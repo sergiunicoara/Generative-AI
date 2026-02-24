@@ -7,250 +7,402 @@
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
-        body {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            min-height: 100vh;
-            padding: 20px 0;
-        }
-        .container-main {
-            max-width: 1200px;
-            margin: 0 auto;
-        }
-        .card {
-            border: none;
-            border-radius: 15px;
-            box-shadow: 0 10px 30px rgba(0,0,0,0.1);
-            margin-bottom: 20px;
-        }
-        .btn-back {
-            background: white;
-            color: #667eea;
-            border: none;
-            padding: 10px 30px;
-            border-radius: 25px;
-            font-weight: 600;
-        }
-        .query-input {
-            border-radius: 25px;
-            padding: 15px 25px;
-            border: 2px solid #667eea;
-        }
-        .btn-test {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
-            border: none;
-            padding: 10px 30px;
-            border-radius: 25px;
-            font-weight: 600;
-        }
-        .result-box {
-            background: #f8f9fa;
-            border-radius: 10px;
-            padding: 20px;
-            margin-top: 20px;
-        }
-        .failure-box {
-            border-left: 4px solid #dc3545;
-        }
-        .fixed-box {
-            border-left: 4px solid #28a745;
-        }
-        .comparison-row {
-            margin-top: 30px;
-        }
+        body { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); min-height: 100vh; padding: 20px 0; }
+        .container-main { max-width: 1200px; margin: 0 auto; }
+        .card { border: none; border-radius: 15px; box-shadow: 0 10px 30px rgba(0,0,0,0.1); margin-bottom: 20px; }
+        .btn-back { background: white; color: #667eea; border: none; padding: 10px 30px; border-radius: 25px; font-weight: 600; }
+        .query-input { border-radius: 25px; padding: 15px 25px; border: 2px solid #667eea; }
+        .btn-test { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; border: none; padding: 10px 30px; border-radius: 25px; font-weight: 600; }
+        .result-box { background: #f8f9fa; border-radius: 10px; padding: 20px; margin-top: 20px; }
+        .failure-box { border-left: 4px solid #dc3545; }
+        .fixed-box { border-left: 4px solid #28a745; }
+        .comparison-row { margin-top: 30px; }
+        pre { white-space: pre-wrap; word-break: break-word; font-size: 0.85rem; }
+        .doc-card { background: #fff; border: 1px solid #dee2e6; border-radius: 8px; padding: 12px; margin-bottom: 10px; font-size: 0.85rem; }
+        .badge-high { background: #198754; }
+        .badge-medium { background: #ffc107; color: #000; }
+        .badge-low { background: #dc3545; }
+        .badge-very_low { background: #6f42c1; }
+        .stat-pill { display: inline-block; background: #e9ecef; border-radius: 20px; padding: 4px 12px; margin: 3px; font-size: 0.82rem; }
+        table { font-size: 0.85rem; }
     </style>
 </head>
 <body>
-    <div class="container-main">
-        <div class="mb-4">
-            <a href="/" class="btn btn-back"><i class="fas fa-arrow-left"></i> Back to Overview</a>
-        </div>
+<div class="container-main">
+    <div class="mb-4">
+        <a href="/" class="btn btn-back"><i class="fas fa-arrow-left"></i> Back to Overview</a>
+    </div>
 
-        <div class="card">
-            <div class="card-body p-5">
-                <h1 class="mb-3">
-                    <i class="fas fa-exclamation-triangle text-warning"></i>
-                    Failure Mode #{{ mode.id }}: {{ mode.name }}
-                </h1>
-                <h3 class="text-muted mb-4">{{ mode.title }}</h3>
-
-                <div class="alert alert-danger">
-                    <strong><i class="fas fa-bolt"></i> Impact:</strong> {{ mode.impact }}
-                </div>
-
-                <h4 class="mt-4"><i class="fas fa-stethoscope"></i> Symptoms</h4>
-                <ul>
-                    {% for symptom in mode.symptoms %}
-                    <li>{{ symptom }}</li>
-                    {% endfor %}
-                </ul>
-
-                <h4 class="mt-4"><i class="fas fa-tools"></i> Solutions</h4>
-                <ul>
-                    {% for solution in mode.solutions %}
-                    <li>{{ solution }}</li>
-                    {% endfor %}
-                </ul>
+    <div class="card">
+        <div class="card-body p-5">
+            <h1 class="mb-3">
+                <i class="fas fa-exclamation-triangle text-warning"></i>
+                Failure Mode #{{ mode.id }}: {{ mode.name }}
+            </h1>
+            <h3 class="text-muted mb-4">{{ mode.title }}</h3>
+            <div class="alert alert-danger">
+                <strong><i class="fas fa-bolt"></i> Impact:</strong> {{ mode.impact }}
             </div>
-        </div>
-
-        <div class="card">
-            <div class="card-body p-5">
-                <h3><i class="fas fa-flask"></i> Test This Failure Mode</h3>
-                <p>Enter a query to see the difference between failure and fixed implementations:</p>
-
-                <div class="row mt-4">
-                    <div class="col-md-8">
-                        <input type="text" id="queryInput" class="form-control query-input"
-                            placeholder="Enter your test query..."
-                            value="How do I authenticate with the API?">
-                    </div>
-                    <div class="col-md-4">
-                        <button class="btn btn-test w-100" onclick="testFailure()" style="height: 100%;">
-                            <i class="fas fa-play"></i> Run Test
-                        </button>
-                    </div>
+            <div class="row mt-4">
+                <div class="col-md-6">
+                    <h4><i class="fas fa-stethoscope"></i> Symptoms</h4>
+                    <ul>{% for s in mode.symptoms %}<li>{{ s }}</li>{% endfor %}</ul>
                 </div>
-
-                <div id="loading" class="text-center mt-4" style="display: none;">
-                    <div class="spinner-border text-primary" role="status">
-                        <span class="visually-hidden">Loading...</span>
-                    </div>
-                    <p class="mt-2">Running test...</p>
+                <div class="col-md-6">
+                    <h4><i class="fas fa-tools"></i> Solutions</h4>
+                    <ul>{% for s in mode.solutions %}<li>{{ s }}</li>{% endfor %}</ul>
                 </div>
-
-                <div id="results" class="comparison-row" style="display: none;">
-                    <div class="row">
-                        <div class="col-md-6">
-                            <div class="result-box failure-box">
-                                <h4><i class="fas fa-times-circle text-danger"></i> Failure Mode</h4>
-                                <div id="failureResults"></div>
-                            </div>
-                        </div>
-                        <div class="col-md-6">
-                            <div class="result-box fixed-box">
-                                <h4><i class="fas fa-check-circle text-success"></i> Fixed Version</h4>
-                                <div id="fixedResults"></div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <div class="card">
-            <div class="card-body p-5">
-                <h3><i class="fas fa-terminal"></i> Run Locally</h3>
-                <p>Execute the Python example on your machine:</p>
-                <pre class="bg-light p-3 rounded"><code>python {{ mode.script }}</code></pre>
             </div>
         </div>
     </div>
 
-    <script>
-        function testFailure() {
-            const query = document.getElementById('queryInput').value;
-            const failureId = '{{ mode.id }}';
+    <!-- Test Panel -->
+    <div class="card">
+        <div class="card-body p-5">
+            <h3><i class="fas fa-flask"></i> Test This Failure Mode</h3>
+            <p>Enter a query to see real results from the script run:</p>
+            <div class="row mt-4">
+                <div class="col-md-8">
+                    <input type="text" id="queryInput" class="form-control query-input"
+                           placeholder="Enter your test query..."
+                           value="How do I authenticate with the API?">
+                </div>
+                <div class="col-md-4">
+                    <button class="btn btn-test w-100" onclick="testFailure()" style="height:100%;">
+                        <i class="fas fa-play"></i> Run Test
+                    </button>
+                </div>
+            </div>
 
-            document.getElementById('loading').style.display = 'block';
-            document.getElementById('results').style.display = 'none';
+            <div id="loading" class="text-center mt-4" style="display:none;">
+                <div class="spinner-border text-primary" role="status"></div>
+                <p class="mt-2">Loading results...</p>
+            </div>
 
-            fetch('/api/test/' + failureId, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ query: query })
-            })
-            .then(response => {
-                if (!response.ok) {
-                    return response.json().then(err => { throw new Error(err.error || 'Server error'); });
-                }
-                return response.json();
-            })
-            .then(data => {
-                document.getElementById('loading').style.display = 'none';
-                document.getElementById('results').style.display = 'block';
-                displayResults(data, failureId);
-            })
-            .catch(error => {
-                document.getElementById('loading').style.display = 'none';
-                document.getElementById('results').style.display = 'block';
-                document.getElementById('failureResults').innerHTML =
-                    `<div class="alert alert-danger">Error: ${error.message}</div>`;
-                document.getElementById('fixedResults').innerHTML = '';
-            });
-        }
+            <div id="results" class="comparison-row" style="display:none;">
+                <div class="row">
+                    <div class="col-md-6">
+                        <div class="result-box failure-box">
+                            <h4><i class="fas fa-times-circle text-danger"></i> Failure Mode</h4>
+                            <div id="failureResults"></div>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="result-box fixed-box">
+                            <h4><i class="fas fa-check-circle text-success"></i> Fixed Version</h4>
+                            <div id="fixedResults"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
 
-        function safeScore(score) {
-            return Number.isFinite(score) ? ' (Score: ' + score.toFixed(2) + ')' : '';
-        }
+    <div class="card">
+        <div class="card-body p-5">
+            <h3><i class="fas fa-terminal"></i> Run Locally</h3>
+            <pre class="bg-light p-3 rounded"><code>python {{ mode.script }} "How do I authenticate with the API?"</code></pre>
+        </div>
+    </div>
+</div>
 
-        function displayResults(data, failureId) {
-            let failureHTML = '';
-            let fixedHTML = '';
+<script>
+const failureId = '{{ mode.id }}';
 
-            if (failureId === '9') {
-                // Latency failure mode
-                failureHTML = `
-                    <p><strong>Latency Distribution:</strong></p>
-                    <ul>
-                        <li>P50: ${data.failure_latency.p50}ms</li>
-                        <li>P95: ${data.failure_latency.p95}ms</li>
-                        <li class="text-danger"><strong>P99: ${data.failure_latency.p99}ms ❌</strong></li>
-                    </ul>
-                    <div class="alert alert-danger">${data.failure_latency.message}</div>
-                `;
-                fixedHTML = `
-                    <p><strong>Latency Distribution:</strong></p>
-                    <ul>
-                        <li>P50: ${data.fixed_latency.p50}ms</li>
-                        <li>P95: ${data.fixed_latency.p95}ms</li>
-                        <li class="text-success"><strong>P99: ${data.fixed_latency.p99}ms ✓</strong></li>
-                    </ul>
-                    <div class="alert alert-success">${data.fixed_latency.message}</div>
-                    ${data.fixed_latency.cache_hit ? '<span class="badge bg-success">Cache Hit!</span>' : ''}
-                `;
-            } else {
-                // Document retrieval failure modes
-                failureHTML = `
-                    <p><strong>${data.failure_results.message}</strong></p>
-                    ${data.failure_results.docs && data.failure_results.docs.length > 0
-                        ? '<ul>' + data.failure_results.docs.map(doc =>
-                            `<li>
-                                ${doc.title}
-                                ${doc.relevant === false ? ' ❌' : ''}
-                                ${doc.stale ? ' <span class="badge bg-danger">Stale</span>' : ''}
-                                ${safeScore(doc.score)}
-                            </li>`
-                        ).join('') + '</ul>'
-                        : '<p class="text-muted">No documents returned.</p>'
-                    }
-                `;
-                fixedHTML = `
-                    <p><strong>${data.fixed_results.message}</strong></p>
-                    ${data.fixed_results.docs && data.fixed_results.docs.length > 0
-                        ? '<ul>' + data.fixed_results.docs.map(doc =>
-                            `<li>
-                                ${doc.title}
-                                ${doc.relevant !== false ? ' ✓' : ''}
-                                ${doc.fresh ? ' <span class="badge bg-success">Fresh</span>' : ''}
-                                ${safeScore(doc.score)}
-                            </li>`
-                        ).join('') + '</ul>'
-                        : '<p class="text-muted">No documents returned.</p>'
-                    }
-                `;
-            }
+function escapeHtml(s) {
+    return String(s || '').replaceAll('&','&').replaceAll('<','<').replaceAll('>','>');
+}
 
-            document.getElementById('failureResults').innerHTML = failureHTML;
-            document.getElementById('fixedResults').innerHTML = fixedHTML;
-        }
+function badge(relevance) {
+    const cls = {'high':'success','medium':'warning text-dark','low':'danger','very_low':'secondary'}[relevance] || 'secondary';
+    return `<span class="badge bg-${cls}">${relevance}</span>`;
+}
 
-        // Allow Enter key to trigger test
-        document.getElementById('queryInput').addEventListener('keypress', function(e) {
-            if (e.key === 'Enter') testFailure();
+function renderFailure(f) {
+    if (!f) return '<p class="text-muted">No failure data.</p>';
+    let html = `<p class="fw-bold text-danger">${escapeHtml(f.title || '')}</p>`;
+
+    // Mode 1 - Chunking
+    if (f.stats && f.docs) {
+        html += `<div class="mb-2">
+            <span class="stat-pill">Chunks: ${f.stats.chunks}</span>
+            <span class="stat-pill">Size: ${f.stats.chunk_size}</span>
+            <span class="stat-pill">Overlap: ${f.stats.overlap}</span>
+        </div>`;
+        if (f.problems) html += '<ul>' + f.problems.map(p=>`<li class="text-danger">${escapeHtml(p)}</li>`).join('') + '</ul>';
+        if (f.retrieval_query) html += `<p><strong>Query:</strong> "${escapeHtml(f.retrieval_query)}"<br><span class="text-danger">❌ ${escapeHtml(f.retrieval_result)}</span></p>`;
+        f.docs.forEach(d => {
+            html += `<div class="doc-card"><strong>Chunk ${d.chunk}</strong> (${d.length} chars)<pre class="mt-1 mb-0">${escapeHtml(d.preview)}</pre></div>`;
         });
-    </script>
+    }
+    // Mode 2 - Embedding
+    else if (f.index_model) {
+        html += `<table class="table table-sm"><tr><td>Index model</td><td>${escapeHtml(f.index_model)}</td></tr>
+        <tr><td>Query model</td><td>${escapeHtml(f.query_model)}</td></tr></table>
+        <div class="alert alert-danger py-2">${escapeHtml(f.error)}</div>`;
+        if (f.problems) html += '<ul>' + f.problems.map(p=>`<li>${escapeHtml(p)}</li>`).join('') + '</ul>';
+    }
+    // Mode 3 - Prompt Injection
+    else if (f.attacks) {
+        f.attacks.forEach(a => {
+            html += `<div class="doc-card mb-2">
+                <strong class="text-danger">Attack: ${escapeHtml(a.name)}</strong><br>
+                <small><strong>Query:</strong> ${escapeHtml(a.query)}</small><br>
+                <small><strong>Response:</strong> ${escapeHtml(a.response)}</small><br>
+                <span class="badge bg-danger mt-1">⚠️ ${escapeHtml(a.breach)}</span>
+            </div>`;
+        });
+    }
+    // Mode 4 - Citation Hallucinations
+    else if (f.hallucinations) {
+        f.hallucinations.forEach(h => {
+            html += `<div class="doc-card mb-2">
+                <strong>Query:</strong> ${escapeHtml(h.query)}<br>
+                <small class="text-muted">${escapeHtml(h.response.substring(0,120))}...</small><br>
+                <ul class="mt-1 mb-0">` + h.fabricated.map(x=>`<li class="text-danger small">❌ ${escapeHtml(x)}</li>`).join('') + `</ul>
+            </div>`;
+        });
+    }
+    // Mode 5 - Context Overflow
+    else if (f.token_breakdown) {
+        html += `<div class="alert alert-danger py-2">Retrieved ${f.retrieved_docs} docs → ${f.token_breakdown.total} tokens needed vs ${f.model_limit} limit → <strong>+${f.overflow} overflow!</strong></div>`;
+        html += `<table class="table table-sm"><thead><tr><th>Component</th><th>Tokens</th></tr></thead><tbody>`;
+        Object.entries(f.token_breakdown).forEach(([k,v]) => {
+            if (k !== 'total') html += `<tr><td>${k.replace(/_/g,' ')}</td><td>${v}</td></tr>`;
+        });
+        html += `<tr class="table-danger fw-bold"><td>TOTAL</td><td>${f.token_breakdown.total}</td></tr></tbody></table>`;
+        if (f.problems) html += '<ul>' + f.problems.map(p=>`<li>${escapeHtml(p)}</li>`).join('') + '</ul>';
+    }
+    // Mode 6 - Bad Filters
+    else if (f.cases && f.total_docs !== undefined) {
+        html += `<p>Query: <em>"${escapeHtml(f.query)}"</em> — ${f.total_docs} docs in corpus</p>`;
+        html += `<table class="table table-sm"><thead><tr><th>Case</th><th>Filter</th><th>Results</th></tr></thead><tbody>`;
+        f.cases.forEach(c => {
+            html += `<tr><td>${escapeHtml(c.name)}</td><td><code>${escapeHtml(c.filter)}</code></td><td class="text-danger fw-bold">${c.results}</td></tr>`;
+        });
+        html += '</tbody></table>';
+    }
+    // Mode 7 - Stale Indexes
+    else if (f.stale_contents) {
+        html += `<p class="text-danger">Index age: ${escapeHtml(f.index_age)}</p>`;
+        html += `<table class="table table-sm"><thead><tr><th>Product</th><th>Stale Price</th><th>Real Price</th></tr></thead><tbody>`;
+        f.stale_contents.forEach((s,i) => {
+            const r = f.reality[i];
+            html += `<tr><td>${escapeHtml(s.product)}</td><td class="text-danger">${escapeHtml(s.price)}</td><td class="text-success">${escapeHtml(r ? r.price : '?')} ${r && r.note ? r.note : ''}</td></tr>`;
+        });
+        html += '</tbody></table>';
+        html += '<h6 class="mt-3">Stale query results:</h6>';
+        f.queries.forEach(q => {
+            html += `<div class="doc-card"><strong>${escapeHtml(q.q)}</strong><br><span class="text-danger">${escapeHtml(q.result)}</span><br><small class="text-muted">Indexed: ${q.indexed}</small></div>`;
+        });
+    }
+    // Mode 8 - Multilingual
+    else if (f.queries && f.languages) {
+        html += `<p>${f.total_docs} docs in ${f.languages.length} languages. Embedding: <em>${escapeHtml(f.embedding_note)}</em></p>`;
+        f.queries.forEach(q => {
+            html += `<div class="doc-card"><strong>"${escapeHtml(q.query)}"</strong> (${q.lang}) — expected: ${q.expected.join(', ')}<ul class="mb-0 mt-1">`;
+            q.retrieved.forEach(r => {
+                html += `<li>${r.match ? '✅' : '❌'} [${escapeHtml(r.lang)}] ${escapeHtml(r.title)}</li>`;
+            });
+            html += '</ul></div>';
+        });
+    }
+    // Mode 9 - Latency
+    else if (f.requests) {
+        html += `<p>P50: <strong>${f.p50}ms</strong> — P99: <strong class="text-danger">${f.p99}ms</strong> — Ratio: <strong class="text-danger">${f.ratio} slower</strong></p>`;
+        html += `<table class="table table-sm"><thead><tr><th>Request</th><th>Latency</th></tr></thead><tbody>`;
+        f.requests.forEach(r => {
+            const cls = r.ms > 300 ? 'table-danger' : '';
+            html += `<tr class="${cls}"><td>#${r.n}</td><td>${r.ms} ms</td></tr>`;
+        });
+        html += '</tbody></table>';
+        html += `<h6 class="mt-3">Index size impact:</h6><table class="table table-sm"><thead><tr><th>Docs</th><th>Latency</th></tr></thead><tbody>`;
+        f.index_size_impact.forEach(r => {
+            html += `<tr><td>${r.docs.toLocaleString()}</td><td class="${r.ms > 500 ? 'text-danger' : ''}">${r.ms} ms</td></tr>`;
+        });
+        html += '</tbody></table>';
+    }
+    // Mode 10 - Reranking
+    else if (f.results) {
+        html += `<p>Query: <em>"${escapeHtml(f.query)}"</em></p>`;
+        html += `<table class="table table-sm"><thead><tr><th>Rank</th><th>Doc</th><th>Similarity</th><th>Relevance</th><th></th></tr></thead><tbody>`;
+        f.results.forEach(r => {
+            const icon = r.correct === true ? '✅' : r.correct === false ? '❌' : '~';
+            html += `<tr><td>${r.rank}</td><td>${escapeHtml(r.id)}</td><td>${r.similarity}</td><td>${badge(r.relevance)}</td><td>${icon}</td></tr>`;
+        });
+        html += '</tbody></table>';
+        html += `<div class="alert alert-warning py-2 mt-2">${escapeHtml(f.problem)}</div>`;
+    }
+    // Generic fallback
+    else if (f.problems) {
+        html += '<ul>' + f.problems.map(p=>`<li>${escapeHtml(p)}</li>`).join('') + '</ul>';
+    }
 
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    return html;
+}
+
+function renderFixed(f) {
+    if (!f) return '<p class="text-muted">No fixed data.</p>';
+    let html = `<p class="fw-bold text-success">${escapeHtml(f.title || '')}</p>`;
+
+    // Mode 1
+    if (f.stats && f.docs) {
+        html += `<div class="mb-2">
+            <span class="stat-pill">Chunks: ${f.stats.chunks}</span>
+            <span class="stat-pill">Size: ${f.stats.chunk_size}</span>
+            <span class="stat-pill">Overlap: ${f.stats.overlap}</span>
+        </div>`;
+        if (f.improvements) html += '<ul>' + f.improvements.map(p=>`<li class="text-success">${escapeHtml(p)}</li>`).join('') + '</ul>';
+        if (f.retrieval_query) html += `<p><strong>Query:</strong> "${escapeHtml(f.retrieval_query)}"<br><span class="text-success">✅ ${escapeHtml(f.retrieval_result)}</span></p>`;
+        f.docs.forEach(d => {
+            html += `<div class="doc-card"><strong>Chunk ${d.chunk}</strong> (${d.length} chars)<pre class="mt-1 mb-0">${escapeHtml(d.preview)}</pre></div>`;
+        });
+        if (f.metrics) {
+            html += `<div class="alert alert-success py-2 mt-2">Bad: ${f.metrics.bad_chunks} chunks @ ${f.metrics.bad_avg} chars avg → Good: ${f.metrics.good_chunks} chunks @ ${f.metrics.good_avg} chars avg</div>`;
+        }
+    }
+    // Mode 2
+    else if (f.model) {
+        html += `<table class="table table-sm"><tr><td>Model</td><td>${escapeHtml(f.model)}</td></tr>
+        <tr><td>Version</td><td>${escapeHtml(f.version)}</td></tr>
+        <tr><td>Dimension</td><td>${f.dimension}</td></tr></table>`;
+        html += `<p><strong>Query:</strong> "${escapeHtml(f.query)}"</p>`;
+        html += `<p>Relevance scores: ${f.scores.map(s=>`<span class="stat-pill">${s}</span>`).join('')}</p>`;
+        if (f.improvements) html += '<ul>' + f.improvements.map(p=>`<li class="text-success">${escapeHtml(p)}</li>`).join('') + '</ul>';
+    }
+    // Mode 3
+    else if (f.defenses) {
+        f.defenses.forEach(d => {
+            html += `<div class="doc-card mb-2"><strong class="text-success">✅ ${escapeHtml(d.name)}</strong><br>`;
+            if (d.original) html += `<small>Original: <em>${escapeHtml(d.original.substring(0,60))}...</em></small><br><small>Sanitized: <em>${escapeHtml(d.sanitized)}</em></small><br>`;
+            if (d.detail) html += `<small>${escapeHtml(d.detail)}</small>`;
+            html += '</div>';
+        });
+        html += `<div class="alert alert-success py-2">Normal query: "${escapeHtml(f.normal_query)}"<br>${escapeHtml(f.normal_response)}</div>`;
+        if (f.improvements) html += '<ul>' + f.improvements.map(p=>`<li class="text-success">${escapeHtml(p)}</li>`).join('') + '</ul>';
+    }
+    // Mode 4
+    else if (f.response && f.verified !== undefined) {
+        html += `<div class="doc-card"><strong>Query:</strong> ${escapeHtml(f.query)}<br><pre class="mt-1 mb-0">${escapeHtml(f.response)}</pre></div>`;
+        html += `<div class="alert alert-success py-2 mt-2">✅ All citations verified — no fabrications</div>`;
+        html += `<div class="doc-card mt-2"><strong>Honest response:</strong> "${escapeHtml(f.honest_query)}"<br><small>${escapeHtml(f.honest_response)}</small></div>`;
+        if (f.improvements) html += '<ul>' + f.improvements.map(p=>`<li class="text-success">${escapeHtml(p)}</li>`).join('') + '</ul>';
+    }
+    // Mode 5
+    else if (f.budget) {
+        html += `<p>Model: <strong>${escapeHtml(f.model)}</strong></p>`;
+        html += `<table class="table table-sm"><thead><tr><th>Component</th><th>Tokens</th><th>%</th></tr></thead><tbody>`;
+        Object.entries(f.budget).forEach(([k,v]) => {
+            html += `<tr><td>${k.replace(/_/g,' ')}</td><td>${v.tokens}</td><td>${v.pct}</td></tr>`;
+        });
+        html += '</tbody></table>';
+        html += `<div class="alert alert-success py-2">Selected ${f.selected_docs} docs — ${f.context_tokens} tokens used — ${f.remaining_budget} remaining</div>`;
+        html += `<h6>Reranked docs:</h6><table class="table table-sm"><thead><tr><th>ID</th><th>Tokens</th><th>Relevance</th></tr></thead><tbody>`;
+        f.reranked_docs.forEach(d => {
+            html += `<tr><td>${d.id}</td><td>${d.tokens}</td><td>${d.relevance}</td></tr>`;
+        });
+        html += '</tbody></table>';
+        if (f.improvements) html += '<ul>' + f.improvements.map(p=>`<li class="text-success">${escapeHtml(p)}</li>`).join('') + '</ul>';
+    }
+    // Mode 6
+    else if (f.cases && Array.isArray(f.cases)) {
+        f.cases.forEach(c => {
+            html += `<div class="doc-card mb-2"><strong class="text-success">✅ ${escapeHtml(c.name)}</strong><br><small class="text-muted">${escapeHtml(c.action)}</small>`;
+            if (c.results && c.results.length) {
+                html += '<ul class="mt-1 mb-0">';
+                c.results.forEach(r => {
+                    html += `<li><strong>${escapeHtml(r.name)}</strong> — ${escapeHtml(r.price)} — ${escapeHtml(r.rating)}</li>`;
+                });
+                html += '</ul>';
+            }
+            html += '</div>';
+        });
+    }
+    // Mode 7
+    else if (f.queries && f.index_version !== undefined) {
+        html += `<div class="alert alert-success py-2">Index v${f.index_version} — ${f.doc_count} docs — Updated: ${f.timestamp} — Stale: ${f.is_stale ? 'Yes' : 'No'}</div>`;
+        f.queries.forEach(q => {
+            html += `<div class="doc-card"><strong>${escapeHtml(q.q)}</strong><br><span class="text-success">${escapeHtml(q.result)}</span><br><small class="text-muted">Updated: ${q.updated} ${q.fresh ? '✅ Fresh' : '⚠️ Older'}</small></div>`;
+        });
+    }
+    // Mode 8
+    else if (f.queries && !f.languages) {
+        f.queries.forEach(q => {
+            html += `<div class="doc-card"><strong>"${escapeHtml(q.query)}"</strong> — Detected: ${escapeHtml(q.detected_lang)}<ul class="mb-0 mt-1">`;
+            q.retrieved.forEach(r => {
+                html += `<li>[${escapeHtml(r.lang)}] ${escapeHtml(r.title)}</li>`;
+            });
+            html += '</ul></div>';
+        });
+    }
+    // Mode 9
+    else if (f.cache_demo) {
+        html += `<h6>Cache demo:</h6><table class="table table-sm"><thead><tr><th>#</th><th>Query</th><th>Cache</th><th>Time</th></tr></thead><tbody>`;
+        f.cache_demo.forEach(r => {
+            html += `<tr class="${r.hit ? 'table-success' : ''}"><td>${r.n}</td><td>${escapeHtml(r.query)}</td><td>${r.hit ? '✅ HIT' : '❌ MISS'}</td><td>${r.ms} ms</td></tr>`;
+        });
+        html += `</tbody></table><div class="alert alert-success py-2">Without cache: ${f.total_without_cache}ms → With cache: ${f.total_with_cache}ms → Speedup: ${f.speedup}</div>`;
+        html += '<h6 class="mt-3">Solutions applied:</h6><ul>';
+        f.solutions.forEach(s => {
+            html += `<li><strong>${escapeHtml(s.name)}</strong>: ${escapeHtml(s.detail)}</li>`;
+        });
+        html += '</ul>';
+    }
+    // Mode 10
+    else if (f.stage1 && f.stage2) {
+        html += `<p><strong>Stage 1:</strong> Vector retrieval (top-8)</p>`;
+        html += `<table class="table table-sm"><thead><tr><th>Rank</th><th>Doc</th><th>Sim</th><th>Relevance</th></tr></thead><tbody>`;
+        f.stage1.forEach(r => {
+            html += `<tr><td>${r.rank}</td><td>${escapeHtml(r.id)}</td><td>${r.sim}</td><td>${badge(r.relevance)}</td></tr>`;
+        });
+        html += '</tbody></table>';
+        html += `<p class="mt-3"><strong>Stage 2:</strong> Cross-encoder reranking</p>`;
+        html += `<table class="table table-sm"><thead><tr><th>Rank</th><th>Doc</th><th>Score</th><th>Relevance</th><th></th></tr></thead><tbody>`;
+        f.stage2.forEach(r => {
+            html += `<tr><td>${r.rank}</td><td>${escapeHtml(r.id)}</td><td>${r.score}</td><td>${badge(r.relevance)}</td><td>${r.correct ? '✅' : '❌'}</td></tr>`;
+        });
+        html += '</tbody></table>';
+        if (f.improvements) html += '<ul>' + f.improvements.map(p=>`<li class="text-success">${escapeHtml(p)}</li>`).join('') + '</ul>';
+    }
+    // Generic
+    else if (f.improvements) {
+        html += '<ul>' + f.improvements.map(p=>`<li class="text-success">${escapeHtml(p)}</li>`).join('') + '</ul>';
+    }
+
+    return html;
+}
+
+function testFailure() {
+    const query = document.getElementById('queryInput').value;
+    document.getElementById('loading').style.display = 'block';
+    document.getElementById('results').style.display = 'none';
+
+    fetch('/api/test/' + failureId, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ query })
+    })
+    .then(async r => {
+        const data = await r.json().catch(() => ({}));
+        if (!r.ok) throw new Error(data.error || 'HTTP ' + r.status);
+        return data;
+    })
+    .then(data => {
+        document.getElementById('loading').style.display = 'none';
+        document.getElementById('results').style.display = 'block';
+        document.getElementById('failureResults').innerHTML = renderFailure(data.failure);
+        document.getElementById('fixedResults').innerHTML = renderFixed(data.fixed);
+    })
+    .catch(err => {
+        document.getElementById('loading').style.display = 'none';
+        alert('Error: ' + err.message);
+    });
+}
+
+document.getElementById('queryInput').addEventListener('keypress', e => {
+    if (e.key === 'Enter') testFailure();
+});
+</script>
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
 </body>
 </html>

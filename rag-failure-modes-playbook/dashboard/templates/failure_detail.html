@@ -1,0 +1,256 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ mode.name }} - RAG Failure Modes</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        body {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px 0;
+        }
+        .container-main {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        .card {
+            border: none;
+            border-radius: 15px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+        }
+        .btn-back {
+            background: white;
+            color: #667eea;
+            border: none;
+            padding: 10px 30px;
+            border-radius: 25px;
+            font-weight: 600;
+        }
+        .query-input {
+            border-radius: 25px;
+            padding: 15px 25px;
+            border: 2px solid #667eea;
+        }
+        .btn-test {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            padding: 10px 30px;
+            border-radius: 25px;
+            font-weight: 600;
+        }
+        .result-box {
+            background: #f8f9fa;
+            border-radius: 10px;
+            padding: 20px;
+            margin-top: 20px;
+        }
+        .failure-box {
+            border-left: 4px solid #dc3545;
+        }
+        .fixed-box {
+            border-left: 4px solid #28a745;
+        }
+        .comparison-row {
+            margin-top: 30px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container-main">
+        <div class="mb-4">
+            <a href="/" class="btn btn-back"><i class="fas fa-arrow-left"></i> Back to Overview</a>
+        </div>
+
+        <div class="card">
+            <div class="card-body p-5">
+                <h1 class="mb-3">
+                    <i class="fas fa-exclamation-triangle text-warning"></i>
+                    Failure Mode #{{ mode.id }}: {{ mode.name }}
+                </h1>
+                <h3 class="text-muted mb-4">{{ mode.title }}</h3>
+
+                <div class="alert alert-danger">
+                    <strong><i class="fas fa-bolt"></i> Impact:</strong> {{ mode.impact }}
+                </div>
+
+                <h4 class="mt-4"><i class="fas fa-stethoscope"></i> Symptoms</h4>
+                <ul>
+                    {% for symptom in mode.symptoms %}
+                    <li>{{ symptom }}</li>
+                    {% endfor %}
+                </ul>
+
+                <h4 class="mt-4"><i class="fas fa-tools"></i> Solutions</h4>
+                <ul>
+                    {% for solution in mode.solutions %}
+                    <li>{{ solution }}</li>
+                    {% endfor %}
+                </ul>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-body p-5">
+                <h3><i class="fas fa-flask"></i> Test This Failure Mode</h3>
+                <p>Enter a query to see the difference between failure and fixed implementations:</p>
+
+                <div class="row mt-4">
+                    <div class="col-md-8">
+                        <input type="text" id="queryInput" class="form-control query-input"
+                            placeholder="Enter your test query..."
+                            value="How do I authenticate with the API?">
+                    </div>
+                    <div class="col-md-4">
+                        <button class="btn btn-test w-100" onclick="testFailure()" style="height: 100%;">
+                            <i class="fas fa-play"></i> Run Test
+                        </button>
+                    </div>
+                </div>
+
+                <div id="loading" class="text-center mt-4" style="display: none;">
+                    <div class="spinner-border text-primary" role="status">
+                        <span class="visually-hidden">Loading...</span>
+                    </div>
+                    <p class="mt-2">Running test...</p>
+                </div>
+
+                <div id="results" class="comparison-row" style="display: none;">
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="result-box failure-box">
+                                <h4><i class="fas fa-times-circle text-danger"></i> Failure Mode</h4>
+                                <div id="failureResults"></div>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="result-box fixed-box">
+                                <h4><i class="fas fa-check-circle text-success"></i> Fixed Version</h4>
+                                <div id="fixedResults"></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-body p-5">
+                <h3><i class="fas fa-terminal"></i> Run Locally</h3>
+                <p>Execute the Python example on your machine:</p>
+                <pre class="bg-light p-3 rounded"><code>python {{ mode.script }}</code></pre>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        function testFailure() {
+            const query = document.getElementById('queryInput').value;
+            const failureId = '{{ mode.id }}';
+
+            document.getElementById('loading').style.display = 'block';
+            document.getElementById('results').style.display = 'none';
+
+            fetch('/api/test/' + failureId, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ query: query })
+            })
+            .then(response => {
+                if (!response.ok) {
+                    return response.json().then(err => { throw new Error(err.error || 'Server error'); });
+                }
+                return response.json();
+            })
+            .then(data => {
+                document.getElementById('loading').style.display = 'none';
+                document.getElementById('results').style.display = 'block';
+                displayResults(data, failureId);
+            })
+            .catch(error => {
+                document.getElementById('loading').style.display = 'none';
+                document.getElementById('results').style.display = 'block';
+                document.getElementById('failureResults').innerHTML =
+                    `<div class="alert alert-danger">Error: ${error.message}</div>`;
+                document.getElementById('fixedResults').innerHTML = '';
+            });
+        }
+
+        function safeScore(score) {
+            return Number.isFinite(score) ? ' (Score: ' + score.toFixed(2) + ')' : '';
+        }
+
+        function displayResults(data, failureId) {
+            let failureHTML = '';
+            let fixedHTML = '';
+
+            if (failureId === '9') {
+                // Latency failure mode
+                failureHTML = `
+                    <p><strong>Latency Distribution:</strong></p>
+                    <ul>
+                        <li>P50: ${data.failure_latency.p50}ms</li>
+                        <li>P95: ${data.failure_latency.p95}ms</li>
+                        <li class="text-danger"><strong>P99: ${data.failure_latency.p99}ms ❌</strong></li>
+                    </ul>
+                    <div class="alert alert-danger">${data.failure_latency.message}</div>
+                `;
+                fixedHTML = `
+                    <p><strong>Latency Distribution:</strong></p>
+                    <ul>
+                        <li>P50: ${data.fixed_latency.p50}ms</li>
+                        <li>P95: ${data.fixed_latency.p95}ms</li>
+                        <li class="text-success"><strong>P99: ${data.fixed_latency.p99}ms ✓</strong></li>
+                    </ul>
+                    <div class="alert alert-success">${data.fixed_latency.message}</div>
+                    ${data.fixed_latency.cache_hit ? '<span class="badge bg-success">Cache Hit!</span>' : ''}
+                `;
+            } else {
+                // Document retrieval failure modes
+                failureHTML = `
+                    <p><strong>${data.failure_results.message}</strong></p>
+                    ${data.failure_results.docs && data.failure_results.docs.length > 0
+                        ? '<ul>' + data.failure_results.docs.map(doc =>
+                            `<li>
+                                ${doc.title}
+                                ${doc.relevant === false ? ' ❌' : ''}
+                                ${doc.stale ? ' <span class="badge bg-danger">Stale</span>' : ''}
+                                ${safeScore(doc.score)}
+                            </li>`
+                        ).join('') + '</ul>'
+                        : '<p class="text-muted">No documents returned.</p>'
+                    }
+                `;
+                fixedHTML = `
+                    <p><strong>${data.fixed_results.message}</strong></p>
+                    ${data.fixed_results.docs && data.fixed_results.docs.length > 0
+                        ? '<ul>' + data.fixed_results.docs.map(doc =>
+                            `<li>
+                                ${doc.title}
+                                ${doc.relevant !== false ? ' ✓' : ''}
+                                ${doc.fresh ? ' <span class="badge bg-success">Fresh</span>' : ''}
+                                ${safeScore(doc.score)}
+                            </li>`
+                        ).join('') + '</ul>'
+                        : '<p class="text-muted">No documents returned.</p>'
+                    }
+                `;
+            }
+
+            document.getElementById('failureResults').innerHTML = failureHTML;
+            document.getElementById('fixedResults').innerHTML = fixedHTML;
+        }
+
+        // Allow Enter key to trigger test
+        document.getElementById('queryInput').addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') testFailure();
+        });
+    </script>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>

@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RAG Failure Modes Playbook - Interactive Dashboard</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px 0;
+        }
+        .container-main {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        .header {
+            text-align: center;
+            color: white;
+            margin-bottom: 40px;
+        }
+        .header h1 {
+            font-size: 3rem;
+            font-weight: 700;
+            margin-bottom: 10px;
+        }
+        .header p {
+            font-size: 1.2rem;
+            opacity: 0.9;
+        }
+        .card {
+            border: none;
+            border-radius: 15px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.1);
+            transition: transform 0.3s, box-shadow 0.3s;
+            height: 100%;
+        }
+        .card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 15px 40px rgba(0,0,0,0.2);
+        }
+        .failure-card {
+            margin-bottom: 30px;
+        }
+        .card-header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border-radius: 15px 15px 0 0 !important;
+            padding: 20px;
+        }
+        .card-header h3 {
+            margin: 0;
+            font-size: 1.5rem;
+        }
+        .badge-impact {
+            background-color: #ff6b6b;
+            padding: 5px 15px;
+            border-radius: 20px;
+            font-size: 0.85rem;
+        }
+        .badge-time {
+            background-color: #4ecdc4;
+            padding: 5px 15px;
+            border-radius: 20px;
+            font-size: 0.85rem;
+        }
+        .btn-explore {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            padding: 10px 30px;
+            border-radius: 25px;
+            font-weight: 600;
+            transition: all 0.3s;
+        }
+        .btn-explore:hover {
+            transform: scale(1.05);
+            box-shadow: 0 5px 15px rgba(0,0,0,0.2);
+            color: white;
+        }
+        .metrics-badge {
+            display: inline-block;
+            padding: 5px 10px;
+            border-radius: 5px;
+            font-size: 0.9rem;
+            margin-right: 10px;
+        }
+        .footer {
+            text-align: center;
+            color: white;
+            margin-top: 50px;
+            padding: 20px;
+        }
+        .icon-large {
+            font-size: 3rem;
+            color: #667eea;
+            margin-bottom: 15px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container-main">
+        <div class="header">
+            <h1><i class="fas fa-fire"></i> RAG Failure Modes Playbook</h1>
+            <p>Interactive Dashboard - Explore, Test, and Learn</p>
+        </div>
+
+        <div class="row mb-4">
+            <div class="col-md-12">
+                <div class="card">
+                    <div class="card-body text-center p-4">
+                        <h2>🎯 10 Critical Failure Modes in Production RAG Systems</h2>
+                        <p class="lead">Battle-tested examples with runnable demonstrations and proven fixes</p>
+                        <a href="/metrics" class="btn btn-explore mt-3">
+                            <i class="fas fa-chart-line"></i> View Production Metrics
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="row">
+            {% for id, mode in failure_modes.items() %}
+            <div class="col-md-6 col-lg-4 failure-card">
+                <div class="card">
+                    <div class="card-header">
+                        <h3><i class="fas fa-exclamation-triangle"></i> #{{ mode.id }}: {{ mode.name }}</h3>
+                    </div>
+                    <div class="card-body">
+                        <h5 class="card-title">{{ mode.title }}</h5>
+                        <p class="card-text">{{ mode.description }}</p>
+
+                        <div class="mb-3">
+                            <span class="badge-impact metrics-badge">
+                                <i class="fas fa-bolt"></i> Impact: {{ mode.impact }}
+                            </span>
+                            <br><br>
+                            <span class="badge-time metrics-badge">
+                                <i class="fas fa-clock"></i> Fix Time: {{ mode.fix_time }}
+                            </span>
+                        </div>
+
+                        <h6>Symptoms:</h6>
+                        <ul>
+                            {% for symptom in mode.symptoms[:2] %}
+                            <li>{{ symptom }}</li>
+                            {% endfor %}
+                        </ul>
+
+                        <h6>Solutions:</h6>
+                        <ul>
+                            {% for solution in mode.solutions[:2] %}
+                            <li>{{ solution }}</li>
+                            {% endfor %}
+                        </ul>
+
+                        <a href="/failure/{{ mode.id }}" class="btn btn-explore w-100 mt-3">
+                            <i class="fas fa-microscope"></i> Explore & Test
+                        </a>
+                    </div>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+
+        <div class="row mt-5">
+            <div class="col-md-12">
+                <div class="card">
+                    <div class="card-body text-center p-4">
+                        <h3><i class="fas fa-rocket"></i> Quick Start</h3>
+                        <p>Run the Python examples locally:</p>
+                        <div class="text-start" style="max-width: 600px; margin: 0 auto;">
+                            <pre class="bg-light p-3 rounded"><code>{% for id, mode in failure_modes.items() %}python {{ mode.script }}
+{% endfor %}</code></pre>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="footer">
+            <p><i class="fas fa-code"></i> Built with battle scars and lessons learned the hard way</p>
+            <p><a href="https://github.com" class="text-white"><i class="fab fa-github"></i> View on GitHub</a></p>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>

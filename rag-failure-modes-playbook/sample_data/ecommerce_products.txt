@@ -1,0 +1,121 @@
+Product: Wireless Bluetooth Headphones Pro
+Category: Electronics > Audio > Headphones
+Brand: TechSound
+Price: $149.99
+Stock: In Stock
+Rating: 4.5/5
+Color: Black, Silver, Blue
+Release Date: 2025-01-15
+Description: Premium wireless headphones with active noise cancellation, 30-hour battery life, and superior sound quality. Perfect for travel and work.
+
+---
+
+Product: Organic Cotton T-Shirt
+Category: Clothing > Men > Shirts
+Brand: EcoWear
+Price: $29.99
+Stock: In Stock
+Rating: 4.8/5
+Size: S, M, L, XL, XXL
+Color: White, Black, Gray, Navy
+Release Date: 2024-11-20
+Description: 100% organic cotton t-shirt with comfortable fit. Eco-friendly and sustainable fashion choice.
+
+---
+
+Product: Smart Fitness Watch Ultra
+Category: Electronics > Wearables > Smartwatches
+Brand: FitTech
+Price: $299.99
+Stock: Out of Stock
+Rating: 4.7/5
+Color: Black, Rose Gold
+Release Date: 2024-08-10
+Description: Advanced fitness tracker with heart rate monitoring, GPS, sleep tracking, and 50+ workout modes. Water resistant up to 50m.
+
+---
+
+Product: Yoga Mat Premium
+Category: Sports > Fitness > Yoga
+Brand: ZenLife
+Price: $39.99
+Stock: In Stock
+Rating: 4.6/5
+Color: Purple, Blue, Pink, Green
+Release Date: 2023-05-12
+Description: Extra thick yoga mat with superior grip and cushioning. Made from eco-friendly TPE material.
+
+---
+
+Product: Stainless Steel Water Bottle
+Category: Home > Kitchen > Drinkware
+Brand: HydroMax
+Price: $24.99
+Stock: In Stock
+Rating: 4.9/5
+Size: 500ml, 750ml, 1000ml
+Color: Silver, Black, Blue, Pink
+Release Date: 2024-03-01
+Description: Vacuum insulated water bottle keeps drinks cold for 24 hours or hot for 12 hours. BPA-free and leak-proof.
+
+---
+
+Product: Leather Laptop Bag
+Category: Accessories > Bags > Laptop Bags
+Brand: ProCarry
+Price: $89.99
+Stock: In Stock
+Rating: 4.4/5
+Size: 13", 15", 17"
+Color: Brown, Black
+Release Date: 2024-06-15
+Description: Genuine leather laptop bag with multiple compartments. Professional design suitable for business and travel.
+
+---
+
+Product: Portable Bluetooth Speaker
+Category: Electronics > Audio > Speakers
+Brand: SoundWave
+Price: $79.99
+Stock: In Stock
+Rating: 4.5/5
+Color: Black, Red, Blue
+Release Date: 2025-02-01
+Description: Compact wireless speaker with 360-degree sound, 12-hour battery, and IPX7 waterproof rating.
+
+---
+
+Product: Ergonomic Office Chair
+Category: Furniture > Office > Chairs
+Brand: ComfortSit
+Price: $249.99
+Stock: In Stock
+Rating: 4.7/5
+Color: Black, Gray
+Release Date: 2024-09-20
+Description: Adjustable ergonomic chair with lumbar support, breathable mesh back, and premium cushioning for all-day comfort.
+
+---
+
+Product: Electric Kettle Fast Boil
+Category: Home > Kitchen > Appliances
+Brand: QuickHeat
+Price: $44.99
+Stock: In Stock
+Rating: 4.6/5
+Color: Stainless Steel, Black
+Release Date: 2024-04-10
+Description: 1.7L electric kettle with rapid boil technology, auto shut-off, and temperature control settings.
+
+---
+
+Product: Running Shoes Air Cushion
+Category: Footwear > Athletic > Running Shoes
+Brand: SpeedStep
+Price: $119.99
+Stock: In Stock
+Rating: 4.8/5
+Size: 7, 8, 9, 10, 11, 12
+Color: Black, White, Blue, Red
+Release Date: 2024-07-25
+Description: Lightweight running shoes with air cushion technology, breathable mesh upper, and superior traction.

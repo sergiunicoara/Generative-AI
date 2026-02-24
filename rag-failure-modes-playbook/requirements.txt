@@ -1,0 +1,32 @@
+# Core RAG and LLM dependencies
+langchain>=1.2.0
+langchain-community>=0.4.0
+langchain-openai>=1.0.0
+langchain-text-splitters>=1.0.0
+openai>=1.0.0
+
+# Vector stores and embeddings
+faiss-cpu>=1.7.0
+sentence-transformers>=2.2.0
+
+# Text processing and utilities
+tiktoken>=0.5.0
+pypdf>=3.17.0
+
+# Multilingual support
+langdetect>=1.0.9
+deep-translator>=1.11.0
+
+# Performance monitoring
+psutil>=5.9.0
+
+# Web dashboard
+flask>=3.0.0
+flask-cors>=4.0.0
+plotly>=5.18.0
+pandas>=2.0.0
+
+# Utilities
+python-dotenv>=1.0.0
+numpy>=1.24.0
+colorama>=0.4.6

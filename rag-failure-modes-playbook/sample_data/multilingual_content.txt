@@ -1,0 +1,63 @@
+English:
+Title: Getting Started with Machine Learning
+Content: Machine learning is a subset of artificial intelligence that enables computers to learn from data without being explicitly programmed. It involves algorithms that improve their performance over time as they are exposed to more data.
+
+---
+
+French:
+Titre: Débuter avec l'apprentissage automatique
+Contenu: L'apprentissage automatique est un sous-ensemble de l'intelligence artificielle qui permet aux ordinateurs d'apprendre à partir de données sans être explicitement programmés. Il implique des algorithmes qui améliorent leurs performances au fil du temps à mesure qu'ils sont exposés à plus de données.
+
+---
+
+Spanish:
+Título: Introducción al aprendizaje automático
+Contenido: El aprendizaje automático es un subconjunto de la inteligencia artificial que permite a las computadoras aprender de los datos sin ser programadas explícitamente. Implica algoritmos que mejoran su rendimiento con el tiempo a medida que se exponen a más datos.
+
+---
+
+German:
+Titel: Erste Schritte mit maschinellem Lernen
+Inhalt: Maschinelles Lernen ist eine Teilmenge der künstlichen Intelligenz, die es Computern ermöglicht, aus Daten zu lernen, ohne explizit programmiert zu werden. Es umfasst Algorithmen, die ihre Leistung im Laufe der Zeit verbessern, wenn sie mehr Daten ausgesetzt sind.
+
+---
+
+Chinese:
+标题：机器学习入门
+内容：机器学习是人工智能的一个子集，使计算机能够从数据中学习，而无需明确编程。它涉及随着时间的推移，随着暴露于更多数据而提高性能的算法。
+
+---
+
+Japanese:
+タイトル: 機械学習の始め方
+内容: 機械学習は人工知能のサブセットであり、明示的にプログラムされることなく、コンピュータがデータから学習できるようにします。時間の経過とともに、より多くのデータにさらされるにつれてパフォーマンスが向上するアルゴリズムが含まれます。
+
+---
+
+Russian:
+Заголовок: Начало работы с машинным обучением
+Содержание: Машинное обучение - это подмножество искусственного интеллекта, которое позволяет компьютерам учиться на данных без явного программирования. Оно включает алгоритмы, которые со временем улучшают свою производительность по мере того, как они подвергаются воздействию большего количества данных.
+
+---
+
+Arabic:
+العنوان: البدء مع التعلم الآلي
+المحتوى: التعلم الآلي هو مجموعة فرعية من الذكاء الاصطناعي يمكّن أجهزة الكمبيوتر من التعلم من البيانات دون برمجة صريحة. يتضمن خوارزميات تحسن أداءها بمرور الوقت مع تعرضها لمزيد من البيانات.
+
+---
+
+Portuguese:
+Título: Introdução ao aprendizado de máquina
+Conteúdo: O aprendizado de máquina é um subconjunto da inteligência artificial que permite que os computadores aprendam com os dados sem serem explicitamente programados. Envolve algoritmos que melhoram seu desempenho ao longo do tempo à medida que são expostos a mais dados.
+
+---
+
+Italian:
+Titolo: Iniziare con l'apprendimento automatico
+Contenuto: L'apprendimento automatico è un sottoinsieme dell'intelligenza artificiale che consente ai computer di apprendere dai dati senza essere programmati esplicitamente. Coinvolge algoritmi che migliorano le loro prestazioni nel tempo man mano che vengono esposti a più dati.
+
+---
+
+Dutch:
+Titel: Aan de slag met machine learning
+Inhoud: Machine learning is een subset van kunstmatige intelligentie waarmee computers kunnen leren van gegevens zonder expliciet te worden geprogrammeerd. Het omvat algoritmen die hun prestaties in de loop van de tijd verbeteren naarmate ze aan meer gegevens worden blootgesteld.

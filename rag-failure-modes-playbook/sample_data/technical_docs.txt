@@ -1,0 +1,50 @@
+# API Authentication Guide
+
+The Authentication API uses OAuth 2.0 for secure access. To authenticate:
+
+1. Register your application at https://developer.example.com
+2. Obtain your client_id and client_secret
+3. Request an access token using the /oauth/token endpoint
+4. Include the token in the Authorization header: Bearer <token>
+
+Token Expiration:
+Access tokens expire after 3600 seconds (1 hour). Refresh tokens are valid for 30 days.
+
+# Rate Limiting
+
+API requests are subject to rate limiting:
+- Free tier: 100 requests/hour
+- Pro tier: 1000 requests/hour
+- Enterprise: Custom limits
+
+Rate limit headers are included in every response:
+X-RateLimit-Limit: 100
+X-RateLimit-Remaining: 95
+X-RateLimit-Reset: 1609459200
+
+# Error Codes
+
+400 Bad Request - Invalid parameters
+401 Unauthorized - Missing or invalid authentication
+403 Forbidden - Insufficient permissions
+404 Not Found - Resource does not exist
+429 Too Many Requests - Rate limit exceeded
+500 Internal Server Error - Server error
+
+# Webhooks
+
+Webhooks allow you to receive real-time notifications:
+
+1. Configure webhook URL in dashboard
+2. Select events to subscribe to
+3. Verify webhook signature using HMAC-SHA256
+
+Webhook payload example:
+{
+  "event": "payment.completed",
+  "timestamp": 1609459200,
+  "data": {
+    "payment_id": "pay_123",
+    "amount": 49.99
+  }
+}

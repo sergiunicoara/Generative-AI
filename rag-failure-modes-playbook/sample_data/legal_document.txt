@@ -1,0 +1,53 @@
+SOFTWARE LICENSE AGREEMENT
+
+This Software License Agreement ("Agreement") is entered into as of January 1, 2024 ("Effective Date"), by and between TechCorp Inc., a Delaware corporation ("Licensor"), and the individual or entity agreeing to these terms ("Licensee").
+
+1. GRANT OF LICENSE
+
+1.1 License Grant. Subject to the terms and conditions of this Agreement, Licensor hereby grants to Licensee a non-exclusive, non-transferable, revocable license to use the Software solely for Licensee's internal business purposes.
+
+1.2 Restrictions. Licensee shall not:
+(a) Modify, adapt, alter, translate, or create derivative works of the Software;
+(b) Reverse engineer, decompile, disassemble, or otherwise attempt to derive the source code;
+(c) Rent, lease, loan, sell, sublicense, or otherwise transfer the Software;
+(d) Remove or alter any proprietary notices or labels on the Software.
+
+2. INTELLECTUAL PROPERTY RIGHTS
+
+2.1 Ownership. Licensor retains all right, title, and interest in and to the Software, including all intellectual property rights therein.
+
+2.2 Feedback. Any feedback, suggestions, or ideas provided by Licensee become the property of Licensor.
+
+3. CONFIDENTIALITY
+
+3.1 Confidential Information. Each party agrees to maintain the confidentiality of the other party's Confidential Information and to use such information only as necessary to perform its obligations under this Agreement.
+
+3.2 Exceptions. Confidential Information does not include information that: (a) is or becomes publicly available through no breach of this Agreement; (b) was rightfully in the receiving party's possession prior to disclosure; (c) is independently developed; or (d) is required to be disclosed by law.
+
+4. TERM AND TERMINATION
+
+4.1 Term. This Agreement commences on the Effective Date and continues until terminated.
+
+4.2 Termination. Either party may terminate this Agreement upon 30 days written notice. Licensor may terminate immediately if Licensee breaches any material term.
+
+4.3 Effect of Termination. Upon termination, Licensee must cease all use of the Software and destroy all copies.
+
+5. WARRANTY DISCLAIMER
+
+THE SOFTWARE IS PROVIDED "AS IS" WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE, OR NON-INFRINGEMENT.
+
+6. LIMITATION OF LIABILITY
+
+IN NO EVENT SHALL LICENSOR BE LIABLE FOR ANY INDIRECT, INCIDENTAL, SPECIAL, CONSEQUENTIAL, OR PUNITIVE DAMAGES, INCLUDING LOST PROFITS, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGES. LICENSOR'S TOTAL LIABILITY SHALL NOT EXCEED THE AMOUNT PAID BY LICENSEE IN THE TWELVE MONTHS PRECEDING THE CLAIM.
+
+7. GENERAL PROVISIONS
+
+7.1 Governing Law. This Agreement is governed by the laws of the State of Delaware, without regard to conflict of law principles.
+
+7.2 Entire Agreement. This Agreement constitutes the entire agreement between the parties and supersedes all prior agreements.
+
+7.3 Amendments. Any amendments must be in writing and signed by both parties.
+
+7.4 Severability. If any provision is found unenforceable, the remaining provisions shall remain in full force.
+
+IN WITNESS WHEREOF, the parties have executed this Agreement as of the Effective Date.

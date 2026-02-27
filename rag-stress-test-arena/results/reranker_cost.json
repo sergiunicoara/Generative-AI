@@ -1,0 +1,22 @@
+{
+  "elasticsearch": {
+    "retrieval_avg_ms": 67.05794215202332,
+    "rerank_avg_ms": 52.357492446899414,
+    "end_to_end_avg_ms": 119.41543459892273
+  },
+  "pgvector": {
+    "retrieval_avg_ms": 141.6202676296234,
+    "rerank_avg_ms": 50.69192886352539,
+    "end_to_end_avg_ms": 192.3121964931488
+  },
+  "qdrant": {
+    "retrieval_avg_ms": 20.858200788497925,
+    "rerank_avg_ms": 50.565152168273926,
+    "end_to_end_avg_ms": 71.42335295677185
+  },
+  "redis": {
+    "retrieval_avg_ms": 4.6499693393707275,
+    "rerank_avg_ms": 50.5858588218689,
+    "end_to_end_avg_ms": 55.235828161239624
+  }
+}

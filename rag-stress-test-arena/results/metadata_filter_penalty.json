@@ -1,0 +1,30 @@
+{
+  "elasticsearch": {
+    "no_filter_avg_ms": 15.540477434794107,
+    "no_filter_p95_ms": 18.884181976318363,
+    "filter_avg_ms": 14.971655209859213,
+    "filter_p95_ms": 17.196059226989746,
+    "filter_p99_ms": 20.415263175964352
+  },
+  "pgvector": {
+    "no_filter_avg_ms": 97.94204870859782,
+    "no_filter_p95_ms": 141.91215038299563,
+    "filter_avg_ms": 109.30734554926555,
+    "filter_p95_ms": 178.40397357940674,
+    "filter_p99_ms": 202.70919799804676
+  },
+  "qdrant": {
+    "no_filter_avg_ms": 18.561491171518963,
+    "no_filter_p95_ms": 34.030234813690186,
+    "filter_avg_ms": 13.97347609202067,
+    "filter_p95_ms": 31.413257122039795,
+    "filter_p99_ms": 37.77806758880614
+  },
+  "redis": {
+    "no_filter_avg_ms": 1.901551882425944,
+    "no_filter_p95_ms": 3.2209992408752446,
+    "filter_avg_ms": 2.248536745707194,
+    "filter_p95_ms": 3.181004524230957,
+    "filter_p99_ms": 4.46009397506712
+  }
+}

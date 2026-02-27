@@ -1,0 +1,98 @@
+{
+  "elasticsearch": {
+    "points": [
+      {
+        "k": 5,
+        "avg_latency_ms": 16.579090356826782,
+        "avg_recall": 1.0
+      },
+      {
+        "k": 10,
+        "avg_latency_ms": 23.813228607177734,
+        "avg_recall": 1.0
+      },
+      {
+        "k": 20,
+        "avg_latency_ms": 36.28552794456482,
+        "avg_recall": 1.0
+      },
+      {
+        "k": 50,
+        "avg_latency_ms": 65.80827236175537,
+        "avg_recall": 1.0
+      }
+    ]
+  },
+  "pgvector": {
+    "points": [
+      {
+        "k": 5,
+        "avg_latency_ms": 142.4878978729248,
+        "avg_recall": 1.0
+      },
+      {
+        "k": 10,
+        "avg_latency_ms": 137.03847646713257,
+        "avg_recall": 1.0
+      },
+      {
+        "k": 20,
+        "avg_latency_ms": 129.11168456077576,
+        "avg_recall": 1.0
+      },
+      {
+        "k": 50,
+        "avg_latency_ms": 143.23464393615723,
+        "avg_recall": 1.0
+      }
+    ]
+  },
+  "qdrant": {
+    "points": [
+      {
+        "k": 5,
+        "avg_latency_ms": 15.554780960083008,
+        "avg_recall": 1.0
+      },
+      {
+        "k": 10,
+        "avg_latency_ms": 13.713161945343018,
+        "avg_recall": 1.0
+      },
+      {
+        "k": 20,
+        "avg_latency_ms": 15.221941471099854,
+        "avg_recall": 1.0
+      },
+      {
+        "k": 50,
+        "avg_latency_ms": 18.46960425376892,
+        "avg_recall": 1.0
+      }
+    ]
+  },
+  "redis": {
+    "points": [
+      {
+        "k": 5,
+        "avg_latency_ms": 1.7784380912780762,
+        "avg_recall": 1.0
+      },
+      {
+        "k": 10,
+        "avg_latency_ms": 1.8190014362335205,
+        "avg_recall": 1.0
+      },
+      {
+        "k": 20,
+        "avg_latency_ms": 1.9568264484405518,
+        "avg_recall": 1.0
+      },
+      {
+        "k": 50,
+        "avg_latency_ms": 2.7701950073242188,
+        "avg_recall": 1.0
+      }
+    ]
+  }
+}

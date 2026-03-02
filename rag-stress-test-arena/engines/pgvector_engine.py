@@ -37,15 +37,38 @@ class PgVectorEngine(BaseEngine):
         with self._get_connection() as conn:
             with conn.cursor() as cur:
                 cur.execute("CREATE EXTENSION IF NOT EXISTS vector")
-                cur.execute(f"CREATE TABLE IF NOT EXISTS {self.table_name} (id TEXT PRIMARY KEY, vector vector(768), metadata JSONB)")
+                # Always drop and recreate to guarantee a clean table per benchmark run
+                cur.execute(f"DROP TABLE IF EXISTS {self.table_name}")
+                cur.execute(f"CREATE TABLE {self.table_name} (id TEXT PRIMARY KEY, vector vector(768), metadata JSONB)")
                 conn.commit()
+
+    def _rebuild_hnsw_index(self, conn):
+        """Drop and rebuild the HNSW index after data is fully loaded for best graph quality."""
+        m = self.kwargs.get('m', 16)
+        ef_construction = self.kwargs.get('ef_construction', 100)
+        idx_name = f"{self.table_name}_hnsw_idx"
+        with conn.cursor() as cur:
+            cur.execute(f"DROP INDEX IF EXISTS {idx_name}")
+            cur.execute(
+                f"CREATE INDEX {idx_name} ON {self.table_name} "
+                f"USING hnsw (vector vector_cosine_ops) "
+                f"WITH (m={m}, ef_construction={ef_construction})"
+            )
+            conn.commit()
 
     def index(self, vectors, metadata):
         data = [(str(m.get("id", uuid.uuid4())), v, Json(m)) for v, m in zip(vectors, metadata)]
         with self._get_connection() as conn:
             with conn.cursor() as cur:
-                execute_values(cur, f"INSERT INTO {self.table_name} (id, vector, metadata) VALUES %s ON CONFLICT (id) DO UPDATE SET vector=EXCLUDED.vector, metadata=EXCLUDED.metadata", data)
+                execute_values(
+                    cur,
+                    f"INSERT INTO {self.table_name} (id, vector, metadata) VALUES %s "
+                    f"ON CONFLICT (id) DO UPDATE SET vector=EXCLUDED.vector, metadata=EXCLUDED.metadata",
+                    data,
+                )
                 conn.commit()
+            # Rebuild HNSW index after every full load for a clean graph
+            self._rebuild_hnsw_index(conn)
 
     def insert(self, vectors, metadata):
         return self.index(vectors, metadata)
@@ -59,10 +82,16 @@ class PgVectorEngine(BaseEngine):
                 conn.commit()
 
     def search(self, query, k=10):
+        ef_search = self.kwargs.get('ef_search', 100)
         with self._get_connection() as conn:
             with conn.cursor() as cur:
-                cur.execute(f"SELECT id, metadata, (vector <=> %s::vector) as dist FROM {self.table_name} ORDER BY dist LIMIT %s", (query, k))
-                return [EngineResult(id=r[0], score=1-float(r[2]), metadata=r[1]) for r in cur.fetchall()]
+                cur.execute(f"SET hnsw.ef_search = {ef_search}")
+                cur.execute(
+                    f"SELECT id, metadata, (vector <=> %s::vector) as dist "
+                    f"FROM {self.table_name} ORDER BY dist LIMIT %s",
+                    (query, k),
+                )
+                return [EngineResult(id=r[0], score=1 - float(r[2]), metadata=r[1]) for r in cur.fetchall()]
 
     def flush(self):
         pass

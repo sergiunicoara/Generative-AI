@@ -1,22 +1,22 @@
 {
   "elasticsearch": {
-    "retrieval_avg_ms": 67.05794215202332,
-    "rerank_avg_ms": 52.357492446899414,
-    "end_to_end_avg_ms": 119.41543459892273
+    "retrieval_avg_ms": 106.65779829025269,
+    "rerank_avg_ms": 51.354472637176514,
+    "end_to_end_avg_ms": 158.0122709274292
   },
   "pgvector": {
-    "retrieval_avg_ms": 141.6202676296234,
-    "rerank_avg_ms": 50.69192886352539,
-    "end_to_end_avg_ms": 192.3121964931488
+    "retrieval_avg_ms": 58.78351807594299,
+    "rerank_avg_ms": 50.7927942276001,
+    "end_to_end_avg_ms": 109.57631230354309
   },
   "qdrant": {
-    "retrieval_avg_ms": 20.858200788497925,
-    "rerank_avg_ms": 50.565152168273926,
-    "end_to_end_avg_ms": 71.42335295677185
+    "retrieval_avg_ms": 32.6894736289978,
+    "rerank_avg_ms": 50.692912340164185,
+    "end_to_end_avg_ms": 83.38238596916199
   },
   "redis": {
-    "retrieval_avg_ms": 4.6499693393707275,
-    "rerank_avg_ms": 50.5858588218689,
-    "end_to_end_avg_ms": 55.235828161239624
+    "retrieval_avg_ms": 4.804596900939941,
+    "rerank_avg_ms": 50.62120318412781,
+    "end_to_end_avg_ms": 55.42580008506775
   }
 }

@@ -1,0 +1,189 @@
+{
+  "metadata": {
+    "distribution": "Wikipedia/all-mpnet-base-v2 (real embeddings)",
+    "recall_k": 10,
+    "ef_search_levels": [
+      10,
+      20,
+      50,
+      100,
+      200
+    ]
+  },
+  "elasticsearch": {
+    "points": [
+      {
+        "ef_search": 10,
+        "avg_ms": 26.8,
+        "p95_ms": 28.65,
+        "recall_at_10": 0.9191,
+        "random_baseline_ms": 43.84,
+        "clustered_penalty_pct": -38.9
+      },
+      {
+        "ef_search": 20,
+        "avg_ms": 25.84,
+        "p95_ms": 27.09,
+        "recall_at_10": 0.9719,
+        "random_baseline_ms": 43.84,
+        "clustered_penalty_pct": -41.1
+      },
+      {
+        "ef_search": 50,
+        "avg_ms": 33.08,
+        "p95_ms": 39.49,
+        "recall_at_10": 0.993,
+        "random_baseline_ms": 43.84,
+        "clustered_penalty_pct": -24.5
+      },
+      {
+        "ef_search": 100,
+        "avg_ms": 29.24,
+        "p95_ms": 29.62,
+        "recall_at_10": 0.9983,
+        "random_baseline_ms": 43.84,
+        "clustered_penalty_pct": -33.3
+      },
+      {
+        "ef_search": 200,
+        "avg_ms": 29.67,
+        "p95_ms": 30.25,
+        "recall_at_10": 0.9995,
+        "random_baseline_ms": 43.84,
+        "clustered_penalty_pct": -32.3
+      }
+    ]
+  },
+  "qdrant": {
+    "points": [
+      {
+        "ef_search": 10,
+        "avg_ms": 20.32,
+        "p95_ms": 21.07,
+        "recall_at_10": 0.9368,
+        "random_baseline_ms": 22.32,
+        "clustered_penalty_pct": -9.0
+      },
+      {
+        "ef_search": 20,
+        "avg_ms": 20.74,
+        "p95_ms": 21.75,
+        "recall_at_10": 0.9812,
+        "random_baseline_ms": 22.32,
+        "clustered_penalty_pct": -7.1
+      },
+      {
+        "ef_search": 50,
+        "avg_ms": 22.29,
+        "p95_ms": 24.42,
+        "recall_at_10": 0.9978,
+        "random_baseline_ms": 22.32,
+        "clustered_penalty_pct": -0.1
+      },
+      {
+        "ef_search": 100,
+        "avg_ms": 22.22,
+        "p95_ms": 23.76,
+        "recall_at_10": 0.9998,
+        "random_baseline_ms": 22.32,
+        "clustered_penalty_pct": -0.5
+      },
+      {
+        "ef_search": 200,
+        "avg_ms": 24.28,
+        "p95_ms": 24.69,
+        "recall_at_10": 1.0,
+        "random_baseline_ms": 22.32,
+        "clustered_penalty_pct": 8.8
+      }
+    ]
+  },
+  "redis": {
+    "points": [
+      {
+        "ef_search": 10,
+        "avg_ms": 2.84,
+        "p95_ms": 3.12,
+        "recall_at_10": 0.8218,
+        "random_baseline_ms": 6.74,
+        "clustered_penalty_pct": -57.9
+      },
+      {
+        "ef_search": 20,
+        "avg_ms": 2.97,
+        "p95_ms": 3.06,
+        "recall_at_10": 0.9212,
+        "random_baseline_ms": 6.74,
+        "clustered_penalty_pct": -55.9
+      },
+      {
+        "ef_search": 50,
+        "avg_ms": 3.45,
+        "p95_ms": 3.89,
+        "recall_at_10": 0.9784,
+        "random_baseline_ms": 6.74,
+        "clustered_penalty_pct": -48.8
+      },
+      {
+        "ef_search": 100,
+        "avg_ms": 3.59,
+        "p95_ms": 3.75,
+        "recall_at_10": 0.9926,
+        "random_baseline_ms": 6.74,
+        "clustered_penalty_pct": -46.8
+      },
+      {
+        "ef_search": 200,
+        "avg_ms": 4.52,
+        "p95_ms": 4.77,
+        "recall_at_10": 0.9976,
+        "random_baseline_ms": 6.74,
+        "clustered_penalty_pct": -33.0
+      }
+    ]
+  },
+  "pgvector": {
+    "points": [
+      {
+        "ef_search": 10,
+        "avg_ms": 41.25,
+        "p95_ms": 41.36,
+        "recall_at_10": 0.8802,
+        "random_baseline_ms": 55.03,
+        "clustered_penalty_pct": -25.0
+      },
+      {
+        "ef_search": 20,
+        "avg_ms": 42.99,
+        "p95_ms": 44.69,
+        "recall_at_10": 0.9458,
+        "random_baseline_ms": 55.03,
+        "clustered_penalty_pct": -21.9
+      },
+      {
+        "ef_search": 50,
+        "avg_ms": 47.45,
+        "p95_ms": 52.22,
+        "recall_at_10": 0.9876,
+        "random_baseline_ms": 55.03,
+        "clustered_penalty_pct": -13.8
+      },
+      {
+        "ef_search": 100,
+        "avg_ms": 47.52,
+        "p95_ms": 48.65,
+        "recall_at_10": 0.9954,
+        "random_baseline_ms": 55.03,
+        "clustered_penalty_pct": -13.6
+      },
+      {
+        "ef_search": 200,
+        "avg_ms": 50.72,
+        "p95_ms": 51.03,
+        "recall_at_10": 0.9984,
+        "random_baseline_ms": 55.03,
+        "clustered_penalty_pct": -7.8
+      }
+    ]
+  }
+}

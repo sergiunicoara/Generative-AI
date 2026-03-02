@@ -40,15 +40,29 @@ class RedisEngine(BaseEngine):
         self._ensure_index()
 
     def _ensure_index(self):
+        # Always drop and recreate to guarantee a clean index per benchmark run
         try:
-            self.client.ft(self.index_name).info()
-        except:
-            schema = (
-                VectorField("vector", "HNSW", {"TYPE": "FLOAT32", "DIM": 768, "DISTANCE_METRIC": "COSINE"}), 
-                TagField("id"),
-                TextField("metadata")
-            )
-            self.client.ft(self.index_name).create_index(schema, definition=IndexDefinition(prefix=["doc:"], index_type=IndexType.HASH))
+            self.client.ft(self.index_name).dropindex(delete_documents=True)
+        except Exception:
+            pass  # Index didn't exist yet — that's fine
+        m = self.kwargs.get('m', 16)
+        ef_construction = self.kwargs.get('ef_construction', 100)
+        schema = (
+            VectorField(
+                "vector", "HNSW",
+                {
+                    "TYPE": "FLOAT32",
+                    "DIM": 768,
+                    "DISTANCE_METRIC": "COSINE",
+                    "M": m,
+                    "EF_CONSTRUCTION": ef_construction,
+                    "INITIAL_CAP": 25000,
+                },
+            ),
+            TagField("id"),
+            TextField("metadata"),
+        )
+        self.client.ft(self.index_name).create_index(schema, definition=IndexDefinition(prefix=["doc:"], index_type=IndexType.HASH))
 
     def index(self, vectors, metadata):
         pipe = self.client.pipeline(transaction=False)
@@ -91,7 +105,8 @@ class RedisEngine(BaseEngine):
             pipe.execute()
 
     def search(self, query, k=10):
-        q = Query(f"*=>[KNN {k} @vector $vec AS score]").sort_by("score").return_fields("id", "score", "metadata").dialect(2)
+        ef_search = self.kwargs.get('ef_search', 100)
+        q = Query(f"*=>[KNN {k} @vector $vec EF_RUNTIME {ef_search} AS score]").sort_by("score").return_fields("id", "score", "metadata").dialect(2)
         params = {"vec": np.array(query, dtype=np.float32).tobytes()}
         res = self.client.ft(self.index_name).search(q, params)
         return [

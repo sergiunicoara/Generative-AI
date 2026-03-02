@@ -1,0 +1,39 @@
+distribution:
+  # Real Wikipedia embeddings — sentence-transformers/all-mpnet-base-v2 (768-d)
+  # Source: HuggingFace wikimedia/wikipedia 20231101.en (frozen snapshot, never changes)
+  # Run `py -3.11 generate_distribution.py` to produce both files.
+  file:       corpus_768d.npy    # 20 000 indexed articles
+  query_file: queries_768d.npy   # 3 000 held-out articles (never indexed)
+  dims:       768
+  n_samples:  20000
+  n_queries:  3000
+
+run:
+  warmup_queries: 500
+  measured_queries: 2000
+  runs: 3
+  random_seed: 42
+  top_k: 10
+  ef_search_levels: [10, 20, 50, 100, 200]
+
+# All engines use identical HNSW parameters for a fair apples-to-apples comparison.
+# distance: cosine for all (matching the brute-force ground truth)
+# m=16, ef_construction=100 → standard moderate-quality graph build
+# ef_search=100 → standard search beam width
+engines:
+  qdrant:
+    ef_search: 100
+    m: 16
+    ef_construction: 100
+  elasticsearch:
+    ef_search: 100
+    m: 16
+    ef_construction: 100
+  redis:
+    ef_search: 100
+    m: 16
+    ef_construction: 100
+  pgvector:
+    ef_search: 100
+    m: 16
+    ef_construction: 100

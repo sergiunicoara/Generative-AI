@@ -2,11 +2,13 @@
 
 ---
 
-Most vector DB benchmarks are measuring a fantasy. Here's what happens on real data.
+Most vector DB benchmarks are measuring a fantasy.
 
-They test with random fake data. Your production RAG system runs on real text — which clusters, overlaps, and behaves completely differently.
+They test on random vectors. Production RAG systems run on real text — clustered, overlapping, and full of hard negatives.
 
-I ran a full stress test on 4 engines (Qdrant, Elasticsearch, Redis, pgvector) using 20,000 real Wikipedia embeddings. Here's what actually matters when you ship to production:
+I ran a full stress test on 4 engines (Qdrant, Elasticsearch, Redis, pgvector) using 20,000 real Wikipedia embeddings. Here's what actually matters in production:
+
+All tests ran on the same hardware, warm caches, fixed embedding model, and identical HNSW parameters unless stated otherwise.
 
 ---
 
@@ -17,7 +19,7 @@ One thing that surprised me: pgvector's single-thread latency dropped from ~58ms
 
 **🎯 Will it find the right answer?**
 On fake benchmark data, all engines hit 100% recall.
-On real data? Redis and pgvector cap at ~99.8% — at standard HNSW build params (m=16, ef_construction=100). Real topics create "hard negatives" that are genuinely difficult to resolve without rebuilding the index with higher-quality params.
+On real data? Redis and pgvector cap at ~99.8% recall under **standard** HNSW build params (m=16, ef_construction=100). Real topics create "hard negatives" that are genuinely difficult to resolve without rebuilding the index with higher-quality params.
 → That's real users occasionally getting the wrong document — worth knowing before you go live.
 
 **✍️ What happens when your index gets updated?**

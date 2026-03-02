@@ -15,7 +15,9 @@ class QdrantEngine(BaseEngine):
         self.collection = collection
         self.distance_metric = distance_metric
         self.client = QdrantClient(host=host, port=port)
-        self._ensure_collection()
+        # skip_index=True → worker-thread mode: connect only, don't touch the collection
+        if not kwargs.get('skip_index', False):
+            self._ensure_collection()
 
     def _ensure_collection(self):
         try:

@@ -68,23 +68,23 @@ Each cell shows `recall@10 / avg latency`. Corpus: 20,000 × 768d **real Wikiped
 
 ## Scenario 2 — Concurrency Burst
 
-Simulates a production traffic spike: 1 → 5 → 10 → 20 → 50 concurrent clients each issuing 200 queries.
+Simulates a production traffic spike: 1 → 5 → 10 → 20 → 50 concurrent clients each issuing 200 queries. Each "client" is an independent engine instance with its own TCP connection — the correct simulation of N real separate clients hitting the server simultaneously.
 
 | Engine            | 1 thread | 5 threads | 10 threads | 20 threads | 50 threads | Peak QPS |
 |-------------------|----------|-----------|------------|------------|------------|----------|
-| **Redis Stack**   | 3.8 ms   | 6.5 ms    | 11.5 ms    | 23.1 ms    | 55.9 ms    | **845**  |
-| **Qdrant**        | 20.6 ms  | 37.7 ms   | 65.0 ms    | 123.7 ms   | 349.5 ms   | 159      |
-| **pgvector**      | 58.2 ms  | 66.4 ms   | 115.2 ms   | 196.1 ms   | 488.6 ms   | 101      |
-| **Elasticsearch** | 27.0 ms  | 61.3 ms   | 128.2 ms   | 261.7 ms   | 653.8 ms   | 81       |
+| **Redis Stack**   | 3.2 ms   | 5.2 ms    | 10.9 ms    | 52.4 ms    | 123.7 ms   | **918**  |
+| **pgvector**      | 18.1 ms  | 43.6 ms   | 66.3 ms    | 119.9 ms   | 273.9 ms   | 164      |
+| **Qdrant**        | 21.7 ms  | 58.5 ms   | 111.4 ms   | 245.4 ms   | 215.8 ms   | 120      |
+| **Elasticsearch** | 39.4 ms  | 85.6 ms   | 161.7 ms   | 319.4 ms   | 921.1 ms   | 61       |
 
 > Plot: `plots/concurrency_avg_ms.png`, `plots/concurrency_p95_ms.png`
 
 ### Key Findings
 
-- **Redis dominates throughput at 845 QPS** — single-threaded event loop scales with concurrency far better than multi-process engines.
-- **Elasticsearch bottlenecks hardest** — QPS plateaus at 74 after just 5 threads; adding more clients only inflates latency, not throughput.
-- **pgvector scales better than expected** — connection pooling keeps throughput growing to 50 threads (101 QPS peak), but latency blows out to 489ms.
-- **Qdrant peaks at 10–20 threads** (151–159 QPS) then degrades — HNSW graph locks become contention points at extreme concurrency.
+- **Redis peaks at 918 QPS** (5 threads) — single-threaded event loop handles bursts well at low-to-mid concurrency, but degrades at 20+ threads as connection contention on the Redis server itself kicks in.
+- **pgvector is more competitive than it first appears** — with a persistent connection per client (as any production app would use), single-thread latency is 18 ms and peak throughput reaches 164 QPS, significantly better than naive benchmarks suggest.
+- **Qdrant peaks at 5–10 threads** (120 QPS) then degrades under higher concurrency — HNSW graph locks become a bottleneck as competing threads contend for the same traversal structures.
+- **Elasticsearch is the weakest single-node engine at 61 QPS** — HTTP overhead and segment-level locking compound under load; this engine is designed to scale out horizontally, not up.
 
 ---
 

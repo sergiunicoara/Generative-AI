@@ -10,9 +10,10 @@ I ran a full stress test on 4 engines (Qdrant, Elasticsearch, Redis, pgvector) u
 
 ---
 
-**🚀 Speed under load? (single node, 20k vectors)**
-Redis handles 845 requests/sec at peak. Elasticsearch tops out at 81 — on a single node.
-Yes, ES scales horizontally across nodes. But most small-to-mid RAG deployments start on one — and that's where Redis wins without any extra infrastructure.
+**🚀 Speed under load? (single node, 20k vectors, independent clients)**
+Redis peaks at 918 req/sec. pgvector reaches 164. Qdrant 120. Elasticsearch 61 — on a single node.
+Yes, ES scales horizontally. But most small-to-mid RAG deployments start on one node — and that's where Redis wins without extra infrastructure.
+One thing that surprised me: pgvector's single-thread latency dropped from ~58ms to 18ms once each client used a persistent connection instead of reconnecting per query. The old number was penalising connection overhead, not search quality.
 
 **🎯 Will it find the right answer?**
 On fake benchmark data, all engines hit 100% recall.

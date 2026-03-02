@@ -4,7 +4,7 @@ import time
 import numpy as np
 import yaml
 from utils import make_random_vectors, load_query_vectors, calculate_recall, p95, avg
-from engine_loader import get_engine, get_all_engines
+from engine_loader import get_engine, get_all_engines, get_all_engine_factories
 from engines.bruteforce_engine import BruteForceEngine
 from scenarios.concurrency_burst import run_scenario as run_concurrency
 from scenarios.metadata_filter_penalty import run_scenario as run_metadata
@@ -141,7 +141,8 @@ def run_scientific_benchmark():
     print("  Running additional scenarios")
     print("="*50)
     engines = get_all_engines()
-    run_concurrency(engines)
+    engine_factories = get_all_engine_factories()
+    run_concurrency(engines, engine_factories=engine_factories)
     run_metadata(engines)
     run_fragmentation(engines)
     run_reranker(engines)

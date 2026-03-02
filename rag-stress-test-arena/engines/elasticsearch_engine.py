@@ -1,6 +1,7 @@
 import uuid, json
 from typing import Any, Dict, List, Optional
 import requests
+from requests.adapters import HTTPAdapter
 from .base import BaseEngine, EngineResult, FilteredEngineResult
 
 _TIMEOUT = (5.0, 30.0)  # (connect_timeout, read_timeout) in seconds
@@ -13,7 +14,14 @@ class ElasticsearchEngine(BaseEngine):
         self.index_name = index
         self._base_url = f"http://{self.host}:{self.port}"
         self._session = requests.Session()
-        self._ensure_index()
+        # Allow up to 64 concurrent TCP connections so worker threads don't
+        # queue behind the default urllib3 pool size of 10.
+        _adapter = HTTPAdapter(pool_connections=64, pool_maxsize=64)
+        self._session.mount("http://", _adapter)
+        self._session.mount("https://", _adapter)
+        # skip_index=True → worker-thread mode: connect only, don't drop/recreate index
+        if not kwargs.get('skip_index', False):
+            self._ensure_index()
 
     def _ensure_index(self):
         # Always drop and recreate to guarantee a clean index per benchmark run

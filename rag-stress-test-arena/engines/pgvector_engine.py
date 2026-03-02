@@ -28,7 +28,13 @@ class PgVectorEngine(BaseEngine):
             "password": password,
             "connect_timeout": connect_timeout_s,
         }
-        self._ensure_table()
+        # skip_index=True → worker-thread mode: open one persistent connection,
+        # skip all schema setup so the already-indexed data is preserved.
+        if kwargs.get('skip_index', False):
+            self._conn = psycopg2.connect(**self.params)
+        else:
+            self._conn = None
+            self._ensure_table()
 
     def _get_connection(self):
         return psycopg2.connect(**self.params)
@@ -83,8 +89,10 @@ class PgVectorEngine(BaseEngine):
 
     def search(self, query, k=10):
         ef_search = self.kwargs.get('ef_search', 100)
-        with self._get_connection() as conn:
-            with conn.cursor() as cur:
+        if self._conn is not None:
+            # Worker mode: reuse the persistent connection (no per-query connect overhead)
+            cur = self._conn.cursor()
+            try:
                 cur.execute(f"SET hnsw.ef_search = {ef_search}")
                 cur.execute(
                     f"SELECT id, metadata, (vector <=> %s::vector) as dist "
@@ -92,6 +100,27 @@ class PgVectorEngine(BaseEngine):
                     (query, k),
                 )
                 return [EngineResult(id=r[0], score=1 - float(r[2]), metadata=r[1]) for r in cur.fetchall()]
+            finally:
+                cur.close()
+        else:
+            # Standard mode: new connection per query (original behaviour)
+            with self._get_connection() as conn:
+                with conn.cursor() as cur:
+                    cur.execute(f"SET hnsw.ef_search = {ef_search}")
+                    cur.execute(
+                        f"SELECT id, metadata, (vector <=> %s::vector) as dist "
+                        f"FROM {self.table_name} ORDER BY dist LIMIT %s",
+                        (query, k),
+                    )
+                    return [EngineResult(id=r[0], score=1 - float(r[2]), metadata=r[1]) for r in cur.fetchall()]
 
     def flush(self):
         pass
+
+    def close(self):
+        if self._conn is not None:
+            try:
+                self._conn.close()
+            except Exception:
+                pass
+            self._conn = None

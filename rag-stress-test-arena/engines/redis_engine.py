@@ -37,7 +37,9 @@ class RedisEngine(BaseEngine):
         )
         # Fail fast if Redis isn't reachable.
         self.client.ping()
-        self._ensure_index()
+        # skip_index=True → worker-thread mode: connect only, don't drop/recreate index
+        if not kwargs.get('skip_index', False):
+            self._ensure_index()
 
     def _ensure_index(self):
         # Always drop and recreate to guarantee a clean index per benchmark run

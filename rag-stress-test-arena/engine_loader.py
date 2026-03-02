@@ -38,6 +38,14 @@ _ENGINE_FACTORIES: Dict[str, Callable[[], BaseEngine]] = {
     "redis":          _make_factory("engines.redis_engine",          "RedisEngine",         "redis"),
 }
 
+# Registry used by get_engine_factory — maps name → (module, class)
+_ENGINE_SPECS: Dict[str, tuple] = {
+    "qdrant":        ("engines.qdrant_engine",        "QdrantEngine"),
+    "elasticsearch": ("engines.elasticsearch_engine", "ElasticsearchEngine"),
+    "pgvector":      ("engines.pgvector_engine",      "PgVectorEngine"),
+    "redis":         ("engines.redis_engine",         "RedisEngine"),
+}
+
 
 def _try_create_engine(name: str) -> Optional[BaseEngine]:
     factory = _ENGINE_FACTORIES.get(name)
@@ -81,3 +89,36 @@ def get_engines_by_names(names: List[str]) -> Dict[str, BaseEngine]:
         if eng is not None:
             engines[name] = eng
     return engines
+
+
+def get_engine_factory(name: str) -> Optional[Callable[..., BaseEngine]]:
+    """Return a factory callable for the named engine that accepts **extra_kwargs.
+
+    Extra kwargs are merged on top of the base config kwargs, allowing callers to
+    pass e.g. ``skip_index=True`` to create a worker-thread client without touching
+    the index:
+
+        factory = get_engine_factory("qdrant")
+        worker_eng = factory(skip_index=True)   # own connection, no index setup
+    """
+    spec = _ENGINE_SPECS.get(name)
+    if spec is None:
+        return None
+    module_path, class_name = spec
+    base_kwargs = _ENGINE_CONFIG.get(name, {})
+    cls = _load_class(module_path, class_name)
+
+    def factory(**extra_kwargs) -> BaseEngine:
+        return cls(**{**base_kwargs, **extra_kwargs})
+
+    return factory
+
+
+def get_all_engine_factories() -> Dict[str, Callable[..., BaseEngine]]:
+    """Return factories for all configured engines, keyed by engine name."""
+    result = {}
+    for name in sorted(_ENGINE_SPECS.keys()):
+        f = get_engine_factory(name)
+        if f is not None:
+            result[name] = f
+    return result

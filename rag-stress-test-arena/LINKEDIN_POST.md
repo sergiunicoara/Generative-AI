@@ -4,13 +4,15 @@
 
 Most vector DB benchmarks are measuring a fantasy.
 
-They test on random vectors. Production RAG systems run on real text — clustered, overlapping, and full of hard negatives.
+They test on random vectors.
+Production RAG systems run on real text — clustered, overlapping, and full of hard negatives.
 
-I ran a full stress test on 4 engines (Qdrant, Elasticsearch, Redis, pgvector) using 20,000 real Wikipedia embeddings.
+I ran a full stress test on 4 engines:
+Qdrant, Elasticsearch, Redis, pgvector
 
-Here's what actually matters in production.
+20,000 real Wikipedia embeddings. Here's what actually matters in production.
 
-All tests ran on the same hardware, warm caches, fixed embedding model, and identical HNSW parameters unless stated otherwise.
+All tests: same hardware, warm caches, fixed embedding model, identical HNSW parameters.
 
 ――――――――――――――――――――――
 
@@ -22,9 +24,12 @@ pgvector reaches 164.
 Qdrant 120.
 Elasticsearch 61 — on a single node.
 
-Yes, Elasticsearch scales horizontally. But most small-to-mid RAG deployments start on one node — and that's where Redis wins without extra infrastructure.
+Yes, Elasticsearch scales horizontally.
+But most small-to-mid RAG deployments start on one node — and that's where Redis wins without extra infrastructure.
 
-One thing that surprised me: pgvector's single-thread latency dropped from ~58ms to 18ms once each client used a persistent connection instead of reconnecting per query.
+One thing that surprised me:
+pgvector's single-thread latency dropped from ~58ms to 18ms once each client used a persistent connection instead of reconnecting per query.
+
 The old number was penalising connection overhead, not search quality.
 
 ――――――――――――――――――――――
@@ -33,7 +38,8 @@ The old number was penalising connection overhead, not search quality.
 
 On fake benchmark data, all engines hit 100% recall.
 
-On real data? Redis and pgvector cap at ~99.8% recall under standard HNSW build params (m=16, ef_construction=100).
+On real data?
+Redis and pgvector cap at ~99.8% recall under standard HNSW build params (m=16, ef_construction=100).
 
 Real topics create "hard negatives" that are genuinely difficult to resolve without rebuilding the index with higher-quality params.
 
@@ -59,7 +65,8 @@ With a 50ms reranker in the pipeline:
 • Redis: 55ms end-to-end
 • Elasticsearch: 158ms end-to-end
 
-When your reranker is slow (≥30ms), it dominates the latency budget. Fast retrieval still matters — it compounds.
+When your reranker is slow (≥30ms), it dominates the latency budget.
+Fast retrieval still matters — it compounds.
 
 If you swap in a 5ms reranker, engine choice suddenly matters a lot more again.
 

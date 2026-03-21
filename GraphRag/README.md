@@ -47,6 +47,7 @@ An end-to-end **GraphRAG** system that combines knowledge graph retrieval with L
 |---------|---------|
 | **Graph-based retrieval** | Entities + relations stored in Neo4j; multi-hop traversal resolves cross-document facts |
 | **BM25 + Vector hybrid search** | Vector ANN and BM25 fulltext results fused via Reciprocal Rank Fusion (RRF) |
+| **Cross-encoder reranking** | `ms-marco-MiniLM-L-6-v2` re-scores RRF candidates with deep pairwise query-chunk scoring before graph expansion |
 | **Multi-hop graph traversal** | `Chunk → Entity → RELATES_TO* → Entity → Chunk` up to depth 2 |
 | **Agentic fallback** | Low-confidence answers trigger iterative IRCoT re-search via Google ADK |
 | **RAGAS evaluation** | Faithfulness, answer relevancy, context precision, context recall — auto-sampled at 20% |
@@ -66,6 +67,7 @@ An end-to-end **GraphRAG** system that combines knowledge graph retrieval with L
 | KPI Store | TimescaleDB (PostgreSQL 16) |
 | Embeddings | `gemini-embedding-001` (3072d) |
 | LLM | `gemini-2.5-flash` |
+| Reranker | `cross-encoder/ms-marco-MiniLM-L-6-v2` (sentence-transformers) |
 | Agent Framework | Google ADK |
 | Evaluation | RAGAS |
 | API | FastAPI + Uvicorn |
@@ -87,6 +89,7 @@ Full end-to-end test completed 2026-03-21:
 | Schema | Vector indexes + BM25 fulltext indexes | ✅ |
 | Graph counts | 3 docs · 3 chunks · 19 entities | ✅ |
 | Hybrid search | BM25 + vector fusion (all chunks tagged `vector+bm25`) | ✅ |
+| Cross-encoder reranker | ms-marco-MiniLM-L-6-v2, top_score=2.97 | ✅ |
 | Cross-doc query | Falcon 9/Starship answer spanning 3 documents | ✅ |
 | RAGAS | context_precision=1.0 · context_recall=1.0 | ✅ |
 | Dashboard | Live KPI charts at /dashboard/ | ✅ |
@@ -346,6 +349,14 @@ This question spans 3 separate documents that have no direct text overlap.
    │  chunk B: vector rank 2, bm25 rank 2  → score 0.0320 [vector+bm25]│
    │  chunk C: vector rank 3, bm25 rank 3  → score 0.0317 [vector+bm25]│
    └───────────────────────────────────────────────────────────────────┘
+   ┌─ Cross-Encoder Reranking ──────────────────────────────────────────┐
+   │  model: cross-encoder/ms-marco-MiniLM-L-6-v2                      │
+   │  scores every (query, chunk) pair independently — not cosine       │
+   │  chunk A: rerank_score=2.97  ← achievements, most relevant        │
+   │  chunk B: rerank_score=1.83  ← products                           │
+   │  chunk C: rerank_score=0.42  ← ownership                          │
+   │  → top rerank_k=5 passed forward to graph expansion               │
+   └───────────────────────────────────────────────────────────────────┘
 
 5. MULTI-HOP GRAPH TRAVERSAL (depth=2)
    chunk A mentions → Entity("SpaceX")
@@ -411,6 +422,7 @@ Query
   │     ├─ Vector ANN on chunk_embeddings index (3072d cosine)
   │     ├─ BM25 fulltext on chunk_fulltext index
   │     ├─ RRF fusion (k=60) of vector + BM25 results
+  │     ├─ Cross-encoder reranking (ms-marco-MiniLM-L-6-v2) → top rerank_k
   │     └─ Multi-hop graph traversal (depth=2)
   │         Chunk → MENTIONS → Entity → RELATES_TO* → Entity → MENTIONS → Chunk
   │

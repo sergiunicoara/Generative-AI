@@ -64,6 +64,10 @@ services:
     ports:
       - "8000:8000"
     env_file: .env
+    environment:
+      NEO4J_URI: bolt://neo4j:7687
+      RABBITMQ_URL: amqp://graphrag:graphrag_dev@rabbitmq:5672/
+      TIMESCALE_URL: postgresql+asyncpg://graphrag:graphrag_dev@timescaledb:5432/graphrag_kpis
     depends_on:
       neo4j:
         condition: service_healthy
@@ -81,6 +85,9 @@ services:
     container_name: graphrag_ingestion_worker
     command: python workers/ingestion_worker.py
     env_file: .env
+    environment:
+      NEO4J_URI: bolt://neo4j:7687
+      RABBITMQ_URL: amqp://graphrag:graphrag_dev@rabbitmq:5672/
     depends_on:
       neo4j:
         condition: service_healthy
@@ -96,6 +103,10 @@ services:
     container_name: graphrag_query_worker
     command: python workers/query_worker.py
     env_file: .env
+    environment:
+      NEO4J_URI: bolt://neo4j:7687
+      RABBITMQ_URL: amqp://graphrag:graphrag_dev@rabbitmq:5672/
+      TIMESCALE_URL: postgresql+asyncpg://graphrag:graphrag_dev@timescaledb:5432/graphrag_kpis
     depends_on:
       neo4j:
         condition: service_healthy
@@ -111,6 +122,9 @@ services:
     container_name: graphrag_eval_worker
     command: python workers/evaluation_worker.py
     env_file: .env
+    environment:
+      RABBITMQ_URL: amqp://graphrag:graphrag_dev@rabbitmq:5672/
+      TIMESCALE_URL: postgresql+asyncpg://graphrag:graphrag_dev@timescaledb:5432/graphrag_kpis
     depends_on:
       rabbitmq:
         condition: service_healthy
@@ -128,6 +142,8 @@ services:
     ports:
       - "8050:8050"
     env_file: .env
+    environment:
+      TIMESCALE_URL: postgresql+asyncpg://graphrag:graphrag_dev@timescaledb:5432/graphrag_kpis
     depends_on:
       timescaledb:
         condition: service_healthy

@@ -44,6 +44,19 @@ class QueryConsumer:
             msg = QueryMessage(**payload)
             result = await agent.run(msg)
 
+            # Store result for API polling
+            try:
+                from api.routes.query import store_result
+                store_result(msg.query_id, {
+                    "status": "completed",
+                    "query_id": msg.query_id,
+                    "answer": result.answer,
+                    "citations": result.citations,
+                    "latency_ms": result.latency_ms,
+                })
+            except Exception:
+                pass  # worker may run standalone without API context
+
             # Async RAGAS evaluation on sampled queries
             if random.random() < eval_sample_rate:
                 eval_job = EvalJob(

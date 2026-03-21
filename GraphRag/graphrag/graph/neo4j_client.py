@@ -32,7 +32,7 @@ class Neo4jClient:
 
     async def run(self, cypher: str, **params) -> list[dict]:
         async with self._driver.session() as session:
-            result = await session.run(cypher, **params)
+            result = await session.run(cypher, parameters=params)
             return [record.data() async for record in result]
 
     # ── Schema initialization ────────────────────────────────────────────────────
@@ -217,6 +217,39 @@ class Neo4jClient:
                 neighbor.name       AS via_entity
             """,
             chunk_ids=chunk_ids,
+        )
+
+    async def bm25_search_chunks(
+        self, query: str, top_k: int = 10
+    ) -> list[dict]:
+        """BM25 fulltext search over Chunk.text using Neo4j fulltext index."""
+        return await self.run(
+            """
+            CALL db.index.fulltext.queryNodes('chunk_fulltext', $query)
+            YIELD node AS c, score
+            RETURN c.id AS chunk_id, c.text AS text, score
+            ORDER BY score DESC
+            LIMIT $k
+            """,
+            query=query,
+            k=top_k,
+        )
+
+    async def bm25_search_entities(
+        self, query: str, top_k: int = 10
+    ) -> list[dict]:
+        """BM25 fulltext search over Entity name + description."""
+        return await self.run(
+            """
+            CALL db.index.fulltext.queryNodes('entity_fulltext', $query)
+            YIELD node AS e, score
+            OPTIONAL MATCH (c:Chunk)-[:MENTIONS]->(e)
+            RETURN DISTINCT c.id AS chunk_id, c.text AS text, score
+            ORDER BY score DESC
+            LIMIT $k
+            """,
+            query=query,
+            k=top_k,
         )
 
     async def get_all_entities(self) -> list[dict]:

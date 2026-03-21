@@ -1,4 +1,4 @@
-"""Local search: vector similarity over chunks → entity graph expansion."""
+"""Local search: vector ANN + BM25 fulltext → RRF fusion → graph expansion."""
 
 from __future__ import annotations
 
@@ -7,6 +7,7 @@ import structlog
 from graphrag.core.config import get_settings
 from graphrag.graph.neo4j_client import get_neo4j
 from graphrag.ingestion.embedder import Embedder
+from graphrag.retrieval.bm25_search import HybridBM25Search
 
 log = structlog.get_logger(__name__)
 
@@ -16,35 +17,49 @@ class LocalSearch:
         self._cfg = get_settings().retrieval
         self._neo4j = get_neo4j()
         self._embedder = Embedder()
+        self._bm25 = HybridBM25Search()
 
     async def search(self, question: str) -> dict:
-        embedding = await self._embedder.embed_text(question)
-
         top_k = self._cfg.get("local_top_k", 10)
         hops  = self._cfg.get("multihop_depth", 2)
+        use_bm25 = self._cfg.get("bm25_enabled", True)
 
-        # Step 1 — vector similarity: find seed chunks
-        seed_chunks = await self._neo4j.vector_search_chunks(embedding, top_k=top_k)
-        seed_ids    = [c["chunk_id"] for c in seed_chunks]
+        # Step 1 — vector ANN: semantic similarity
+        embedding    = await self._embedder.embed_text(question)
+        vector_chunks = await self._neo4j.vector_search_chunks(embedding, top_k=top_k)
 
-        # Step 2 — graph traversal: follow entity relations N hops and
-        #           pull back the chunks those neighbors appear in
-        hop_chunks  = await self._neo4j.get_multihop_chunks(seed_ids, hops=hops)
+        # Step 2 — BM25 + RRF fusion (true hybrid search)
+        if use_bm25:
+            seed_chunks = await self._bm25.search(
+                query=question,
+                vector_chunks=vector_chunks,
+                top_k=top_k,
+            )
+        else:
+            seed_chunks = vector_chunks
 
-        # Merge — seed chunks first (higher relevance), then graph-expanded
+        seed_ids = [c["chunk_id"] for c in seed_chunks]
+
+        # Step 3 — multi-hop graph traversal: follow entity relations N hops
+        #           and pull back the chunks those neighbors appear in
+        hop_chunks = await self._neo4j.get_multihop_chunks(seed_ids, hops=hops)
+
+        # Merge: seed chunks first (RRF-ranked), then graph-expanded
         seen: set[str] = set(seed_ids)
         extra_chunks = [c for c in hop_chunks if c["chunk_id"] not in seen]
         all_chunks   = seed_chunks + extra_chunks
 
-        # Step 3 — entity context from all retrieved chunk ids
+        # Step 4 — entity context from all chunk IDs
         all_ids  = [c["chunk_id"] for c in all_chunks]
         entities = await self._neo4j.get_entity_neighbors(all_ids)
 
         log.info(
             "local_search.done",
-            seed_chunks=len(seed_chunks),
+            vector_chunks=len(vector_chunks),
+            fused_chunks=len(seed_chunks),
             hop_chunks=len(extra_chunks),
             entities=len(entities),
             hops=hops,
+            bm25=use_bm25,
         )
         return {"chunks": all_chunks, "entities": entities}

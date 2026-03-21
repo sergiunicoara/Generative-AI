@@ -63,6 +63,24 @@ async def dev_login(response: Response, next: str = "/docs"):
     return r
 
 
+@router.post("/dev-token", summary="⚡ Dev token — returns Bearer JWT as JSON (dev + CLI only)", include_in_schema=True)
+async def dev_token():
+    """Returns a Bearer token as JSON for CLI / PowerShell use in development."""
+    from graphrag.core.config import get_settings
+    if get_settings().env != "development":
+        raise HTTPException(status_code=403, detail="Only available in development")
+
+    token = create_access_token({
+        "sub": "dev-user",
+        "email": "dev@localhost",
+        "name": "Dev User",
+        "picture": "",
+        "type": "m2m",
+        "scope": "read write",
+    })
+    return {"access_token": token, "token_type": "bearer", "expires_in": ACCESS_TOKEN_EXPIRE_MINUTES * 60}
+
+
 # ── Browser: Google OAuth 2.0 ─────────────────────────────────────────────────
 
 @router.get("/login", summary="Redirect browser to Google sign-in")

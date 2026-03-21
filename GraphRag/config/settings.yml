@@ -23,6 +23,7 @@ retrieval:
   rerank_top_k: 5
   hybrid_weight_local: 0.6
   hybrid_weight_global: 0.4
+  bm25_enabled: true       # BM25 fulltext + RRF fusion with vector results
   agentic_fallback: true   # trigger iterative agent when hybrid answer is weak
   agentic_max_steps: 4     # max sub-searches before forced synthesis
 

@@ -9,4 +9,6 @@ CREATE VECTOR INDEX community_embeddings IF NOT EXISTS
   FOR (c:Community) ON (c.embedding)
   OPTIONS {indexConfig: {`vector.dimensions`: 3072, `vector.similarity_function`: 'cosine'}};
 CREATE INDEX entity_type IF NOT EXISTS FOR (e:Entity) ON (e.type);
-CREATE INDEX chunk_doc IF NOT EXISTS FOR (c:Chunk) ON (c.document_id)
+CREATE INDEX chunk_doc IF NOT EXISTS FOR (c:Chunk) ON (c.document_id);
+CREATE FULLTEXT INDEX chunk_fulltext IF NOT EXISTS FOR (c:Chunk) ON EACH [c.text];
+CREATE FULLTEXT INDEX entity_fulltext IF NOT EXISTS FOR (e:Entity) ON EACH [e.name, e.description]

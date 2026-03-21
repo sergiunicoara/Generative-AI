@@ -1,6 +1,7 @@
 # ── Google ADK + Gemini ────────────────────────────────────────────────────────
 google-adk>=1.0.0
 google-generativeai>=0.8.0
+google-genai>=1.0.0
 
 # ── Graph processing ───────────────────────────────────────────────────────────
 neo4j>=5.20.0
@@ -23,6 +24,8 @@ datasets>=2.20.0
 # ── API & Dashboard ────────────────────────────────────────────────────────────
 fastapi>=0.111.0
 uvicorn[standard]>=0.30.0
+python-jose[cryptography]>=3.3.0
+python-multipart>=0.0.9
 dash>=2.17.0
 plotly>=5.22.0
 prometheus-fastapi-instrumentator>=2.3.0

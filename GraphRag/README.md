@@ -307,6 +307,101 @@ Invoke-RestMethod -Uri "http://localhost:8000/evaluation/summary" -Method GET -H
 
 ---
 
+## End-to-End Flow: User Asks a Question
+
+> **Example:** *"What rockets did Elon Musk's company launch and what did they achieve?"*
+
+This question spans 3 separate documents that have no direct text overlap.
+
+```
+1. USER AUTHENTICATES
+   POST /auth/dev-token  →  JWT (HS256, 60 min)
+   Authorization: Bearer eyJhbGci...
+
+2. USER SUBMITS QUESTION
+   POST /query
+   { "question": "What rockets did Elon Musk company launch and what did they achieve?" }
+   →  FastAPI validates JWT scope("read")
+   →  Publishes message to RabbitMQ exchange: graphrag.query
+   →  Returns immediately: { query_id: "abc-123", status: "queued" }
+
+3. QUERY WORKER PICKS UP MESSAGE
+   rabbitmq.consuming  exchange=graphrag.query  queue=graphrag.query.queue
+   →  QueryAgent.run(query_id, question)
+
+4. LOCAL SEARCH (parallel vector + BM25)
+   ┌─ Vector ANN ──────────────────────────────────────────────────────┐
+   │  embed("What rockets did Elon Musk company launch...")            │
+   │  → 3072d vector via gemini-embedding-001                         │
+   │  → db.index.vector.queryNodes('chunk_embeddings', 10, $vec)      │
+   │  → top-3 chunks by cosine similarity                             │
+   └───────────────────────────────────────────────────────────────────┘
+   ┌─ BM25 Fulltext ───────────────────────────────────────────────────┐
+   │  CALL db.index.fulltext.queryNodes('chunk_fulltext',             │
+   │       'rockets Elon Musk launch achieve')                        │
+   │  → top-3 chunks by BM25 score                                    │
+   └───────────────────────────────────────────────────────────────────┘
+   ┌─ RRF Fusion (k=60) ───────────────────────────────────────────────┐
+   │  chunk A: vector rank 1, bm25 rank 1  → score 0.0328 [vector+bm25]│
+   │  chunk B: vector rank 2, bm25 rank 2  → score 0.0320 [vector+bm25]│
+   │  chunk C: vector rank 3, bm25 rank 3  → score 0.0317 [vector+bm25]│
+   └───────────────────────────────────────────────────────────────────┘
+
+5. MULTI-HOP GRAPH TRAVERSAL (depth=2)
+   chunk A mentions → Entity("SpaceX")
+   Entity("SpaceX")  -[RELATES_TO]→  Entity("Falcon 9")
+   Entity("Falcon 9") ← MENTIONS ─  chunk in achievements.txt
+
+   Cross-document bridge resolved:
+     ownership.txt    →  "Elon Musk owns SpaceX"
+     products.txt     →  "SpaceX manufactures Falcon 9, Starship"
+     achievements.txt →  "Falcon 9 landed 2015, Starship flew 2023, NASA Artemis"
+
+6. GLOBAL SEARCH
+   embed(question) → query community_embeddings index
+   → Community nodes with pre-built cluster summaries
+   → Adds high-level context about the SpaceX/Tesla/Elon Musk cluster
+
+7. CONFIDENCE CHECK
+   if citations found AND answer is specific:
+       → skip agentic fallback  ✅ (this query passes)
+   else:
+       → trigger AgenticRetriever (IRCoT loop, max 4 steps)
+          Step 1: LLM reasons → SEARCH: Elon Musk vehicles Mars
+          Step 2: re-search → no new chunks found
+          Step 3: SEARCH: SpaceX Mars mission → still nothing
+          Step 4: ANSWER: insufficient context in knowledge base
+
+8. GEMINI GENERATES ANSWER
+   Context: local chunks (60%) + community summaries (40%)
+   Model: gemini-2.5-flash
+
+   Answer:
+     "SpaceX, founded by Elon Musk, launched:
+      • Falcon 9 — first booster landing 2015, 200+ missions [Chunk 8910eded]
+      • Starship — first successful flight 2023, NASA Artemis HLS [Chunk 8910eded]"
+
+9. USER POLLS FOR RESULT
+   GET /query/abc-123
+   → { status: "completed", answer: "...", citations: [...], latency_ms: 3860 }
+
+10. RAGAS EVALUATION (20% sampled)
+    → EvalJob published to graphrag.eval queue
+    → EvaluationAgent runs:
+         faithfulness      = 1.0   (answer grounded in retrieved chunks)
+         context_precision = 1.0   (all retrieved chunks were relevant)
+         context_recall    = 1.0   (all ground truth facts were found)
+         answer_relevancy  = 0.85  (answer directly addresses the question)
+    → Scores stored in TimescaleDB
+
+11. DASHBOARD UPDATES
+    http://localhost:8050/dashboard/
+    → Plotly chart refreshes every 30s
+    → latency timeseries + RAGAS score table + alert thresholds
+```
+
+---
+
 ## Retrieval Pipeline
 
 ```

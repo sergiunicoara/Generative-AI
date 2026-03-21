@@ -1,0 +1,44 @@
+ingestion:
+  chunk_size: 512
+  chunk_overlap: 64
+  embedding_batch_size: 100
+  entity_types:
+    - PERSON
+    - ORG
+    - PRODUCT
+    - CONCEPT
+    - LOCATION
+    - EVENT
+
+graph:
+  community_levels: 3
+  leiden_resolution: 1.0
+  min_community_size: 3
+  community_summary_max_tokens: 512
+
+retrieval:
+  local_top_k: 10
+  multihop_depth: 2        # how many RELATES_TO hops to follow (2 = A→B→C)
+  global_top_communities: 5
+  rerank_top_k: 5
+  hybrid_weight_local: 0.6
+  hybrid_weight_global: 0.4
+  agentic_fallback: true   # trigger iterative agent when hybrid answer is weak
+  agentic_max_steps: 4     # max sub-searches before forced synthesis
+
+evaluation:
+  ragas_metrics:
+    - faithfulness
+    - answer_relevancy
+    - context_precision
+    - context_recall
+  eval_sample_rate: 0.2
+  min_ground_truth_queries: 50
+
+business_matrix:
+  kpi_retention_days: 90
+  dashboard_refresh_seconds: 30
+  alert_thresholds:
+    latency_p95_ms: 3000
+    faithfulness: 0.7
+    context_recall: 0.6

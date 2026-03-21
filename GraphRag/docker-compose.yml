@@ -1,0 +1,141 @@
+version: "3.9"
+
+services:
+  neo4j:
+    image: neo4j:5.20-community
+    container_name: graphrag_neo4j
+    ports:
+      - "7474:7474"   # HTTP browser
+      - "7687:7687"   # Bolt
+    environment:
+      NEO4J_AUTH: neo4j/graphrag_dev
+      NEO4J_PLUGINS: '["apoc", "graph-data-science"]'
+      NEO4J_server_memory_heap_max__size: 2G
+      NEO4J_server_memory_pagecache_size: 1G
+    volumes:
+      - neo4j_data:/data
+      - neo4j_logs:/logs
+    healthcheck:
+      test: ["CMD", "cypher-shell", "-u", "neo4j", "-p", "graphrag_dev", "RETURN 1"]
+      interval: 15s
+      timeout: 10s
+      retries: 5
+
+  rabbitmq:
+    image: rabbitmq:3.13-management
+    container_name: graphrag_rabbitmq
+    ports:
+      - "5672:5672"    # AMQP
+      - "15672:15672"  # Management UI
+    environment:
+      RABBITMQ_DEFAULT_USER: graphrag
+      RABBITMQ_DEFAULT_PASS: graphrag_dev
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "ping"]
+      interval: 15s
+      timeout: 10s
+      retries: 5
+
+  timescaledb:
+    image: timescale/timescaledb:latest-pg16
+    container_name: graphrag_timescaledb
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_DB: graphrag_kpis
+      POSTGRES_USER: graphrag
+      POSTGRES_PASSWORD: graphrag_dev
+    volumes:
+      - timescale_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U graphrag -d graphrag_kpis"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: graphrag_api
+    command: uvicorn api.main:app --host 0.0.0.0 --port 8000 --reload
+    ports:
+      - "8000:8000"
+    env_file: .env
+    depends_on:
+      neo4j:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      timescaledb:
+        condition: service_healthy
+    volumes:
+      - .:/app
+
+  ingestion_worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: graphrag_ingestion_worker
+    command: python workers/ingestion_worker.py
+    env_file: .env
+    depends_on:
+      neo4j:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    volumes:
+      - .:/app
+
+  query_worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: graphrag_query_worker
+    command: python workers/query_worker.py
+    env_file: .env
+    depends_on:
+      neo4j:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    volumes:
+      - .:/app
+
+  evaluation_worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: graphrag_eval_worker
+    command: python workers/evaluation_worker.py
+    env_file: .env
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+      timescaledb:
+        condition: service_healthy
+    volumes:
+      - .:/app
+
+  dashboard:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: graphrag_dashboard
+    command: python graphrag/business_matrix/dashboard_server.py
+    ports:
+      - "8050:8050"
+    env_file: .env
+    depends_on:
+      timescaledb:
+        condition: service_healthy
+    volumes:
+      - .:/app
+
+volumes:
+  neo4j_data:
+  neo4j_logs:
+  rabbitmq_data:
+  timescale_data:

@@ -1,0 +1,42 @@
+# ── Google ADK + Gemini ────────────────────────────────────────────────────────
+google-adk>=1.0.0
+google-generativeai>=0.8.0
+
+# ── Graph processing ───────────────────────────────────────────────────────────
+neo4j>=5.20.0
+graspologic>=3.3.0
+networkx>=3.3
+
+# ── Document ingestion ─────────────────────────────────────────────────────────
+pypdf>=4.0.0
+python-docx>=1.1.0
+langchain-text-splitters>=0.2.0
+
+# ── Async messaging (RabbitMQ) ─────────────────────────────────────────────────
+aio-pika>=9.4.0
+pika>=1.3.2
+
+# ── Evaluation ─────────────────────────────────────────────────────────────────
+ragas>=0.2.0
+datasets>=2.20.0
+
+# ── API & Dashboard ────────────────────────────────────────────────────────────
+fastapi>=0.111.0
+uvicorn[standard]>=0.30.0
+dash>=2.17.0
+plotly>=5.22.0
+prometheus-fastapi-instrumentator>=2.3.0
+httpx>=0.27.0
+
+# ── Storage ────────────────────────────────────────────────────────────────────
+sqlalchemy>=2.0.30
+asyncpg>=0.29.0
+
+# ── Config & validation ────────────────────────────────────────────────────────
+pydantic>=2.7.0
+pydantic-settings>=2.3.0
+pyyaml>=6.0.1
+python-dotenv>=1.0.0
+
+# ── Observability ──────────────────────────────────────────────────────────────
+structlog>=24.2.0

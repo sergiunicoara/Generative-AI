@@ -1,0 +1,24 @@
+{
+  "permissions": {
+    "allow": [
+      "mcp__Claude_Preview__preview_start",
+      "Bash(netstat -ano)",
+      "Bash(tasklist /FI \"PID eq 6020\" /FO LIST)",
+      "Bash(tasklist /FI \"PID eq 4184\" /FO LIST)",
+      "Bash(powershell -Command \"Get-Process -Id 6020,4184 | Select-Object Id,ProcessName,Path\")",
+      "Bash(docker ps:*)",
+      "Bash(docker stop:*)",
+      "Bash(py -3.11 -m pip install -e . -q)",
+      "Bash(curl.exe -s -u graphrag:graphrag_dev -X DELETE http://localhost:15672/api/queues/%2F/graphrag.ingest.queue)",
+      "Bash(curl.exe -s -u graphrag:graphrag_dev -X DELETE http://localhost:15672/api/queues/%2F/graphrag.query.queue)",
+      "Bash(curl.exe -s -u graphrag:graphrag_dev -X DELETE http://localhost:15672/api/queues/%2F/graphrag.eval.queue)",
+      "Bash(py -3.11 -m pip show google-genai)",
+      "Bash(py -3.11 -c \"from google import genai; client = genai.Client\\(api_key=''AIzaSyAzDRwZPMX68pewUNAACJZK3ttVT5fYg_Y''\\); r = client.models.generate_content\\(model=''gemini-2.0-flash-lite'', contents=''say hi''\\); print\\(r.text\\)\")",
+      "Bash(py -3.11 -c \"from google import genai; client = genai.Client\\(api_key=''AIzaSyBxjyb6Jdi7kptrp5aqVwZdOk4-j9M7F6k''\\); r = client.models.generate_content\\(model=''gemini-2.0-flash-lite'', contents=''say hi''\\); print\\(r.text\\)\")",
+      "Bash(py -3.11 -c \"from google import genai; client = genai.Client\\(api_key=''AIzaSyBxjyb6Jdi7kptrp5aqVwZdOk4-j9M7F6k''\\); r = client.models.generate_content\\(model=''gemini-2.5-flash'', contents=''say hi''\\); print\\(r.text\\)\")",
+      "Bash(py -3.11 -c \":*)",
+      "Bash(py -3.11 -m pip install \"python-jose[cryptography]\" httpx itsdangerous --quiet)",
+      "Bash(py -3.11 -c \"import secrets; print\\(secrets.token_hex\\(32\\)\\)\")"
+    ]
+  }
+}

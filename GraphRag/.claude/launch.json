@@ -1,0 +1,37 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "GraphRAG API",
+      "runtimeExecutable": "py",
+      "runtimeArgs": ["-3.11", "-m", "uvicorn", "api.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"],
+      "port": 8000,
+      "autoPort": false
+    },
+    {
+      "name": "Business Matrix Dashboard",
+      "runtimeExecutable": "py",
+      "runtimeArgs": ["-3.11", "graphrag/business_matrix/dashboard_server.py"],
+      "port": 8050,
+      "autoPort": false
+    },
+    {
+      "name": "Ingestion Worker",
+      "runtimeExecutable": "py",
+      "runtimeArgs": ["-3.11", "workers/ingestion_worker.py"],
+      "autoPort": true
+    },
+    {
+      "name": "Query Worker",
+      "runtimeExecutable": "py",
+      "runtimeArgs": ["-3.11", "workers/query_worker.py"],
+      "autoPort": true
+    },
+    {
+      "name": "Evaluation Worker",
+      "runtimeExecutable": "py",
+      "runtimeArgs": ["-3.11", "workers/evaluation_worker.py"],
+      "autoPort": true
+    }
+  ]
+}

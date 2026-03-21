@@ -41,5 +41,8 @@ pydantic-settings>=2.3.0
 pyyaml>=6.0.1
 python-dotenv>=1.0.0
 
+# ── Reranking ──────────────────────────────────────────────────────────────────
+sentence-transformers>=3.0.0
+
 # ── Observability ──────────────────────────────────────────────────────────────
 structlog>=24.2.0

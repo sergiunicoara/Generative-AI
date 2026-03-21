@@ -24,6 +24,7 @@ retrieval:
   hybrid_weight_local: 0.6
   hybrid_weight_global: 0.4
   bm25_enabled: true       # BM25 fulltext + RRF fusion with vector results
+  reranker_enabled: true   # cross-encoder rerank after RRF (ms-marco-MiniLM-L-6-v2)
   agentic_fallback: true   # trigger iterative agent when hybrid answer is weak
   agentic_max_steps: 4     # max sub-searches before forced synthesis
 

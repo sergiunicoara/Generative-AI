@@ -1,12 +1,13 @@
-"""Time-series KPI storage (TimescaleDB in production, SQLite in development)."""
+"""Time-series KPI storage — SQLite (portable, zero external dependency)."""
 
 from __future__ import annotations
 
-from sqlalchemy import Column, DateTime, Float, String, text
+import os
+from pathlib import Path
+
+from sqlalchemy import Column, DateTime, Float, String
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, create_async_engine
 from sqlalchemy.orm import DeclarativeBase, sessionmaker
-
-from graphrag.core.config import get_settings
 
 
 class Base(DeclarativeBase):
@@ -34,10 +35,9 @@ _session_factory = None
 
 
 def _get_db_url() -> str:
-    cfg = get_settings()
-    if cfg.env == "development":
-        return "sqlite+aiosqlite:///results/kpi_snapshots/kpis.db"
-    return cfg.timescale_url
+    db_path = Path(os.getenv("KPI_DB_PATH", "results/kpi_snapshots/kpis.db"))
+    db_path.parent.mkdir(parents=True, exist_ok=True)
+    return f"sqlite+aiosqlite:///{db_path}"
 
 
 async def get_engine() -> AsyncEngine:

@@ -38,23 +38,6 @@ services:
       timeout: 10s
       retries: 5
 
-  timescaledb:
-    image: timescale/timescaledb:latest-pg16
-    container_name: graphrag_timescaledb
-    ports:
-      - "5432:5432"
-    environment:
-      POSTGRES_DB: graphrag_kpis
-      POSTGRES_USER: graphrag
-      POSTGRES_PASSWORD: graphrag_dev
-    volumes:
-      - timescale_data:/var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U graphrag -d graphrag_kpis"]
-      interval: 15s
-      timeout: 5s
-      retries: 5
-
   api:
     build:
       context: .
@@ -67,16 +50,15 @@ services:
     environment:
       NEO4J_URI: bolt://neo4j:7687
       RABBITMQ_URL: amqp://graphrag:graphrag_dev@rabbitmq:5672/
-      TIMESCALE_URL: postgresql+asyncpg://graphrag:graphrag_dev@timescaledb:5432/graphrag_kpis
+      KPI_DB_PATH: /data/kpis.db
     depends_on:
       neo4j:
         condition: service_healthy
       rabbitmq:
         condition: service_healthy
-      timescaledb:
-        condition: service_healthy
     volumes:
       - .:/app
+      - kpi_data:/data
 
   ingestion_worker:
     build:
@@ -106,7 +88,7 @@ services:
     environment:
       NEO4J_URI: bolt://neo4j:7687
       RABBITMQ_URL: amqp://graphrag:graphrag_dev@rabbitmq:5672/
-      TIMESCALE_URL: postgresql+asyncpg://graphrag:graphrag_dev@timescaledb:5432/graphrag_kpis
+      KPI_DB_PATH: /data/kpis.db
     depends_on:
       neo4j:
         condition: service_healthy
@@ -114,6 +96,7 @@ services:
         condition: service_healthy
     volumes:
       - .:/app
+      - kpi_data:/data
 
   evaluation_worker:
     build:
@@ -124,14 +107,13 @@ services:
     env_file: .env
     environment:
       RABBITMQ_URL: amqp://graphrag:graphrag_dev@rabbitmq:5672/
-      TIMESCALE_URL: postgresql+asyncpg://graphrag:graphrag_dev@timescaledb:5432/graphrag_kpis
+      KPI_DB_PATH: /data/kpis.db
     depends_on:
       rabbitmq:
         condition: service_healthy
-      timescaledb:
-        condition: service_healthy
     volumes:
       - .:/app
+      - kpi_data:/data
 
   dashboard:
     build:
@@ -143,15 +125,13 @@ services:
       - "8050:8050"
     env_file: .env
     environment:
-      TIMESCALE_URL: postgresql+asyncpg://graphrag:graphrag_dev@timescaledb:5432/graphrag_kpis
-    depends_on:
-      timescaledb:
-        condition: service_healthy
+      KPI_DB_PATH: /data/kpis.db
     volumes:
       - .:/app
+      - kpi_data:/data
 
 volumes:
   neo4j_data:
   neo4j_logs:
   rabbitmq_data:
-  timescale_data:
+  kpi_data:

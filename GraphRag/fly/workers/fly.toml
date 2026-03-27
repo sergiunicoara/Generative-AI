@@ -1,0 +1,27 @@
+app = "graphrag-workers"
+primary_region = "ams"
+
+[build]
+  dockerfile = "../../Dockerfile"
+
+[env]
+  PYTHONUNBUFFERED = "1"
+  PYTHONPATH = "/app"
+  ENV = "production"
+  LOG_LEVEL = "INFO"
+
+# Workers don't expose HTTP - no [http_service] needed
+[[mounts]]
+  source = "kpi_data"
+  destination = "/data"
+
+[vm]
+  memory = "512mb"
+  cpu_kind = "shared"
+  cpus = 1
+
+# Run all workers in one process via supervisor script
+[processes]
+  ingestion = "python workers/ingestion_worker.py"
+  query = "python workers/query_worker.py"
+  evaluation = "python workers/evaluation_worker.py"

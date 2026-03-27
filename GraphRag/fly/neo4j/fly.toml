@@ -1,0 +1,37 @@
+app = "graphrag-neo4j"
+primary_region = "ams"
+
+[build]
+  image = "neo4j:5.20-community"
+
+[env]
+  NEO4J_AUTH = "neo4j/graphrag_dev"
+  NEO4J_server_memory_heap_max__size = "256m"
+  NEO4J_server_memory_pagecache_size = "128m"
+
+[[services]]
+  internal_port = 7687
+  protocol = "tcp"
+  auto_stop_machines = false
+  auto_start_machines = true
+
+  [[services.ports]]
+    port = 7687
+
+[[services]]
+  internal_port = 7474
+  protocol = "tcp"
+  auto_stop_machines = false
+  auto_start_machines = true
+
+  [[services.ports]]
+    port = 7474
+
+[[mounts]]
+  source = "neo4j_data"
+  destination = "/data"
+
+[vm]
+  memory = "512mb"
+  cpu_kind = "shared"
+  cpus = 1

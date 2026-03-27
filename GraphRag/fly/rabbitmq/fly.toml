@@ -1,0 +1,27 @@
+app = "graphrag-rabbit"
+primary_region = "ams"
+
+[build]
+  image = "rabbitmq:3.13-management"
+
+[env]
+  RABBITMQ_DEFAULT_USER = "graphrag"
+  RABBITMQ_DEFAULT_PASS = "graphrag_dev"
+
+[[services]]
+  internal_port = 5672
+  protocol = "tcp"
+  auto_stop_machines = false
+  auto_start_machines = true
+
+  [[services.ports]]
+    port = 5672
+
+[[mounts]]
+  source = "rabbitmq_data"
+  destination = "/var/lib/rabbitmq"
+
+[vm]
+  memory = "256mb"
+  cpu_kind = "shared"
+  cpus = 1

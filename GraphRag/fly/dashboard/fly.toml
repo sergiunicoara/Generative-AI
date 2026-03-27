@@ -1,0 +1,26 @@
+app = "graphrag-dashboard"
+primary_region = "ams"
+
+[build]
+  dockerfile = "../../Dockerfile"
+
+[env]
+  PYTHONUNBUFFERED = "1"
+  PYTHONPATH = "/app"
+  ENV = "production"
+  LOG_LEVEL = "INFO"
+
+[http_service]
+  internal_port = 8050
+  force_https = true
+  auto_stop_machines = false
+  auto_start_machines = true
+
+[[mounts]]
+  source = "kpi_data"
+  destination = "/data"
+
+[vm]
+  memory = "256mb"
+  cpu_kind = "shared"
+  cpus = 1

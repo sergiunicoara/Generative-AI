@@ -252,6 +252,47 @@ class Neo4jClient:
             k=top_k,
         )
 
+    async def get_chunk_entity_embeddings(
+        self, chunk_ids: list[str]
+    ) -> list[dict]:
+        """Return entity embeddings for all entities mentioned by the given chunks.
+
+        Used by GNNScorer to build the node-feature matrix H.
+        Only returns entities that actually have a stored embedding.
+        """
+        return await self.run(
+            """
+            UNWIND $chunk_ids AS cid
+            MATCH (c:Chunk {id: cid})-[:MENTIONS]->(e:Entity)
+            WHERE e.embedding IS NOT NULL AND size(e.embedding) > 0
+            RETURN cid          AS chunk_id,
+                   e.name       AS entity_name,
+                   e.type       AS entity_type,
+                   e.embedding  AS embedding
+            """,
+            chunk_ids=chunk_ids,
+        )
+
+    async def get_entity_relations_subgraph(
+        self, entity_names: list[str]
+    ) -> list[dict]:
+        """Return RELATES_TO edges between a set of named entities.
+
+        Used by GNNScorer to build the adjacency matrix A.
+        Only intra-subgraph edges are returned (both endpoints in the list).
+        """
+        return await self.run(
+            """
+            UNWIND $names AS name
+            MATCH (s:Entity {name: name})-[r:RELATES_TO]->(t:Entity)
+            WHERE t.name IN $names
+            RETURN s.name    AS src,
+                   t.name    AS tgt,
+                   r.weight  AS weight
+            """,
+            names=entity_names,
+        )
+
     async def get_all_entities(self) -> list[dict]:
         return await self.run(
             "MATCH (e:Entity) RETURN e.id AS id, e.name AS name, e.type AS type"

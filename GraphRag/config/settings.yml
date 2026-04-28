@@ -25,6 +25,13 @@ retrieval:
   hybrid_weight_global: 0.4
   bm25_enabled: true       # BM25 fulltext + RRF fusion with vector results
   reranker_enabled: true   # cross-encoder rerank after RRF (ms-marco-MiniLM-L-6-v2)
+  # ── GNN scoring (after multi-hop traversal) ───────────────────────────────
+  gnn_enabled: true        # GCN/GAT graph-propagated re-scoring
+  gnn_type: gat            # "gcn" (Kipf & Welling 2017) | "gat" (Veličković 2018)
+  gnn_layers: 2            # number of message-passing layers
+  gnn_alpha: 0.6           # weight for cross-encoder / vector score
+  gnn_beta: 0.4            # weight for GNN structural score
+  # ─────────────────────────────────────────────────────────────────────────
   agentic_fallback: true   # trigger iterative agent when hybrid answer is weak
   agentic_max_steps: 4     # max sub-searches before forced synthesis
 

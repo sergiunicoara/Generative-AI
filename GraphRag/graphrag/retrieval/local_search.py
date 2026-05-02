@@ -25,6 +25,23 @@ from graphrag.retrieval.reranker import CrossEncoderReranker
 
 log = structlog.get_logger(__name__)
 
+# ── Query-adaptive weight routing ─────────────────────────────────────────────
+# Queries containing relational signals get more graph weight (lower alpha).
+# Direct factoid queries stay at the calibrated default (high alpha).
+_RELATIONAL_SIGNALS = [
+    "relationship", "how did", "caused by", "connected", "led to",
+    "between", "link", "related", "chain", "through", "via",
+    "owned by", "founded by", "acquired", "impact of", "effect of",
+]
+
+
+def _adaptive_weights(question: str, alpha_default: float, beta_default: float):
+    q = question.lower()
+    if any(s in q for s in _RELATIONAL_SIGNALS):
+        # Boost graph signal for multi-hop / relational queries
+        return 0.5, 0.5
+    return alpha_default, beta_default
+
 
 class LocalSearch:
     def __init__(self):
@@ -38,10 +55,12 @@ class LocalSearch:
         self._gnn = GNNScorer(
             gnn_type                  = self._cfg.get("gnn_type", "gat"),
             num_layers                = self._cfg.get("gnn_layers", 2),
-            alpha                     = self._cfg.get("gnn_alpha", 0.6),
-            beta                      = self._cfg.get("gnn_beta",  0.4),
+            alpha                     = self._cfg.get("gnn_alpha", 0.9),
+            beta                      = self._cfg.get("gnn_beta",  0.1),
             edge_confidence_threshold = self._cfg.get("gnn_edge_confidence_threshold", 0.7),
+            confidence_half_life_days = self._cfg.get("gnn_confidence_half_life_days", 0),
         )
+        self._adaptive_weights = self._cfg.get("gnn_adaptive_weights", True)
 
     async def search(self, question: str) -> dict:
         top_k      = self._cfg.get("local_top_k", 10)
@@ -87,6 +106,16 @@ class LocalSearch:
         #           subgraph (GCN or GAT), then blend structural score with
         #           cross-encoder score for a final graph-aware ranking.
         if use_gnn and all_chunks:
+            # Query-adaptive weights: relational queries get more graph signal
+            alpha, beta = _adaptive_weights(
+                question,
+                self._cfg.get("gnn_alpha", 0.9),
+                self._cfg.get("gnn_beta",  0.1),
+            ) if self._adaptive_weights else (
+                self._cfg.get("gnn_alpha", 0.9),
+                self._cfg.get("gnn_beta",  0.1),
+            )
+
             # Fetch entity embeddings + intra-subgraph edges in parallel
             chunk_entities, entity_edges = await asyncio.gather(
                 self._neo4j.get_chunk_entity_embeddings(all_ids),
@@ -100,6 +129,8 @@ class LocalSearch:
                     chunks         = all_chunks,
                     chunk_entities = chunk_entities,
                     entity_edges   = entity_edges,
+                    alpha          = alpha,
+                    beta           = beta,
                 ),
             )
 

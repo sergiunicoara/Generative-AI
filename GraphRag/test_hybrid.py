@@ -45,8 +45,10 @@ async def run_query(label: str, question: str):
         if final is not None:
             score_str += f"final={final:.4f}"
 
-        via_str = f"  via_entity={via}" if via else ""
-        print(f"  [{i}] {score_str}{via_str}")
+        expl = c.get("explanation", "")
+        print(f"  [{i}] {score_str}")
+        if expl:
+            print(f"      WHY: {expl}")
         print(f"      {c['text'][:100]}")
         print()
 

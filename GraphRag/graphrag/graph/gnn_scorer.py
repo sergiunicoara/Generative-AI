@@ -47,6 +47,9 @@ Final blend:
 
 from __future__ import annotations
 
+import math
+from datetime import datetime, timezone
+
 import numpy as np
 import structlog
 
@@ -133,9 +136,10 @@ class GNNScorer:
         self,
         gnn_type: str = "gat",   # "gcn" | "gat"
         num_layers: int = 2,
-        alpha: float = 0.6,       # weight for cross-encoder / vector score
-        beta: float = 0.4,        # weight for GNN structural score
+        alpha: float = 0.9,       # weight for cross-encoder / vector score
+        beta: float = 0.1,        # weight for GNN structural score
         edge_confidence_threshold: float = 0.7,  # drop edges below this confidence
+        confidence_half_life_days: int = 0,       # 0 = no decay
     ):
         if gnn_type not in ("gcn", "gat"):
             raise ValueError(f"gnn_type must be 'gcn' or 'gat', got {gnn_type!r}")
@@ -144,6 +148,7 @@ class GNNScorer:
         self._alpha = alpha
         self._beta = beta
         self._edge_conf_threshold = edge_confidence_threshold
+        self._half_life_days = confidence_half_life_days
 
     # ------------------------------------------------------------------
     # Public API
@@ -154,7 +159,9 @@ class GNNScorer:
         query_vec: list[float],
         chunks: list[dict],
         chunk_entities: list[dict],   # [{chunk_id, entity_name, embedding}]
-        entity_edges: list[dict],     # [{src, tgt, weight}]
+        entity_edges: list[dict],     # [{src, tgt, weight, confidence, extracted_at}]
+        alpha: float | None = None,   # override instance default (query-adaptive)
+        beta: float | None = None,
     ) -> list[dict]:
         """Compute GNN-blended scores and re-sort chunks in-place.
 
@@ -169,11 +176,15 @@ class GNNScorer:
         Returns:
             Same chunk list, re-sorted by ``final_score`` (descending).
         """
+        alpha = alpha if alpha is not None else self._alpha
+        beta  = beta  if beta  is not None else self._beta
+
         if not chunk_entities:
             log.info("gnn_scorer.skip", reason="no_entity_embeddings")
             for c in chunks:
-                c["gnn_score"] = 0.0
-                c["final_score"] = self._fallback_score(c)
+                c["gnn_score"]   = 0.0
+                c["final_score"] = self._fallback_score(c, alpha, beta)
+                c["explanation"] = "GNN skipped: no entity embeddings"
             return chunks
 
         q = np.array(query_vec, dtype=np.float32)
@@ -193,8 +204,21 @@ class GNNScorer:
         A = np.zeros((N, N), dtype=np.float32)
         edge_count = 0
         skipped_edges = 0
+        now = datetime.now(timezone.utc)
         for edge in entity_edges:
             conf = float(edge.get("confidence", 1.0))
+            # Timestamp decay: conf *= exp(-ln2 / half_life * age_days)
+            if self._half_life_days > 0:
+                raw_ts = edge.get("extracted_at")
+                if raw_ts:
+                    try:
+                        ts = datetime.fromisoformat(str(raw_ts))
+                        if ts.tzinfo is None:
+                            ts = ts.replace(tzinfo=timezone.utc)
+                        age_days = (now - ts).days
+                        conf *= math.exp(-math.log(2) / self._half_life_days * age_days)
+                    except (ValueError, TypeError):
+                        pass
             if conf < self._edge_conf_threshold:
                 skipped_edges += 1
                 continue
@@ -218,6 +242,7 @@ class GNNScorer:
         H_norm = H_out / norms                          # (N, D), unit vectors
 
         # ── Build chunk → entity indices map ─────────────────────────
+        idx_to_name: dict[int, str] = {i: n for n, i in entity_idx.items()}
         chunk_to_eidxs: dict[str, list[int]] = {}
         for r in chunk_entities:
             chunk_to_eidxs.setdefault(r["chunk_id"], []).append(
@@ -229,17 +254,30 @@ class GNNScorer:
             cid   = chunk["chunk_id"]
             eidxs = chunk_to_eidxs.get(cid, [])
             if eidxs:
-                # Max cosine similarity over all mentioned entities
-                gnn_score = float((H_norm[eidxs] @ q).max())
-                # Clip to [0, 1] (cosine can be negative)
-                gnn_score = max(0.0, gnn_score)
+                entity_scores = H_norm[eidxs] @ q          # cosine per entity
+                best_pos      = int(entity_scores.argmax())
+                gnn_score     = float(max(0.0, entity_scores[best_pos]))
+                best_entity   = idx_to_name[eidxs[best_pos]]
+                via           = chunk.get("via_entity", "")
+                if via and via != best_entity:
+                    explanation = (
+                        f"Via {via} → {best_entity} "
+                        f"(gnn={gnn_score:.3f}, rerank={chunk.get('rerank_score', 0):.2f})"
+                    )
+                else:
+                    explanation = (
+                        f"Top entity: {best_entity} "
+                        f"(gnn={gnn_score:.3f}, rerank={chunk.get('rerank_score', 0):.2f})"
+                    )
             else:
-                gnn_score = 0.0
+                gnn_score   = 0.0
+                explanation = f"No linked entities (rerank={chunk.get('rerank_score', 0):.2f})"
 
             chunk["gnn_score"]   = gnn_score
+            chunk["explanation"] = explanation
             chunk["final_score"] = (
-                self._alpha * self._fallback_score(chunk)
-                + self._beta * gnn_score
+                alpha * self._fallback_score(chunk, alpha, beta)
+                + beta * gnn_score
             )
 
         chunks.sort(key=lambda c: c["final_score"], reverse=True)
@@ -275,7 +313,7 @@ class GNNScorer:
         return H
 
     @staticmethod
-    def _fallback_score(chunk: dict) -> float:
+    def _fallback_score(chunk: dict, alpha: float = 1.0, beta: float = 0.0) -> float:
         """Normalise existing score to [0, 1] for blending.
 
         Cross-encoder logits are unbounded; apply sigmoid(x/5) to map

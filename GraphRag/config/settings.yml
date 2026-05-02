@@ -32,6 +32,8 @@ retrieval:
   gnn_alpha: 0.9           # weight for cross-encoder / vector score
   gnn_beta: 0.1            # weight for GNN structural score
   gnn_edge_confidence_threshold: 0.7  # drop RELATES_TO edges below this confidence
+  gnn_confidence_half_life_days: 180  # edge confidence decay half-life; 0 = no decay
+  gnn_adaptive_weights: true          # relational queries use 0.5/0.5, factoid uses alpha/beta
   # ─────────────────────────────────────────────────────────────────────────
   agentic_fallback: true   # trigger iterative agent when hybrid answer is weak
   agentic_max_steps: 4     # max sub-searches before forced synthesis

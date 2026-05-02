@@ -46,6 +46,7 @@ class Relation(BaseModel):
     relation: str           # e.g. "ACQUIRED", "BUILT", "WORKS_AT"
     weight: float = 1.0
     confidence: float = 1.0  # LLM extraction confidence [0, 1]
+    extracted_at: datetime = Field(default_factory=datetime.utcnow)
     source_chunk_id: str = ""
 
 

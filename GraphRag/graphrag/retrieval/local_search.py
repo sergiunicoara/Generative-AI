@@ -36,10 +36,11 @@ class LocalSearch:
             top_k=self._cfg.get("rerank_top_k", 5)
         )
         self._gnn = GNNScorer(
-            gnn_type   = self._cfg.get("gnn_type", "gat"),
-            num_layers = self._cfg.get("gnn_layers", 2),
-            alpha      = self._cfg.get("gnn_alpha", 0.6),
-            beta       = self._cfg.get("gnn_beta",  0.4),
+            gnn_type                  = self._cfg.get("gnn_type", "gat"),
+            num_layers                = self._cfg.get("gnn_layers", 2),
+            alpha                     = self._cfg.get("gnn_alpha", 0.6),
+            beta                      = self._cfg.get("gnn_beta",  0.4),
+            edge_confidence_threshold = self._cfg.get("gnn_edge_confidence_threshold", 0.7),
         )
 
     async def search(self, question: str) -> dict:

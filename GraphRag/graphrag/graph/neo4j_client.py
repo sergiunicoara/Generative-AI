@@ -113,12 +113,17 @@ class Neo4jClient:
             MATCH (s:Entity {name: $src_name})
             MATCH (t:Entity {name: $tgt_name})
             MERGE (s)-[r:RELATES_TO {relation: $relation}]->(t)
-            SET r.weight = $weight
+            SET r.weight     = $weight,
+                r.confidence = CASE
+                    WHEN r.confidence IS NULL THEN $confidence
+                    ELSE (r.confidence + $confidence) / 2.0
+                END
             """,
             src_name=src_name,
             tgt_name=tgt_name,
             relation=rel.relation,
             weight=rel.weight,
+            confidence=rel.confidence,
         )
 
     async def merge_community(self, community: Community):
@@ -286,9 +291,10 @@ class Neo4jClient:
             UNWIND $names AS name
             MATCH (s:Entity {name: name})-[r:RELATES_TO]->(t:Entity)
             WHERE t.name IN $names
-            RETURN s.name    AS src,
-                   t.name    AS tgt,
-                   r.weight  AS weight
+            RETURN s.name                             AS src,
+                   t.name                             AS tgt,
+                   r.weight                           AS weight,
+                   coalesce(r.confidence, 1.0)        AS confidence
             """,
             names=entity_names,
         )

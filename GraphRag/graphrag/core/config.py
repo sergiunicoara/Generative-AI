@@ -15,7 +15,7 @@ ROOT = Path(__file__).resolve().parents[2]  # repo root
 
 def _load_yaml() -> dict:
     path = ROOT / "config" / "settings.yml"
-    with open(path) as f:
+    with open(path, encoding="utf-8") as f:
         return yaml.safe_load(f)
 
 

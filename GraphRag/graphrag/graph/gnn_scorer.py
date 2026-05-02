@@ -135,6 +135,7 @@ class GNNScorer:
         num_layers: int = 2,
         alpha: float = 0.6,       # weight for cross-encoder / vector score
         beta: float = 0.4,        # weight for GNN structural score
+        edge_confidence_threshold: float = 0.7,  # drop edges below this confidence
     ):
         if gnn_type not in ("gcn", "gat"):
             raise ValueError(f"gnn_type must be 'gcn' or 'gat', got {gnn_type!r}")
@@ -142,6 +143,7 @@ class GNNScorer:
         self._num_layers = num_layers
         self._alpha = alpha
         self._beta = beta
+        self._edge_conf_threshold = edge_confidence_threshold
 
     # ------------------------------------------------------------------
     # Public API
@@ -190,7 +192,12 @@ class GNNScorer:
         # ── Build adjacency matrix ────────────────────────────────────
         A = np.zeros((N, N), dtype=np.float32)
         edge_count = 0
+        skipped_edges = 0
         for edge in entity_edges:
+            conf = float(edge.get("confidence", 1.0))
+            if conf < self._edge_conf_threshold:
+                skipped_edges += 1
+                continue
             i = entity_idx.get(edge["src"])
             j = entity_idx.get(edge["tgt"])
             if i is not None and j is not None and i != j:
@@ -198,6 +205,10 @@ class GNNScorer:
                 A[i, j] = w
                 A[j, i] = w   # treat as undirected
                 edge_count += 1
+        if skipped_edges:
+            log.info("gnn_scorer.edges_filtered",
+                     skipped=skipped_edges,
+                     threshold=self._edge_conf_threshold)
 
         # ── GNN propagation ───────────────────────────────────────────
         H_out = self._propagate(A, H)

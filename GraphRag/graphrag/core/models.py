@@ -45,6 +45,7 @@ class Relation(BaseModel):
     target_entity_id: str
     relation: str           # e.g. "ACQUIRED", "BUILT", "WORKS_AT"
     weight: float = 1.0
+    confidence: float = 1.0  # LLM extraction confidence [0, 1]
     source_chunk_id: str = ""
 
 

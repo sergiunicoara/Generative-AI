@@ -26,9 +26,17 @@ Return ONLY valid JSON in this exact format:
     {{"name": "...", "type": "...", "description": "one-sentence description"}}
   ],
   "relations": [
-    {{"source": "entity name", "target": "entity name", "relation": "VERB_RELATION"}}
+    {{
+      "source": "entity name",
+      "target": "entity name",
+      "relation": "VERB_RELATION",
+      "confidence": 0.95
+    }}
   ]
 }}
+
+confidence is a float [0.0, 1.0] reflecting how clearly the text states this relationship.
+Use 0.9+ for explicit statements, 0.6-0.9 for strong implications, below 0.6 for weak inference.
 
 Text:
 {text}
@@ -94,6 +102,7 @@ class Extractor:
                         source_entity_id=src.id,
                         target_entity_id=tgt.id,
                         relation=r.get("relation", "RELATED_TO"),
+                        confidence=float(r.get("confidence", 1.0)),
                         source_chunk_id=chunk.id,
                     )
                 )

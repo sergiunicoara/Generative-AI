@@ -1,0 +1,14 @@
+[
+  {
+    "question": "Who founded SpaceX?",
+    "ground_truth": "Elon Musk founded SpaceX in 2002."
+  },
+  {
+    "question": "What rockets did SpaceX manufacture?",
+    "ground_truth": "SpaceX manufactures the Falcon 9 rocket and the Starship rocket."
+  },
+  {
+    "question": "What did Falcon 9 achieve in 2015?",
+    "ground_truth": "Falcon 9 successfully landed its booster for the first time in 2015."
+  }
+]

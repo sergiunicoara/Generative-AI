@@ -17,7 +17,6 @@ import asyncio
 import json
 import os
 import sys
-from itertools import product
 from pathlib import Path
 
 os.environ.setdefault("PYTHONUTF8", "1")
@@ -39,8 +38,9 @@ from graphrag.retrieval.local_search import _fetch_subgraph_edges
 log = structlog.get_logger(__name__)
 
 # ── Grid ──────────────────────────────────────────────────────────────────────
-ALPHA_VALUES = [0.5, 0.6, 0.7, 0.8]
-BETA_VALUES  = [0.2, 0.3, 0.4, 0.5]   # note: alpha + beta need not sum to 1
+# alpha + beta must equal 1.0 (weighted average — final_score stays in [0, 1])
+ALPHA_VALUES = [0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9]
+BETA_VALUES  = []   # derived: beta = 1 - alpha
 
 
 async def _retrieve_with_params(
@@ -131,7 +131,7 @@ async def calibrate(eval_path: Path, dry_run: bool):
     best_beta   = cfg.get("gnn_beta",  0.4)
     results     = []
 
-    combos = [(a, b) for a, b in product(ALPHA_VALUES, BETA_VALUES)]
+    combos = [(a, round(1.0 - a, 2)) for a in ALPHA_VALUES]
     log.info("calibrate.grid", combos=len(combos), queries=len(eval_set))
 
     for alpha, beta in combos:

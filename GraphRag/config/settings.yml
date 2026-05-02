@@ -29,8 +29,8 @@ retrieval:
   gnn_enabled: true        # GCN/GAT graph-propagated re-scoring
   gnn_type: gat            # "gcn" (Kipf & Welling 2017) | "gat" (Veličković 2018)
   gnn_layers: 2            # number of message-passing layers
-  gnn_alpha: 0.8           # weight for cross-encoder / vector score
-  gnn_beta: 0.5            # weight for GNN structural score
+  gnn_alpha: 0.9           # weight for cross-encoder / vector score
+  gnn_beta: 0.1            # weight for GNN structural score
   gnn_edge_confidence_threshold: 0.7  # drop RELATES_TO edges below this confidence
   # ─────────────────────────────────────────────────────────────────────────
   agentic_fallback: true   # trigger iterative agent when hybrid answer is weak

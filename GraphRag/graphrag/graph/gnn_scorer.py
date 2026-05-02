@@ -243,11 +243,16 @@ class GNNScorer:
 
         # ── Build chunk → entity indices map ─────────────────────────
         idx_to_name: dict[int, str] = {i: n for n, i in entity_idx.items()}
+        idx_to_type: dict[int, str] = {}
+        for r in chunk_entities:
+            idx_to_type[entity_idx[r["entity_name"]]] = r.get("entity_type", "")
         chunk_to_eidxs: dict[str, list[int]] = {}
         for r in chunk_entities:
             chunk_to_eidxs.setdefault(r["chunk_id"], []).append(
                 entity_idx[r["entity_name"]]
             )
+
+        _SKIP_TYPES = {"LOCATION"}   # don't use these as explanation labels
 
         # ── Score & blend ─────────────────────────────────────────────
         for chunk in chunks:
@@ -257,7 +262,13 @@ class GNNScorer:
                 entity_scores = H_norm[eidxs] @ q          # cosine per entity
                 best_pos      = int(entity_scores.argmax())
                 gnn_score     = float(max(0.0, entity_scores[best_pos]))
-                best_entity   = idx_to_name[eidxs[best_pos]]
+                # For the label, prefer non-LOCATION entities
+                label_pos = best_pos
+                for rank_pos in entity_scores.argsort()[::-1]:
+                    if idx_to_type.get(eidxs[rank_pos]) not in _SKIP_TYPES:
+                        label_pos = rank_pos
+                        break
+                best_entity = idx_to_name[eidxs[label_pos]]
                 via           = chunk.get("via_entity", "")
                 if via and via != best_entity:
                     explanation = (

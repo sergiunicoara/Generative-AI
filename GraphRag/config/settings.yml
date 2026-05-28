@@ -9,12 +9,27 @@ ingestion:
     - CONCEPT
     - LOCATION
     - EVENT
+  # ── Alias registry ──────────────────────────────────────────────────────────
+  alias_embedding_threshold: 0.92   # cosine similarity to treat as duplicate entity
+  alias_fuzzy_threshold: 85         # rapidfuzz ratio for soft name matching
+  # ── Ingestion validation (graph poisoning prevention) ───────────────────────
+  validate_after_ingestion: true    # run graph health check after every doc
+  auto_remove_self_loops: true      # delete self-referencing edges automatically
+  detect_cycles_after_ingestion: true
 
 graph:
   community_levels: 3
   leiden_resolution: 1.0
   min_community_size: 3
   community_summary_max_tokens: 512
+  # ── Hierarchy depth limits ───────────────────────────────────────────────────
+  max_explicit_depth: 5             # warn when node depth exceeds this
+  # ── Dirty flags & materialized aggregates ───────────────────────────────────
+  dirty_flag_propagation: true      # cascade status_dirty to ancestors on change
+  aggregate_recompute_batch: 100    # max nodes to recompute per maintenance run
+  # ── Document authority ───────────────────────────────────────────────────────
+  default_authority_level: 4        # INFORMAL — override per document on ingestion
+  superseded_confidence_penalty: 0.5  # confidence multiplier for superseded doc edges
 
 retrieval:
   local_top_k: 10
@@ -25,6 +40,9 @@ retrieval:
   hybrid_weight_global: 0.4
   bm25_enabled: true       # BM25 fulltext + RRF fusion with vector results
   reranker_enabled: true   # cross-encoder rerank after RRF (ms-marco-MiniLM-L-6-v2)
+  # ── Session context ──────────────────────────────────────────────────────────
+  session_context_enabled: true     # enrich ambiguous follow-up queries with session entities
+  session_max_turns: 10             # sliding window size per session
   # ── GNN scoring (after multi-hop traversal) ───────────────────────────────
   gnn_enabled: true        # GCN/GAT graph-propagated re-scoring
   gnn_type: gat            # "gcn" (Kipf & Welling 2017) | "gat" (Veličković 2018)
@@ -34,6 +52,8 @@ retrieval:
   gnn_edge_confidence_threshold: 0.7  # drop RELATES_TO edges below this confidence
   gnn_confidence_half_life_days: 180  # edge confidence decay half-life; 0 = no decay
   gnn_adaptive_weights: true          # relational queries use 0.5/0.5, factoid uses alpha/beta
+  # ── Authority-weighted retrieval ─────────────────────────────────────────────
+  authority_weighting_enabled: true   # adjust edge confidence by source doc authority
   # ─────────────────────────────────────────────────────────────────────────
   agentic_fallback: true   # trigger iterative agent when hybrid answer is weak
   agentic_max_steps: 4     # max sub-searches before forced synthesis
@@ -46,6 +66,12 @@ evaluation:
     - context_recall
   eval_sample_rate: 0.2
   min_ground_truth_queries: 50
+
+maintenance:
+  stale_edge_days: 365              # edges older than this are candidates for pruning
+  low_conf_prune_threshold: 0.2     # minimum confidence to keep an edge
+  orphan_flag_enabled: true         # flag entities with no chunk links
+  cycle_check_enabled: true         # detect cycles on every maintenance run
 
 business_matrix:
   kpi_retention_days: 90

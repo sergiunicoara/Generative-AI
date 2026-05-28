@@ -48,17 +48,40 @@ class Neo4jClient:
 
     # ── Ingestion helpers ────────────────────────────────────────────────────────
 
-    async def merge_document(self, doc_id: str, filename: str, ingested_at: str):
+    async def entity_exists(self, name: str, entity_type: str) -> bool:
+        """Check if an entity node already exists."""
+        rows = await self.run(
+            "MATCH (e:Entity {name: $name, type: $type}) RETURN count(e) AS n",
+            name=name,
+            type=entity_type,
+        )
+        return bool(rows and rows[0]["n"] > 0)
+
+    async def merge_document(
+        self,
+        doc_id: str,
+        filename: str,
+        ingested_at: str,
+        authority_level: int = 4,
+        valid_from: str | None = None,
+        valid_to: str | None = None,
+    ):
         await self.run(
             """
             MERGE (d:Document {id: $id})
-            SET d.filename = $filename,
-                d.ingested_at = $ingested_at,
-                d.status = 'done'
+            SET d.filename        = $filename,
+                d.ingested_at     = $ingested_at,
+                d.status          = 'done',
+                d.authority_level = $authority_level,
+                d.valid_from      = $valid_from,
+                d.valid_to        = $valid_to
             """,
             id=doc_id,
             filename=filename,
             ingested_at=ingested_at,
+            authority_level=authority_level,
+            valid_from=valid_from,
+            valid_to=valid_to,
         )
 
     async def merge_chunk(self, chunk: Chunk):
@@ -83,16 +106,21 @@ class Neo4jClient:
         await self.run(
             """
             MERGE (e:Entity {name: $name, type: $type})
-            ON CREATE SET e.id = $id,
+            ON CREATE SET e.id          = $id,
                           e.description = $description,
-                          e.embedding = $embedding
-            ON MATCH SET  e.description = CASE WHEN e.description = '' THEN $description ELSE e.description END
+                          e.embedding   = $embedding,
+                          e.source_type = $source_type,
+                          e.created_at  = datetime()
+            ON MATCH SET  e.description = CASE WHEN e.description = '' THEN $description ELSE e.description END,
+                          e.embedding   = CASE WHEN $embedding IS NOT NULL AND size($embedding) > 0 THEN $embedding ELSE e.embedding END,
+                          e.updated_at  = datetime()
             """,
             id=entity.id,
             name=entity.name,
             type=entity.type,
             description=entity.description,
             embedding=entity.embedding,
+            source_type=entity.source_type if isinstance(entity.source_type, str) else entity.source_type.value,
         )
 
     async def merge_mentions(self, chunk_id: str, entity_name: str, entity_type: str):
@@ -113,9 +141,14 @@ class Neo4jClient:
             MATCH (s:Entity {name: $src_name})
             MATCH (t:Entity {name: $tgt_name})
             MERGE (s)-[r:RELATES_TO {relation: $relation}]->(t)
-            SET r.weight        = $weight,
-                r.extracted_at  = $extracted_at,
-                r.confidence    = CASE
+            SET r.weight           = $weight,
+                r.extracted_at     = $extracted_at,
+                r.source_doc_id    = $source_doc_id,
+                r.source_type      = $source_type,
+                r.constraint_type  = $constraint_type,
+                r.valid_from       = $valid_from,
+                r.valid_to         = $valid_to,
+                r.confidence       = CASE
                     WHEN r.confidence IS NULL THEN $confidence
                     ELSE 1.0 - (1.0 - r.confidence) * (1.0 - $confidence)
                 END
@@ -126,6 +159,11 @@ class Neo4jClient:
             weight=rel.weight,
             confidence=rel.confidence,
             extracted_at=rel.extracted_at.isoformat(),
+            source_doc_id=rel.source_doc_id,
+            source_type=rel.source_type if isinstance(rel.source_type, str) else rel.source_type.value,
+            constraint_type=rel.constraint_type if isinstance(rel.constraint_type, str) else rel.constraint_type.value,
+            valid_from=rel.valid_from.isoformat() if rel.valid_from else None,
+            valid_to=rel.valid_to.isoformat() if rel.valid_to else None,
         )
 
     async def merge_community(self, community: Community):

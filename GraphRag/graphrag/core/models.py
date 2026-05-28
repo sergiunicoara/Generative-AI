@@ -148,6 +148,77 @@ class ChangeLog(BaseModel):
     source_doc_id: str = ""
 
 
+# ── Knowledge graph extension models ──────────────────────────────────────────
+
+class NegativeRelation(BaseModel):
+    """
+    Asserts that a relation does NOT hold between two entities.
+
+    Stored as a NEGATIVE_RELATES_TO edge with the same provenance model as
+    Relation (source_doc_ids accumulation, confidence, valid_from/valid_to).
+    """
+    id: str = Field(default_factory=lambda: str(uuid4()))
+    source_entity_name: str
+    source_entity_type: str
+    target_entity_name: str
+    target_entity_type: str
+    relation: str
+    confidence: float = 1.0
+    source_doc_id: str = ""
+    valid_from: datetime | None = None
+    valid_to: datetime | None = None
+    tenant: str = "default"
+    asserted_by: str = "system"
+
+
+class Statement(BaseModel):
+    """
+    A reified relation — a triple (subject, relation, object) promoted to a
+    first-class node so that meta-statements can be made about it.
+
+    Stored as a Statement node with SUBJECT_OF and OBJECT_OF edges back to
+    the entity endpoints.  The originating RELATES_TO edge is preserved.
+    """
+    id: str = Field(default_factory=lambda: str(uuid4()))
+    src_name: str
+    src_type: str
+    tgt_name: str
+    tgt_type: str
+    relation: str
+    confidence: float = 1.0
+    source_doc_ids: list[str] = Field(default_factory=list)
+    tenant: str = "default"
+    reified_at: datetime = Field(default_factory=datetime.utcnow)
+
+
+class CalibrationSample(BaseModel):
+    """A single (predicted_confidence, actual_outcome) data point."""
+    id: str = Field(default_factory=lambda: str(uuid4()))
+    predicted_confidence: float
+    actual_outcome: float           # 1.0 = correct, 0.0 = incorrect
+    relation: str = ""
+    source_doc_id: str = ""
+    prompt_version: str = ""
+    tenant: str = "default"
+    verified_by: str = "system"
+    recorded_at: datetime = Field(default_factory=datetime.utcnow)
+
+
+class GraphSnapshot(BaseModel):
+    """Lightweight checkpoint of graph statistics at a point in time."""
+    id: str = Field(default_factory=lambda: str(uuid4()))
+    label: str
+    tenant: str = "default"
+    entity_count: int = 0
+    edge_count: int = 0
+    negative_count: int = 0
+    conflict_count: int = 0
+    community_count: int = 0
+    orphan_count: int = 0
+    avg_confidence: float = 0.0
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+
+
 # ── Query / retrieval models ───────────────────────────────────────────────────
 
 class QueryResult(BaseModel):

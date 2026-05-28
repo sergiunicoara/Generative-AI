@@ -80,6 +80,24 @@ All work completed across two sessions. Tracked retroactively per CLAUDE.md.
 
 ---
 
+## Phase 7 — KG Architecture Gaps
+
+- [x] Implement `graphrag/graph/negative_knowledge.py` — `NEGATIVE_RELATES_TO` edge type with same provenance model as positive edges; assert/retract/query API; conflict detection with `ContradictionDetector`
+- [x] Implement `graphrag/graph/type_taxonomy.py` — `SUBCLASS_OF` hierarchy (`EntityType` nodes); `expand_type()` for query expansion; `least_common_ancestor()` for merge decisions; singleton + Neo4j persistence
+- [x] Implement `graphrag/graph/bitemporal.py` — `BitemporalStore` with `as_of_entities()`, `as_of_edges()`, `transaction_diff()`, `time_travel_report()`; stamp `recorded_at` (transaction time) on entity and relation CREATE in `neo4j_client.py`
+- [x] Implement `graphrag/graph/confidence_calibration.py` — `CalibrationService` with Brier score, calibration curve, isotonic correction, `CalibrationSnapshot` trend nodes
+- [x] Implement `graphrag/graph/reification.py` — `ReificationService`; `Statement` nodes with `SUBJECT_OF`/`OBJECT_OF` edges; `endorse()`, `contradict()`, `add_meta()` methods
+- [x] Implement `graphrag/graph/edge_embeddings.py` — `EdgeEmbeddingService`; TransE scoring (`‖ h + r − t ‖₂`); deterministic relation embeddings from name hash; `predict_missing_links()` for link prediction; `embed_all_edges()` batch
+- [x] Implement `graphrag/graph/graph_snapshots.py` — `GraphSnapshotService`; `create_snapshot()` with health metrics; `diff_snapshots()` with per-field before/after/delta/pct; `list_snapshots()`, `restore_summary()`
+- [x] Add `_detect_positive_negative_pairs()` to `ContradictionDetector.scan()` — 5th conflict type
+- [x] Add `recorded_at = datetime()` ON CREATE to `merge_entity` and `merge_relation` in `neo4j_client.py`
+- [x] Add `NegativeRelation`, `Statement`, `CalibrationSample`, `GraphSnapshot` models to `core/models.py`
+- [x] Create `api/routes/kg_features.py` — 28 endpoints covering all 7 features
+- [x] Wire `kg_features.router` into `api/main.py` at prefix `/kg`
+- [x] Fix indentation bug in `corrections.py` `list_conflicts` handler
+
+---
+
 ## Review
 
 ### What was built

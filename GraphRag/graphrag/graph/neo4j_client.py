@@ -120,7 +120,8 @@ class Neo4jClient:
                           e.source_doc_id    = $source_doc_id,
                           e.extraction_model = $extraction_model,
                           e.prompt_version   = $prompt_version,
-                          e.created_at       = datetime()
+                          e.created_at       = datetime(),
+                          e.recorded_at      = datetime()   // transaction time — never updated
             ON MATCH SET  e.description = CASE WHEN e.description = '' THEN $description ELSE e.description END,
                           e.embedding   = CASE WHEN $embedding IS NOT NULL AND size($embedding) > 0 THEN $embedding ELSE e.embedding END,
                           e.updated_at  = datetime()
@@ -170,6 +171,7 @@ class Neo4jClient:
             MATCH (s:Entity {name: $src_name, type: $src_type, tenant: $tenant})
             MATCH (t:Entity {name: $tgt_name, type: $tgt_type, tenant: $tenant})
             MERGE (s)-[r:RELATES_TO {relation: $relation}]->(t)
+            ON CREATE SET r.recorded_at = datetime()   // transaction time — set once, never updated
             SET r.weight           = $weight,
                 r.extracted_at     = $extracted_at,
                 r.source_doc_id    = $source_doc_id,

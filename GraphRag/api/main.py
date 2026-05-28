@@ -8,7 +8,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.sessions import SessionMiddleware
 
-from api.routes import auth, ingest, query, evaluation, kpis, corrections
+from api.routes import auth, ingest, query, evaluation, kpis, corrections, kg_features
 from graphrag.core.config import get_settings
 
 log = structlog.get_logger(__name__)
@@ -80,6 +80,7 @@ app.include_router(query.router,      prefix="/query",      tags=["Query"])
 app.include_router(evaluation.router,  prefix="/evaluation",  tags=["Evaluation"])
 app.include_router(kpis.router,        prefix="/kpis",        tags=["KPIs"])
 app.include_router(corrections.router, prefix="/corrections", tags=["Corrections"])
+app.include_router(kg_features.router, prefix="/kg",          tags=["KG Features"])
 
 
 @app.get("/health", tags=["Health"])

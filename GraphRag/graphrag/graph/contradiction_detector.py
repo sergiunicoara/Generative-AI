@@ -95,6 +95,7 @@ class ContradictionDetector:
         new_conflicts += await self._detect_directional_reversals(doc_id, tenant, scan_limit)
         new_conflicts += await self._detect_exclusive_states(doc_id, tenant, scan_limit)
         new_conflicts += await self._detect_functional_violations(doc_id, tenant, scan_limit)
+        new_conflicts += await self._detect_positive_negative_pairs(doc_id, tenant, scan_limit)
 
         log.info(
             "contradiction_detector.scan_done",
@@ -455,6 +456,95 @@ class ContradictionDetector:
                     "relation": rel,
                     "targets": row["targets"],
                 })
+        return created
+
+    async def _detect_positive_negative_pairs(
+        self,
+        doc_id: str | None,
+        tenant: str | None,
+        scan_limit: int,
+    ) -> list[dict]:
+        """
+        Detect triples where both a RELATES_TO and a NEGATIVE_RELATES_TO edge
+        coexist for the same (src, relation, tgt) — an explicit contradiction
+        between a positive and a negative knowledge assertion.
+
+        A document saying "A USES B" and another saying "A definitely does NOT
+        USE B" represent incompatible epistemic claims that require resolution
+        by document authority or manual review.
+        """
+        tenant_filter = "AND s.tenant = $tenant AND t.tenant = $tenant" if tenant else ""
+        doc_filter    = (
+            "AND ($doc_id IN pos.source_doc_ids OR $doc_id IN neg.source_doc_ids)"
+            if doc_id else ""
+        )
+        limit_clause  = f"LIMIT {scan_limit}" if scan_limit > 0 else ""
+        params: dict  = {}
+        if tenant:
+            params["tenant"] = tenant
+        if doc_id:
+            params["doc_id"] = doc_id
+
+        rows = await self._neo4j.run(
+            f"""
+            MATCH (s:Entity)-[pos:RELATES_TO]->(t:Entity)
+            MATCH (s)-[neg:NEGATIVE_RELATES_TO {{relation: pos.relation}}]->(t)
+            WHERE true {tenant_filter} {doc_filter}
+            OPTIONAL MATCH (c:Conflict {{
+                src: s.name, tgt: t.name,
+                relation: pos.relation,
+                conflict_type: 'positive_negative_pair',
+                status: 'open'
+            }})
+            WITH s.name AS src, t.name AS tgt, pos.relation AS rel,
+                 pos.source_doc_ids AS pos_docs, neg.source_doc_ids AS neg_docs,
+                 count(c) AS existing
+            WHERE existing = 0
+            RETURN src, tgt, rel, pos_docs, neg_docs
+            {limit_clause}
+            """,
+            **params,
+        )
+
+        created: list[dict] = []
+        for row in rows:
+            conflict_id = str(uuid4())
+            await self._neo4j.run(
+                """
+                CREATE (c:Conflict {
+                    id:            $id,
+                    src:           $src,
+                    tgt:           $tgt,
+                    relation:      $rel,
+                    conflict_type: 'positive_negative_pair',
+                    sources:       $sources,
+                    tenant:        $tenant,
+                    status:        'open',
+                    detected_at:   datetime(),
+                    resolved_at:   null,
+                    resolved_by:   null,
+                    winner_doc_id: null
+                })
+                """,
+                id=conflict_id,
+                src=row["src"],
+                tgt=row["tgt"],
+                rel=row["rel"],
+                sources=str({
+                    "positive": row.get("pos_docs") or [],
+                    "negative": row.get("neg_docs") or [],
+                }),
+                tenant=tenant or "",
+            )
+            created.append({
+                "conflict_id": conflict_id,
+                "type":        "positive_negative_pair",
+                "src":         row["src"],
+                "tgt":         row["tgt"],
+                "relation":    row["rel"],
+                "positive_docs": row.get("pos_docs") or [],
+                "negative_docs": row.get("neg_docs") or [],
+            })
         return created
 
     # ── Resolution ─────────────────────────────────────────────────────────────

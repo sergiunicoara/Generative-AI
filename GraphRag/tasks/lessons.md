@@ -635,3 +635,114 @@ reinforcing.
 > (same `source_doc_id`), don't fuse — it's not independent evidence.
 > The `source_doc_ids` list enables this check: only fuse if the new source is not
 > already in the list.
+
+---
+
+## A19 — Open-world assumption is not free — model negative knowledge explicitly
+
+**Finding:**
+A graph with no edge "A USES B" makes no claim: it may mean "we don't know" or
+"A definitely does NOT use B". Without explicit negative edges, the retrieval layer
+answers "Unknown" to "Does A use B?" even when a document explicitly states it does not.
+This ambiguity is especially dangerous in safety-critical domains where "not found" and
+"confirmed absent" are different answers with different consequences.
+
+**Principle:**
+> When a source document explicitly negates a relation ("Engine A does not use Fuel Pump B"),
+> store a `NEGATIVE_RELATES_TO` edge with the same provenance model as positive edges.
+> If a positive RELATES_TO edge also exists for the same triple, surface it immediately as
+> a `positive_negative_pair` conflict. Retrieval should check for confirmed negatives and
+> include them in LLM context so the model can answer "No (confirmed)" rather than "Unknown".
+
+---
+
+## A20 — Flat type namespaces break query expansion and merge decisions
+
+**Finding:**
+A query for "Agent" entities must explicitly enumerate PERSON and ORG when the type
+namespace is flat. Adding a new type (EXECUTIVE, REGULATOR) requires updating every
+query that should include it. Merge decisions between "MANAGER" and "PERSON" entities
+require knowing that MANAGER is a subtype of PERSON, but there is no place to express
+that. The type space fragments silently as ingestion runs with different prompt versions.
+
+**Principle:**
+> Build a `SUBCLASS_OF` hierarchy from day one. Concrete leaf types (PERSON, ORG) sit
+> below abstract parents (AGENT). Query expansion calls `expand_type("AGENT")` and gets
+> all subtypes automatically. Merge decisions use `least_common_ancestor(type_a, type_b)`
+> to find the most specific safe merge target. New subtypes are registered in the taxonomy,
+> not scattered as strings across query files.
+
+---
+
+## A21 — Single-axis time models cannot answer "what did we know when?"
+
+**Finding:**
+Valid time (when a fact was true in the real world) is essential for temporal queries.
+But transaction time (when we recorded the fact) is equally essential for auditing
+and debugging. Without transaction time, "did the bad ingestion batch introduce this
+fact?" requires reconstructing write timestamps from audit logs — if they were captured
+at all. A retroactive correction silently overwrites the original write with no trace.
+
+**Principle:**
+> Stamp `recorded_at = datetime()` on CREATE (never update it) for every entity and
+> every relation. This is the transaction-time dimension of a bitemporal model.
+> Bitemporal query = `WHERE valid_from ≤ $vt AND recorded_at ≤ $tt` — "what did we know
+> (tt) about the world at time (vt)?". Without transaction time, point-in-time KG
+> reconstruction is impossible even with a perfect audit trail.
+
+---
+
+## A22 — Confidence numbers are not calibrated by default
+
+**Finding:**
+LLMs report relation confidence in the range 0.7–0.99 regardless of actual accuracy.
+A model reporting 0.9 confidence that is correct only 55% of the time is miscalibrated.
+The Bayesian fusion (`1 - (1-c1)(1-c2)`) computes correctly given accurate inputs, but
+if the prior confidences are biased upward, the fused value is also biased.
+Downstream effects: high-confidence edges dominate GNN weighting even when they're wrong;
+contradiction detection thresholds fire on the wrong edges.
+
+**Principle:**
+> Track Brier score over a golden set: mean((predicted - actual)²). A perfectly calibrated
+> model scores 0.0; an always-0.5 baseline scores 0.25. Run isotonic regression on the
+> calibration curve (binned mean_predicted vs mean_actual) and apply the correction to raw
+> LLM-reported confidence before storing edges. Rebuild the calibration table after model
+> updates — confidence distributions shift with prompt version.
+
+---
+
+## A23 — TransE link prediction surfaces missing relations without labeled training data
+
+**Finding:**
+The GNN scores existing paths but cannot suggest plausible missing edges. Link prediction
+requires a scoring function over unseen (h, r, t) triples. TransE provides this with
+only entity embeddings as input (which already exist). The score `‖ h + r − t ‖₂` is
+low for plausible triples and high for implausible ones. Relation embeddings can be
+derived deterministically from the relation name (seeded from a hash of the name) when
+no learned embedding is available — same relation always maps to the same vector.
+
+**Principle:**
+> TransE link prediction is essentially free if entity embeddings already exist.
+> Use it as a graph completion signal: after ingestion, run `predict_missing_links()` for
+> key entities and surface the top-k with score below a threshold as candidate facts for
+> human review. This turns the graph from a passive store into an active hypothesis
+> generator. False positives are expected — the output feeds a review queue, not the
+> live graph.
+
+---
+
+## A24 — Snapshots decouple "current state" from "historical state" without duplication
+
+**Finding:**
+Without named checkpoints, comparing graph state before and after a batch ingestion
+requires either storing two full graph copies (expensive) or reconstructing the pre-batch
+state from audit logs (slow and error-prone). A lightweight snapshot that stores statistics
+(entity count, edge count, health metrics, and the recorded_at of the youngest fact at
+snapshot time) is sufficient for most audit and regression detection purposes.
+
+**Principle:**
+> Create named graph snapshots before major ingestion batches (`pre-Q1-ingest`) and after
+> (`post-Q1-ingest`). Diff snapshots to detect quality regression immediately after
+> ingestion, not weeks later in RAGAS scores. For precise point-in-time reconstruction,
+> combine snapshots (which record the transaction-time boundary) with bitemporal queries
+> (which filter by that boundary). Snapshots are cheap; retrospective debugging is expensive.

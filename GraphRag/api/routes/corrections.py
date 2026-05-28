@@ -269,7 +269,7 @@ async def resolve_conflict(request: ConflictResolveRequest):
     summary="List open semantic contradictions awaiting review",
 )
 async def list_conflicts(limit: int = 50, tenant: str | None = None):
-neo4j = get_neo4j()
+    neo4j = get_neo4j()
     detector = ContradictionDetector(neo4j)
     return await detector.get_open_conflicts(limit=limit, tenant=tenant)
 

@@ -7,10 +7,11 @@ An end-to-end **GraphRAG** system that combines knowledge graph retrieval with L
 ## Architecture
 
 ```
-                        ┌─────────────────────────────────────────────┐
-                        │              FastAPI  :8000                  │
-                        │  /ingest  /query  /kpis  /evaluation  /auth  │
-                        └──────────┬──────────────┬────────────────────┘
+                        ┌─────────────────────────────────────────────────────┐
+                        │                  FastAPI  :8000                      │
+                        │  /ingest  /query  /kpis  /evaluation  /auth          │
+                        │  /corrections  (split · quarantine · conflicts)      │
+                        └──────────┬──────────────┬──────────────────────────┘
                                    │              │
                     ┌──────────────▼──┐      ┌────▼───────────────┐
                     │   RabbitMQ      │      │   OAuth 2.0 (JWT)  │
@@ -26,7 +27,14 @@ An end-to-end **GraphRAG** system that combines knowledge graph retrieval with L
                   │                  Neo4j  :7687              │
                   │   Document → Chunk → Entity → Community   │
                   │   Vector index (3072d) + BM25 fulltext     │
+                  │   RELATES_TO edges with confidence,        │
+                  │   source_doc_ids, authority weights        │
                   └───────────────────────────────────────────┘
+                                       │
+                  ┌────────────────────▼───────────────────────┐
+                  │           Redis  :6379                      │
+                  │        Session context store (24h TTL)      │
+                  └────────────────────────────────────────────┘
                                        │
                   ┌────────────────────▼───────────────────────┐
                   │           TimescaleDB  :5432                │
@@ -45,16 +53,72 @@ An end-to-end **GraphRAG** system that combines knowledge graph retrieval with L
 
 | Feature | Details |
 |---------|---------|
-| **Graph-based retrieval** | Entities + relations stored in Neo4j; multi-hop traversal resolves cross-document facts |
-| **BM25 + Vector hybrid search** | Vector ANN and BM25 fulltext results fused via Reciprocal Rank Fusion (RRF) |
-| **Cross-encoder reranking** | `ms-marco-MiniLM-L-6-v2` re-scores RRF candidates with deep pairwise query-chunk scoring before graph expansion |
+| **6-stage retrieval pipeline** | Vector ANN → BM25+RRF → Cross-encoder → Multi-hop → GAT GNN → LLM |
+| **Graph Attention Network (GAT)** | GCN/GAT re-scores chunks using entity embedding propagation; attention weights by cosine similarity between neighbours |
+| **Query-adaptive GNN weights** | Relational queries (e.g. "how did X cause Y") auto-shift to 50/50 text/GNN; factoid queries use default α/β |
+| **BM25 + Vector hybrid search** | Vector ANN and BM25 fulltext results fused via Reciprocal Rank Fusion (RRF, k=60) |
+| **Cross-encoder reranking** | `ms-marco-MiniLM-L-6-v2` deep pairwise query-chunk scoring before graph expansion |
 | **Multi-hop graph traversal** | `Chunk → Entity → RELATES_TO* → Entity → Chunk` up to depth 2 |
-| **Agentic fallback** | Low-confidence answers trigger iterative IRCoT re-search via Google ADK |
+| **Agentic fallback (IRCoT)** | Low-confidence answers trigger iterative re-search via Google ADK (max 4 steps) |
+| **Session context** | Redis-backed conversation history (24h TTL); enriches follow-up queries with prior turn entities |
+| **Alias resolution** | Name-based + embedding-based deduplication before every entity MERGE; per-tenant registry pool |
+| **Document authority hierarchy** | 4-level authority system (Regulatory → Manufacturer → Internal → Informal); superseded docs penalised |
+| **Contradiction detection** | Multi-source, directional-reversal, exclusive-state, and functional-violation conflict types; scoped per tenant |
+| **Community detection** | Leiden algorithm (graspologic) builds hierarchical graph summaries for global search; staleness-gated auto-rebuild |
+| **Graph health metrics** | 6 semantic metrics (alias coverage, relation precision, contradiction rate, orphan growth, merge/split proxy, community coherence) with per-tenant trend snapshots |
+| **Ontology enforcement** | Domain/range validation on every relation write; deprecated relation names auto-migrated on ingestion |
+| **Tenant isolation** | All entities, edges, conflicts, communities, and health snapshots are scoped by `(name, type, tenant)` |
+| **Graph integrity guards** | Self-loop removal, cycle detection, quarantine, ingestion validation, dirty-flag propagation after every write |
+| **Manual correction API** | `/corrections` endpoints: entity split, quarantine/release, edge reject/override, conflict resolution |
 | **RAGAS evaluation** | Faithfulness, answer relevancy, context precision, context recall — auto-sampled at 20% |
 | **OAuth 2.0** | Google browser login + M2M client credentials grant (JWT Bearer) |
 | **Business Matrix** | Live Plotly Dash dashboard with KPI timeseries and alert thresholds |
 | **Async pipeline** | RabbitMQ decouples ingestion, query, and evaluation workers with DLQ + TTL |
-| **Community detection** | Leiden algorithm builds hierarchical graph summaries for global search |
+
+---
+
+## Retrieval Pipeline — 6 Stages
+
+```
+Query
+  │
+  ├─ [0] Session context enrichment
+  │      If session_id provided: inject prior-turn entities into query
+  │
+  ├─ [1] Vector ANN
+  │      embed(query) → 3072d cosine search on chunk_embeddings index
+  │
+  ├─ [2] BM25 + RRF fusion
+  │      BM25 fulltext search → Reciprocal Rank Fusion (k=60) with vector results
+  │
+  ├─ [3] Cross-encoder reranking
+  │      ms-marco-MiniLM-L-6-v2 — deep pairwise (query, chunk) scoring → top rerank_k
+  │
+  ├─ [4] Multi-hop graph traversal (depth=2)
+  │      Chunk → MENTIONS → Entity → RELATES_TO* → Entity → MENTIONS → Chunk
+  │      Bridges facts distributed across separate documents
+  │
+  ├─ [5] GAT/GCN scoring
+  │      Build node-feature matrix H from entity embeddings
+  │      Build adjacency matrix A from RELATES_TO edges (authority-weighted confidence)
+  │      Propagate: final = α·sigmoid(rerank_score/5) + β·gnn_score
+  │      Query-adaptive: relational queries → α=β=0.5; factoid → α=0.9, β=0.1
+  │
+  ├─ [6] Entity context + global community summaries
+  │
+  ├─► ContextBuilder (local 60% + global 40%)
+  │
+  ├─► Gemini generates grounded answer with chunk citations
+  │
+  └─► Low confidence?
+        └─► AgenticRetriever (IRCoT loop, max 4 steps)
+              ├─ SEARCH: <sub-query> → re-retrieve → expand context
+              └─ ANSWER: <final> or "insufficient context"
+```
+
+**Why GNN on top of a reranker?**
+
+The cross-encoder scores text similarity. It doesn't know that *Falcon 9* and *SpaceX* are structurally linked in the graph. A GAT propagates entity embeddings along RELATES_TO edges — semantically related neighbours vote on each entity's relevance. Chunks that mention graph-connected entities score higher even when their text has a weak direct match to the query.
 
 ---
 
@@ -62,12 +126,15 @@ An end-to-end **GraphRAG** system that combines knowledge graph retrieval with L
 
 | Component | Technology |
 |-----------|-----------|
-| Graph DB | Neo4j 5.20 + APOC + GDS |
+| Graph DB | Neo4j 5.20 |
+| Session Store | Redis 7 |
 | Message Queue | RabbitMQ 3.13 |
 | KPI Store | TimescaleDB (PostgreSQL 16) |
 | Embeddings | `gemini-embedding-001` (3072d) |
 | LLM | `gemini-2.5-flash` |
 | Reranker | `cross-encoder/ms-marco-MiniLM-L-6-v2` (sentence-transformers) |
+| GNN | PyTorch — GAT / GCN (configurable) |
+| Community detection | graspologic (Leiden algorithm) |
 | Agent Framework | Google ADK |
 | Evaluation | RAGAS |
 | API | FastAPI + Uvicorn |
@@ -77,93 +144,114 @@ An end-to-end **GraphRAG** system that combines knowledge graph retrieval with L
 
 ---
 
+## Project Structure
+
+```
+GraphRag/
+├── api/
+│   ├── main.py                      # FastAPI app, lifespan hook, middleware, routes
+│   ├── auth/
+│   │   ├── dependencies.py          # get_current_user, require_scope
+│   │   ├── google.py                # Google OAuth 2.0 Authorization Code flow
+│   │   └── jwt.py                   # HS256 JWT creation & validation
+│   └── routes/
+│       ├── auth.py                  # /auth/login, /callback, /token, /clients
+│       ├── ingest.py                # POST /ingest
+│       ├── query.py                 # POST /query, GET /query/{id}
+│       ├── evaluation.py            # GET /evaluation/summary
+│       ├── kpis.py                  # GET /kpis/summary, /kpis/timeseries
+│       └── corrections.py           # entity split · quarantine · edge override · conflict resolve
+│
+├── graphrag/
+│   ├── agents/
+│   │   ├── base_agent.py            # Abstract Google ADK agent base
+│   │   ├── ingestion_agent.py       # Document → chunk → embed → extract → graph
+│   │   ├── query_agent.py           # Question → retrieve → answer
+│   │   └── evaluation_agent.py      # RAGAS scoring agent
+│   ├── business_matrix/
+│   │   ├── dashboard_server.py      # Plotly Dash on :8050/dashboard/
+│   │   ├── kpi_store.py             # SQLAlchemy KPI event model
+│   │   └── kpi_tracker.py           # KPI aggregation queries
+│   ├── core/
+│   │   ├── config.py                # Settings (pydantic-settings, .env + YAML)
+│   │   └── models.py                # Domain models: Document, Chunk, Entity, Relation, Community, SessionTurn ...
+│   ├── graph/
+│   │   ├── neo4j_client.py          # Async Neo4j driver, MERGE helpers, vector + BM25 search
+│   │   ├── schema.cypher            # Constraints, vector indexes, fulltext indexes
+│   │   ├── alias_registry.py        # Per-tenant alias pool: name-based + embedding deduplication
+│   │   ├── audit_trail.py           # Immutable AuditEvent nodes for every entity/relation change
+│   │   ├── community_builder.py     # Leiden community detection (graspologic); fallback to connected-components
+│   │   ├── community_manager.py     # Staleness scoring (entity/edge drift); snapshot & rebuild gating
+│   │   ├── community_summarizer.py  # LLM-generated community summaries
+│   │   ├── contradiction_detector.py # Multi-source, directional, exclusive-state, functional conflicts
+│   │   ├── cycle_detector.py        # Detect cycles in RELATES_TO graph post-ingestion
+│   │   ├── document_authority.py    # Authority levels, SUPERSEDES chains, edge confidence penalties
+│   │   ├── entity_splitter.py       # Detect over-merged entities; split into canonical + variant nodes
+│   │   ├── gnn_scorer.py            # GAT/GCN graph-propagated re-scoring (PyTorch)
+│   │   ├── graph_evaluator.py       # 6 semantic health metrics; per-tenant GraphHealthSnapshot nodes
+│   │   ├── ingestion_validator.py   # Post-write graph health check; degree anomaly detection
+│   │   ├── ontology_registry.py     # Domain/range rules; deprecated relation migration; schema events
+│   │   └── quarantine.py            # Quarantine/release entities; auto-quarantine anomalies
+│   ├── ingestion/
+│   │   ├── chunker.py               # Sliding-window text chunking
+│   │   ├── embedder.py              # Gemini embedding batches
+│   │   ├── extractor.py             # LLM entity + relation extraction
+│   │   └── graph_writer.py          # Persist chunks/entities/relations; alias resolution; validation
+│   ├── messaging/
+│   │   ├── rabbitmq_client.py       # aio-pika connection, publish, consume, DLQ
+│   │   ├── publishers.py            # publish_document(), publish_query(), publish_eval_job()
+│   │   └── consumers.py             # Message handler wiring per queue
+│   └── retrieval/
+│       ├── local_search.py          # 6-stage pipeline: vector + BM25 + rerank + multihop + GNN + context
+│       ├── global_search.py         # Community embedding search + map-reduce synthesis
+│       ├── hybrid_retriever.py      # Combines local + global; agentic fallback; session turn recording
+│       ├── agentic_retriever.py     # Iterative IRCoT re-search (Google ADK)
+│       ├── bm25_search.py           # HybridBM25Search with RRF (k=60)
+│       ├── reranker.py              # CrossEncoderReranker (ms-marco-MiniLM-L-6-v2)
+│       ├── session_context.py       # Async session context: query enrichment from prior turns
+│       └── session_store.py         # Redis-backed turn store; in-memory fallback; strict startup mode
+│
+├── workers/
+│   ├── ingestion_worker.py          # Consumes graphrag.ingest queue
+│   ├── query_worker.py              # Consumes graphrag.query queue
+│   └── evaluation_worker.py         # Consumes graphrag.eval queue
+│
+├── scripts/
+│   ├── init_neo4j.py                # Idempotent schema initializer (run once after docker up)
+│   └── community_rebuild.py         # CLI: rebuild communities per tenant with staleness check
+│
+├── tests/
+│   └── integration/
+│       └── test_safety_paths.py     # Tenant isolation · ontology · contradiction · quarantine · community
+│
+├── config/
+│   └── settings.yml                 # All pipeline tuning (see Configuration section)
+├── docker-compose.yml
+├── Dockerfile
+├── requirements.txt
+└── .env                             # Secrets (never commit)
+```
+
+---
+
 ## Verified System Check Results
 
 Full end-to-end test completed 2026-03-21:
 
 | Step | Component | Result |
 |------|-----------|--------|
-| Infrastructure | Neo4j + RabbitMQ + TimescaleDB | ✅ Healthy |
-| API | FastAPI + OAuth | ✅ Running on :8000 |
+| Infrastructure | Neo4j + RabbitMQ + TimescaleDB + Redis | ✅ Healthy |
+| API | FastAPI + OAuth + lifespan hook | ✅ Running on :8000 |
 | Ingestion | 3 documents → 19 entities, 23 relations | ✅ |
 | Schema | Vector indexes + BM25 fulltext indexes | ✅ |
 | Graph counts | 3 docs · 3 chunks · 19 entities | ✅ |
 | Hybrid search | BM25 + vector fusion (all chunks tagged `vector+bm25`) | ✅ |
 | Cross-encoder reranker | ms-marco-MiniLM-L-6-v2, top_score=2.97 | ✅ |
+| GNN scoring | GAT 2-layer; α=0.9 text + β=0.1 graph | ✅ |
 | Cross-doc query | Falcon 9/Starship answer spanning 3 documents | ✅ |
 | RAGAS | context_precision=1.0 · context_recall=1.0 | ✅ |
 | Dashboard | Live KPI charts at /dashboard/ | ✅ |
 | Agentic fallback | IRCoT triggered on low-confidence query | ✅ |
-
----
-
-## Project Structure
-
-```
-GraphRag/
-├── api/
-│   ├── main.py                  # FastAPI app, middleware, route registration
-│   ├── auth/
-│   │   ├── dependencies.py      # get_current_user, require_scope
-│   │   ├── google.py            # Google OAuth 2.0 Authorization Code flow
-│   │   └── jwt.py               # HS256 JWT creation & validation
-│   └── routes/
-│       ├── auth.py              # /auth/login, /callback, /token, /clients, /dev-token
-│       ├── ingest.py            # POST /ingest  (requires write scope)
-│       ├── query.py             # POST /query, GET /query/{id}  (requires read scope)
-│       ├── evaluation.py        # GET  /evaluation/summary
-│       └── kpis.py              # GET  /kpis/summary, /kpis/timeseries
-│
-├── graphrag/
-│   ├── agents/
-│   │   ├── base_agent.py        # Abstract Google ADK agent base
-│   │   ├── ingestion_agent.py   # Document → chunk → embed → extract → graph
-│   │   ├── query_agent.py       # Question → retrieve → answer
-│   │   └── evaluation_agent.py  # RAGAS scoring agent
-│   ├── business_matrix/
-│   │   ├── dashboard_server.py  # FastAPI + Plotly Dash on :8050/dashboard/
-│   │   ├── kpi_store.py         # SQLAlchemy KPI event model
-│   │   └── kpi_tracker.py       # KPI aggregation queries
-│   ├── core/
-│   │   ├── config.py            # Settings (pydantic-settings, .env + YAML)
-│   │   └── models.py            # Domain models: Document, Chunk, Entity, ...
-│   ├── graph/
-│   │   ├── neo4j_client.py      # Async Neo4j driver, MERGE helpers, vector + BM25 search
-│   │   ├── schema.cypher        # Constraints, vector indexes, fulltext indexes
-│   │   ├── community_builder.py # Leiden community detection (graspologic)
-│   │   └── community_summarizer.py  # LLM-generated community summaries
-│   ├── ingestion/
-│   │   ├── chunker.py           # Sliding-window text chunking
-│   │   ├── embedder.py          # Gemini embedding batches
-│   │   ├── extractor.py         # LLM entity + relation extraction
-│   │   └── graph_writer.py      # Persist chunks/entities/relations to Neo4j
-│   ├── messaging/
-│   │   ├── rabbitmq_client.py   # aio-pika connection, publish, consume, DLQ
-│   │   ├── publishers.py        # publish_document(), publish_query(), publish_eval_job()
-│   │   └── consumers.py         # Message handler wiring per queue
-│   └── retrieval/
-│       ├── local_search.py      # Vector ANN + BM25 RRF fusion + multi-hop graph expansion
-│       ├── global_search.py     # Community embedding search + synthesis
-│       ├── hybrid_retriever.py  # Combines local + global, triggers agentic fallback
-│       ├── agentic_retriever.py # Iterative IRCoT re-search (Google ADK)
-│       ├── bm25_search.py       # HybridBM25Search with RRF (k=60)
-│       └── context_builder.py   # Assembles LLM context string from results
-│
-├── workers/
-│   ├── ingestion_worker.py      # Consumes graphrag.ingest queue
-│   ├── query_worker.py          # Consumes graphrag.query queue
-│   └── evaluation_worker.py     # Consumes graphrag.eval queue
-│
-├── scripts/
-│   └── init_neo4j.py            # Idempotent schema initializer (run once after docker up)
-│
-├── config/
-│   └── settings.yml             # Chunking, graph, retrieval, evaluation tuning
-├── docker-compose.yml           # Neo4j, RabbitMQ, TimescaleDB (+ optional containerized workers)
-├── Dockerfile
-├── requirements.txt
-└── .env                         # Secrets (never commit)
-```
 
 ---
 
@@ -218,7 +306,7 @@ ENV=development
 ### 4. Start infrastructure
 
 ```bash
-docker-compose up neo4j rabbitmq timescaledb
+docker-compose up neo4j rabbitmq timescaledb redis
 ```
 
 ### 5. Initialize Neo4j schema
@@ -227,9 +315,9 @@ docker-compose up neo4j rabbitmq timescaledb
 py -3.11 scripts/init_neo4j.py
 ```
 
-Run this once after Neo4j first starts. It creates vector indexes, fulltext indexes, and constraints (all idempotent).
+Run once after Neo4j first starts. Creates vector indexes, fulltext indexes, constraints, and relation indexes (all idempotent).
 
-### 6. Start workers and API (each in a separate terminal)
+### 6. Start workers and API
 
 ```bash
 # Terminal 1 — API
@@ -260,31 +348,6 @@ $token = $resp.access_token
 $h = @{"Authorization"="Bearer $token"; "Content-Type"="application/json"}
 ```
 
-### Browser (production OAuth)
-
-1. Visit **http://localhost:8000/auth/login** — redirects to Google sign-in
-2. After sign-in, redirected back with JWT Bearer token
-
-### M2M client credentials
-
-```bash
-# Register a client
-curl -X POST http://localhost:8000/auth/clients \
-  -H "Authorization: Bearer <token>" \
-  -H "Content-Type: application/json" \
-  -d '{"client_name": "my-script", "scopes": ["read", "write"]}'
-
-# Get a Bearer token
-curl -X POST http://localhost:8000/auth/token \
-  -H "Content-Type: application/json" \
-  -d '{
-    "grant_type": "client_credentials",
-    "client_id": "graphrag_...",
-    "client_secret": "...",
-    "scope": "read write"
-  }'
-```
-
 ### Ingest a document
 
 ```powershell
@@ -296,16 +359,103 @@ Invoke-RestMethod -Uri http://localhost:8000/ingest -Method POST -Headers $h `
 
 ```powershell
 $q = Invoke-RestMethod -Uri http://localhost:8000/query -Method POST -Headers $h `
-  -Body '{"question":"What did Company A launch?","mode":"hybrid","ground_truth":"Company A launched a rocket via its subsidiary Company B."}'
+  -Body '{"question":"What did Company A launch?","mode":"hybrid","session_id":"user-123"}'
 
 # Poll for result
 Invoke-RestMethod -Uri "http://localhost:8000/query/$($q.query_id)" -Method GET -Headers $h
 ```
 
-### Check RAGAS scores
+### Manual corrections
 
 ```powershell
-Invoke-RestMethod -Uri "http://localhost:8000/evaluation/summary" -Method GET -Headers $h
+# Split an over-merged entity
+Invoke-RestMethod -Uri http://localhost:8000/corrections/split -Method POST -Headers $h `
+  -Body '{"entity_name":"Apple","entity_type":"ORG","tenant":"default"}'
+
+# List open contradiction conflicts
+Invoke-RestMethod -Uri http://localhost:8000/corrections/conflicts -Method GET -Headers $h
+
+# Resolve a conflict
+Invoke-RestMethod -Uri http://localhost:8000/corrections/conflict-resolve -Method POST -Headers $h `
+  -Body '{"conflict_id":"...","resolution":"manual_override"}'
+```
+
+### Rebuild communities (CLI)
+
+```bash
+# Check staleness, rebuild if needed
+py -3.11 scripts/community_rebuild.py --tenant default
+
+# Force rebuild regardless of staleness
+py -3.11 scripts/community_rebuild.py --tenant default --force
+
+# Dry-run: check without rebuilding
+py -3.11 scripts/community_rebuild.py --tenant default --dry-run
+```
+
+---
+
+## Configuration
+
+All tuning is in `config/settings.yml`:
+
+```yaml
+ingestion:
+  chunk_size: 512
+  chunk_overlap: 64
+  embedding_batch_size: 100
+  entity_types: [PERSON, ORG, PRODUCT, CONCEPT, LOCATION, EVENT]
+  alias_embedding_threshold: 0.92   # cosine similarity to treat as duplicate entity
+  alias_fuzzy_threshold: 85         # rapidfuzz ratio for soft name matching
+  validate_after_ingestion: true    # run graph health check after every doc
+  auto_remove_self_loops: true
+  detect_cycles_after_ingestion: true
+
+graph:
+  community_levels: 3
+  leiden_resolution: 1.0
+  min_community_size: 3
+  require_leiden: true              # fail hard if graspologic is missing
+  auto_rebuild_communities: true    # rebuild when staleness exceeds threshold
+  community_staleness_threshold: 0.15
+  community_staleness_check_on_ingest: true
+  dirty_flag_propagation: true
+  default_authority_level: 4        # INFORMAL
+  superseded_confidence_penalty: 0.5
+
+retrieval:
+  local_top_k: 10
+  multihop_depth: 2
+  rerank_top_k: 5
+  bm25_enabled: true
+  reranker_enabled: true
+  gnn_enabled: true
+  gnn_type: gat                     # "gcn" | "gat"
+  gnn_layers: 2
+  gnn_alpha: 0.9                    # weight for text score
+  gnn_beta: 0.1                     # weight for GNN structural score
+  gnn_adaptive_weights: true        # relational queries → 0.5/0.5
+  authority_weighting_enabled: true
+  session_context_enabled: true
+  session_store: redis              # "memory" | "redis"
+  session_store_strict: true        # fail startup if Redis unreachable
+  redis_url: redis://localhost:6379/0
+  session_ttl_seconds: 86400
+  agentic_fallback: true
+  agentic_max_steps: 4
+
+ontology:
+  enforce_domain_range: true
+  allow_migration_renames: true
+  migration_map:
+    IS_CEO: CEO_OF
+    FOUNDED_BY_PERSON: FOUNDED_BY
+
+maintenance:
+  stale_edge_days: 365
+  low_conf_prune_threshold: 0.2
+  orphan_flag_enabled: true
+  cycle_check_enabled: true
 ```
 
 ---
@@ -314,137 +464,92 @@ Invoke-RestMethod -Uri "http://localhost:8000/evaluation/summary" -Method GET -H
 
 > **Example:** *"What rockets did Elon Musk's company launch and what did they achieve?"*
 
-This question spans 3 separate documents that have no direct text overlap.
+This question spans 3 separate documents with no direct text overlap.
 
 ```
 1. USER AUTHENTICATES
    POST /auth/dev-token  →  JWT (HS256, 60 min)
-   Authorization: Bearer eyJhbGci...
 
 2. USER SUBMITS QUESTION
-   POST /query
-   { "question": "What rockets did Elon Musk company launch and what did they achieve?" }
+   POST /query  { "question": "...", "session_id": "user-42" }
    →  FastAPI validates JWT scope("read")
-   →  Publishes message to RabbitMQ exchange: graphrag.query
-   →  Returns immediately: { query_id: "abc-123", status: "queued" }
+   →  Publishes to RabbitMQ: graphrag.query
+   →  Returns: { query_id: "abc-123", status: "queued" }
 
-3. QUERY WORKER PICKS UP MESSAGE
-   rabbitmq.consuming  exchange=graphrag.query  queue=graphrag.query.queue
-   →  QueryAgent.run(query_id, question)
+3. QUERY WORKER
+   →  QueryAgent.run(query_id, question, session_id)
 
-4. LOCAL SEARCH (parallel vector + BM25)
-   ┌─ Vector ANN ──────────────────────────────────────────────────────┐
-   │  embed("What rockets did Elon Musk company launch...")            │
-   │  → 3072d vector via gemini-embedding-001                         │
-   │  → db.index.vector.queryNodes('chunk_embeddings', 10, $vec)      │
-   │  → top-3 chunks by cosine similarity                             │
-   └───────────────────────────────────────────────────────────────────┘
-   ┌─ BM25 Fulltext ───────────────────────────────────────────────────┐
-   │  CALL db.index.fulltext.queryNodes('chunk_fulltext',             │
-   │       'rockets Elon Musk launch achieve')                        │
-   │  → top-3 chunks by BM25 score                                    │
-   └───────────────────────────────────────────────────────────────────┘
-   ┌─ RRF Fusion (k=60) ───────────────────────────────────────────────┐
-   │  chunk A: vector rank 1, bm25 rank 1  → score 0.0328 [vector+bm25]│
-   │  chunk B: vector rank 2, bm25 rank 2  → score 0.0320 [vector+bm25]│
-   │  chunk C: vector rank 3, bm25 rank 3  → score 0.0317 [vector+bm25]│
-   └───────────────────────────────────────────────────────────────────┘
-   ┌─ Cross-Encoder Reranking ──────────────────────────────────────────┐
-   │  model: cross-encoder/ms-marco-MiniLM-L-6-v2                      │
-   │  scores every (query, chunk) pair independently — not cosine       │
-   │  chunk A: rerank_score=2.97  ← achievements, most relevant        │
-   │  chunk B: rerank_score=1.83  ← products                           │
-   │  chunk C: rerank_score=0.42  ← ownership                          │
-   │  → top rerank_k=5 passed forward to graph expansion               │
-   └───────────────────────────────────────────────────────────────────┘
+4. SESSION CONTEXT ENRICHMENT
+   Prior turn: "Who owns SpaceX?" → answer mentioned "Elon Musk", "SpaceX"
+   →  enriched_question = "What rockets did Elon Musk's company [SpaceX] launch?"
 
-5. MULTI-HOP GRAPH TRAVERSAL (depth=2)
-   chunk A mentions → Entity("SpaceX")
-   Entity("SpaceX")  -[RELATES_TO]→  Entity("Falcon 9")
-   Entity("Falcon 9") ← MENTIONS ─  chunk in achievements.txt
-
-   Cross-document bridge resolved:
-     ownership.txt    →  "Elon Musk owns SpaceX"
-     products.txt     →  "SpaceX manufactures Falcon 9, Starship"
-     achievements.txt →  "Falcon 9 landed 2015, Starship flew 2023, NASA Artemis"
+5. LOCAL SEARCH — 6 stages
+   ├─ Vector ANN: embed(enriched_question) → top-10 chunks by cosine
+   ├─ BM25: fulltext search → RRF fusion with vector results
+   ├─ Cross-encoder: ms-marco-MiniLM-L-6-v2 → rerank top-5
+   │     chunk A (achievements): rerank_score=2.97  ← best text match
+   │     chunk B (products):     rerank_score=1.83
+   │     chunk C (ownership):    rerank_score=0.42
+   ├─ Multi-hop: chunk A mentions SpaceX → RELATES_TO → Falcon 9 → achievements.txt
+   │     Cross-document bridge resolved:
+   │       ownership.txt    →  "Elon Musk owns SpaceX"
+   │       products.txt     →  "SpaceX manufactures Falcon 9, Starship"
+   │       achievements.txt →  "Falcon 9 landed 2015, Starship flew 2023"
+   └─ GAT GNN scoring:
+         Falcon 9 chunk: cross-encoder score=-6.74 (weak text match — "Elon" absent)
+         GAT score=0.73  (graph knows SpaceX → Falcon 9 → Starship are linked)
+         final = 0.9 × sigmoid(-6.74/5) + 0.1 × 0.73 = 0.18 + 0.07 = 0.25
+         Chunk stays in results. Without GNN it would drop out.
 
 6. GLOBAL SEARCH
-   embed(question) → query community_embeddings index
-   → Community nodes with pre-built cluster summaries
-   → Adds high-level context about the SpaceX/Tesla/Elon Musk cluster
+   embed(question) → community_embeddings ANN → cluster summaries
+   →  Adds high-level SpaceX/Tesla/Musk community context
 
 7. CONFIDENCE CHECK
-   if citations found AND answer is specific:
-       → skip agentic fallback  ✅ (this query passes)
-   else:
-       → trigger AgenticRetriever (IRCoT loop, max 4 steps)
-          Step 1: LLM reasons → SEARCH: Elon Musk vehicles Mars
-          Step 2: re-search → no new chunks found
-          Step 3: SEARCH: SpaceX Mars mission → still nothing
-          Step 4: ANSWER: insufficient context in knowledge base
+   Citations found + specific answer → skip agentic fallback ✅
+   (else: IRCoT loop, max 4 SEARCH steps, then "insufficient context")
 
 8. GEMINI GENERATES ANSWER
    Context: local chunks (60%) + community summaries (40%)
-   Model: gemini-2.5-flash
+   "SpaceX, founded by Elon Musk, launched:
+    • Falcon 9 — first booster landing 2015, 200+ missions [Chunk 8910]
+    • Starship — first successful flight 2023, NASA Artemis HLS [Chunk 8910]"
 
-   Answer:
-     "SpaceX, founded by Elon Musk, launched:
-      • Falcon 9 — first booster landing 2015, 200+ missions [Chunk 8910eded]
-      • Starship — first successful flight 2023, NASA Artemis HLS [Chunk 8910eded]"
+9. SESSION TURN RECORDED (after answer is known)
+   session_ctx.record_turn(session_id, question, answer, referenced_entities)
+   →  Stored in Redis with 24h TTL
 
-9. USER POLLS FOR RESULT
-   GET /query/abc-123
-   → { status: "completed", answer: "...", citations: [...], latency_ms: 3860 }
+10. USER POLLS
+    GET /query/abc-123
+    → { status: "completed", answer: "...", citations: [...], latency_ms: 3860 }
 
-10. RAGAS EVALUATION (20% sampled)
-    → EvalJob published to graphrag.eval queue
-    → EvaluationAgent runs:
-         faithfulness      = 1.0   (answer grounded in retrieved chunks)
-         context_precision = 1.0   (all retrieved chunks were relevant)
-         context_recall    = 1.0   (all ground truth facts were found)
-         answer_relevancy  = 0.85  (answer directly addresses the question)
-    → Scores stored in TimescaleDB
-
-11. DASHBOARD UPDATES
-    http://localhost:8050/dashboard/
-    → Plotly chart refreshes every 30s
-    → latency timeseries + RAGAS score table + alert thresholds
+11. RAGAS EVALUATION (20% sampled)
+    faithfulness=1.0 · context_precision=1.0 · context_recall=1.0
+    → Scores stored in TimescaleDB → live in dashboard
 ```
 
 ---
 
-## Retrieval Pipeline
+## Graph Integrity & Production Hardening
 
-```
-Query
-  │
-  ├─► LocalSearch
-  │     ├─ Vector ANN on chunk_embeddings index (3072d cosine)
-  │     ├─ BM25 fulltext on chunk_fulltext index
-  │     ├─ RRF fusion (k=60) of vector + BM25 results
-  │     ├─ Cross-encoder reranking (ms-marco-MiniLM-L-6-v2) → top rerank_k
-  │     └─ Multi-hop graph traversal (depth=2)
-  │         Chunk → MENTIONS → Entity → RELATES_TO* → Entity → MENTIONS → Chunk
-  │
-  ├─► GlobalSearch
-  │     └─ Community embedding ANN → synthesized summaries
-  │
-  ├─► ContextBuilder (local 60% + global 40%)
-  │
-  ├─► Gemini generates answer with citations
-  │
-  └─► Low confidence? (no citations / vague answer)
-        └─► AgenticRetriever (IRCoT loop, max 4 steps)
-              ├─ Step N: LLM reasons → SEARCH: <sub-query>
-              ├─ Re-search → add new chunks to context
-              └─ Until ANSWER: <final> or max steps reached
-```
+Every ingestion batch runs the following checks automatically:
 
-This solves the **cross-document reasoning** problem:
+| Guard | What it does |
+|-------|-------------|
+| **Alias resolution** | Name-based + embedding deduplication before MERGE; prevents duplicate entity nodes |
+| **Ontology validation** | Domain/range rules checked on every relation; violations logged as schema events |
+| **Self-loop removal** | `(e)-[r:RELATES_TO]->(e)` edges deleted automatically |
+| **Cycle detection** | RELATES_TO cycles flagged after each write |
+| **Contradiction detection** | Multi-source, directional, exclusive-state, and functional conflicts detected and stored as `Conflict` nodes |
+| **Quarantine** | Entities flagged as degree anomalies auto-quarantined; excluded from retrieval until released |
+| **Community staleness** | Entity/edge drift tracked; communities auto-rebuilt when drift exceeds threshold |
+| **Graph health snapshot** | 6 metrics persisted as `GraphHealthSnapshot` nodes for trend monitoring |
 
-> *"Company A owns Company B"* (doc 1, page 10)
-> *"Company B launched a rocket"* (doc 2, page 300)
-> Query: *"What did Company A launch?"* → **correctly answered via graph traversal**
+**Tenant isolation** is enforced at the data layer: every entity, edge, conflict, community, and health snapshot is keyed on `(name, type, tenant)`. Cross-tenant queries never mix results.
+
+**Strict mode** for critical dependencies:
+- `require_leiden: true` → startup fails hard if `graspologic` is missing (silent fallback degrades global search quality undetectably)
+- `session_store_strict: true` → FastAPI lifespan hook pings Redis at startup; fails hard if unreachable
 
 ---
 
@@ -465,29 +570,6 @@ Evaluation is sampled at **20%** of queries automatically. View results:
 
 ---
 
-## Configuration
-
-All tuning is in `config/settings.yml`:
-
-```yaml
-retrieval:
-  local_top_k: 10          # chunks retrieved by vector search
-  multihop_depth: 2        # graph hops (2 = A→B→C)
-  bm25_enabled: true       # enable BM25 fulltext search
-  agentic_fallback: true   # enable iterative re-search on low confidence
-  agentic_max_steps: 4     # max sub-searches before forced synthesis
-
-ingestion:
-  chunk_size: 512
-  chunk_overlap: 64
-
-graph:
-  min_community_size: 3    # minimum entities to form a community
-  leiden_resolution: 1.0
-```
-
----
-
 ## Service URLs
 
 | Service | URL | Credentials |
@@ -504,7 +586,9 @@ graph:
 | Error | Cause | Fix |
 |-------|-------|-----|
 | `No such vector schema index: chunk_embeddings` | Schema not initialized | Run `py -3.11 scripts/init_neo4j.py` |
-| `403 API key leaked/expired` | Google revoked the key | Create new key at aistudio.google.com, update `.env`, restart all processes |
+| `startup.session_store_unavailable` | Redis unreachable at startup | Start Redis or set `session_store_strict: false` in settings.yml |
+| `graspologic is not installed` | Leiden community detection unavailable | `pip install graspologic` or set `require_leiden: false` (degrades global search) |
+| `403 API key leaked/expired` | Google revoked the key | Create new key at aistudio.google.com, update `.env`, restart |
 | `AMQPConnectionError` | RabbitMQ not running | `docker-compose up rabbitmq` |
 | `Invalid token: Not enough segments` | Empty/expired JWT | Re-run `/auth/dev-token` and rebuild `$h` headers |
 | Workers connecting to wrong host in Docker | `.env` uses `localhost` | Docker overrides in `docker-compose.yml` use service names |

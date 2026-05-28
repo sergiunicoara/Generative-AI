@@ -30,7 +30,7 @@ graph:
   auto_rebuild_communities: true    # rebuild when staleness exceeds threshold; disable only if you run scripts/community_rebuild.py externally
   community_staleness_threshold: 0.15   # 0.0-1.0 — rebuild when drift exceeds this
   community_staleness_check_on_ingest: true  # check staleness on every ingestion batch
-  require_leiden: false             # true = fail hard if graspologic not installed; false = log error and fall back
+  require_leiden: true              # fail hard if graspologic is missing — silent fallback to connected-components degrades global search quality undetectably
   # ── Document authority ───────────────────────────────────────────────────────
   default_authority_level: 4        # INFORMAL — override per document on ingestion
   superseded_confidence_penalty: 0.5  # confidence multiplier for superseded doc edges
@@ -47,8 +47,8 @@ retrieval:
   # ── Session context ──────────────────────────────────────────────────────────
   session_context_enabled: true     # enrich ambiguous follow-up queries with session entities
   session_max_turns: 10             # sliding window size per session
-  session_store: memory             # "memory" | "redis" — persistence backend for session turns
-  redis_url: ""                     # e.g. redis://localhost:6379/0 — leave empty to use memory
+  session_store: redis              # "memory" | "redis" — redis survives restarts; falls back to memory if Redis is unreachable
+  redis_url: redis://localhost:6379/0  # update to your Redis instance in production
   session_ttl_seconds: 86400        # Redis key TTL for session turns (24h)
   # ── GNN scoring (after multi-hop traversal) ───────────────────────────────
   gnn_enabled: true        # GCN/GAT graph-propagated re-scoring

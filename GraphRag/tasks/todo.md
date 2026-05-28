@@ -133,6 +133,31 @@ All work completed across two sessions. Tracked retroactively per CLAUDE.md.
 
 ---
 
+---
+
+## Phase 9 — Tests, Alerts, Admin UI
+
+### Phase 9a — Integration Tests
+- [x] Create `tests/integration/test_operational_paths.py` — TestSessionStorePersistence (5 tests), TestLeidenStartupPath (3 tests), TestTenantScopedContradiction (3 tests), TestCommunityAutoRebuildLifecycle (3 tests)
+
+### Phase 9b — Load Tests
+- [x] Create `tests/load/__init__.py`
+- [x] Create `tests/load/test_load_scenarios.py` — 5 async concurrency benchmark tests
+
+### Phase 9c — Alert Service
+- [x] Create `graphrag/monitoring/__init__.py`
+- [x] Create `graphrag/monitoring/alerts.py` — AlertService with check/fire/check_and_fire
+- [x] Edit `graphrag/graph/graph_evaluator.py` — call alert_svc.check_and_fire() in persist_snapshot()
+- [x] Edit `api/routes/kg_features.py` — add GET /health/alerts endpoint
+- [x] Edit `config/settings.yml` — add contradiction_rate, orphan_rate, low_confidence_rate thresholds
+
+### Phase 9d — Admin Dashboard
+- [x] Create `graphrag/dashboard/__init__.py`
+- [x] Create `graphrag/dashboard/app.py` — Dash admin panel with 5 tabs
+- [x] Edit `api/main.py` — mount Dash app at /admin
+
+---
+
 ## Review
 
 ### What was built

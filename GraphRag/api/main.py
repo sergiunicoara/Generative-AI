@@ -86,3 +86,15 @@ app.include_router(kg_features.router, prefix="/kg",          tags=["KG Features
 @app.get("/health", tags=["Health"])
 async def health():
     return {"status": "ok"}
+
+
+# ── Admin dashboard ────────────────────────────────────────────────────────────
+# Mount the Dash admin panel at /admin using the WSGI bridge.
+# Dash renders server-side via Flask/Werkzeug; WSGIMiddleware adapts it to ASGI.
+try:
+    from starlette.middleware.wsgi import WSGIMiddleware
+    from graphrag.dashboard.app import app as dash_app
+    app.mount("/admin", WSGIMiddleware(dash_app.server))
+    log.info("startup.admin_dashboard_mounted", path="/admin")
+except Exception as _dash_exc:
+    log.warning("startup.admin_dashboard_unavailable", error=str(_dash_exc))

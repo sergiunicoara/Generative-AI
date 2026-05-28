@@ -282,7 +282,7 @@ class GraphEvaluator:
         return report
 
     async def persist_snapshot(self, report: dict, tenant: str = "default") -> str:
-        """Persist a graph health snapshot for trend tracking."""
+        """Persist a graph health snapshot and fire threshold alerts."""
         snap_id = str(uuid4())
         await self._neo4j.run(
             """
@@ -308,6 +308,22 @@ class GraphEvaluator:
             community_coherence=report.get("community_coherence", {}).get("avg_community_coherence", 0),
         )
         log.info("graph_evaluator.snapshot_persisted", snapshot_id=snap_id, tenant=tenant)
+
+        # Fire threshold-based alerts after every snapshot so operators see
+        # health degradation in their log aggregator without polling the graph.
+        try:
+            from graphrag.monitoring.alerts import get_alert_service
+            alerts = get_alert_service().check_and_fire(report, tenant=tenant)
+            if alerts:
+                log.warning(
+                    "graph_evaluator.alerts_fired",
+                    count=len(alerts),
+                    metrics=[a["metric"] for a in alerts],
+                    tenant=tenant,
+                )
+        except Exception as exc:  # never let alerting crash the evaluator
+            log.warning("graph_evaluator.alert_error", error=str(exc))
+
         return snap_id
 
     async def get_trend(self, limit: int = 10, tenant: str = "default") -> list[dict]:

@@ -97,3 +97,6 @@ business_matrix:
     latency_p95_ms: 3000
     faithfulness: 0.7
     context_recall: 0.6
+    contradiction_rate: 0.05   # breach if conflicts_per_1k_edges / 1000 exceeds 5 %
+    orphan_rate: 0.10          # breach if orphan_rate exceeds 10 %
+    low_confidence_rate: 0.30  # breach if noise_edge_rate exceeds 30 %

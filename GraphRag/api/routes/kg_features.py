@@ -1273,3 +1273,24 @@ async def build_semantic_communities(tenant: str = "default"):
     from graphrag.graph.community_builder import CommunityBuilder
     builder = CommunityBuilder(tenant=tenant)
     return await builder.build_semantic_communities()
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# 21. Alert history
+# ══════════════════════════════════════════════════════════════════════════════
+
+@router.get(
+    "/health/alerts",
+    dependencies=[Depends(require_scope("read"))],
+    summary="Return the most recently fired threshold-breach alerts (newest first)",
+)
+async def get_health_alerts(limit: int = 50):
+    """
+    Return recently fired GraphHealthSnapshot threshold-breach alerts.
+
+    Alerts are accumulated in memory by AlertService.fire() and keyed to the
+    most recent GraphEvaluator.persist_snapshot() call.  The deque is
+    process-local — for multi-worker deployments use a shared Redis list.
+    """
+    from graphrag.monitoring.alerts import get_recent_alerts
+    return {"alerts": get_recent_alerts(limit=limit)}

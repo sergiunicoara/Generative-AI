@@ -903,3 +903,79 @@ queries on the current type.
 > that stores the entity type as a field value (not just Entity.type) and update all of
 > them in the same migration transaction. Add a `type_migrated_from` audit field so the
 > old value is recoverable without hitting the audit log.
+
+---
+
+## A34 — Test graphs must use string node IDs when the model requires strings
+
+**What happened:**
+`TestLeidenStartupPath._tiny_graph()` built a NetworkX graph with integer node IDs
+(`G.add_edges_from([(0, 1), (1, 2)])`).  `Community.member_entity_ids: list[str]`
+requires strings.  All three Leiden tests failed with Pydantic ValidationError on node
+IDs 0, 1, 2, 3.
+
+**Root cause:**
+NetworkX defaults to integer node IDs and Pydantic's strict-type list validation does
+not coerce ints to strings.  The mismatch was invisible until runtime.
+
+**Rule:**
+> When writing a test graph for a component whose model uses string entity IDs, always
+> use string nodes: `G.add_edges_from([("n0", "n1"), ("n1", "n2")])`.  Check the model
+> field type before building test fixtures.
+
+---
+
+## A35 — sys.modules.pop does not block imports of installed packages
+
+**What happened:**
+`TestLeidenStartupPath` tried to simulate a missing graspologic by calling
+`sys.modules.pop("graspologic", None)`.  The test expected a `RuntimeError` but
+`_run_leiden()` succeeded because Python re-imported graspologic from disk on the
+next `from graspologic.partition import leiden`.
+
+**Root cause:**
+`sys.modules.pop` removes the cached copy but Python immediately re-imports from the
+file system if the package is installed.
+
+**Rule:**
+> To block an installed package from importing in tests, set its `sys.modules` entry
+> to `None`: `patch.dict(sys.modules, {"graspologic": None, "graspologic.partition": None})`.
+> Python treats a `None` entry as "this module intentionally does not exist" and raises
+> `ImportError` without touching the filesystem.
+
+---
+
+## A36 — Alert thresholds belong in config, not scattered across service constructors
+
+**What happened:**
+Initial AlertService draft hard-coded `contradiction_rate: 0.05` in the class body.
+The project already had `business_matrix.alert_thresholds` in `settings.yml` for latency
+and RAGAS metrics.
+
+**Root cause:**
+New service was written without checking if a config section for it already existed.
+
+**Rule:**
+> Before adding a new constant to a service, grep for existing config sections that
+> logically own it.  Centralise thresholds in config so operators can tune them without
+> code changes.  The pattern: `DEFAULT_THRESHOLDS` as code fallback + config override
+> merged at singleton init.
+
+---
+
+## A37 — Dashboard data loading must go through the REST API, not direct Neo4j
+
+**What happened:**
+An early dashboard design considered adding `graphrag.graph.neo4j_client` imports
+directly to `graphrag/dashboard/app.py`.
+
+**Root cause:**
+Dashboard sits outside the FastAPI process boundary (WSGIMiddleware mount), so async
+Neo4j calls from a sync Dash callback would require a new event loop and config
+bootstrap — creating hidden coupling.
+
+**Rule:**
+> UI components that are mounted inside a server process should still consume data
+> through the public REST API (`httpx.get(API_BASE + path)`), not through internal
+> service singletons.  This keeps auth, validation, and rate limiting in one place and
+> makes the dashboard independently deployable.

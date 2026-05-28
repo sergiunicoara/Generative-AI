@@ -304,3 +304,334 @@ Snapshots were designed for single-tenant use; tenant was not part of the data m
 > Retrofitting tenant onto existing nodes is painful and lossy. Add it on the first write,
 > even if the system is currently single-tenant.
 > Standard field: `tenant: $tenant` in every `CREATE` for analytics nodes.
+
+---
+
+---
+
+# Knowledge Graph Architecture — Findings & Design Lessons
+
+Architectural insights learned from building and hardening the GraphRAG pipeline.
+These are design principles, not code bugs.
+
+---
+
+## A01 — GNN compensates for what text can't see
+
+**Finding:**
+Cross-encoder score for a Falcon 9 chunk against "What rockets did Elon Musk's company launch?" was **-6.74** — weak text match because "Elon" isn't in that chunk. GAT score was **0.73** because the graph knows `SpaceX → Falcon 9 → Starship`. Without the GNN layer, that chunk drops out of results entirely even though it's directly relevant.
+
+**Principle:**
+> Text similarity answers "is this chunk about the query?" Graph scoring answers "is this
+> chunk connected to entities the query is about?" Both questions matter. A reranker alone
+> is not sufficient for multi-document reasoning — it only sees text overlap, not graph
+> structure. The GNN layer is not an optimisation; it's a correctness layer.
+
+---
+
+## A02 — Query-adaptive GNN weights outperform fixed α/β
+
+**Finding:**
+A fixed `α=0.9, β=0.1` is correct for factoid queries ("Who founded SpaceX?") where the
+text score is reliable. But for relational queries ("How did X's acquisition affect Y's
+supply chain?") the text match is often weak across the relevant chunks and the graph
+structure carries more signal. Forcing `α=β=0.5` on relational queries measurably
+improves recall on multi-hop fact retrieval.
+
+**Principle:**
+> Don't use fixed blend weights for a mixed query population. Detect query intent
+> (relational signals: "caused by", "connected", "between", "led to", "impact of")
+> and adjust weights accordingly. The cost is one string scan per query; the benefit
+> is correct weighting without manual tuning per use case.
+
+---
+
+## A03 — Session context must enrich the query before embedding
+
+**Finding:**
+Session enrichment adds prior-turn entities to an ambiguous follow-up query
+(e.g. "What else did they launch?" → "What else did SpaceX launch?"). This enrichment
+must happen *before* `embed(query)` — not before LLM generation. If enrichment happens
+after embedding, the vector search runs on the ambiguous query and retrieves the wrong
+seed chunks regardless of what the LLM eventually receives.
+
+**Principle:**
+> Query enrichment and query embedding are order-dependent. The enriched string is the
+> input to all downstream retrieval stages, not just the LLM. The correct pipeline order
+> is: enrich → embed → ANN → BM25 → rerank → multihop → GNN → LLM.
+
+---
+
+## A04 — Leiden hierarchy is not optional for global search quality
+
+**Finding:**
+When `graspologic` is missing, the system falls back to connected components (flat
+partitioning, level 0 only). Community summaries generated on connected components
+describe "all nodes reachable from X" rather than "semantically coherent clusters at
+multiple resolutions". Global search map-reduce over these summaries produces vague,
+unfocused answers that RAGAS scores as low context recall.
+
+**Principle:**
+> The Leiden algorithm's multi-resolution hierarchy (coarse at level 0, fine at level 2)
+> is what makes global search answers useful. Connected components is a structural
+> fallback, not a quality-equivalent alternative. Treat `graspologic` as a hard
+> dependency for production, not an optional enhancement.
+
+---
+
+## A05 — Community staleness gating prevents rebuild thrash
+
+**Finding:**
+Rebuilding communities after every ingestion batch is expensive (full entity+relation
+fetch + Leiden + LLM summarization). But never rebuilding means global search runs on
+stale structure as the graph grows. The right model: compute a staleness score from
+entity/edge drift (40% entity delta + 60% edge delta) and only rebuild when drift
+exceeds a threshold (default 0.15).
+
+**Principle:**
+> Community rebuild is a write-heavy batch operation. Gate it on a staleness metric, not
+> on every ingestion. The staleness check itself is a lightweight read (snapshot delta),
+> so it can run on every batch without rebuild cost. Tune the threshold by domain:
+> fast-changing knowledge bases need a lower threshold; stable corpora can tolerate more
+> drift.
+
+---
+
+## A06 — Two-layer entity deduplication is required
+
+**Finding:**
+Name-based alias resolution catches obvious variants ("Elon Musk" / "E. Musk" / "musk").
+But it misses paraphrases and abbreviations with no shared tokens ("SpaceX" vs.
+"Space Exploration Technologies"). Embedding similarity (cosine > 0.92 threshold) catches
+these. Either layer alone leaves a meaningful number of duplicate nodes in the graph.
+
+**Principle:**
+> Entity deduplication needs two layers: (1) fuzzy name matching for surface variants,
+> (2) embedding similarity for semantic equivalents. Run name matching first (cheap);
+> only run embedding comparison if name matching found no canonical. The threshold matters:
+> 0.92 cosine is aggressive — tune lower if your domain has many legitimately similar
+> but distinct entities.
+
+---
+
+## A07 — Source evidence accumulation enables contradiction detection
+
+**Finding:**
+The original model wrote one RELATES_TO edge per (src, relation, tgt) pair per ingestion
+pass, overwriting the previous `source_doc_id`. This meant the graph looked like every
+relation came from a single document. Multi-source contradiction detection — which checks
+whether two *independent* documents assert the same relation differently — was impossible.
+
+Switching to a `source_doc_ids` list (accumulated, not overwritten) on each edge gave
+contradiction detection the full provenance it needs: same edge, all contributing sources
+visible, supersession relationships queryable across all of them.
+
+**Principle:**
+> In a knowledge graph built from multiple documents, every edge must carry its full
+> source provenance as a list. A single `source_doc_id` field that gets overwritten
+> destroys the audit trail and makes multi-source analysis impossible. Model provenance
+> as an append-only list from the first schema version.
+
+---
+
+## A08 — Contradiction types need distinct semantics
+
+**Finding:**
+A generic "conflict" label on a Conflict node doesn't tell the resolver what to do.
+Four distinct types each suggest a different resolution strategy:
+- `multi_source` → check authority levels; higher authority wins
+- `directional_reversal` → `A→B` vs `B→A`; likely an extraction error; review source text
+- `exclusive_state` → "X is CEO" + "X is not CEO"; one must be stale; check timestamps
+- `functional_violation` → ontology says X can only have one Y; deduplicate
+
+**Principle:**
+> Contradiction detection is only useful if it produces actionable output. Classify
+> conflicts by type at detection time, not resolution time. Each type maps to a resolution
+> strategy. A conflict queue with mixed untyped entries is processed slowly and
+> inconsistently.
+
+---
+
+## A09 — Document authority level determines conflict resolution, not recency
+
+**Finding:**
+Newer documents are not always more authoritative. A regulatory directive from 2015
+(authority level 1) supersedes an internal email from 2025 (authority level 4). Resolving
+conflicts by timestamp would systematically prefer the less authoritative source.
+
+The SUPERSEDES relationship between documents is the right model: it makes the authority
+order explicit and queryable, independent of ingestion timestamp or document date.
+
+**Principle:**
+> Model document authority explicitly (1=regulatory, 2=manufacturer, 3=internal,
+> 4=informal). Never use ingestion time or document date as a proxy for authority.
+> Build SUPERSEDES edges between documents at ingestion time when the supersession is
+> known. Apply a confidence penalty (e.g. 0.5×) to edges from superseded documents
+> during retrieval so they rank lower without being deleted.
+
+---
+
+## A10 — Orphan entities are a leading indicator of extractor problems
+
+**Finding:**
+An entity with no MENTIONS link from any Chunk exists in the graph but is unreachable
+from retrieval. Orphan rate rising across ingestion batches (not just spiking and
+recovering) signals a systematic extractor failure: entities are being extracted and
+written but the MENTIONS edges are not being created. By the time RAGAS scores degrade,
+hundreds of entities may already be dark.
+
+**Principle:**
+> Track orphan rate as a leading indicator, not as a cleanup metric. A rising orphan
+> rate predicts future retrieval gaps before they appear in evaluation scores. Alert
+> at the graph health layer (`orphan_delta > 0` across N consecutive snapshots), not
+> by waiting for user-reported answer quality drops.
+
+---
+
+## A11 — Quarantine beats deletion for suspicious entities
+
+**Finding:**
+When an entity is flagged as a degree anomaly (e.g. hub node with 500+ edges from a
+single document — likely an extraction artifact), deleting it destroys the audit trail
+and makes it impossible to investigate the root cause or recover if the flag was a
+false positive.
+
+Quarantine (set `quarantined=true`, exclude from retrieval, keep in graph) preserves
+all edges and provenance. The entity can be inspected, released, or split after review.
+
+**Principle:**
+> Never delete flagged entities automatically. Quarantine them. Deletion is irreversible
+> and destroys diagnostic information. The quarantine flag is cheap (one property write)
+> and exclusion from retrieval (`WHERE NOT e.quarantined = true`) is trivial. Build
+> release and split workflows before enabling auto-quarantine.
+
+---
+
+## A12 — Community coherence predicts global search quality
+
+**Finding:**
+A community with low intra-community edge density (most edges go to entities outside
+the community) means Leiden found poor cluster structure — the "community" is not actually
+a semantically coherent group. LLM summaries of such communities are vague and unfocused.
+When global search map-reduces over low-coherence communities, the partial answers are
+weak and the synthesis degrades.
+
+**Principle:**
+> Monitor `avg_community_coherence` (ratio of intra-community to total edges per
+> community) as a leading indicator of global search quality. Values below ~0.4 signal
+> that the graph is too sparse or that Leiden resolution parameters need tuning.
+> Coherence below threshold should trigger a parameter sweep before the next rebuild,
+> not just a rebuild at the same parameters.
+
+---
+
+## A13 — Multi-hop depth 2 is the sweet spot; depth 3+ increases noise
+
+**Finding:**
+Multi-hop at depth 2 (`A → B → C`) resolves the core cross-document reasoning problem:
+entity mentioned in chunk → connected entity → chunk mentioning that entity. Depth 3
+(`A → B → C → D`) exponentially increases the number of hop chunks pulled in, most of
+which are tangentially related at best. For a corpus of moderate size, depth 3 typically
+doubles the chunk count but adds minimal relevant information.
+
+**Principle:**
+> Default to `multihop_depth: 2`. Only increase to 3 if your domain has deep causal
+> chains (e.g. supply chain analysis, legal precedent chains) and you have evidence that
+> depth-3 chunks improve recall on your evaluation queries. The cost is linear in
+> chunk count but the noise increases super-linearly.
+
+---
+
+## A14 — Cross-encoder before multi-hop, not after
+
+**Finding:**
+Placing cross-encoder reranking before multi-hop traversal (current architecture) means
+the seed chunks for graph expansion are the highest-quality text matches. The hop chunks
+inherit quality from good seeds.
+
+Placing cross-encoder after multi-hop would mean reranking a much larger set (seeds +
+all hop chunks), most of which were added for graph connectivity, not text relevance.
+The reranker would spend budget on structurally-present but textually-weak chunks.
+
+**Principle:**
+> The pipeline order matters: rerank before expand, not after. Use the reranker to
+> select the best seed set for graph traversal. Apply GNN scoring after expansion to
+> score the full set (seeds + hops) using graph signal — that's what the GNN is for.
+
+---
+
+## A15 — Graph health metrics are leading indicators; RAGAS is lagging
+
+**Finding:**
+RAGAS scores measure answer quality on the evaluation sample. By the time faithfulness
+or context recall drops, the underlying graph problem (rising orphan rate, high
+contradiction rate, low alias coverage, degraded community structure) has usually been
+accumulating for multiple ingestion batches.
+
+Graph health metrics are cheap to compute and predictive:
+- Rising `orphan_delta` → extraction pipeline losing MENTIONS edges
+- Rising `conflicts_per_1k_edges` → new documents contradicting existing facts
+- Falling `alias_coverage` → duplicate entities accumulating
+- Falling `avg_community_coherence` → Leiden structure degrading
+
+**Principle:**
+> Build graph health monitoring before you need it. By the time RAGAS drops, the
+> diagnosis takes hours. With a `GraphHealthSnapshot` trend, the anomaly is visible
+> at the batch that caused it. Alert on health metrics; use RAGAS to confirm.
+
+---
+
+## A16 — Tenant isolation must be designed first, retrofitted never
+
+**Finding:**
+Tenant isolation was added incrementally to an initially single-tenant design. Each
+addition required: updating the entity unique constraint, adding tenant filters to every
+MATCH/MERGE, updating alias registries, adding tenant to conflict nodes, health snapshots,
+community nodes, and auditing every analytics query. Retrofitting took significantly
+longer than designing it in from the start would have.
+
+**Principle:**
+> If multi-tenancy is a possibility (not even a certainty), build the `tenant` dimension
+> into the schema on day one:
+> - Entity unique constraint: `(name, type, tenant)`
+> - Every MATCH pattern: `{..., tenant: $tenant}`
+> - Every analytics node: `tenant: $tenant` stored at CREATE time
+> The cost of adding it upfront is one extra parameter everywhere.
+> The cost of retrofitting is auditing every query in the codebase.
+
+---
+
+## A17 — Self-loops are extraction artifacts, not valid knowledge
+
+**Finding:**
+LLM entity extractors occasionally produce relations where source and target resolve to
+the same entity (e.g. "SpaceX was founded by SpaceX" due to coreference errors). These
+self-loops (`(e)-[:RELATES_TO]->(e)`) create cycles, inflate entity degree counts, and
+corrupt GNN message-passing (a node attending to itself at full weight skews its embedding).
+
+**Principle:**
+> Auto-remove self-loops immediately after every relation write. They are never valid
+> domain knowledge — they are always extraction errors. Don't quarantine them or flag
+> them for review; just delete. Add the removal to the post-write validation pipeline
+> so it runs automatically, not as a scheduled cleanup job.
+
+---
+
+## A18 — Confidence fusion must be Bayesian, not averaging
+
+**Finding:**
+When the same relation is extracted from two independent documents both with confidence
+0.8, averaging gives 0.8 — unchanged. But two independent sources asserting the same
+fact is stronger evidence than one. The Bayesian combination
+`1 - (1 - c1) × (1 - c2) = 0.96` correctly reflects the increased certainty.
+
+Averaging is wrong because it treats additional confirming evidence as neutral rather than
+reinforcing.
+
+**Principle:**
+> Use Bayesian confidence fusion for accumulating evidence on edges:
+> `r.confidence = 1 - (1 - r.confidence) * (1 - $new_confidence)`
+> Only use this for independent sources. If two extractions come from the same document
+> (same `source_doc_id`), don't fuse — it's not independent evidence.
+> The `source_doc_ids` list enables this check: only fuse if the new source is not
+> already in the list.

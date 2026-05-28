@@ -237,12 +237,20 @@ class ForwardChainingEngine:
         decay = rule.confidence_decay
         tenant_filter = "AND a.tenant = $tenant AND c.tenant = $tenant" if tenant else ""
 
+        # Tenant must be enforced on every node and edge along the path,
+        # not only on the endpoints — otherwise a 2-hop path can traverse
+        # an intermediate entity from a different tenant.
+        path_tenant_filter = (
+            "AND ALL(n IN nodes(path) WHERE n.tenant = $tenant) "
+            "AND ALL(r IN relationships(path) WHERE r.tenant = $tenant)"
+        ) if tenant else ""
+
         rows = await self._neo4j.run(
             f"""
             MATCH path = (a:Entity)-[:RELATES_TO*2..{depth} {{relation: $rel}}]->(c:Entity)
             WHERE NOT (a)-[:RELATES_TO {{relation: $rel}}]->(c)
               AND a <> c
-              {tenant_filter}
+              {path_tenant_filter}
             WITH a, c,
                  length(path) AS hops,
                  reduce(conf = 1.0, r IN relationships(path) |
@@ -278,7 +286,11 @@ class ForwardChainingEngine:
         """A -[rel]-> B  =>  B -[rel]-> A"""
         rel = rule.relation
         derived = rule.derived_relation or rel
-        tenant_filter = "AND a.tenant = $tenant AND b.tenant = $tenant" if tenant else ""
+        tenant_filter = (
+            "AND a.tenant = $tenant "
+            "AND b.tenant = $tenant "
+            "AND r.tenant = $tenant"
+        ) if tenant else ""
 
         rows = await self._neo4j.run(
             f"""
@@ -315,7 +327,11 @@ class ForwardChainingEngine:
         """A -[rel]-> B  =>  B -[derived_rel]-> A"""
         rel = rule.relation
         derived = rule.derived_relation or rel
-        tenant_filter = "AND a.tenant = $tenant AND b.tenant = $tenant" if tenant else ""
+        tenant_filter = (
+            "AND a.tenant = $tenant "
+            "AND b.tenant = $tenant "
+            "AND r.tenant = $tenant"
+        ) if tenant else ""
 
         rows = await self._neo4j.run(
             f"""
@@ -357,7 +373,16 @@ class ForwardChainingEngine:
         derived = rule.derived_relation or rel1
         if not rel2:
             return 0
-        tenant_filter = "AND a.tenant = $tenant AND c.tenant = $tenant" if tenant else ""
+        # All three entities AND both edges must belong to the same tenant.
+        # Missing b.tenant would let the inference cross tenant boundaries via
+        # a shared intermediate entity name.
+        tenant_filter = (
+            "AND a.tenant = $tenant "
+            "AND b.tenant = $tenant "
+            "AND c.tenant = $tenant "
+            "AND r1.tenant = $tenant "
+            "AND r2.tenant = $tenant"
+        ) if tenant else ""
 
         rows = await self._neo4j.run(
             f"""

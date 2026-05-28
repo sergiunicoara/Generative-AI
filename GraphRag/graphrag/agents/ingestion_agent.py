@@ -77,10 +77,17 @@ class IngestionAgent(BaseGraphRAGAgent):
                 )
 
             await self._writer.write_entities(entities, chunk)
-            await self._writer.write_relations(relations, entity_map)
+            await self._writer.write_relations(
+                relations, entity_map, doc_id=doc.id, tenant=doc.tenant
+            )
 
             all_entities.extend(entities)
             all_relations.extend(relations)
+
+        maintenance_report = await self._writer.validate_and_check_cycles(
+            doc_id=doc.id,
+            tenant=doc.tenant,
+        )
 
         log.info(
             "ingestion_agent.done",
@@ -88,6 +95,8 @@ class IngestionAgent(BaseGraphRAGAgent):
             chunks=len(chunks),
             entities=len(all_entities),
             relations=len(all_relations),
+            validation_issues=maintenance_report["validation"]["total_issues"],
+            new_conflicts=maintenance_report["new_conflicts"],
         )
         return {
             "job_id": job_id,
@@ -95,4 +104,5 @@ class IngestionAgent(BaseGraphRAGAgent):
             "chunks": len(chunks),
             "entities": len(all_entities),
             "relations": len(all_relations),
+            "maintenance": maintenance_report,
         }

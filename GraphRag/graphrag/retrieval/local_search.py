@@ -67,27 +67,51 @@ class LocalSearch:
         )
         self._adaptive_weights   = self._cfg.get("gnn_adaptive_weights", True)
         self._authority_svc      = DocumentAuthorityService(self._neo4j)
-        self._session_ctx        = get_session_context()
+        self._use_session_ctx    = self._cfg.get("session_context_enabled", True)
+        self._session_ctx        = get_session_context() if self._use_session_ctx else None
 
     async def search(
         self,
         question: str,
         session_id: str = "",
+        tenant: str = "default",
     ) -> dict:
+        """Run the 6-step retrieval pipeline.
+
+        Returns a dict with keys:
+          chunks               — scored, sorted chunk list
+          entities             — entity context rows
+          referenced_entities  — entity names seen in this result set
+          referenced_chunks    — chunk IDs in this result set
+
+        Session recording is intentionally NOT done here.  The answer is only
+        available after LLM generation; callers should use the returned
+        referenced_* fields to call session_ctx.record_turn() with the real
+        answer once it is known.
+        """
         top_k      = self._cfg.get("local_top_k", 10)
         hops       = self._cfg.get("multihop_depth", 2)
         use_bm25   = self._cfg.get("bm25_enabled", True)
         use_rerank = self._cfg.get("reranker_enabled", True)
         use_gnn    = self._cfg.get("gnn_enabled", True)
 
-        # ── Session context: resolve ambiguous follow-up queries ───────────────
-        enriched_question = self._session_ctx.enrich_query(session_id, question)
-        if enriched_question != question:
-            log.info("local_search.query_enriched", session_id=session_id)
+        # ── Session context: resolve ambiguous follow-up queries ──────────────
+        # Only runs when session_context_enabled=true in config AND a session_id
+        # is provided.  Query enrichment uses prior turns; recording happens in
+        # the caller (hybrid_retriever) once the real answer is available.
+        enriched_question = question
+        if self._use_session_ctx and self._session_ctx and session_id:
+            enriched_question = await self._session_ctx.enrich_query(session_id, question)
+            if enriched_question != question:
+                log.info("local_search.query_enriched", session_id=session_id)
 
         # Step 1 — vector ANN
         embedding     = await self._embedder.embed_text(enriched_question)
-        vector_chunks = await self._neo4j.vector_search_chunks(embedding, top_k=top_k)
+        vector_chunks = await self._neo4j.vector_search_chunks(
+            embedding,
+            top_k=top_k,
+            tenant=tenant,
+        )
 
         # Step 2 — BM25 + RRF fusion
         if use_bm25:
@@ -95,6 +119,7 @@ class LocalSearch:
                 query=enriched_question,
                 vector_chunks=vector_chunks,
                 top_k=top_k,
+                tenant=tenant,
             )
         else:
             fused_chunks = vector_chunks
@@ -108,7 +133,11 @@ class LocalSearch:
         seed_ids = [c["chunk_id"] for c in seed_chunks]
 
         # Step 4 — multi-hop graph traversal
-        hop_chunks = await self._neo4j.get_multihop_chunks(seed_ids, hops=hops)
+        hop_chunks = await self._neo4j.get_multihop_chunks(
+            seed_ids,
+            hops=hops,
+            tenant=tenant,
+        )
 
         seen: set[str] = set(seed_ids)
         extra_chunks = [c for c in hop_chunks if c["chunk_id"] not in seen]
@@ -128,7 +157,7 @@ class LocalSearch:
 
             chunk_entities, entity_edges = await asyncio.gather(
                 self._neo4j.get_chunk_entity_embeddings(all_ids),
-                _fetch_subgraph_edges(self._neo4j, all_ids),
+                _fetch_subgraph_edges(self._neo4j, all_ids, tenant),
             )
 
             # Apply document authority weights to edge confidence
@@ -150,19 +179,13 @@ class LocalSearch:
             )
 
         # Step 6 — entity context
-        entities = await self._neo4j.get_entity_neighbors(all_ids)
+        entities = await self._neo4j.get_entity_neighbors(all_ids, tenant=tenant)
 
-        # ── Record turn in session context ────────────────────────────────────
+        # Collect the entity/chunk references so the caller can record the
+        # session turn once the real LLM answer is available.
         referenced_entities = list({
             e.get("entity", "") for e in entities if e.get("entity")
         })
-        self._session_ctx.record_turn(
-            session_id=session_id,
-            question=question,
-            answer="",   # answer not available yet at this stage
-            referenced_entities=referenced_entities,
-            referenced_chunks=all_ids,
-        )
 
         log.info(
             "local_search.done",
@@ -176,17 +199,28 @@ class LocalSearch:
             bm25=use_bm25,
             reranker=use_rerank,
             gnn=use_gnn,
+            session_ctx=self._use_session_ctx,
             session_id=session_id or "none",
         )
-        return {"chunks": all_chunks, "entities": entities}
+        return {
+            "chunks": all_chunks,
+            "entities": entities,
+            # Returned so hybrid_retriever can record the turn with the real answer
+            "referenced_entities": referenced_entities,
+            "referenced_chunks": all_ids,
+        }
 
 
 # ── helpers ───────────────────────────────────────────────────────────────────
 
-async def _fetch_subgraph_edges(neo4j, chunk_ids: list[str]) -> list[dict]:
+async def _fetch_subgraph_edges(
+    neo4j,
+    chunk_ids: list[str],
+    tenant: str = "default",
+) -> list[dict]:
     """Helper: get entity names from chunks then fetch the connecting edges."""
     rows = await neo4j.get_chunk_entity_embeddings(chunk_ids)
     names = list({r["entity_name"] for r in rows})
     if not names:
         return []
-    return await neo4j.get_entity_relations_subgraph(names)
+    return await neo4j.get_entity_relations_subgraph(names, tenant=tenant)

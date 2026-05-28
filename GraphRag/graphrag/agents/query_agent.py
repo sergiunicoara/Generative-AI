@@ -49,6 +49,8 @@ class QueryAgent(BaseGraphRAGAgent):
         result = await self._retriever.retrieve_and_answer(
             question=message.question,
             mode=message.mode,
+            tenant=message.tenant,
+            session_id=message.session_id,
         )
         result.query_id = message.query_id
         log.info(

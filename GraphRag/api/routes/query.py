@@ -23,6 +23,7 @@ class QueryRequest(BaseModel):
     mode: str = "hybrid"       # local | global | hybrid
     ground_truth: str = ""
     tenant: str = "default"
+    session_id: str = ""
 
 
 class QueryResponse(BaseModel):
@@ -38,6 +39,7 @@ async def submit_query(request: QueryRequest):
             mode=request.mode,
             ground_truth=request.ground_truth,
             tenant=request.tenant,
+            session_id=request.session_id,
         )
     except Exception as exc:
         raise HTTPException(status_code=503, detail=f"Queue unavailable: {exc}")

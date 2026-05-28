@@ -15,7 +15,7 @@ async def main():
     )
 
     schema_path = Path(__file__).parents[1] / "graphrag" / "graph" / "schema.cypher"
-    statements = schema_path.read_text().split(";")
+    statements = schema_path.read_text(encoding="utf-8").split(";")
 
     async with driver.session() as session:
         for stmt in statements:

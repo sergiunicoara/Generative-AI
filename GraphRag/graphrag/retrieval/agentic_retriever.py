@@ -118,6 +118,8 @@ class AgenticRetriever:
         question: str,
         initial_context: str = "",
         initial_citations: list[str] | None = None,
+        tenant: str = "default",
+        session_id: str = "",
     ) -> QueryResult:
         t0 = time.monotonic()
 
@@ -129,7 +131,11 @@ class AgenticRetriever:
             context_sections.append(initial_context)
 
         # Initial search on the original question
-        seed_results = await self._local.search(question)
+        seed_results = await self._local.search(
+            question,
+            session_id=session_id,
+            tenant=tenant,
+        )
         seed_chunks = seed_results.get("chunks", [])
         all_chunks.extend(seed_chunks)
 
@@ -186,7 +192,11 @@ class AgenticRetriever:
                 sub_query = reasoning[7:].strip()
                 log.info("agentic_retriever.sub_search", query=sub_query)
 
-                sub_results = await self._local.search(sub_query)
+                sub_results = await self._local.search(
+                    sub_query,
+                    session_id=session_id,
+                    tenant=tenant,
+                )
                 sub_chunks = sub_results.get("chunks", [])
 
                 # Only add chunks not already seen

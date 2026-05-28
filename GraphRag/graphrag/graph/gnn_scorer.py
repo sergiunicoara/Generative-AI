@@ -182,9 +182,13 @@ class GNNScorer:
         if not chunk_entities:
             log.info("gnn_scorer.skip", reason="no_entity_embeddings")
             for c in chunks:
+                text_score       = self._text_score(c)
                 c["gnn_score"]   = 0.0
-                c["final_score"] = self._fallback_score(c, alpha, beta)
-                c["explanation"] = "GNN skipped: no entity embeddings"
+                # No graph evidence — weight falls entirely on text score.
+                # Applying alpha preserves the documented formula when gnn=0:
+                #   final = α·text + β·0 = α·text
+                c["final_score"] = alpha * text_score
+                c["explanation"] = f"GNN skipped: no entities (text={text_score:.3f})"
             return chunks
 
         q = np.array(query_vec, dtype=np.float32)
@@ -233,6 +237,26 @@ class GNNScorer:
             log.info("gnn_scorer.edges_filtered",
                      skipped=skipped_edges,
                      threshold=self._edge_conf_threshold)
+
+        # ── Hub dampening ─────────────────────────────────────────────
+        # High-degree hubs dominate propagation even when only weakly relevant.
+        # Apply per-node penalty: 1 / log(1 + degree).
+        # Use graph-level degree from Neo4j (passed via chunk_entity_embeddings
+        # 'degree' field) when available; fall back to local adjacency sum.
+        degree_from_graph: dict[str, int] = {}
+        for r in chunk_entities:
+            deg = r.get("degree")
+            if deg is not None:
+                degree_from_graph[r["entity_name"]] = int(deg)
+
+        hub_penalties = np.ones(N, dtype=np.float32)
+        for name, idx in entity_idx.items():
+            deg = degree_from_graph.get(name, int(A[idx].sum()))
+            hub_penalties[idx] = float(1.0 / math.log1p(max(deg, 1)))
+
+        # A_hub[i,j] = A[i,j] * min(penalty_i, penalty_j)
+        hub_mat = np.minimum(hub_penalties[:, None], hub_penalties[None, :])
+        A = A * hub_mat
 
         # ── GNN propagation ───────────────────────────────────────────
         H_out = self._propagate(A, H)
@@ -284,12 +308,12 @@ class GNNScorer:
                 gnn_score   = 0.0
                 explanation = f"No linked entities (rerank={chunk.get('rerank_score', 0):.2f})"
 
+            text_score           = self._text_score(chunk)
             chunk["gnn_score"]   = gnn_score
+            chunk["text_score"]  = text_score
             chunk["explanation"] = explanation
-            chunk["final_score"] = (
-                alpha * self._fallback_score(chunk, alpha, beta)
-                + beta * gnn_score
-            )
+            # Documented formula: final = α·text_score + β·gnn_score
+            chunk["final_score"] = alpha * text_score + beta * gnn_score
 
         chunks.sort(key=lambda c: c["final_score"], reverse=True)
 
@@ -324,11 +348,15 @@ class GNNScorer:
         return H
 
     @staticmethod
-    def _fallback_score(chunk: dict, alpha: float = 1.0, beta: float = 0.0) -> float:
-        """Normalise existing score to [0, 1] for blending.
+    def _text_score(chunk: dict) -> float:
+        """Normalise the text-based score to [0, 1] for blending.
 
-        Cross-encoder logits are unbounded; apply sigmoid(x/5) to map
-        them to a comparable range.  Vector scores are already in [0, 1].
+        Cross-encoder logits are unbounded; apply sigmoid(x/5) to bring
+        them into a range comparable to cosine similarity scores.
+        Vector scores are already in [0, 1] and are returned as-is.
+
+        This is the *text* component of the final blend formula:
+            final = α · text_score + β · gnn_score
         """
         if "rerank_score" in chunk:
             x = float(chunk["rerank_score"])

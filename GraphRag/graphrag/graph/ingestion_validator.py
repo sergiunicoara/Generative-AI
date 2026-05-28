@@ -27,6 +27,21 @@ log = structlog.get_logger(__name__)
 MAX_DEGREE_MULTIPLIER  = 5.0   # flag if degree > mean * this
 MIN_CONFIDENCE         = 0.1   # flag edges with suspiciously low confidence
 MAX_ORPHAN_RATE        = 0.10  # flag if > 10% of new entities are orphans
+RELATION_RULES: dict[str, set[tuple[str, str]]] = {
+    "FOUNDED": {("PERSON", "ORG"), ("PERSON", "PRODUCT")},
+    "FOUNDED_BY": {("ORG", "PERSON"), ("PRODUCT", "PERSON")},
+    "CEO_OF": {("PERSON", "ORG")},
+    "OWNS": {("PERSON", "ORG"), ("ORG", "ORG"), ("ORG", "PRODUCT")},
+    "ACQUIRED": {("ORG", "ORG"), ("ORG", "PRODUCT")},
+    "MANUFACTURES": {("ORG", "PRODUCT")},
+    "LAUNCHED": {("ORG", "PRODUCT"), ("PERSON", "PRODUCT")},
+    "WORKS_AT": {("PERSON", "ORG")},
+    "LOCATED_IN": {
+        ("ORG", "LOCATION"),
+        ("PERSON", "LOCATION"),
+        ("EVENT", "LOCATION"),
+    },
+}
 
 
 class IngestionValidator:
@@ -55,6 +70,7 @@ class IngestionValidator:
         issues += await self._check_orphan_entities(doc_id)
         issues += await self._check_degree_anomalies(doc_id)
         issues += await self._check_low_confidence_edges(doc_id)
+        issues += await self._check_relation_schema(doc_id)
 
         report = {
             "doc_id": doc_id,
@@ -182,6 +198,40 @@ class IngestionValidator:
             }
             for r in rows
         ]
+
+    async def _check_relation_schema(self, doc_id: str | None) -> list[dict]:
+        """Relations that violate the current ontology's allowed type pairs."""
+        scope_clause = "AND r.source_doc_id = $doc_id" if doc_id else ""
+        params: dict = {}
+        if doc_id:
+            params["doc_id"] = doc_id
+
+        rows = await self._neo4j.run(
+            f"""
+            MATCH (s:Entity)-[r:RELATES_TO]->(t:Entity)
+            WHERE r.relation <> 'RELATED_TO' {scope_clause}
+            RETURN s.name AS src, s.type AS src_type,
+                   t.name AS tgt, t.type AS tgt_type,
+                   r.relation AS relation
+            LIMIT 200
+            """,
+            **params,
+        )
+        issues: list[dict] = []
+        for row in rows:
+            allowed_pairs = RELATION_RULES.get(row["relation"], set())
+            if allowed_pairs and (row["src_type"], row["tgt_type"]) not in allowed_pairs:
+                issues.append(
+                    {
+                        "type": "relation_schema_violation",
+                        "src": row["src"],
+                        "src_type": row["src_type"],
+                        "tgt": row["tgt"],
+                        "tgt_type": row["tgt_type"],
+                        "relation": row["relation"],
+                    }
+                )
+        return issues
 
     async def remove_self_loops(self) -> int:
         """Delete self-referencing edges. Returns count removed."""

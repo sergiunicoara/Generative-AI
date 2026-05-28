@@ -28,6 +28,7 @@ async def publish_query(
     mode: str = "hybrid",
     ground_truth: str = "",
     tenant: str = "default",
+    session_id: str = "",
 ) -> str:
     mq = await get_rabbitmq()
     msg = QueryMessage(
@@ -35,6 +36,7 @@ async def publish_query(
         mode=mode,
         ground_truth=ground_truth,
         tenant=tenant,
+        session_id=session_id,
     )
     await mq.publish(
         QUERY_EXCHANGE,

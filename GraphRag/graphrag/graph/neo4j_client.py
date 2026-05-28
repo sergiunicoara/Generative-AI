@@ -48,12 +48,13 @@ class Neo4jClient:
 
     # ── Ingestion helpers ────────────────────────────────────────────────────────
 
-    async def entity_exists(self, name: str, entity_type: str) -> bool:
-        """Check if an entity node already exists."""
+    async def entity_exists(self, name: str, entity_type: str, tenant: str = "default") -> bool:
+        """Check if an entity node already exists within the given tenant."""
         rows = await self.run(
-            "MATCH (e:Entity {name: $name, type: $type}) RETURN count(e) AS n",
+            "MATCH (e:Entity {name: $name, type: $type, tenant: $tenant}) RETURN count(e) AS n",
             name=name,
             type=entity_type,
+            tenant=tenant,
         )
         return bool(rows and rows[0]["n"] > 0)
 
@@ -65,6 +66,7 @@ class Neo4jClient:
         authority_level: int = 4,
         valid_from: str | None = None,
         valid_to: str | None = None,
+        tenant: str = "default",
     ):
         await self.run(
             """
@@ -74,7 +76,8 @@ class Neo4jClient:
                 d.status          = 'done',
                 d.authority_level = $authority_level,
                 d.valid_from      = $valid_from,
-                d.valid_to        = $valid_to
+                d.valid_to        = $valid_to,
+                d.tenant          = $tenant
             """,
             id=doc_id,
             filename=filename,
@@ -82,15 +85,17 @@ class Neo4jClient:
             authority_level=authority_level,
             valid_from=valid_from,
             valid_to=valid_to,
+            tenant=tenant,
         )
 
-    async def merge_chunk(self, chunk: Chunk):
+    async def merge_chunk(self, chunk: Chunk, tenant: str = "default"):
         await self.run(
             """
             MERGE (c:Chunk {id: $id})
-            SET c.text = $text,
+            SET c.text        = $text,
                 c.chunk_index = $chunk_index,
-                c.embedding = $embedding
+                c.embedding   = $embedding,
+                c.tenant      = $tenant
             WITH c
             MATCH (d:Document {id: $doc_id})
             MERGE (c)-[:PART_OF]->(d)
@@ -100,17 +105,22 @@ class Neo4jClient:
             chunk_index=chunk.chunk_index,
             embedding=chunk.embedding,
             doc_id=chunk.document_id,
+            tenant=tenant,
         )
 
-    async def merge_entity(self, entity: Entity):
+    async def merge_entity(self, entity: Entity, tenant: str = "default"):
+        """Merge entity scoped to tenant — same (name, type) in different tenants are distinct nodes."""
         await self.run(
             """
-            MERGE (e:Entity {name: $name, type: $type})
-            ON CREATE SET e.id          = $id,
-                          e.description = $description,
-                          e.embedding   = $embedding,
-                          e.source_type = $source_type,
-                          e.created_at  = datetime()
+            MERGE (e:Entity {name: $name, type: $type, tenant: $tenant})
+            ON CREATE SET e.id               = $id,
+                          e.description      = $description,
+                          e.embedding        = $embedding,
+                          e.source_type      = $source_type,
+                          e.source_doc_id    = $source_doc_id,
+                          e.extraction_model = $extraction_model,
+                          e.prompt_version   = $prompt_version,
+                          e.created_at       = datetime()
             ON MATCH SET  e.description = CASE WHEN e.description = '' THEN $description ELSE e.description END,
                           e.embedding   = CASE WHEN $embedding IS NOT NULL AND size($embedding) > 0 THEN $embedding ELSE e.embedding END,
                           e.updated_at  = datetime()
@@ -118,28 +128,33 @@ class Neo4jClient:
             id=entity.id,
             name=entity.name,
             type=entity.type,
+            tenant=tenant,
             description=entity.description,
             embedding=entity.embedding,
             source_type=entity.source_type if isinstance(entity.source_type, str) else entity.source_type.value,
+            source_doc_id=entity.source_doc_id,
+            extraction_model=entity.extraction_model,
+            prompt_version=entity.prompt_version,
         )
 
-    async def merge_mentions(self, chunk_id: str, entity_name: str, entity_type: str):
+    async def merge_mentions(self, chunk_id: str, entity_name: str, entity_type: str, tenant: str = "default"):
         await self.run(
             """
             MATCH (c:Chunk {id: $chunk_id})
-            MATCH (e:Entity {name: $entity_name, type: $entity_type})
+            MATCH (e:Entity {name: $entity_name, type: $entity_type, tenant: $tenant})
             MERGE (c)-[:MENTIONS]->(e)
             """,
             chunk_id=chunk_id,
             entity_name=entity_name,
             entity_type=entity_type,
+            tenant=tenant,
         )
 
-    async def merge_relation(self, rel: Relation, src_name: str, tgt_name: str):
+    async def merge_relation(self, rel: Relation, src_name: str, tgt_name: str, tenant: str = "default"):
         await self.run(
             """
-            MATCH (s:Entity {name: $src_name})
-            MATCH (t:Entity {name: $tgt_name})
+            MATCH (s:Entity {name: $src_name, tenant: $tenant})
+            MATCH (t:Entity {name: $tgt_name, tenant: $tenant})
             MERGE (s)-[r:RELATES_TO {relation: $relation}]->(t)
             SET r.weight           = $weight,
                 r.extracted_at     = $extracted_at,
@@ -148,6 +163,15 @@ class Neo4jClient:
                 r.constraint_type  = $constraint_type,
                 r.valid_from       = $valid_from,
                 r.valid_to         = $valid_to,
+                r.tenant           = $tenant,
+                // Accumulate all contributing document IDs as a list so that
+                // contradiction detection can see every source even after
+                // multiple merges collapse to a single edge.
+                r.source_doc_ids   = CASE
+                    WHEN r.source_doc_ids IS NULL         THEN [$source_doc_id]
+                    WHEN $source_doc_id IN r.source_doc_ids THEN r.source_doc_ids
+                    ELSE r.source_doc_ids + [$source_doc_id]
+                END,
                 r.confidence       = CASE
                     WHEN r.confidence IS NULL THEN $confidence
                     ELSE 1.0 - (1.0 - r.confidence) * (1.0 - $confidence)
@@ -155,6 +179,7 @@ class Neo4jClient:
             """,
             src_name=src_name,
             tgt_name=tgt_name,
+            tenant=tenant,
             relation=rel.relation,
             weight=rel.weight,
             confidence=rel.confidence,
@@ -165,6 +190,27 @@ class Neo4jClient:
             valid_from=rel.valid_from.isoformat() if rel.valid_from else None,
             valid_to=rel.valid_to.isoformat() if rel.valid_to else None,
         )
+        # Store deep provenance if present — scoped to the correct tenant edge
+        if rel.chunk_span_start is not None or rel.extraction_model:
+            await self.run(
+                """
+                MATCH (s:Entity {name: $src_name, tenant: $tenant})
+                      -[r:RELATES_TO {relation: $relation}]->
+                      (t:Entity {name: $tgt_name, tenant: $tenant})
+                SET r.chunk_span_start = $span_start,
+                    r.chunk_span_end   = $span_end,
+                    r.extraction_model = $extraction_model,
+                    r.prompt_version   = $prompt_version
+                """,
+                src_name=src_name,
+                tgt_name=tgt_name,
+                tenant=tenant,
+                relation=rel.relation,
+                span_start=rel.chunk_span_start,
+                span_end=rel.chunk_span_end,
+                extraction_model=rel.extraction_model,
+                prompt_version=rel.prompt_version,
+            )
 
     async def merge_community(self, community: Community):
         await self.run(
@@ -173,13 +219,15 @@ class Neo4jClient:
             SET c.level = $level,
                 c.summary = $summary,
                 c.embedding = $embedding,
-                c.member_count = $member_count
+                c.member_count = $member_count,
+                c.tenant = $tenant
             """,
             id=community.id,
             level=community.level,
             summary=community.summary,
             embedding=community.embedding,
             member_count=community.member_count,
+            tenant=community.tenant,
         )
         for entity_id in community.member_entity_ids:
             await self.run(
@@ -192,109 +240,203 @@ class Neo4jClient:
                 community_id=community.id,
             )
 
+    async def clear_communities(self, tenant: str = "default") -> None:
+        await self.run(
+            """
+            MATCH (c:Community)
+            WHERE c.tenant = $tenant
+            DETACH DELETE c
+            """,
+            tenant=tenant,
+        )
+
     # ── Retrieval helpers ────────────────────────────────────────────────────────
 
     async def vector_search_chunks(
-        self, embedding: list[float], top_k: int = 10
+        self, embedding: list[float], top_k: int = 10, tenant: str = "default"
     ) -> list[dict]:
-        """ANN search over Chunk.embedding using Neo4j vector index."""
+        """ANN search over Chunk.embedding using Neo4j vector index.
+        Filters by tenant and excludes chunks whose mentioned entities are quarantined.
+        """
         return await self.run(
             """
             CALL db.index.vector.queryNodes('chunk_embeddings', $k, $embedding)
             YIELD node AS c, score
+            WHERE ($tenant = 'default' OR c.tenant = $tenant)
+              AND NOT EXISTS {
+                  MATCH (c)-[:MENTIONS]->(e:Entity)
+                  WHERE e.quarantined = true
+              }
             RETURN c.id AS chunk_id, c.text AS text, score
             ORDER BY score DESC
             """,
             k=top_k,
             embedding=embedding,
+            tenant=tenant,
         )
 
     async def vector_search_communities(
-        self, embedding: list[float], top_k: int = 5
+        self,
+        embedding: list[float],
+        top_k: int = 5,
+        tenant: str = "default",
     ) -> list[dict]:
         """ANN search over Community.embedding for global search."""
         return await self.run(
             """
             CALL db.index.vector.queryNodes('community_embeddings', $k, $embedding)
             YIELD node AS c, score
+            WHERE ($tenant = 'default' OR c.tenant = $tenant)
             RETURN c.id AS community_id, c.summary AS summary, c.level AS level, score
             ORDER BY score DESC
             """,
             k=top_k,
             embedding=embedding,
+            tenant=tenant,
         )
 
-    async def get_entity_neighbors(self, chunk_ids: list[str]) -> list[dict]:
-        """Expand retrieved chunks to their entity neighbors (1-hop)."""
-        return await self.run(
-            """
-            UNWIND $chunk_ids AS cid
-            MATCH (c:Chunk {id: cid})-[:MENTIONS]->(e:Entity)
-            OPTIONAL MATCH (e)-[r:RELATES_TO]-(neighbor:Entity)
-            RETURN e.name AS entity, e.type AS type, e.description AS description,
-                   collect(DISTINCT neighbor.name) AS neighbors
-            """,
-            chunk_ids=chunk_ids,
-        )
-
-    async def get_multihop_chunks(
-        self, chunk_ids: list[str], hops: int = 2
+    async def get_entity_neighbors(
+        self,
+        chunk_ids: list[str],
+        as_of: str | None = None,
+        tenant: str = "default",
     ) -> list[dict]:
+        """Expand retrieved chunks to their entity neighbors (1-hop).
+        Excludes quarantined entities. Optionally filters edges by valid_to.
         """
-        Multi-hop graph traversal:
-          Chunk → MENTIONS → Entity → RELATES_TO* (up to `hops`) → Entity
-          → MENTIONS (reverse) → Chunk
-
-        This is what makes "Company A owns Company B" on p.10 connect to
-        "Company B launched a rocket" on p.300.
-        """
+        temporal_filter = (
+            "AND (r.valid_from IS NULL OR r.valid_from <= $as_of) "
+            "AND (r.valid_to IS NULL OR r.valid_to > $as_of)"
+            if as_of else ""
+        )
         return await self.run(
             f"""
             UNWIND $chunk_ids AS cid
             MATCH (c:Chunk {{id: cid}})-[:MENTIONS]->(e:Entity)
-            MATCH (e)-[:RELATES_TO*1..{hops}]-(neighbor:Entity)
-            MATCH (neighbor_chunk:Chunk)-[:MENTIONS]->(neighbor)
-            WHERE NOT neighbor_chunk.id IN $chunk_ids
-            RETURN DISTINCT
-                neighbor_chunk.id   AS chunk_id,
-                neighbor_chunk.text AS text,
-                0.0                 AS score,
-                neighbor.name       AS via_entity
+            WHERE NOT e.quarantined = true
+            OPTIONAL MATCH (e)-[r:RELATES_TO]-(neighbor:Entity)
+            OPTIONAL MATCH (src_doc:Document {{id: r.source_doc_id}})
+            WHERE NOT neighbor.quarantined = true {temporal_filter}
+              AND ($tenant = 'default' OR r.source_doc_id IS NULL OR src_doc.tenant = $tenant)
+            RETURN e.name AS entity, e.type AS type, e.description AS description,
+                   collect(DISTINCT neighbor.name) AS neighbors
             """,
             chunk_ids=chunk_ids,
+            tenant=tenant,
+            **({"as_of": as_of} if as_of else {}),
         )
 
-    async def bm25_search_chunks(
-        self, query: str, top_k: int = 10
+    async def get_multihop_chunks(
+        self,
+        chunk_ids: list[str],
+        hops: int = 2,
+        as_of: str | None = None,
+        tenant: str = "default",
     ) -> list[dict]:
-        """BM25 fulltext search over Chunk.text using Neo4j fulltext index."""
+        """
+        Multi-hop graph traversal with temporal filtering and path quality scoring.
+
+        Returns hop chunks with:
+          - path_length: number of RELATES_TO hops taken
+          - path_confidence: product of edge confidences along the path
+          - via_entity: name of the bridging entity
+
+        Temporal filter: only traverses edges valid at `as_of` datetime.
+        Quarantine filter: skips quarantined entities.
+        Tenant filter: only returns chunks for the given tenant.
+        """
+        temporal_filter = (
+            "AND ALL(r IN relationships(path) WHERE "
+            "(r.valid_from IS NULL OR r.valid_from <= $as_of) "
+            "AND (r.valid_to IS NULL OR r.valid_to > $as_of))"
+            if as_of else ""
+        )
+        tenant_filter = (
+            "AND ALL(r IN relationships(path) WHERE "
+            "r.source_doc_id IS NULL OR EXISTS { "
+            "MATCH (d:Document {id: r.source_doc_id}) "
+            "WHERE d.tenant = $tenant })"
+            if tenant != "default" else ""
+        )
+        results = await self.run(
+            f"""
+            UNWIND $chunk_ids AS cid
+            MATCH (c:Chunk {{id: cid}})-[:MENTIONS]->(e:Entity)
+            WHERE NOT e.quarantined = true
+            MATCH path = (e)-[:RELATES_TO*1..{hops}]-(neighbor:Entity)
+            WHERE NOT neighbor.quarantined = true {temporal_filter} {tenant_filter}
+              AND ALL(n IN nodes(path) WHERE NOT n.quarantined = true)
+            MATCH (neighbor_chunk:Chunk)-[:MENTIONS]->(neighbor)
+            WHERE NOT neighbor_chunk.id IN $chunk_ids
+              AND ($tenant = 'default' OR neighbor_chunk.tenant = $tenant)
+            WITH DISTINCT
+                neighbor_chunk.id   AS chunk_id,
+                neighbor_chunk.text AS text,
+                neighbor.name       AS via_entity,
+                length(path)        AS path_length,
+                reduce(conf = 1.0, r IN relationships(path) |
+                    conf * coalesce(r.confidence, 1.0)) AS path_confidence
+            RETURN chunk_id, text, via_entity, path_length, path_confidence,
+                   // path score: penalise longer paths, reward high-confidence paths
+                   (path_confidence / toFloat(path_length)) AS path_score
+            ORDER BY path_score DESC
+            """,
+            chunk_ids=chunk_ids,
+            tenant=tenant,
+            **({"as_of": as_of} if as_of else {}),
+        )
+        # Normalise to list[dict] with score field for downstream compatibility
+        for row in results:
+            row["score"] = float(row.get("path_score") or 0.0)
+        return results
+
+    async def bm25_search_chunks(
+        self, query: str, top_k: int = 10, tenant: str = "default"
+    ) -> list[dict]:
+        """BM25 fulltext search over Chunk.text using Neo4j fulltext index.
+        Filters by tenant and excludes quarantined entity chunks.
+        """
         return await self.run(
             """
             CALL db.index.fulltext.queryNodes('chunk_fulltext', $query)
             YIELD node AS c, score
+            WHERE ($tenant = 'default' OR c.tenant = $tenant)
+              AND NOT EXISTS {
+                  MATCH (c)-[:MENTIONS]->(e:Entity)
+                  WHERE e.quarantined = true
+              }
             RETURN c.id AS chunk_id, c.text AS text, score
             ORDER BY score DESC
             LIMIT $k
             """,
             query=query,
             k=top_k,
+            tenant=tenant,
         )
 
     async def bm25_search_entities(
-        self, query: str, top_k: int = 10
+        self,
+        query: str,
+        top_k: int = 10,
+        tenant: str = "default",
     ) -> list[dict]:
-        """BM25 fulltext search over Entity name + description."""
+        """BM25 fulltext search over Entity name + description.
+        Excludes quarantined entities.
+        """
         return await self.run(
             """
             CALL db.index.fulltext.queryNodes('entity_fulltext', $query)
             YIELD node AS e, score
+            WHERE NOT e.quarantined = true
             OPTIONAL MATCH (c:Chunk)-[:MENTIONS]->(e)
+            WHERE ($tenant = 'default' OR c.tenant = $tenant)
             RETURN DISTINCT c.id AS chunk_id, c.text AS text, score
             ORDER BY score DESC
             LIMIT $k
             """,
             query=query,
             k=top_k,
+            tenant=tenant,
         )
 
     async def get_chunk_entity_embeddings(
@@ -304,53 +446,83 @@ class Neo4jClient:
 
         Used by GNNScorer to build the node-feature matrix H.
         Only returns entities that actually have a stored embedding.
+        Excludes quarantined entities.
         """
         return await self.run(
             """
             UNWIND $chunk_ids AS cid
             MATCH (c:Chunk {id: cid})-[:MENTIONS]->(e:Entity)
             WHERE e.embedding IS NOT NULL AND size(e.embedding) > 0
+              AND NOT e.quarantined = true
             RETURN cid          AS chunk_id,
                    e.name       AS entity_name,
                    e.type       AS entity_type,
-                   e.embedding  AS embedding
+                   e.embedding  AS embedding,
+                   size((e)-[:RELATES_TO]-()) AS degree
             """,
             chunk_ids=chunk_ids,
         )
 
     async def get_entity_relations_subgraph(
-        self, entity_names: list[str]
+        self,
+        entity_names: list[str],
+        as_of: str | None = None,
+        tenant: str = "default",
     ) -> list[dict]:
         """Return RELATES_TO edges between a set of named entities.
 
         Used by GNNScorer to build the adjacency matrix A.
         Only intra-subgraph edges are returned (both endpoints in the list).
+        Optionally filters edges by temporal validity.
         """
+        temporal_filter = (
+            "AND (r.valid_from IS NULL OR r.valid_from <= $as_of) "
+            "AND (r.valid_to IS NULL OR r.valid_to > $as_of)"
+            if as_of else ""
+        )
         return await self.run(
-            """
+            f"""
             UNWIND $names AS name
-            MATCH (s:Entity {name: name})-[r:RELATES_TO]->(t:Entity)
-            WHERE t.name IN $names
+            MATCH (s:Entity {{name: name}})-[r:RELATES_TO]->(t:Entity)
+            OPTIONAL MATCH (d:Document {id: r.source_doc_id})
+            WHERE t.name IN $names {temporal_filter}
+              AND NOT s.quarantined = true
+              AND NOT t.quarantined = true
+              AND ($tenant = 'default' OR r.source_doc_id IS NULL OR d.tenant = $tenant)
             RETURN s.name                             AS src,
                    t.name                             AS tgt,
                    r.weight                           AS weight,
                    coalesce(r.confidence, 1.0)        AS confidence,
-                   r.extracted_at                     AS extracted_at
+                   r.extracted_at                     AS extracted_at,
+                   r.source_doc_id                    AS source_doc_id
             """,
             names=entity_names,
+            tenant=tenant,
+            **({"as_of": as_of} if as_of else {}),
         )
 
-    async def get_all_entities(self) -> list[dict]:
+    async def get_all_entities(self, tenant: str = "default") -> list[dict]:
         return await self.run(
-            "MATCH (e:Entity) RETURN e.id AS id, e.name AS name, e.type AS type"
+            """
+            MATCH (c:Chunk)-[:MENTIONS]->(e:Entity)
+            WHERE ($tenant = 'default' OR c.tenant = $tenant)
+              AND NOT e.quarantined = true
+            RETURN DISTINCT e.id AS id, e.name AS name, e.type AS type
+            """,
+            tenant=tenant,
         )
 
-    async def get_all_relations(self) -> list[dict]:
+    async def get_all_relations(self, tenant: str = "default") -> list[dict]:
         return await self.run(
             """
             MATCH (s:Entity)-[r:RELATES_TO]->(t:Entity)
+            OPTIONAL MATCH (d:Document {id: r.source_doc_id})
+            WHERE NOT s.quarantined = true
+              AND NOT t.quarantined = true
+              AND ($tenant = 'default' OR r.source_doc_id IS NULL OR d.tenant = $tenant)
             RETURN s.id AS source_id, t.id AS target_id, r.relation AS relation, r.weight AS weight
-            """
+            """,
+            tenant=tenant,
         )
 
 

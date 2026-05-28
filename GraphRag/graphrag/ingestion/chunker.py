@@ -22,6 +22,7 @@ def chunk_document(document: Document) -> list[Chunk]:
             document_id=document.id,
             text=text,
             chunk_index=i,
+            tenant=document.tenant,
         )
         for i, text in enumerate(texts)
     ]

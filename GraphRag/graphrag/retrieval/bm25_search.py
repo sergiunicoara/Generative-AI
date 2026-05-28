@@ -68,6 +68,7 @@ class HybridBM25Search:
         query: str,
         vector_chunks: list[dict],
         top_k: int = 10,
+        tenant: str = "default",
     ) -> list[dict]:
         """
         Args:
@@ -79,10 +80,18 @@ class HybridBM25Search:
             RRF-fused list of chunks, each with a `score` and `retrieval` tag.
         """
         # BM25 on chunk text
-        bm25_chunks = await self._neo4j.bm25_search_chunks(query, top_k=top_k)
+        bm25_chunks = await self._neo4j.bm25_search_chunks(
+            query,
+            top_k=top_k,
+            tenant=tenant,
+        )
 
         # BM25 on entity names/descriptions → back to chunks
-        entity_chunks = await self._neo4j.bm25_search_entities(query, top_k=top_k)
+        entity_chunks = await self._neo4j.bm25_search_entities(
+            query,
+            top_k=top_k,
+            tenant=tenant,
+        )
 
         # Merge entity BM25 into chunk BM25 (same RRF pass)
         bm25_combined = _reciprocal_rank_fusion(

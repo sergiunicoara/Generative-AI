@@ -50,35 +50,37 @@ class AliasRegistry:
         # → ("SpaceX", "ORG") or None if unknown
     """
 
-    def __init__(self, neo4j_client):
+    def __init__(self, neo4j_client, tenant: str = "default"):
         self._neo4j = neo4j_client
+        self._tenant = tenant
         # normalized_alias → (canonical_name, canonical_type)
+        # Keyed per-tenant so the registry is safe for single-tenant usage
+        # (multi-tenant deployments should use one registry instance per tenant)
         self._exact: dict[str, tuple[str, str]] = {}
         self._loaded = False
 
     async def load(self) -> None:
-        """Refresh alias table from Neo4j."""
+        """Refresh alias table from Neo4j scoped to this registry's tenant."""
         rows = await self._neo4j.run(
             """
-            MATCH (e:Entity)
-            OPTIONAL MATCH (e)<-[:ALIAS_OF]-(a:Alias)
+            MATCH (e:Entity {tenant: $tenant})
+            OPTIONAL MATCH (e)<-[:ALIAS_OF]-(a:Alias {tenant: $tenant})
             RETURN e.name AS canonical_name,
                    e.type AS canonical_type,
                    collect(a.value) AS aliases
-            """
+            """,
+            tenant=self._tenant,
         )
         self._exact.clear()
         for row in rows:
             cname = row["canonical_name"]
             ctype = row["canonical_type"]
-            # Register the canonical name itself
             self._exact[_normalize(cname)] = (cname, ctype)
-            # Register every alias
             for alias in row.get("aliases") or []:
                 if alias:
                     self._exact[_normalize(alias)] = (cname, ctype)
         self._loaded = True
-        log.info("alias_registry.loaded", entries=len(self._exact))
+        log.info("alias_registry.loaded", tenant=self._tenant, entries=len(self._exact))
 
     def resolve(self, raw_name: str) -> tuple[str, str] | None:
         """
@@ -122,12 +124,12 @@ class AliasRegistry:
         source_doc_id: str = "",
         confidence: float = 1.0,
     ) -> None:
-        """Persist a new alias to Neo4j and update in-memory cache."""
+        """Persist a new alias to Neo4j (tenant-scoped) and update in-memory cache."""
         from uuid import uuid4
         await self._neo4j.run(
             """
-            MATCH (e:Entity {name: $canonical_name, type: $canonical_type})
-            MERGE (a:Alias {value: $raw_value})
+            MATCH (e:Entity {name: $canonical_name, type: $canonical_type, tenant: $tenant})
+            MERGE (a:Alias {value: $raw_value, tenant: $tenant})
             ON CREATE SET a.id           = $alias_id,
                           a.normalized   = $normalized,
                           a.source_doc   = $source_doc,
@@ -137,6 +139,7 @@ class AliasRegistry:
             """,
             canonical_name=canonical_name,
             canonical_type=canonical_type,
+            tenant=self._tenant,
             raw_value=raw_value,
             alias_id=str(uuid4()),
             normalized=_normalize(raw_value),
@@ -158,10 +161,7 @@ class AliasRegistry:
     ) -> tuple[str, str, float] | None:
         """
         Search for an existing entity whose embedding is very close
-        to the given one.  Returns (name, type, similarity) or None.
-
-        Used before creating a new entity to prevent embedding-level
-        duplicates that escaped name-based resolution.
+        to the given one — tenant-scoped.  Returns (name, type, similarity) or None.
         """
         rows = await self._neo4j.run(
             """
@@ -169,6 +169,7 @@ class AliasRegistry:
             YIELD node AS e, score
             WHERE e.type = $entity_type
               AND e.name <> $exclude_name
+              AND e.tenant = $tenant
               AND score >= $threshold
             RETURN e.name AS name, e.type AS type, score
             ORDER BY score DESC
@@ -177,6 +178,7 @@ class AliasRegistry:
             embedding=embedding,
             entity_type=entity_type,
             exclude_name=exclude_name,
+            tenant=self._tenant,
             threshold=_EMBEDDING_SIMILARITY_THRESHOLD,
         )
         if rows:
@@ -185,16 +187,17 @@ class AliasRegistry:
         return None
 
 
-# ── Module-level singleton ─────────────────────────────────────────────────────
+# ── Per-tenant registry pool ──────────────────────────────────────────────────
+# One AliasRegistry instance per tenant — entity identity is tenant-scoped.
 
-_registry: AliasRegistry | None = None
+_registries: dict[str, AliasRegistry] = {}
 
 
-def get_alias_registry(neo4j_client=None) -> AliasRegistry:
-    global _registry
-    if _registry is None:
+def get_alias_registry(neo4j_client=None, tenant: str = "default") -> AliasRegistry:
+    global _registries
+    if tenant not in _registries:
         if neo4j_client is None:
             from graphrag.graph.neo4j_client import get_neo4j
             neo4j_client = get_neo4j()
-        _registry = AliasRegistry(neo4j_client)
-    return _registry
+        _registries[tenant] = AliasRegistry(neo4j_client, tenant=tenant)
+    return _registries[tenant]

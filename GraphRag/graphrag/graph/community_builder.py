@@ -21,27 +21,54 @@ class CommunityBuilder:
     (via graspologic), and writes Community nodes back to Neo4j.
     """
 
-    def __init__(self):
+    def __init__(self, tenant: str = "default"):
         self._cfg = get_settings().graph
         self._neo4j = get_neo4j()
+        self._tenant = tenant
 
     async def build(self) -> list[Community]:
-        log.info("community_builder.start")
+        log.info("community_builder.start", tenant=self._tenant)
 
-        entities = await self._neo4j.get_all_entities()
-        relations = await self._neo4j.get_all_relations()
+        entities = await self._neo4j.get_all_entities(tenant=self._tenant)
+        relations = await self._neo4j.get_all_relations(tenant=self._tenant)
 
         if not entities:
-            log.warning("community_builder.no_entities")
+            log.warning("community_builder.no_entities", tenant=self._tenant)
             return []
 
         G = self._build_networkx_graph(entities, relations)
         communities = self._run_leiden(G)
 
+        # Surface community quality — if all communities are fallback-tagged,
+        # global search will run on connected-components structure, not Leiden
+        # hierarchy.  Operators should see this in production logs.
+        fallback_count = sum(
+            1 for c in communities
+            if c.summary.startswith("[fallback:")
+        )
+        if fallback_count == len(communities) and communities:
+            log.error(
+                "community_builder.quality_degraded",
+                algorithm="connected_components",
+                community_count=len(communities),
+                tenant=self._tenant,
+                impact="global search operating on flat components, not Leiden hierarchy",
+                fix="pip install graspologic  OR  set graph.require_leiden=true to fail fast",
+            )
+        else:
+            log.info(
+                "community_builder.quality_ok",
+                algorithm="leiden",
+                community_count=len(communities),
+                tenant=self._tenant,
+            )
+
+        await self._neo4j.clear_communities(tenant=self._tenant)
         for community in communities:
+            community.tenant = self._tenant
             await self._neo4j.merge_community(community)
 
-        log.info("community_builder.done", count=len(communities))
+        log.info("community_builder.done", count=len(communities), tenant=self._tenant)
         return communities
 
     def _build_networkx_graph(
@@ -58,8 +85,26 @@ class CommunityBuilder:
         try:
             from graspologic.partition import leiden
         except ImportError:
-            log.warning("community_builder.graspologic_missing, falling back to connected_components")
-            return self._fallback_components(G)
+            require_leiden = self._cfg.get("require_leiden", False)
+            if require_leiden:
+                raise RuntimeError(
+                    "graspologic is not installed but graph.require_leiden=true. "
+                    "Install it with: pip install graspologic"
+                )
+            log.error(
+                "community_builder.graspologic_missing",
+                impact=(
+                    "Falling back to connected-components — hierarchical "
+                    "community structure lost. Global-search quality will be "
+                    "materially lower. Install graspologic to restore full Leiden."
+                ),
+                fix="pip install graspologic",
+            )
+            communities = self._fallback_components(G)
+            # Tag communities so downstream code can see they are low-quality
+            for c in communities:
+                c.summary = "[fallback: connected_components — graspologic missing]"
+            return communities
 
         nodes = list(G.nodes())
         if len(nodes) < 2:

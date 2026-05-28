@@ -14,6 +14,7 @@ from graphrag.retrieval.local_search import LocalSearch
 from graphrag.retrieval.global_search import GlobalSearch
 from graphrag.retrieval.context_builder import ContextBuilder
 from graphrag.retrieval.agentic_retriever import AgenticRetriever, _is_low_confidence
+from graphrag.retrieval.session_context import get_session_context
 
 log = structlog.get_logger(__name__)
 
@@ -43,11 +44,15 @@ class HybridRetriever:
         self._agentic = AgenticRetriever(
             max_steps=self._cfg.get("agentic_max_steps", 4)
         )
+        self._use_session_ctx = self._cfg.get("session_context_enabled", True)
+        self._session_ctx = get_session_context() if self._use_session_ctx else None
 
     async def retrieve_and_answer(
         self,
         question: str,
         mode: str = "hybrid",
+        tenant: str = "default",
+        session_id: str = "",
     ) -> QueryResult:
         t0 = time.monotonic()
 
@@ -55,10 +60,14 @@ class HybridRetriever:
         global_results = {}
 
         if mode in ("local", "hybrid"):
-            local_results = await self._local.search(question)
+            local_results = await self._local.search(
+                question,
+                session_id=session_id,
+                tenant=tenant,
+            )
 
         if mode in ("global", "hybrid"):
-            global_results = await self._global.search(question)
+            global_results = await self._global.search(question, tenant=tenant)
 
         context, citations = self._context_builder.build(
             local_results=local_results,
@@ -81,6 +90,18 @@ class HybridRetriever:
         answer = response.text.strip()
         latency_ms = (time.monotonic() - t0) * 1000
 
+        # ── Record session turn with the real answer ───────────────────────────
+        # Done here (not in local_search) so the stored turn always reflects the
+        # actual answer shown to the user, making follow-up enrichment faithful.
+        if self._use_session_ctx and self._session_ctx and session_id and local_results:
+            await self._session_ctx.record_turn(
+                session_id=session_id,
+                question=question,
+                answer=answer,
+                referenced_entities=local_results.get("referenced_entities", []),
+                referenced_chunks=local_results.get("referenced_chunks", []),
+            )
+
         # ── Agentic fallback ───────────────────────────────────────────────────
         # If the hybrid answer is low-confidence, hand off to the iterative
         # agent which re-searches sub-questions until it accumulates enough
@@ -96,6 +117,8 @@ class HybridRetriever:
                 question=question,
                 initial_context=context,
                 initial_citations=citations,
+                tenant=tenant,
+                session_id=session_id,
             )
             result.latency_ms += latency_ms
             return result

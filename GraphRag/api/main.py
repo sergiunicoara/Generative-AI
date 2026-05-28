@@ -6,7 +6,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.sessions import SessionMiddleware
 
-from api.routes import auth, ingest, query, evaluation, kpis
+from api.routes import auth, ingest, query, evaluation, kpis, corrections
 from graphrag.core.config import get_settings
 
 settings = get_settings()
@@ -45,8 +45,9 @@ app.add_middleware(
 app.include_router(auth.router,       prefix="/auth",       tags=["Auth"])
 app.include_router(ingest.router,     prefix="/ingest",     tags=["Ingestion"])
 app.include_router(query.router,      prefix="/query",      tags=["Query"])
-app.include_router(evaluation.router, prefix="/evaluation", tags=["Evaluation"])
-app.include_router(kpis.router,       prefix="/kpis",       tags=["KPIs"])
+app.include_router(evaluation.router,  prefix="/evaluation",  tags=["Evaluation"])
+app.include_router(kpis.router,        prefix="/kpis",        tags=["KPIs"])
+app.include_router(corrections.router, prefix="/corrections", tags=["Corrections"])
 
 
 @app.get("/health", tags=["Health"])

@@ -20,19 +20,30 @@ Disambiguation signals:
   - Vague references: "the company", "the system", "the rocket"
   - Implicit continuations: "what about...", "and also...", "how about..."
 
-Sessions are in-memory (dict) — they reset on process restart.
-For persistent sessions, swap the dict for Redis or a DB table.
+Persistence
+-----------
+Session turns are now stored via SessionStore (see session_store.py).
+When configured with a Redis URL the history survives process restarts.
+With no Redis the behaviour is identical to the previous in-memory dict.
+
+Public async interface:
+  await ctx.record_turn(...)
+  await ctx.enrich_query(...)
+  await ctx.get_recent_entities(...)
+  await ctx.get_recent_chunks(...)
+  await ctx.clear_session(...)
+  await ctx.session_summary(...)
 """
 
 from __future__ import annotations
 
 import re
 from collections import deque
-from datetime import datetime, timezone
 
 import structlog
 
 from graphrag.core.models import SessionTurn
+from graphrag.retrieval.session_store import SessionStore, get_session_store
 
 log = structlog.get_logger(__name__)
 
@@ -55,26 +66,27 @@ SESSION_MAX_TURNS = 10   # sliding window size per session
 
 class SessionContext:
     """
-    In-memory multi-turn session context.
+    Multi-turn session context backed by a persistent SessionStore.
 
-    Usage::
+    Usage (async)::
 
         ctx = SessionContext()
-        enriched_query = ctx.enrich_query(session_id, "What about their engines?")
+        enriched = await ctx.enrich_query(session_id, "What about their engines?")
         # → "What about SpaceX's engines? (context: SpaceX, Falcon 9)"
-        ctx.record_turn(session_id, question, answer, entities, chunks)
+        await ctx.record_turn(session_id, question, answer, entities, chunks)
     """
 
-    def __init__(self):
-        # session_id → deque of SessionTurn
-        self._sessions: dict[str, deque[SessionTurn]] = {}
+    def __init__(self, store: SessionStore | None = None):
+        self._store = store or get_session_store()
 
-    def _get_turns(self, session_id: str) -> deque[SessionTurn]:
-        if session_id not in self._sessions:
-            self._sessions[session_id] = deque(maxlen=SESSION_MAX_TURNS)
-        return self._sessions[session_id]
+    # ── Internal ───────────────────────────────────────────────────────────────
 
-    def record_turn(
+    async def _get_turns(self, session_id: str) -> deque[SessionTurn]:
+        return await self._store.load_turns(session_id)
+
+    # ── Write ──────────────────────────────────────────────────────────────────
+
+    async def record_turn(
         self,
         session_id: str,
         question: str,
@@ -85,23 +97,23 @@ class SessionContext:
         """Append a completed turn to the session history."""
         if not session_id:
             return
-        turns = self._get_turns(session_id)
-        turns.append(
-            SessionTurn(
-                question=question,
-                answer=answer,
-                referenced_entities=referenced_entities,
-                referenced_chunks=referenced_chunks,
-            )
+        turn = SessionTurn(
+            question=question,
+            answer=answer,
+            referenced_entities=referenced_entities,
+            referenced_chunks=referenced_chunks,
         )
+        await self._store.save_turn(session_id, turn)
         log.debug(
             "session_context.turn_recorded",
             session_id=session_id,
             entities=referenced_entities,
-            total_turns=len(turns),
+            backend="redis" if self._store.is_redis_backed() else "memory",
         )
 
-    def enrich_query(self, session_id: str, question: str) -> str:
+    # ── Read / enrich ──────────────────────────────────────────────────────────
+
+    async def enrich_query(self, session_id: str, question: str) -> str:
         """
         If the question contains ambiguity signals, append the most
         recently referenced entities as explicit context.
@@ -111,7 +123,7 @@ class SessionContext:
         if not session_id:
             return question
 
-        turns = self._get_turns(session_id)
+        turns = await self._get_turns(session_id)
         if not turns:
             return question
 
@@ -140,11 +152,11 @@ class SessionContext:
         )
         return enriched
 
-    def get_recent_entities(self, session_id: str, n: int = 5) -> list[str]:
+    async def get_recent_entities(self, session_id: str, n: int = 5) -> list[str]:
         """Return the N most recently referenced unique entity names."""
         if not session_id:
             return []
-        turns = self._get_turns(session_id)
+        turns = await self._get_turns(session_id)
         seen: list[str] = []
         for turn in reversed(list(turns)):
             for entity in turn.referenced_entities:
@@ -154,11 +166,11 @@ class SessionContext:
                 break
         return seen[:n]
 
-    def get_recent_chunks(self, session_id: str, n: int = 10) -> list[str]:
+    async def get_recent_chunks(self, session_id: str, n: int = 10) -> list[str]:
         """Return the N most recently retrieved chunk IDs."""
         if not session_id:
             return []
-        turns = self._get_turns(session_id)
+        turns = await self._get_turns(session_id)
         seen: list[str] = []
         for turn in reversed(list(turns)):
             for chunk_id in turn.referenced_chunks:
@@ -168,18 +180,19 @@ class SessionContext:
                 break
         return seen[:n]
 
-    def clear_session(self, session_id: str) -> None:
+    async def clear_session(self, session_id: str) -> None:
         """Remove all history for a session (e.g. user logs out)."""
-        self._sessions.pop(session_id, None)
+        await self._store.clear(session_id)
 
-    def session_summary(self, session_id: str) -> dict:
+    async def session_summary(self, session_id: str) -> dict:
         """Return a summary of the session for debugging."""
-        turns = self._get_turns(session_id)
+        turns = await self._get_turns(session_id)
         return {
             "session_id": session_id,
             "turn_count": len(turns),
-            "recent_entities": self.get_recent_entities(session_id),
-            "recent_chunks": self.get_recent_chunks(session_id, 5),
+            "recent_entities": await self.get_recent_entities(session_id),
+            "recent_chunks": await self.get_recent_chunks(session_id, 5),
+            "backend": "redis" if self._store.is_redis_backed() else "memory",
         }
 
 

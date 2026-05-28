@@ -84,6 +84,9 @@ class Extractor:
                 type=e.get("type", "CONCEPT"),
                 description=e.get("description", ""),
                 source_chunk_ids=[chunk.id],
+                source_doc_id=chunk.document_id,
+                extraction_model=self._model_name,
+                prompt_version="v1",
             )
             for e in data.get("entities", [])
             if e.get("name")
@@ -97,6 +100,17 @@ class Extractor:
             src = entity_map.get(r.get("source", ""))
             tgt = entity_map.get(r.get("target", ""))
             if src and tgt and src.id != tgt.id:
+                # Approximate span: find source entity name in chunk text
+                span_start: int | None = None
+                span_end: int | None = None
+                try:
+                    pos = chunk.text.find(r.get("source", ""))
+                    if pos >= 0:
+                        span_start = pos
+                        span_end = pos + len(r.get("source", ""))
+                except Exception:
+                    pass
+
                 relations.append(
                     Relation(
                         source_entity_id=src.id,
@@ -104,8 +118,21 @@ class Extractor:
                         relation=r.get("relation", "RELATED_TO"),
                         confidence=float(r.get("confidence", 1.0)),
                         source_chunk_id=chunk.id,
+                        extraction_model=self._model_name,
+                        prompt_version="v1",
+                        chunk_span_start=span_start,
+                        chunk_span_end=span_end,
                     )
                 )
+
+        # ── Ontology validation ───────────────────────────────────────
+        try:
+            from graphrag.graph.ontology_registry import get_ontology_registry
+            registry = get_ontology_registry()
+            if registry._loaded:
+                registry.validate_extraction(entities, relations)
+        except Exception:
+            pass  # registry not yet initialised — skip silently
 
         log.info(
             "extractor.done",

@@ -15,6 +15,7 @@ class IngestRequest(BaseModel):
     text: str
     priority: str = "normal"
     metadata: dict = {}
+    tenant: str = "default"
 
 
 class IngestResponse(BaseModel):
@@ -30,6 +31,7 @@ async def ingest_document(request: IngestRequest):
         source_path=request.filename,
         raw_text=request.text,
         metadata=request.metadata,
+        tenant=request.tenant,
     )
     try:
         job_id = await publish_document(doc, priority=request.priority)

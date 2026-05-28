@@ -27,6 +27,10 @@ graph:
   # ── Dirty flags & materialized aggregates ───────────────────────────────────
   dirty_flag_propagation: true      # cascade status_dirty to ancestors on change
   aggregate_recompute_batch: 100    # max nodes to recompute per maintenance run
+  auto_rebuild_communities: false   # set true in production; false keeps graph stale until scripts/community_rebuild.py runs
+  community_staleness_threshold: 0.15   # 0.0-1.0 — rebuild when drift exceeds this
+  community_staleness_check_on_ingest: true  # check staleness on every ingestion batch
+  require_leiden: false             # true = fail hard if graspologic not installed; false = log error and fall back
   # ── Document authority ───────────────────────────────────────────────────────
   default_authority_level: 4        # INFORMAL — override per document on ingestion
   superseded_confidence_penalty: 0.5  # confidence multiplier for superseded doc edges
@@ -43,6 +47,9 @@ retrieval:
   # ── Session context ──────────────────────────────────────────────────────────
   session_context_enabled: true     # enrich ambiguous follow-up queries with session entities
   session_max_turns: 10             # sliding window size per session
+  session_store: memory             # "memory" | "redis" — persistence backend for session turns
+  redis_url: ""                     # e.g. redis://localhost:6379/0 — leave empty to use memory
+  session_ttl_seconds: 86400        # Redis key TTL for session turns (24h)
   # ── GNN scoring (after multi-hop traversal) ───────────────────────────────
   gnn_enabled: true        # GCN/GAT graph-propagated re-scoring
   gnn_type: gat            # "gcn" (Kipf & Welling 2017) | "gat" (Veličković 2018)
@@ -66,6 +73,15 @@ evaluation:
     - context_recall
   eval_sample_rate: 0.2
   min_ground_truth_queries: 50
+
+ontology:
+  enforce_domain_range: true        # reject relations that violate domain/range rules
+  allow_migration_renames: true     # auto-rename deprecated relation names on ingestion
+  migration_map:                    # old_relation: new_relation
+    IS_CEO: CEO_OF
+    FOUNDED_BY_PERSON: FOUNDED_BY
+    PART_OF_ORG: PART_OF
+    HAS_LOCATION: LOCATED_IN
 
 maintenance:
   stale_edge_days: 365              # edges older than this are candidates for pruning

@@ -50,6 +50,7 @@ class Document(BaseModel):
     supersedes: list[str] = Field(default_factory=list)   # doc IDs this replaces
     valid_from: datetime | None = None
     valid_to: datetime | None = None
+    tenant: str = "default"
 
 
 class Chunk(BaseModel):
@@ -59,6 +60,7 @@ class Chunk(BaseModel):
     chunk_index: int
     embedding: list[float] = Field(default_factory=list)
     metadata: dict[str, Any] = Field(default_factory=dict)
+    tenant: str = "default"
 
 
 class Entity(BaseModel):
@@ -70,6 +72,11 @@ class Entity(BaseModel):
     source_chunk_ids: list[str] = Field(default_factory=list)
     source_type: SourceType = SourceType.DOCUMENT
     canonical_id: str | None = None   # set when this is a duplicate of another entity
+    tenant: str = "default"           # tenant scope — entities are isolated per tenant
+    # ── Deep provenance ────────────────────────────────────────────────────────
+    source_doc_id: str = ""           # first document to introduce this entity
+    extraction_model: str = ""        # LLM model that extracted this entity
+    prompt_version: str = "v1"        # prompt template version at extraction time
 
 
 class Relation(BaseModel):
@@ -86,6 +93,11 @@ class Relation(BaseModel):
     constraint_type: ConstraintType = ConstraintType.SOFT
     valid_from: datetime | None = None
     valid_to: datetime | None = None   # None = currently valid
+    # ── Deep provenance ────────────────────────────────────────────────────────
+    chunk_span_start: int | None = None   # character offset where relation was found
+    chunk_span_end: int | None = None
+    extraction_model: str = ""
+    prompt_version: str = "v1"
 
 
 # ── Graph models ───────────────────────────────────────────────────────────────
@@ -97,6 +109,7 @@ class Community(BaseModel):
     summary: str = ""
     embedding: list[float] = Field(default_factory=list)
     member_count: int = 0
+    tenant: str = "default"
 
 
 class CanonicalPart(BaseModel):

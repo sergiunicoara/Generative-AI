@@ -150,11 +150,25 @@ class Neo4jClient:
             tenant=tenant,
         )
 
-    async def merge_relation(self, rel: Relation, src_name: str, tgt_name: str, tenant: str = "default"):
+    async def merge_relation(
+        self,
+        rel: Relation,
+        src_name: str,
+        src_type: str,
+        tgt_name: str,
+        tgt_type: str,
+        tenant: str = "default",
+    ):
+        """Write a RELATES_TO edge, matching endpoints by (name, type, tenant).
+
+        Including ``type`` in the MATCH prevents ambiguous matches when a
+        tenant has two entities with the same name but different types (e.g.
+        "Apple" as ORG vs. PRODUCT).
+        """
         await self.run(
             """
-            MATCH (s:Entity {name: $src_name, tenant: $tenant})
-            MATCH (t:Entity {name: $tgt_name, tenant: $tenant})
+            MATCH (s:Entity {name: $src_name, type: $src_type, tenant: $tenant})
+            MATCH (t:Entity {name: $tgt_name, type: $tgt_type, tenant: $tenant})
             MERGE (s)-[r:RELATES_TO {relation: $relation}]->(t)
             SET r.weight           = $weight,
                 r.extracted_at     = $extracted_at,
@@ -178,7 +192,9 @@ class Neo4jClient:
                 END
             """,
             src_name=src_name,
+            src_type=src_type,
             tgt_name=tgt_name,
+            tgt_type=tgt_type,
             tenant=tenant,
             relation=rel.relation,
             weight=rel.weight,
@@ -190,20 +206,22 @@ class Neo4jClient:
             valid_from=rel.valid_from.isoformat() if rel.valid_from else None,
             valid_to=rel.valid_to.isoformat() if rel.valid_to else None,
         )
-        # Store deep provenance if present — scoped to the correct tenant edge
+        # Store deep provenance if present — scoped to the exact (name, type, tenant) edge
         if rel.chunk_span_start is not None or rel.extraction_model:
             await self.run(
                 """
-                MATCH (s:Entity {name: $src_name, tenant: $tenant})
+                MATCH (s:Entity {name: $src_name, type: $src_type, tenant: $tenant})
                       -[r:RELATES_TO {relation: $relation}]->
-                      (t:Entity {name: $tgt_name, tenant: $tenant})
+                      (t:Entity {name: $tgt_name, type: $tgt_type, tenant: $tenant})
                 SET r.chunk_span_start = $span_start,
                     r.chunk_span_end   = $span_end,
                     r.extraction_model = $extraction_model,
                     r.prompt_version   = $prompt_version
                 """,
                 src_name=src_name,
+                src_type=src_type,
                 tgt_name=tgt_name,
+                tgt_type=tgt_type,
                 tenant=tenant,
                 relation=rel.relation,
                 span_start=rel.chunk_span_start,
@@ -465,38 +483,50 @@ class Neo4jClient:
 
     async def get_entity_relations_subgraph(
         self,
-        entity_names: list[str],
+        entities: list[dict],
         as_of: str | None = None,
         tenant: str = "default",
     ) -> list[dict]:
-        """Return RELATES_TO edges between a set of named entities.
+        """Return RELATES_TO edges between a set of entities.
+
+        ``entities`` is a list of ``{"name": str, "type": str}`` dicts.
+        Using (name, type) pairs rather than names alone avoids ambiguous
+        matches when a tenant has two entities with the same name but
+        different types (e.g. "Apple" as ORG vs. PRODUCT).
 
         Used by GNNScorer to build the adjacency matrix A.
         Only intra-subgraph edges are returned (both endpoints in the list).
         Optionally filters edges by temporal validity.
         """
+        if not entities:
+            return []
         temporal_filter = (
             "AND (r.valid_from IS NULL OR r.valid_from <= $as_of) "
             "AND (r.valid_to IS NULL OR r.valid_to > $as_of)"
             if as_of else ""
         )
+        # Build a set-membership key of the form "name:type" for the target
+        # side filter so both dimensions are checked without a subquery.
         return await self.run(
             f"""
-            UNWIND $names AS name
-            MATCH (s:Entity {{name: name}})-[r:RELATES_TO]->(t:Entity)
-            OPTIONAL MATCH (d:Document {id: r.source_doc_id})
-            WHERE t.name IN $names {temporal_filter}
+            UNWIND $entities AS pair
+            MATCH (s:Entity {{name: pair.name, type: pair.type, tenant: $tenant}})
+                  -[r:RELATES_TO]->
+                  (t:Entity {{tenant: $tenant}})
+            WHERE (t.name + ':' + t.type) IN $entity_keys {temporal_filter}
               AND NOT s.quarantined = true
               AND NOT t.quarantined = true
-              AND ($tenant = 'default' OR r.source_doc_id IS NULL OR d.tenant = $tenant)
             RETURN s.name                             AS src,
+                   s.type                             AS src_type,
                    t.name                             AS tgt,
+                   t.type                             AS tgt_type,
                    r.weight                           AS weight,
                    coalesce(r.confidence, 1.0)        AS confidence,
                    r.extracted_at                     AS extracted_at,
                    r.source_doc_id                    AS source_doc_id
             """,
-            names=entity_names,
+            entities=entities,
+            entity_keys=[f"{e['name']}:{e['type']}" for e in entities],
             tenant=tenant,
             **({"as_of": as_of} if as_of else {}),
         )

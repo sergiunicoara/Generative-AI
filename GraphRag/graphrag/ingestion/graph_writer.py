@@ -219,30 +219,35 @@ class GraphWriter:
             if not (src and tgt):
                 continue
 
-            # Resolve aliases for src and tgt names within this tenant
+            # Resolve aliases for src and tgt names within this tenant.
+            # Alias resolution can change the canonical type too, so capture
+            # both name and type after resolution so merge_relation can match
+            # on the full (name, type, tenant) triple.
             src_canonical = registry.resolve(src.name)
             tgt_canonical = registry.resolve(tgt.name)
             src_name = src_canonical[0] if src_canonical else src.name
+            src_type = src_canonical[1] if src_canonical else src.type
             tgt_name = tgt_canonical[0] if tgt_canonical else tgt.name
+            tgt_type = tgt_canonical[1] if tgt_canonical else tgt.type
 
             is_valid, normalized_relation = self._ontology.validate_relation_triplet(
-                src.type,
+                src_type,
                 rel.relation,
-                tgt.type,
+                tgt_type,
             )
             rel.relation = normalized_relation
             if not is_valid:
                 await self._ontology.record_schema_event(
                     event_type="relation_schema_violation",
-                    detail=f"{src.type}:{src_name}-{rel.relation}->{tgt.type}:{tgt_name}",
+                    detail=f"{src_type}:{src_name}-{rel.relation}->{tgt_type}:{tgt_name}",
                     source_doc_id=doc_id,
                 )
                 log.warning(
                     "graph_writer.relation_skipped",
                     src=src_name,
-                    src_type=src.type,
+                    src_type=src_type,
                     tgt=tgt_name,
-                    tgt_type=tgt.type,
+                    tgt_type=tgt_type,
                     relation=rel.relation,
                     tenant=tenant,
                 )
@@ -251,7 +256,9 @@ class GraphWriter:
             # Inject provenance
             rel.source_doc_id = doc_id
 
-            await self._neo4j.merge_relation(rel, src_name, tgt_name, tenant=tenant)
+            await self._neo4j.merge_relation(
+                rel, src_name, src_type, tgt_name, tgt_type, tenant=tenant
+            )
             merged_count += 1
 
             await self._audit.log_relation_change(

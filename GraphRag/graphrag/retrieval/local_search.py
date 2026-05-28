@@ -220,9 +220,20 @@ async def _fetch_subgraph_edges(
     chunk_ids: list[str],
     tenant: str = "default",
 ) -> list[dict]:
-    """Helper: get entity names from chunks then fetch the connecting edges."""
+    """Helper: get entity (name, type) pairs from chunks then fetch edges.
+
+    Passing full (name, type) pairs instead of names alone prevents ambiguous
+    MATCH results when the same tenant has two entities with identical names
+    but different types (e.g. "Apple" as ORG vs. PRODUCT).
+    """
     rows = await neo4j.get_chunk_entity_embeddings(chunk_ids)
-    names = list({r["entity_name"] for r in rows})
-    if not names:
+    seen: set[tuple[str, str]] = set()
+    entities: list[dict] = []
+    for r in rows:
+        key = (r["entity_name"], r["entity_type"])
+        if key not in seen:
+            seen.add(key)
+            entities.append({"name": r["entity_name"], "type": r["entity_type"]})
+    if not entities:
         return []
-    return await neo4j.get_entity_relations_subgraph(names, tenant=tenant)
+    return await neo4j.get_entity_relations_subgraph(entities, tenant=tenant)

@@ -1,4 +1,4 @@
-"""Redis-backed session store with in-memory fallback.
+"""Redis-backed session store with in-memory fallback and optional strict mode.
 
 Problem solved
 --------------
@@ -14,16 +14,37 @@ Architecture
   - List is capped to SESSION_MAX_TURNS via LTRIM after every RPUSH
   - Keys expire after SESSION_TTL_SECONDS (default 24 h)
 - Fallback: in-memory deque (identical to the pre-Redis behaviour)
-  Used automatically when Redis is unavailable or not configured.
+  Used automatically when Redis is unavailable or not configured,
+  UNLESS strict mode is enabled (see below).
+
+Strict mode
+-----------
+Set ``session_store_strict: true`` in config (retrieval section) to
+switch from graceful degradation to fail-fast behaviour:
+
+  - Import failure  (``redis[asyncio]`` package missing)
+    → raises ``ImportError`` at process start (caught by lifespan hook)
+  - Connection failure (Redis unreachable at startup)
+    → ``verify_connection()`` raises ``ConnectionError``
+    → FastAPI lifespan hook aborts startup so the issue is visible
+  - Per-operation failure (transient blip during a live request)
+    → logged at ERROR level (not WARNING) but still falls back to memory
+      so in-flight requests are not dropped mid-answer
+
+Rationale: killing a live request mid-stream on a transient Redis blip
+causes worse user experience than degrading to memory for that one turn.
+The strict/non-strict distinction therefore applies at startup time only.
 
 Configuration (config/settings.yml → retrieval):
-  session_store: redis        # "memory" | "redis"
+  session_store: redis             # "memory" | "redis"
   redis_url: redis://localhost:6379/0
   session_ttl_seconds: 86400
+  session_store_strict: true       # fail-fast if Redis unavailable at startup
 
 Usage::
 
     store = get_session_store()
+    await store.verify_connection()   # call once at startup (FastAPI lifespan)
     turns = await store.load_turns(session_id)
     await store.save_turn(session_id, new_turn)
     await store.clear(session_id)
@@ -32,7 +53,6 @@ Usage::
 from __future__ import annotations
 
 import json
-import logging
 from collections import deque
 
 import structlog
@@ -51,6 +71,20 @@ class SessionStore:
 
     All public methods are async to accommodate the Redis I/O path without
     changing the interface for the in-memory path.
+
+    Parameters
+    ----------
+    redis_url:
+        Connection URL for Redis.  ``None`` → memory-only mode.
+    max_turns:
+        Maximum turns kept per session (sliding window).
+    ttl_seconds:
+        Redis key TTL in seconds.
+    strict:
+        When ``True``, a missing ``redis[asyncio]`` package or a failed
+        connection attempt at init raises immediately instead of falling
+        back silently.  Per-operation failures during live requests still
+        fall back to memory but are logged at ERROR level.
     """
 
     def __init__(
@@ -58,24 +92,76 @@ class SessionStore:
         redis_url: str | None = None,
         max_turns: int = SESSION_MAX_TURNS,
         ttl_seconds: int = SESSION_TTL_SECONDS,
+        strict: bool = False,
     ):
         self._max_turns  = max_turns
         self._ttl        = ttl_seconds
+        self._strict     = strict
         self._redis      = None
         self._memory: dict[str, deque[SessionTurn]] = {}
 
         if redis_url:
             try:
                 import redis.asyncio as aioredis
-                self._redis = aioredis.from_url(redis_url, decode_responses=True)
-                log.info("session_store.redis_connected", url=redis_url)
-            except ImportError:
+            except ImportError as exc:
+                msg = (
+                    "redis[asyncio] is not installed but session_store=redis. "
+                    "Install it with: pip install redis[asyncio]"
+                )
+                if strict:
+                    raise ImportError(msg) from exc
                 log.warning(
                     "session_store.redis_not_installed",
                     note="install redis[asyncio] for persistent sessions",
                 )
+                return
+
+            try:
+                self._redis = aioredis.from_url(redis_url, decode_responses=True)
+                log.info("session_store.redis_configured", url=redis_url)
             except Exception as exc:
+                if strict:
+                    raise ConnectionError(
+                        f"Failed to create Redis client for {redis_url}: {exc}"
+                    ) from exc
                 log.warning("session_store.redis_connect_failed", error=str(exc))
+
+    # ── Startup verification ───────────────────────────────────────────────────
+
+    async def verify_connection(self) -> None:
+        """
+        Verify that the Redis connection is live.
+
+        Call this once during application startup (e.g. FastAPI lifespan).
+        - Non-strict mode: logs a warning on failure, continues.
+        - Strict mode: raises ``ConnectionError`` on failure so the process
+          exits with a clear error rather than serving sessions from memory
+          without the operator knowing.
+        """
+        if self._redis is None:
+            # Either memory-only mode or import failed — nothing to ping
+            return
+
+        try:
+            ok = await self._redis.ping()
+            if ok:
+                log.info("session_store.redis_ping_ok")
+                return
+            # ping() returned False
+            raise ConnectionError("Redis PING returned False")
+        except ConnectionError:
+            raise
+        except Exception as exc:
+            err = ConnectionError(
+                f"Redis is unreachable at startup: {exc}"
+            )
+            if self._strict:
+                raise err from exc
+            log.warning(
+                "session_store.redis_unreachable_at_startup",
+                error=str(exc),
+                note="sessions will use in-memory fallback",
+            )
 
     # ── Key helpers ────────────────────────────────────────────────────────────
 
@@ -98,7 +184,7 @@ class SessionStore:
                         pass   # skip corrupted entries
                 return turns
             except Exception as exc:
-                log.warning("session_store.redis_load_failed", error=str(exc))
+                self._log_op_failure("load", exc)
                 # Fall through to memory
 
         return self._memory.get(session_id, deque(maxlen=self._max_turns))
@@ -113,7 +199,7 @@ class SessionStore:
                 await self._redis.expire(key, self._ttl)
                 return
             except Exception as exc:
-                log.warning("session_store.redis_save_failed", error=str(exc))
+                self._log_op_failure("save", exc)
                 # Fall through to memory
 
         # Memory fallback
@@ -128,7 +214,7 @@ class SessionStore:
                 await self._redis.delete(self._key(session_id))
                 return
             except Exception as exc:
-                log.warning("session_store.redis_clear_failed", error=str(exc))
+                self._log_op_failure("clear", exc)
 
         self._memory.pop(session_id, None)
 
@@ -144,6 +230,25 @@ class SessionStore:
         except Exception:
             return False
 
+    # ── Internal helpers ───────────────────────────────────────────────────────
+
+    def _log_op_failure(self, op: str, exc: Exception) -> None:
+        """
+        Log a per-operation Redis failure.
+
+        Strict mode → ERROR (operator attention required; data may drift to memory).
+        Non-strict mode → WARNING (expected fallback).
+        """
+        fields = {
+            "op": op,
+            "error": str(exc),
+            "fallback": "memory",
+        }
+        if self._strict:
+            log.error("session_store.redis_op_failed_strict", **fields)
+        else:
+            log.warning(f"session_store.redis_{op}_failed", **fields)
+
 
 # ── Module-level singleton ─────────────────────────────────────────────────────
 
@@ -151,19 +256,26 @@ _store: SessionStore | None = None
 
 
 def get_session_store() -> SessionStore:
-    """Return the process-level SessionStore instance (created lazily)."""
+    """Return the process-level SessionStore instance (created lazily).
+
+    Reads ``session_store``, ``redis_url``, ``session_ttl_seconds``,
+    ``session_max_turns``, and ``session_store_strict`` from
+    ``config/settings.yml`` (retrieval section).
+    """
     global _store
     if _store is None:
         from graphrag.core.config import get_settings
-        cfg  = get_settings()
-        ret  = cfg.retrieval
-        mode = ret.get("session_store", "memory")
-        url  = ret.get("redis_url", "") if mode == "redis" else ""
-        ttl  = int(ret.get("session_ttl_seconds", SESSION_TTL_SECONDS))
-        max_t = int(ret.get("session_max_turns", SESSION_MAX_TURNS))
+        cfg    = get_settings()
+        ret    = cfg.retrieval
+        mode   = ret.get("session_store", "memory")
+        url    = ret.get("redis_url", "") if mode == "redis" else ""
+        ttl    = int(ret.get("session_ttl_seconds", SESSION_TTL_SECONDS))
+        max_t  = int(ret.get("session_max_turns", SESSION_MAX_TURNS))
+        strict = bool(ret.get("session_store_strict", False))
         _store = SessionStore(
             redis_url=url or None,
             max_turns=max_t,
             ttl_seconds=ttl,
+            strict=strict,
         )
     return _store

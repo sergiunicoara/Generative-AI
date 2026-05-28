@@ -23,6 +23,10 @@ but says nothing about the graph itself. These blind spots accumulate silently:
 6. Community coherence — average ratio of intra-community edges to total
    edges per entity. Low cohesion means Leiden found poor structure.
 
+All metrics accept an optional ``tenant`` parameter so that in multi-tenant
+deployments each tenant's health can be tracked independently.  Pass
+``tenant="default"`` (the default) to query across all tenants.
+
 All metrics feed into GraphHealthSnapshot nodes for trend tracking.
 """
 
@@ -42,8 +46,8 @@ class GraphEvaluator:
     Usage::
 
         evaluator = GraphEvaluator(neo4j_client)
-        report = await evaluator.full_report()
-        await evaluator.persist_snapshot(report)
+        report = await evaluator.full_report(tenant="acme")
+        await evaluator.persist_snapshot(report, tenant="acme")
     """
 
     def __init__(self, neo4j_client):
@@ -51,7 +55,7 @@ class GraphEvaluator:
 
     # ── Individual metrics ─────────────────────────────────────────────────────
 
-    async def entity_resolution_quality(self) -> dict:
+    async def entity_resolution_quality(self, tenant: str = "default") -> dict:
         """
         Entity resolution health:
         - alias_coverage: fraction of entities that have at least one alias
@@ -63,6 +67,7 @@ class GraphEvaluator:
             """
             MATCH (e:Entity)
             WHERE NOT e.quarantined = true
+              AND ($tenant = 'default' OR e.tenant = $tenant)
             OPTIONAL MATCH (e)<-[:ALIAS_OF]-(a:Alias)
             WITH e, count(a) AS alias_count
             RETURN count(e)                                          AS total_entities,
@@ -70,7 +75,8 @@ class GraphEvaluator:
                    count(CASE WHEN alias_count >= 5 THEN 1 END)     AS high_alias_count,
                    count(CASE WHEN alias_count = 0  THEN 1 END)     AS no_alias_count,
                    avg(toFloat(alias_count))                         AS avg_aliases
-            """
+            """,
+            tenant=tenant,
         )
         r = rows[0] if rows else {}
         total = r.get("total_entities") or 1
@@ -82,7 +88,7 @@ class GraphEvaluator:
             "avg_aliases_per_entity": round(r.get("avg_aliases") or 0, 2),
         }
 
-    async def relation_precision(self) -> dict:
+    async def relation_precision(self, tenant: str = "default") -> dict:
         """
         Relation edge quality:
         - high_conf_rate: fraction of edges with confidence >= 0.7
@@ -93,6 +99,7 @@ class GraphEvaluator:
         rows = await self._neo4j.run(
             """
             MATCH ()-[r:RELATES_TO]->()
+            WHERE ($tenant = 'default' OR r.tenant = $tenant)
             RETURN count(r)                                             AS total_edges,
                    avg(r.confidence)                                    AS avg_confidence,
                    count(CASE WHEN r.confidence >= 0.7 THEN 1 END)     AS high_conf,
@@ -101,7 +108,8 @@ class GraphEvaluator:
                    count(CASE WHEN r.source_type = 'llm'      THEN 1 END) AS llm_edges,
                    count(CASE WHEN r.source_type = 'inferred' THEN 1 END) AS inferred_edges,
                    count(CASE WHEN r.source_type = 'manual'   THEN 1 END) AS manual_edges
-            """
+            """,
+            tenant=tenant,
         )
         r = rows[0] if rows else {}
         total = r.get("total_edges") or 1
@@ -118,19 +126,24 @@ class GraphEvaluator:
             },
         }
 
-    async def contradiction_rate(self) -> dict:
+    async def contradiction_rate(self, tenant: str = "default") -> dict:
         """
         Open conflicts per 1000 edges — rising rate signals new ingestions
         disagree with existing facts.
         """
         rows = await self._neo4j.run(
             """
-            MATCH ()-[r:RELATES_TO]->() WITH count(r) AS total_edges
+            MATCH ()-[r:RELATES_TO]->()
+            WHERE ($tenant = 'default' OR r.tenant = $tenant)
+            WITH count(r) AS total_edges
             OPTIONAL MATCH (c:Conflict {status: 'open'})
+            WHERE ($tenant = 'default' OR c.tenant = $tenant)
             WITH total_edges, count(c) AS open_conflicts
             OPTIONAL MATCH (cr:Conflict {status: 'resolved_manual'})
+            WHERE ($tenant = 'default' OR cr.tenant = $tenant)
             RETURN total_edges, open_conflicts, count(cr) AS resolved_conflicts
-            """
+            """,
+            tenant=tenant,
         )
         r = rows[0] if rows else {}
         total = r.get("total_edges") or 1
@@ -141,33 +154,39 @@ class GraphEvaluator:
             "conflicts_per_1k_edges": round(open_c / total * 1000, 2),
         }
 
-    async def orphan_growth_rate(self) -> dict:
+    async def orphan_growth_rate(self, tenant: str = "default") -> dict:
         """
         Orphan entity rate — entities with no MENTIONS link.
         Compare to previous health snapshot to detect acceleration.
         """
         rows = await self._neo4j.run(
             """
-            MATCH (e:Entity) WHERE NOT e.quarantined = true
+            MATCH (e:Entity)
+            WHERE NOT e.quarantined = true
+              AND ($tenant = 'default' OR e.tenant = $tenant)
             WITH count(e) AS total
             MATCH (e2:Entity)
             WHERE NOT (e2)<-[:MENTIONS]-(:Chunk)
               AND NOT e2.quarantined = true
+              AND ($tenant = 'default' OR e2.tenant = $tenant)
             RETURN total, count(e2) AS orphans
-            """
+            """,
+            tenant=tenant,
         )
         r = rows[0] if rows else {}
         total = r.get("total") or 1
         orphans = r.get("orphans", 0)
 
-        # Compare to last snapshot
+        # Compare to last snapshot for this tenant
         prev_rows = await self._neo4j.run(
             """
             MATCH (h:GraphHealthSnapshot)
+            WHERE ($tenant = 'default' OR h.tenant = $tenant)
             RETURN h.orphan_count AS prev_orphans
             ORDER BY h.recorded_at DESC
             LIMIT 1
-            """
+            """,
+            tenant=tenant,
         )
         prev_orphans = prev_rows[0]["prev_orphans"] if prev_rows else orphans
 
@@ -177,7 +196,7 @@ class GraphEvaluator:
             "orphan_delta":    orphans - (prev_orphans or orphans),
         }
 
-    async def merge_split_error_proxy(self) -> dict:
+    async def merge_split_error_proxy(self, tenant: str = "default") -> dict:
         """
         Proxy for merge/split errors:
         - over_merge_candidates: entities with >=5 aliases (may be over-merged)
@@ -187,16 +206,18 @@ class GraphEvaluator:
         rows = await self._neo4j.run(
             """
             MATCH (e:Entity)
+            WHERE ($tenant = 'default' OR e.tenant = $tenant)
             OPTIONAL MATCH (e)<-[:ALIAS_OF]-(a:Alias)
             WITH e, count(a) AS alias_count
             RETURN count(CASE WHEN alias_count >= 5 THEN 1 END) AS over_merge_candidates,
                    count(CASE WHEN e.status = 'split' THEN 1 END) AS split_entities,
                    count(CASE WHEN e.quarantined = true THEN 1 END) AS quarantined_count
-            """
+            """,
+            tenant=tenant,
         )
         return dict(rows[0]) if rows else {}
 
-    async def community_coherence(self) -> dict:
+    async def community_coherence(self, tenant: str = "default") -> dict:
         """
         Average intra-community edge density.
         A coherent community has most of its edges connecting members
@@ -205,9 +226,11 @@ class GraphEvaluator:
         rows = await self._neo4j.run(
             """
             MATCH (e:Entity)-[:MEMBER_OF]->(c:Community)
+            WHERE ($tenant = 'default' OR c.tenant = $tenant)
             WITH c, collect(e.name) AS members
             MATCH (s:Entity)-[r:RELATES_TO]->(t:Entity)
             WHERE s.name IN members
+              AND ($tenant = 'default' OR r.tenant = $tenant)
             WITH c, members,
                  count(CASE WHEN t.name IN members THEN 1 END) AS intra_edges,
                  count(r) AS total_edges
@@ -219,7 +242,8 @@ class GraphEvaluator:
             ) AS avg_coherence,
             count(c) AS community_count
             RETURN avg_coherence, community_count
-            """
+            """,
+            tenant=tenant,
         )
         r = rows[0] if rows else {}
         return {
@@ -229,16 +253,17 @@ class GraphEvaluator:
 
     # ── Full report ────────────────────────────────────────────────────────────
 
-    async def full_report(self) -> dict:
-        """Run all metrics and return combined report."""
-        resolution   = await self.entity_resolution_quality()
-        precision    = await self.relation_precision()
-        contradiction = await self.contradiction_rate()
-        orphans      = await self.orphan_growth_rate()
-        merge_proxy  = await self.merge_split_error_proxy()
-        coherence    = await self.community_coherence()
+    async def full_report(self, tenant: str = "default") -> dict:
+        """Run all metrics scoped to ``tenant`` and return combined report."""
+        resolution    = await self.entity_resolution_quality(tenant)
+        precision     = await self.relation_precision(tenant)
+        contradiction = await self.contradiction_rate(tenant)
+        orphans       = await self.orphan_growth_rate(tenant)
+        merge_proxy   = await self.merge_split_error_proxy(tenant)
+        coherence     = await self.community_coherence(tenant)
 
         report = {
+            "tenant":               tenant,
             "entity_resolution":    resolution,
             "relation_precision":   precision,
             "contradiction":        contradiction,
@@ -247,7 +272,7 @@ class GraphEvaluator:
             "community_coherence":  coherence,
         }
 
-        log.info("graph_evaluator.full_report", **{
+        log.info("graph_evaluator.full_report", tenant=tenant, **{
             "alias_coverage":      resolution.get("alias_coverage"),
             "high_conf_rate":      precision.get("high_conf_rate"),
             "conflicts_per_1k":    contradiction.get("conflicts_per_1k_edges"),
@@ -256,13 +281,14 @@ class GraphEvaluator:
         })
         return report
 
-    async def persist_snapshot(self, report: dict) -> str:
+    async def persist_snapshot(self, report: dict, tenant: str = "default") -> str:
         """Persist a graph health snapshot for trend tracking."""
         snap_id = str(uuid4())
         await self._neo4j.run(
             """
             CREATE (h:GraphHealthSnapshot {
                 id:                  $id,
+                tenant:              $tenant,
                 alias_coverage:      $alias_coverage,
                 high_conf_rate:      $high_conf_rate,
                 contradiction_rate:  $contradiction_rate,
@@ -273,6 +299,7 @@ class GraphEvaluator:
             })
             """,
             id=snap_id,
+            tenant=tenant,
             alias_coverage=report.get("entity_resolution", {}).get("alias_coverage", 0),
             high_conf_rate=report.get("relation_precision", {}).get("high_conf_rate", 0),
             contradiction_rate=report.get("contradiction", {}).get("conflicts_per_1k_edges", 0),
@@ -280,15 +307,17 @@ class GraphEvaluator:
             orphan_count=report.get("orphan_growth", {}).get("orphan_count", 0),
             community_coherence=report.get("community_coherence", {}).get("avg_community_coherence", 0),
         )
-        log.info("graph_evaluator.snapshot_persisted", snapshot_id=snap_id)
+        log.info("graph_evaluator.snapshot_persisted", snapshot_id=snap_id, tenant=tenant)
         return snap_id
 
-    async def get_trend(self, limit: int = 10) -> list[dict]:
-        """Return recent health snapshots for trend analysis."""
+    async def get_trend(self, limit: int = 10, tenant: str = "default") -> list[dict]:
+        """Return recent health snapshots for trend analysis, scoped to tenant."""
         return await self._neo4j.run(
             """
             MATCH (h:GraphHealthSnapshot)
-            RETURN h.alias_coverage      AS alias_coverage,
+            WHERE ($tenant = 'default' OR h.tenant = $tenant)
+            RETURN h.tenant              AS tenant,
+                   h.alias_coverage      AS alias_coverage,
                    h.high_conf_rate      AS high_conf_rate,
                    h.contradiction_rate  AS contradiction_rate,
                    h.orphan_rate         AS orphan_rate,
@@ -298,4 +327,5 @@ class GraphEvaluator:
             LIMIT $limit
             """,
             limit=limit,
+            tenant=tenant,
         )

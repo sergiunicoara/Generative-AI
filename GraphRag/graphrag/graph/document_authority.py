@@ -40,7 +40,7 @@ class DocumentAuthorityService:
         svc = DocumentAuthorityService(neo4j_client)
         await svc.register_supersession("doc_v2_id", supersedes=["doc_v1_id"])
         authority = await svc.get_authority("doc_id")
-        conflicts = await svc.find_conflicts_for_entity("SpaceX")
+        conflicts = await svc.find_conflicts_for_entity("SpaceX", entity_type="ORG", tenant="default")
     """
 
     def __init__(self, neo4j_client):
@@ -110,51 +110,84 @@ class DocumentAuthorityService:
             "valid_to": r.get("valid_to"),
         }
 
-    async def find_conflicts_for_entity(self, entity_name: str) -> list[dict]:
+    async def find_conflicts_for_entity(
+        self,
+        entity_name: str,
+        entity_type: str,
+        tenant: str = "default",
+    ) -> list[dict]:
         """
-        Find RELATES_TO edges on an entity where two source documents
-        disagree — same (src, tgt, relation) but different properties
-        from different authority levels.
+        Find RELATES_TO edges originating from this entity that carry
+        multiple source documents (``source_doc_ids`` list length > 1).
 
-        Returns list of conflict dicts with both versions and resolution hint.
+        Each such edge was produced by merging evidence from several ingestion
+        passes; when the contributing documents have different authority levels
+        the lower-numbered level (= higher authority) should be preferred.
+
+        ``entity_type`` and ``tenant`` are required to uniquely identify the
+        entity — matching on name alone is ambiguous when a tenant has two
+        entities with the same name but different types.
+
+        Returns a list of dicts, one per multi-source edge::
+
+            {
+                "target":       str,          # target entity name
+                "target_type":  str,          # target entity type
+                "relation":     str,
+                "source_doc_ids": list[str],  # all contributing docs
+                "confidence":   float,        # merged edge confidence
+                "doc_levels":   list[dict],   # [{id, authority_level}, ...]
+                "best_doc_id":  str,          # highest-authority doc
+                "resolution":   str,          # human-readable hint
+            }
+
+        Note: this is a diagnostic / authority-resolution helper.  The primary
+        contradiction-detection path is ``ContradictionDetector.scan()``, which
+        runs full conflict analysis including supersession checks.
         """
         rows = await self._neo4j.run(
             """
-            MATCH (e:Entity {name: $name})-[r:RELATES_TO]->(t:Entity)
-            WHERE r.source_doc_id IS NOT NULL
-            WITH t.name AS tgt, r.relation AS rel,
-                 collect({
-                     doc_id:    r.source_doc_id,
-                     weight:    r.weight,
-                     confidence: r.confidence,
-                     extracted_at: r.extracted_at
-                 }) AS sources
-            WHERE size(sources) > 1
-            MATCH (d:Document)
-            WHERE d.id IN [s IN sources | s.doc_id]
-            WITH tgt, rel, sources,
-                 collect({id: d.id, level: d.authority_level}) AS doc_levels
-            RETURN tgt, rel, sources, doc_levels
+            MATCH (e:Entity {name: $name, type: $type, tenant: $tenant})
+                  -[r:RELATES_TO]->
+                  (t:Entity {tenant: $tenant})
+            WHERE r.source_doc_ids IS NOT NULL
+              AND size(r.source_doc_ids) > 1
+            WITH t.name          AS tgt,
+                 t.type          AS tgt_type,
+                 r.relation      AS rel,
+                 r.source_doc_ids AS doc_ids,
+                 r.confidence    AS confidence
+            UNWIND doc_ids AS doc_id
+            OPTIONAL MATCH (d:Document {id: doc_id})
+            WITH tgt, tgt_type, rel, doc_ids, confidence,
+                 collect({id: d.id, level: coalesce(d.authority_level, 4)}) AS doc_levels
+            RETURN tgt, tgt_type, rel, doc_ids, confidence, doc_levels
             """,
             name=entity_name,
+            type=entity_type,
+            tenant=tenant,
         )
 
         conflicts = []
         for row in rows:
-            doc_map = {d["id"]: d["level"] for d in (row.get("doc_levels") or [])}
-            sources = row.get("sources") or []
-            # Sort by authority level — best (lowest number) first
-            ranked = sorted(
-                sources,
-                key=lambda s: doc_map.get(s.get("doc_id"), 4),
-            )
+            doc_levels = row.get("doc_levels") or []
+            # Sort by authority level — lower number = higher authority
+            ranked = sorted(doc_levels, key=lambda d: d.get("level", 4))
+            best = ranked[0] if ranked else {}
             conflicts.append(
                 {
-                    "target": row["tgt"],
-                    "relation": row["rel"],
-                    "versions": ranked,
-                    "resolution": f"Use source from doc {ranked[0].get('doc_id')} "
-                                  f"(authority level {doc_map.get(ranked[0].get('doc_id'), 4)})",
+                    "target":         row["tgt"],
+                    "target_type":    row["tgt_type"],
+                    "relation":       row["rel"],
+                    "source_doc_ids": row.get("doc_ids") or [],
+                    "confidence":     row.get("confidence"),
+                    "doc_levels":     ranked,
+                    "best_doc_id":    best.get("id"),
+                    "resolution":     (
+                        f"Prefer doc {best.get('id')} "
+                        f"(authority level {best.get('level', 4)})"
+                        if best else "No document metadata available"
+                    ),
                 }
             )
         return conflicts

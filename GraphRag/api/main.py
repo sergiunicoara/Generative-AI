@@ -1,7 +1,9 @@
 """FastAPI application — GraphRAG API with OAuth 2.0."""
 
 import secrets
+from contextlib import asynccontextmanager
 
+import structlog
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.sessions import SessionMiddleware
@@ -9,7 +11,36 @@ from starlette.middleware.sessions import SessionMiddleware
 from api.routes import auth, ingest, query, evaluation, kpis, corrections
 from graphrag.core.config import get_settings
 
+log = structlog.get_logger(__name__)
+
 settings = get_settings()
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Run startup checks before accepting traffic, teardown on shutdown."""
+    # ── Startup ───────────────────────────────────────────────────────────────
+    # Verify Redis session store connectivity.
+    # When session_store_strict=true this raises immediately on failure so
+    # the process exits with a visible error instead of silently falling back
+    # to in-memory sessions.  Non-strict mode logs a warning and continues.
+    from graphrag.retrieval.session_store import get_session_store
+    store = get_session_store()
+    try:
+        await store.verify_connection()
+    except (ConnectionError, ImportError) as exc:
+        log.error(
+            "startup.session_store_unavailable",
+            error=str(exc),
+            hint="set session_store_strict=false to allow in-memory fallback",
+        )
+        raise   # abort startup — let the process supervisor restart with correct config
+
+    log.info("startup.complete")
+    yield
+    # ── Shutdown ──────────────────────────────────────────────────────────────
+    log.info("shutdown.complete")
+
 
 app = FastAPI(
     title="GraphRAG API",
@@ -21,6 +52,7 @@ app = FastAPI(
     ),
     version="0.2.0",
     swagger_ui_parameters={"withCredentials": True},
+    lifespan=lifespan,
 )
 
 # ── Middleware ─────────────────────────────────────────────────────────────────

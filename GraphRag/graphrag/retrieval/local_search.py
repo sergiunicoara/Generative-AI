@@ -65,9 +65,10 @@ class LocalSearch:
             edge_confidence_threshold = self._cfg.get("gnn_edge_confidence_threshold", 0.7),
             confidence_half_life_days = self._cfg.get("gnn_confidence_half_life_days", 0),
         )
-        self._adaptive_weights   = self._cfg.get("gnn_adaptive_weights", True)
-        self._authority_svc      = DocumentAuthorityService(self._neo4j)
-        self._use_session_ctx    = self._cfg.get("session_context_enabled", True)
+        self._adaptive_weights     = self._cfg.get("gnn_adaptive_weights", True)
+        self._use_authority_weights = self._cfg.get("authority_weighting_enabled", True)
+        self._authority_svc        = DocumentAuthorityService(self._neo4j)
+        self._use_session_ctx      = self._cfg.get("session_context_enabled", True)
         self._session_ctx        = get_session_context() if self._use_session_ctx else None
 
     async def search(
@@ -160,10 +161,11 @@ class LocalSearch:
                 _fetch_subgraph_edges(self._neo4j, all_ids, tenant),
             )
 
-            # Apply document authority weights to edge confidence
-            entity_edges = await self._authority_svc.apply_authority_weights(
-                entity_edges
-            )
+            # Apply document authority weights to edge confidence (config-gated)
+            if self._use_authority_weights:
+                entity_edges = await self._authority_svc.apply_authority_weights(
+                    entity_edges
+                )
 
             loop = asyncio.get_event_loop()
             all_chunks = await loop.run_in_executor(

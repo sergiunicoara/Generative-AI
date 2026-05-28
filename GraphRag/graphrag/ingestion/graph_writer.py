@@ -309,11 +309,18 @@ class GraphWriter:
         }
 
     async def _maybe_rebuild_communities(self, tenant: str) -> dict:
+        graph_cfg = self._cfg.graph
+
+        # Honour the staleness-check toggle — when disabled the check is fully
+        # skipped (no Neo4j read, no snapshot write) so ingestion cost stays flat.
+        if not graph_cfg.get("community_staleness_check_on_ingest", True):
+            return {"checked": False, "rebuilt": False, "community_count": 0}
+
         manager = CommunityManager(self._neo4j)
         stale = await manager.check_staleness(tenant=tenant)
         report = {"checked": True, **stale, "rebuilt": False, "community_count": 0}
 
-        if not self._cfg.graph.get("auto_rebuild_communities", False):
+        if not graph_cfg.get("auto_rebuild_communities", True):
             if stale.get("snapshot_recorded_at") is None:
                 await manager.snapshot(tenant=tenant)
             report["checked"] = False

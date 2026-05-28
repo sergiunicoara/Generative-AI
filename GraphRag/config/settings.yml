@@ -27,7 +27,7 @@ graph:
   # ── Dirty flags & materialized aggregates ───────────────────────────────────
   dirty_flag_propagation: true      # cascade status_dirty to ancestors on change
   aggregate_recompute_batch: 100    # max nodes to recompute per maintenance run
-  auto_rebuild_communities: false   # set true in production; false keeps graph stale until scripts/community_rebuild.py runs
+  auto_rebuild_communities: true    # rebuild when staleness exceeds threshold; disable only if you run scripts/community_rebuild.py externally
   community_staleness_threshold: 0.15   # 0.0-1.0 — rebuild when drift exceeds this
   community_staleness_check_on_ingest: true  # check staleness on every ingestion batch
   require_leiden: false             # true = fail hard if graspologic not installed; false = log error and fall back

@@ -98,6 +98,41 @@ All work completed across two sessions. Tracked retroactively per CLAUDE.md.
 
 ---
 
+## Phase 8 — Remaining KG Architecture Gaps
+
+### Core KG Integrity
+- [x] Implement `graphrag/graph/embedding_registry.py` — EmbeddingRegistry: version tracking, incompatibility detection, `migrate_embeddings()` batch job; add `embedding_model`/`embedding_version` to Entity in `neo4j_client.py`
+- [x] Implement `graphrag/graph/property_schema.py` — PropertySchemaValidator: per-type attribute cardinality rules, wire into `IngestionValidator`
+- [x] Extend `OntologyRegistry` with `rename_entity_type()` — cascade update entities, WikidataLinks, edges, Statements, audit trail
+- [x] Create `scripts/re_embed.py` — CLI: `--tenant`, `--model`, `--batch-size`, `--dry-run`; writes back to Neo4j with new version tag
+- [x] Create `scripts/entity_type_migration.py` — CLI: `--old-type`, `--new-type`, `--tenant`, `--dry-run`
+
+### Reasoning Layer
+- [x] Implement `graphrag/graph/inference_engine.py` — ForwardChainingEngine: Datalog-style rules (transitivity, symmetry, inverse), mark inferred edges with `source_type=inferred`, configurable rule set
+- [x] Extend `GNNScorer` — `propagate_confidence()` (product of edge confidences along multi-hop paths); `annotate_path_confidence()` stamps `path_confidence` on each chunk result
+- [x] Extend `EdgeEmbeddingService` with `train()` — TransE negative-sampling SGD training loop; updates `RelationEmbedding` nodes with learned vectors
+
+### Community & Clustering
+- [x] Implement `graphrag/graph/incremental_community.py` — IncrementalCommunityDetector: track changed entities since last build via `CommunityRebuildPoint`, only rebuild affected communities
+- [x] Extend `CommunityBuilder` with `build_semantic_communities()` — HDBSCAN on entity embeddings; compute Jaccard overlap vs Leiden; log divergence as quality metric; `SEMANTIC_MEMBER_OF` edges
+
+### Data Quality & Compliance
+- [x] Implement `graphrag/graph/gdpr.py` — GDPRService: `forget_entity()`, `forget_document()` (cascade + redact chunk text), `deletion_audit_log()`
+- [x] Implement `graphrag/graph/pii_guard.py` — PIIGuard: regex + entity-type based PII detection, `redact()`, `tag_entity_pii()`, `scan_document()`
+- [x] Implement `graphrag/retrieval/query_cache.py` — QueryCache: Redis-backed, key=hash(query+tenant+session), provenance-aware invalidation on document ingest
+
+### Advanced Features
+- [x] Implement `graphrag/graph/entity_linker.py` — WikidataEntityLinker: Wikidata API lookup, cache in `WikidataLink` nodes, store `wikidata_qid` on Entity
+- [x] Implement `graphrag/graph/counterfactual.py` — CounterfactualAnalyzer: `simulate_retraction(doc_id)` dry-run showing what conflicts/entities disappear if a doc is removed
+- [x] Implement `graphrag/graph/multimodal.py` — MultiModalEntityService: attach image/audio/video to entities, cross-modal embedding storage, inventory
+
+### Operational
+- [x] Create `scripts/kg_backup.py` — export all nodes/edges/chunks to NDJSON; local + S3 support; `restore` mode
+- [x] Add API endpoints for all 13 new services to `api/routes/kg_features.py` (Phase 8: endpoints 8–20)
+- [x] Update `tasks/lessons.md` with A25–A33
+
+---
+
 ## Review
 
 ### What was built

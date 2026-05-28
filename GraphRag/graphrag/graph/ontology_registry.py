@@ -324,6 +324,158 @@ class OntologyRegistry:
             """
         )
 
+    # ── Entity type rename / migration ─────────────────────────────────────────
+
+    async def rename_entity_type(
+        self,
+        old_type: str,
+        new_type: str,
+        tenant: str = "default",
+        dry_run: bool = False,
+    ) -> dict:
+        """
+        Cascade-rename all entities with *old_type* to *new_type*.
+
+        Steps:
+          1. Count affected entities.
+          2. Update Entity.type for all affected entities in the tenant.
+          3. Update WikidataLink.entity_type references.
+          4. Update RELATES_TO edges that carry src_type / tgt_type metadata.
+          5. Update AliasRegistry entries (if stored in graph).
+          6. Record an OntologyMigration node for audit.
+          7. Update the in-memory allowed_types set.
+
+        Parameters
+        ----------
+        dry_run : If True, count affected entities but do NOT modify anything.
+
+        Returns a report dict with counts.
+        """
+        old_upper = old_type.strip().upper()
+        new_upper = new_type.strip().upper()
+
+        if old_upper == new_upper:
+            return {"old_type": old_upper, "new_type": new_upper,
+                    "entities_renamed": 0, "dry_run": dry_run,
+                    "status": "no_op"}
+
+        # ── Count affected ───────────────────────────────────────────────────
+        count_rows = await self._neo4j.run(
+            """
+            MATCH (e:Entity {type: $old_type})
+            WHERE ($tenant = 'default' OR e.tenant = $tenant)
+              AND NOT e.quarantined = true
+            RETURN count(e) AS n
+            """,
+            old_type=old_upper,
+            tenant=tenant,
+        )
+        n_entities = count_rows[0].get("n", 0) if count_rows else 0
+
+        if dry_run:
+            return {
+                "old_type":        old_upper,
+                "new_type":        new_upper,
+                "entities_renamed": n_entities,
+                "dry_run":         True,
+                "status":          "dry_run",
+            }
+
+        if n_entities == 0:
+            log.info("ontology_registry.rename_no_entities",
+                     old=old_upper, new=new_upper, tenant=tenant)
+            return {"old_type": old_upper, "new_type": new_upper,
+                    "entities_renamed": 0, "dry_run": False, "status": "no_entities"}
+
+        log.info("ontology_registry.rename_start",
+                 old=old_upper, new=new_upper, n=n_entities, tenant=tenant)
+
+        # ── 1. Rename Entity nodes ───────────────────────────────────────────
+        await self._neo4j.run(
+            """
+            MATCH (e:Entity {type: $old_type})
+            WHERE ($tenant = 'default' OR e.tenant = $tenant)
+            SET e.type             = $new_type,
+                e.type_migrated_from = $old_type,
+                e.type_migrated_at  = datetime()
+            """,
+            old_type=old_upper,
+            new_type=new_upper,
+            tenant=tenant,
+        )
+
+        # ── 2. Update WikidataLink nodes ─────────────────────────────────────
+        wl_rows = await self._neo4j.run(
+            """
+            MATCH (wl:WikidataLink {entity_type: $old_type})
+            WHERE ($tenant = 'default' OR wl.tenant = $tenant)
+            SET wl.entity_type = $new_type
+            RETURN count(wl) AS n
+            """,
+            old_type=old_upper,
+            new_type=new_upper,
+            tenant=tenant,
+        )
+        n_wikidata = wl_rows[0].get("n", 0) if wl_rows else 0
+
+        # ── 3. Update edge metadata (src_type / tgt_type on RELATES_TO) ──────
+        await self._neo4j.run(
+            """
+            MATCH ()-[r:RELATES_TO]->()
+            WHERE ($tenant = 'default' OR r.tenant = $tenant)
+              AND r.src_type = $old_type
+            SET r.src_type = $new_type
+            """,
+            old_type=old_upper, new_type=new_upper, tenant=tenant,
+        )
+        await self._neo4j.run(
+            """
+            MATCH ()-[r:RELATES_TO]->()
+            WHERE ($tenant = 'default' OR r.tenant = $tenant)
+              AND r.tgt_type = $old_type
+            SET r.tgt_type = $new_type
+            """,
+            old_type=old_upper, new_type=new_upper, tenant=tenant,
+        )
+
+        # ── 4. Update Statement nodes (reified relations) ────────────────────
+        for field in ("src_type", "tgt_type", "subject_type", "object_type"):
+            await self._neo4j.run(
+                f"""
+                MATCH (stmt:Statement)
+                WHERE ($tenant = 'default' OR stmt.tenant = $tenant)
+                  AND stmt.{field} = $old_type
+                SET stmt.{field} = $new_type
+                """,
+                old_type=old_upper, new_type=new_upper, tenant=tenant,
+            )
+
+        # ── 5. Audit record ──────────────────────────────────────────────────
+        await self.persist_migration(
+            old_relation=f"entity_type:{old_upper}",
+            new_relation=f"entity_type:{new_upper}",
+            migrated_count=n_entities,
+        )
+        await self.record_schema_event(
+            event_type="entity_type_rename",
+            detail=f"{old_upper} → {new_upper} ({n_entities} entities)",
+        )
+
+        # ── 6. Update in-memory allowed_types ───────────────────────────────
+        self._allowed_types.discard(old_upper)
+        self._allowed_types.add(new_upper)
+
+        report = {
+            "old_type":         old_upper,
+            "new_type":         new_upper,
+            "entities_renamed": n_entities,
+            "wikidata_updated": n_wikidata,
+            "dry_run":          False,
+            "status":           "complete",
+        }
+        log.info("ontology_registry.rename_complete", **report, tenant=tenant)
+        return report
+
 
 # ── Module-level singleton ─────────────────────────────────────────────────────
 

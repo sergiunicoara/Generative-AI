@@ -362,3 +362,105 @@ class GNNScorer:
             x = float(chunk["rerank_score"])
             return float(1.0 / (1.0 + np.exp(-x / 5.0)))   # sigmoid
         return float(chunk.get("score", 0.0))
+
+    # ------------------------------------------------------------------
+    # Confidence propagation
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def propagate_confidence(
+        entity_edges: list[dict],
+        seed_entities: list[str],
+        max_hops: int = 3,
+        min_confidence: float = 0.05,
+    ) -> dict[str, float]:
+        """
+        Propagate confidence outward from seed entities through the edge graph.
+
+        Confidence decays multiplicatively along each path:
+            conf(path h→r→t) = conf(edge h→t) * conf(h)
+
+        At each entity, we keep the *maximum* confidence across all paths that
+        reach it.  This is equivalent to finding the most-confident path from any
+        seed to each reachable entity.
+
+        Use this to annotate chunk results with the highest-confidence path
+        connecting any seed entity to a chunk's mention entities.
+
+        Parameters
+        ----------
+        entity_edges   : RELATES_TO edge dicts — each must have ``src``, ``tgt``,
+                         and ``confidence`` fields.
+        seed_entities  : Entity names assigned confidence 1.0 at the start.
+        max_hops       : Maximum number of hops to propagate (prevents runaway).
+        min_confidence : Prune paths whose confidence drops below this threshold.
+
+        Returns
+        -------
+        dict[entity_name → max_path_confidence]
+            Includes seeds (confidence 1.0) and all reachable entities.
+        """
+        # Build adjacency: entity_name → [(neighbour, edge_confidence)]
+        adj: dict[str, list[tuple[str, float]]] = {}
+        for edge in entity_edges:
+            src  = edge.get("src") or edge.get("source") or ""
+            tgt  = edge.get("tgt") or edge.get("target") or ""
+            conf = float(edge.get("confidence", 1.0))
+            if not src or not tgt:
+                continue
+            adj.setdefault(src, []).append((tgt, conf))
+            adj.setdefault(tgt, []).append((src, conf))   # undirected propagation
+
+        # BFS / Bellman-Ford with max-product semantics
+        best: dict[str, float] = {e: 1.0 for e in seed_entities}
+        frontier = list(seed_entities)
+
+        for _hop in range(max_hops):
+            next_frontier: list[str] = []
+            for entity in frontier:
+                current_conf = best[entity]
+                for neighbour, edge_conf in adj.get(entity, []):
+                    propagated = current_conf * edge_conf
+                    if propagated < min_confidence:
+                        continue
+                    if propagated > best.get(neighbour, 0.0):
+                        best[neighbour] = propagated
+                        next_frontier.append(neighbour)
+            if not next_frontier:
+                break
+            frontier = next_frontier
+
+        return best
+
+    @staticmethod
+    def annotate_path_confidence(
+        chunks: list[dict],
+        chunk_entities: list[dict],
+        path_confidences: dict[str, float],
+    ) -> list[dict]:
+        """
+        Stamp each chunk with the maximum path confidence across its mention entities.
+
+        Mutates chunks in-place — adds ``path_confidence`` field.
+
+        Parameters
+        ----------
+        chunks            : Chunk dicts (already scored by ``score()``).
+        chunk_entities    : [{chunk_id, entity_name, ...}, ...]
+        path_confidences  : Output of ``propagate_confidence()``.
+
+        Returns the same chunks list for chaining.
+        """
+        # Build chunk_id → max entity confidence
+        chunk_max: dict[str, float] = {}
+        for row in chunk_entities:
+            cid  = row["chunk_id"]
+            ename = row["entity_name"]
+            conf = path_confidences.get(ename, 0.0)
+            if conf > chunk_max.get(cid, 0.0):
+                chunk_max[cid] = conf
+
+        for chunk in chunks:
+            chunk["path_confidence"] = round(chunk_max.get(chunk["chunk_id"], 0.0), 4)
+
+        return chunks

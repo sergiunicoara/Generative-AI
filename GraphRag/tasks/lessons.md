@@ -746,3 +746,160 @@ snapshot time) is sufficient for most audit and regression detection purposes.
 > ingestion, not weeks later in RAGAS scores. For precise point-in-time reconstruction,
 > combine snapshots (which record the transaction-time boundary) with bitemporal queries
 > (which filter by that boundary). Snapshots are cheap; retrospective debugging is expensive.
+
+---
+
+## A25 — TransE training only updates relation embeddings, never entity embeddings
+
+**Finding:**
+Entity embeddings come from a sentence transformer and are expensive to recompute (requires
+re-embedding the entire corpus). TransE training should update only the translation vectors
+`r` (relation embeddings) — which are small in count and cheap to update. Updating entity
+embeddings during TransE training would contradict the pre-trained semantic space and
+require re-embedding all edges after every training run.
+
+**Principle:**
+> In a graph where entity embeddings come from a pre-trained text model, treat them as
+> fixed during TransE training. Only learn relation translations `r`. This separates
+> concerns: the sentence transformer provides semantic coordinates; TransE provides
+> structural translations between those coordinates. After training, re-run `embed_all_edges()`
+> to update the stored triple embeddings with the new `r` vectors.
+
+---
+
+## A26 — Confidence propagates multiplicatively, not additively, through multi-hop paths
+
+**Finding:**
+When a query traverses A → B → C, the confidence of the path is `conf(A→B) × conf(B→C)`.
+This is not a quality-level combination — it is a probability calculation: if each hop
+introduces independent uncertainty, joint confidence decays as the product. Additive
+propagation would allow path confidence to exceed edge confidence, which is nonsensical.
+
+**Principle:**
+> Propagate edge confidence multiplicatively along paths (Bellman-Ford with product instead
+> of sum). Use max-product (best path) not sum-product (total support). Cut paths below a
+> minimum confidence threshold (default 0.05) to prevent noise accumulation at depth 3+.
+> Stamp the resulting `path_confidence` on each chunk result so the LLM can treat low-
+> confidence path chunks with appropriate scepticism.
+
+---
+
+## A27 — Incremental community detection requires a rebuild point anchor
+
+**Finding:**
+Without a stored timestamp of the last community build, "what changed since the last build"
+has no answer. The system either rebuilds from scratch (expensive) or doesn't know it should
+rebuild (stale). A `CommunityRebuildPoint` node with a `rebuilt_at` timestamp is the minimal
+state needed to drive incremental detection — compare Entity.recorded_at against it.
+
+**Principle:**
+> After every community build (full or incremental), write a `CommunityRebuildPoint` node
+> with the current datetime. The incremental detector queries `Entity.recorded_at > last_rebuild`
+> to find changed entities. Without this anchor, the incremental path degenerates to full
+> rebuild on every ingestion. The rebuild point is cheap to write and cheap to query.
+
+---
+
+## A28 — GDPR erasure requires a pre-deletion audit record, not a post-deletion one
+
+**Finding:**
+If the deletion process fails halfway (network error, timeout), a post-deletion audit
+record is never written — leaving the DPO with no evidence of what was attempted. Starting
+the deletion with an audit record in `status='in_progress'` ensures the intent is recorded
+even if the execution fails. A reaper job can find stuck `in_progress` audits and retry or
+alert.
+
+**Principle:**
+> Create the DeletionAudit node BEFORE the first DELETE statement. The audit record's
+> existence proves the erasure was requested and started. Update it to `status='complete'`
+> only after all deletion steps succeed. A stuck `in_progress` record is a recovery signal;
+> a missing record is an untraceable gap in the compliance trail.
+
+---
+
+## A29 — PII regex patterns need de-overlapping, not just union
+
+**Finding:**
+A string containing a credit card number also matches IP_V4 patterns (groups of digits
+separated by characters). Without de-overlapping, both findings are returned for the same
+span, and a naive redaction would apply two passes and corrupt the output. The correct
+algorithm: sort findings by start position, keep only the highest-confidence finding
+when two patterns overlap the same character span.
+
+**Principle:**
+> Always de-overlap PII findings before returning or redacting. Sort by start position,
+> then by confidence descending within the same span. Apply redactions in reverse order
+> (from end to start) so earlier offset positions are not shifted. Both the de-overlapping
+> and the reverse-order redaction are required for correct output.
+
+---
+
+## A30 — Wikidata linking should cache failures, not just successes
+
+**Finding:**
+An entity not found in Wikidata ("XR-7500 Widget" — an internal part number) is looked
+up on every call if only successes are cached. For a batch of 1000 unlinked entities,
+this means 1000 API calls even if 900 of them were already tried and returned nothing.
+Caching failures as `WikidataLink {status: 'not_found'}` prevents repeated futile lookups.
+
+**Principle:**
+> Cache negative results with a TTL (7 days default). The `status: 'not_found'` record
+> acts as a negative cache entry. Include it in the `get_link()` lookup and skip the API
+> call if it exists. Periodically clear `not_found` entries (they expire after TTL) to
+> allow re-checking as Wikidata grows.
+
+---
+
+## A31 — Counterfactual impact score must weight removed edges more than exclusive entities
+
+**Finding:**
+Exclusive entities (those sourced only from the retracted document) are important but their
+loss is recoverable — if the document is re-ingested with corrections, the entities return.
+Removed edges (those whose only evidence came from this document) are more damaging: they
+represent knowledge links that will disappear from reasoning paths. Weighting removed edges
+at 0.4 and exclusive entities at 0.3 reflects this priority.
+
+**Principle:**
+> Impact score weights should reflect operational recovery cost, not raw count.
+> Removed edges: 0.40 (hardest to recover — must re-process the source document)
+> Exclusive entities: 0.30 (recoverable via re-ingestion)
+> Resolved conflicts: 0.20 (may be beneficial — removes known contradictions)
+> Orphaned entities: 0.10 (low additional impact — already captured in exclusive entities)
+> Calibrate weights by asking: "if this component increases by 10%, how much worse is the
+> retrieval experience?"
+
+---
+
+## A32 — Query result cache invalidation must be entity-scoped, not time-based alone
+
+**Finding:**
+A TTL cache for query results becomes stale the moment a new document updates an entity
+mentioned in the cached answer. With pure TTL, the answer "Elon Musk is CEO of Tesla"
+stays in cache for an hour even after a document is ingested that changes his role.
+Provenance-aware invalidation (entity_name → set of cache keys) ensures only affected
+answers are purged on ingestion, not all cached answers.
+
+**Principle:**
+> Build the provenance index at set-time: for each entity in `entities_used`, add the
+> cache key to that entity's provenance set. At invalidation time (post-ingest), look up
+> the provenance sets for the ingested document's entities and delete only those cache
+> entries. The provenance index TTL should be longer than the result TTL to avoid dangling
+> keys — cache entries expire, but the index outlives them.
+
+---
+
+## A33 — Entity type renames must cascade to all nodes that carry the type as a field value
+
+**Finding:**
+Renaming entity type EXEC → PERSON in the Entity.type field is not enough. WikidataLink
+nodes carry `entity_type` as a field; Statement nodes carry `src_type`, `tgt_type`,
+`subject_type`, `object_type`; RELATES_TO edges carry `src_type` / `tgt_type` in some
+pipelines. A partial rename creates inconsistency: `Entity.type = 'PERSON'` but
+`WikidataLink.entity_type = 'EXEC'` — the link is now unreachable because get_link()
+queries on the current type.
+
+**Principle:**
+> Entity type rename is a graph-wide operation. Enumerate every node label and edge type
+> that stores the entity type as a field value (not just Entity.type) and update all of
+> them in the same migration transaction. Add a `type_migrated_from` audit field so the
+> old value is recoverable without hitting the audit log.

@@ -1,13 +1,26 @@
 """POST/GET /kg — Knowledge graph architecture feature endpoints.
 
-Covers the 7 production KG gaps added in Phase 7:
+Phase 7 — 7 production KG gaps:
   1. Negative knowledge     (NEGATIVE_RELATES_TO assertions)
   2. Entity type taxonomy   (SUBCLASS_OF hierarchy + type expansion)
   3. Bitemporal queries     (valid-time + transaction-time "as of" queries)
   4. Confidence calibration (Brier score, calibration curve, apply correction)
   5. Relation reification   (Statement nodes + meta-statements)
-  6. Edge embeddings        (TransE scoring, link prediction)
+  6. Edge embeddings        (TransE scoring, link prediction, training)
   7. Graph snapshots        (named checkpoints + diff)
+
+Phase 8 — 8 additional features:
+  8.  Embedding registry     (version inventory, compatibility check, re-embed queue)
+  9.  Property schema        (cardinality validation, conflict detection)
+  10. Inference engine       (forward-chaining rules, dry-run)
+  11. External entity linking (Wikidata QID lookup + batch)
+  12. Counterfactual analysis (simulate document retraction, impact score)
+  13. GDPR / erasure         (forget_entity, forget_document, audit log)
+  14. PII guard              (scan, redact, tag, inventory)
+  15. Query cache            (invalidate by entity, flush tenant, stats)
+  16. Incremental community  (change detection, partial rebuild)
+  17. Multi-modal entities   (attach images/audio, set embeddings)
+  18. Entity type migration  (rename_entity_type cascade)
 
 All write endpoints require `write` scope.
 All read endpoints require `read` scope.
@@ -612,3 +625,651 @@ async def diff_snapshots(snap_id_a: str, snap_id_b: str, tenant: str = "default"
         snap_id_b=snap_id_b,
         tenant=tenant,
     )
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# 8. Edge Embeddings — TransE Training
+# ══════════════════════════════════════════════════════════════════════════════
+
+class TransETrainRequest(BaseModel):
+    tenant: str = "default"
+    epochs: int = 100
+    lr: float = 0.01
+    margin: float = 1.0
+    neg_samples: int = 5
+    batch_size: int = 256
+    seed: int = 42
+
+
+@router.post(
+    "/edge-embeddings/train",
+    dependencies=[Depends(require_scope("write"))],
+    summary="Train TransE relation embeddings using negative-sampling SGD",
+)
+async def train_transe(request: TransETrainRequest):
+    from graphrag.graph.edge_embeddings import EdgeEmbeddingService
+    svc = EdgeEmbeddingService(get_neo4j())
+    result = await svc.train(
+        tenant=request.tenant,
+        epochs=request.epochs,
+        lr=request.lr,
+        margin=request.margin,
+        neg_samples=request.neg_samples,
+        batch_size=request.batch_size,
+        seed=request.seed,
+    )
+    return result
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# 9. Embedding Registry
+# ══════════════════════════════════════════════════════════════════════════════
+
+@router.get(
+    "/embedding-registry/inventory",
+    dependencies=[Depends(require_scope("read"))],
+    summary="List embedding model versions in use per tenant",
+)
+async def embedding_inventory(tenant: str = "default"):
+    from graphrag.graph.embedding_registry import EmbeddingRegistry
+    reg = EmbeddingRegistry(get_neo4j())
+    return await reg.inventory(tenant=tenant)
+
+
+class EmbeddingCompatRequest(BaseModel):
+    current_model: str
+    current_version: str = "latest"
+    expected_dim: int = 768
+    tenant: str = "default"
+
+
+@router.post(
+    "/embedding-registry/check-compatibility",
+    dependencies=[Depends(require_scope("read"))],
+    summary="Check whether the current model/version is compatible with stored embeddings",
+)
+async def check_embedding_compat(request: EmbeddingCompatRequest):
+    from graphrag.graph.embedding_registry import EmbeddingRegistry
+    reg = EmbeddingRegistry(get_neo4j())
+    return await reg.check_compatibility(
+        current_model=request.current_model,
+        current_version=request.current_version,
+        expected_dim=request.expected_dim,
+        tenant=request.tenant,
+    )
+
+
+class QueueReEmbedRequest(BaseModel):
+    model: str
+    version: str = "latest"
+    tenant: str = "default"
+    limit: int = 10000
+    force: bool = False
+
+
+@router.post(
+    "/embedding-registry/queue-re-embed",
+    dependencies=[Depends(require_scope("write"))],
+    summary="Flag stale entities for re-embedding",
+)
+async def queue_re_embed(request: QueueReEmbedRequest):
+    from graphrag.graph.embedding_registry import EmbeddingRegistry
+    reg = EmbeddingRegistry(get_neo4j())
+    count = await reg.queue_re_embed(
+        model=request.model,
+        version=request.version,
+        tenant=request.tenant,
+        limit=request.limit,
+        force=request.force,
+    )
+    return {"queued": count, "tenant": request.tenant}
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# 10. Property Schema Validation
+# ══════════════════════════════════════════════════════════════════════════════
+
+@router.get(
+    "/property-schema/validate-entity",
+    dependencies=[Depends(require_scope("read"))],
+    summary="Validate an entity's properties against the registered cardinality rules",
+)
+async def validate_entity_schema(
+    entity_name: str,
+    entity_type: str,
+    tenant: str = "default",
+):
+    from graphrag.graph.property_schema import PropertySchemaValidator
+    v = PropertySchemaValidator(get_neo4j())
+    return await v.validate_entity(entity_name, entity_type, tenant)
+
+
+@router.get(
+    "/property-schema/validate-document",
+    dependencies=[Depends(require_scope("read"))],
+    summary="Validate all entities in a document against property cardinality rules",
+)
+async def validate_document_schema(doc_id: str, tenant: str = "default"):
+    from graphrag.graph.property_schema import PropertySchemaValidator
+    v = PropertySchemaValidator(get_neo4j())
+    return await v.validate_document(doc_id, tenant)
+
+
+@router.get(
+    "/property-schema/conflicts",
+    dependencies=[Depends(require_scope("read"))],
+    summary="Detect property-level conflicts for an entity type",
+)
+async def detect_property_conflicts(
+    entity_type: str,
+    tenant: str = "default",
+    limit: int = 100,
+):
+    from graphrag.graph.property_schema import PropertySchemaValidator
+    v = PropertySchemaValidator(get_neo4j())
+    return await v.detect_property_conflicts(entity_type, tenant, limit)
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# 11. Forward-Chaining Inference Engine
+# ══════════════════════════════════════════════════════════════════════════════
+
+class InferenceRunRequest(BaseModel):
+    tenant: str = "default"
+    max_iterations: int = 5
+    dry_run: bool = False
+
+
+class InferenceDocRequest(BaseModel):
+    doc_id: str
+    tenant: str = "default"
+
+
+@router.post(
+    "/inference/run",
+    dependencies=[Depends(require_scope("write"))],
+    summary="Run forward-chaining inference rules and materialise inferred edges",
+)
+async def run_inference(request: InferenceRunRequest):
+    from graphrag.graph.inference_engine import ForwardChainingEngine
+    engine = ForwardChainingEngine(get_neo4j())
+    return await engine.run(
+        tenant=request.tenant,
+        max_iterations=request.max_iterations,
+        dry_run=request.dry_run,
+    )
+
+
+@router.post(
+    "/inference/run-for-document",
+    dependencies=[Depends(require_scope("write"))],
+    summary="Run forward-chaining rules scoped to a single document",
+)
+async def run_inference_for_doc(request: InferenceDocRequest):
+    from graphrag.graph.inference_engine import ForwardChainingEngine
+    engine = ForwardChainingEngine(get_neo4j())
+    return await engine.run_for_document(
+        doc_id=request.doc_id,
+        tenant=request.tenant,
+    )
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# 12. External Entity Linking (Wikidata)
+# ══════════════════════════════════════════════════════════════════════════════
+
+class WikidataLinkRequest(BaseModel):
+    entity_name: str
+    entity_type: str
+    tenant: str = "default"
+    force: bool = False
+
+
+class WikidataBatchRequest(BaseModel):
+    tenant: str = "default"
+    limit: int = 100
+    entity_types: list[str] | None = None
+
+
+@router.post(
+    "/entity-linking/link",
+    dependencies=[Depends(require_scope("write"))],
+    summary="Look up the Wikidata QID for a single entity and cache the result",
+)
+async def link_entity_wikidata(request: WikidataLinkRequest):
+    from graphrag.graph.entity_linker import WikidataEntityLinker
+    linker = WikidataEntityLinker(get_neo4j())
+    result = await linker.link_entity(
+        entity_name=request.entity_name,
+        entity_type=request.entity_type,
+        tenant=request.tenant,
+        force=request.force,
+    )
+    if result is None:
+        return {"status": "not_found", "entity": request.entity_name}
+    return {"status": "linked", **result}
+
+
+@router.post(
+    "/entity-linking/link-all",
+    dependencies=[Depends(require_scope("write"))],
+    summary="Batch-link all unlinked entities for a tenant",
+)
+async def link_all_entities(request: WikidataBatchRequest):
+    from graphrag.graph.entity_linker import WikidataEntityLinker
+    linker = WikidataEntityLinker(get_neo4j())
+    count = await linker.link_all_unlinked(
+        tenant=request.tenant,
+        limit=request.limit,
+        entity_types=request.entity_types,
+    )
+    return {"linked": count, "tenant": request.tenant}
+
+
+@router.get(
+    "/entity-linking/list",
+    dependencies=[Depends(require_scope("read"))],
+    summary="List all Wikidata-linked entities for a tenant",
+)
+async def list_linked_entities(tenant: str = "default", limit: int = 100):
+    from graphrag.graph.entity_linker import WikidataEntityLinker
+    linker = WikidataEntityLinker(get_neo4j())
+    return await linker.list_linked(tenant=tenant, limit=limit)
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# 13. Counterfactual Analysis
+# ══════════════════════════════════════════════════════════════════════════════
+
+@router.get(
+    "/counterfactual/simulate/{doc_id}",
+    dependencies=[Depends(require_scope("read"))],
+    summary="Simulate the impact of removing a document without modifying data",
+)
+async def simulate_retraction(doc_id: str, tenant: str = "default"):
+    from graphrag.graph.counterfactual import CounterfactualAnalyzer
+    analyzer = CounterfactualAnalyzer(get_neo4j())
+    return await analyzer.simulate_retraction(doc_id=doc_id, tenant=tenant)
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# 14. GDPR / Right-to-be-Forgotten
+# ══════════════════════════════════════════════════════════════════════════════
+
+class ForgetEntityRequest(BaseModel):
+    entity_name: str
+    entity_type: str
+    tenant: str = "default"
+    requested_by: str = "dpo"
+    request_id: str = ""
+
+
+class ForgetDocumentRequest(BaseModel):
+    doc_id: str
+    tenant: str = "default"
+    requested_by: str = "dpo"
+    request_id: str = ""
+
+
+@router.post(
+    "/gdpr/forget-entity",
+    dependencies=[Depends(require_scope("write"))],
+    summary="Permanently erase all data for a named entity (GDPR right-to-be-forgotten)",
+)
+async def gdpr_forget_entity(request: ForgetEntityRequest):
+    from graphrag.graph.gdpr import GDPRService
+    svc = GDPRService(get_neo4j())
+    return await svc.forget_entity(
+        entity_name=request.entity_name,
+        entity_type=request.entity_type,
+        tenant=request.tenant,
+        requested_by=request.requested_by,
+        request_id=request.request_id,
+    )
+
+
+@router.post(
+    "/gdpr/forget-document",
+    dependencies=[Depends(require_scope("write"))],
+    summary="Erase all data exclusively sourced from a document (GDPR erasure)",
+)
+async def gdpr_forget_document(request: ForgetDocumentRequest):
+    from graphrag.graph.gdpr import GDPRService
+    svc = GDPRService(get_neo4j())
+    return await svc.forget_document(
+        doc_id=request.doc_id,
+        tenant=request.tenant,
+        requested_by=request.requested_by,
+        request_id=request.request_id,
+    )
+
+
+@router.get(
+    "/gdpr/audit-log",
+    dependencies=[Depends(require_scope("read"))],
+    summary="Return the GDPR deletion audit log for a tenant",
+)
+async def gdpr_audit_log(tenant: str = "default", limit: int = 100):
+    from graphrag.graph.gdpr import GDPRService
+    svc = GDPRService(get_neo4j())
+    return await svc.deletion_audit_log(tenant=tenant, limit=limit)
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# 15. PII Guard
+# ══════════════════════════════════════════════════════════════════════════════
+
+class PIIScanRequest(BaseModel):
+    text: str
+    min_confidence: float = 0.80
+
+
+class PIITagRequest(BaseModel):
+    entity_name: str
+    entity_type: str
+    tenant: str = "default"
+    reason: str = ""
+
+
+@router.post(
+    "/pii/scan",
+    dependencies=[Depends(require_scope("read"))],
+    summary="Scan text for PII patterns (SSN, email, phone, credit card, etc.)",
+)
+async def pii_scan(request: PIIScanRequest):
+    from graphrag.graph.pii_guard import PIIGuard
+    guard = PIIGuard(get_neo4j(), min_confidence=request.min_confidence)
+    findings = guard.scan_text(request.text)
+    return {
+        "finding_count": len(findings),
+        "findings": [
+            {
+                "pii_class":  f.pii_class,
+                "confidence": f.confidence,
+                "offset":     f.start,
+                "length":     f.end - f.start,
+            }
+            for f in findings
+        ],
+    }
+
+
+@router.post(
+    "/pii/redact",
+    dependencies=[Depends(require_scope("read"))],
+    summary="Return text with PII replaced by [CLASS_REDACTED] placeholders",
+)
+async def pii_redact(request: PIIScanRequest):
+    from graphrag.graph.pii_guard import PIIGuard
+    guard = PIIGuard(get_neo4j(), min_confidence=request.min_confidence)
+    return {"redacted_text": guard.redact(request.text)}
+
+
+@router.post(
+    "/pii/tag-entity",
+    dependencies=[Depends(require_scope("write"))],
+    summary="Mark an entity as PII-sensitive in Neo4j",
+)
+async def pii_tag_entity(request: PIITagRequest):
+    from graphrag.graph.pii_guard import PIIGuard
+    guard = PIIGuard(get_neo4j())
+    await guard.tag_entity_pii(
+        entity_name=request.entity_name,
+        entity_type=request.entity_type,
+        tenant=request.tenant,
+        reason=request.reason,
+    )
+    return {"status": "tagged"}
+
+
+@router.post(
+    "/pii/auto-tag-persons",
+    dependencies=[Depends(require_scope("write"))],
+    summary="Tag all PERSON entities in a tenant as PII-sensitive",
+)
+async def pii_auto_tag_persons(tenant: str = "default"):
+    from graphrag.graph.pii_guard import PIIGuard
+    guard = PIIGuard(get_neo4j())
+    count = await guard.auto_tag_persons(tenant=tenant)
+    return {"tagged": count, "tenant": tenant}
+
+
+@router.get(
+    "/pii/scan-document/{doc_id}",
+    dependencies=[Depends(require_scope("read"))],
+    summary="Scan all chunks of a document for PII (diagnostic only — no mutations)",
+)
+async def pii_scan_document(doc_id: str, tenant: str = "default"):
+    from graphrag.graph.pii_guard import PIIGuard
+    guard = PIIGuard(get_neo4j())
+    return await guard.scan_document(doc_id=doc_id, tenant=tenant)
+
+
+@router.get(
+    "/pii/inventory",
+    dependencies=[Depends(require_scope("read"))],
+    summary="List all entities tagged as PII-sensitive",
+)
+async def pii_inventory(tenant: str = "default", limit: int = 100):
+    from graphrag.graph.pii_guard import PIIGuard
+    guard = PIIGuard(get_neo4j())
+    return await guard.list_pii_entities(tenant=tenant, limit=limit)
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# 16. Query Cache
+# ══════════════════════════════════════════════════════════════════════════════
+
+class CacheInvalidateRequest(BaseModel):
+    entity_names: list[str]
+    tenant: str = "default"
+
+
+@router.post(
+    "/cache/invalidate",
+    dependencies=[Depends(require_scope("write"))],
+    summary="Invalidate cached query results that used any of the given entities",
+)
+async def cache_invalidate(request: CacheInvalidateRequest):
+    from graphrag.retrieval.query_cache import get_query_cache
+    cache = await get_query_cache()
+    count = await cache.invalidate_for_entities(
+        entity_names=request.entity_names,
+        tenant=request.tenant,
+    )
+    return {"invalidated": count, "tenant": request.tenant}
+
+
+@router.delete(
+    "/cache/flush/{tenant}",
+    dependencies=[Depends(require_scope("write"))],
+    summary="Remove all cached results for a tenant (use after bulk re-ingestion)",
+)
+async def cache_flush_tenant(tenant: str):
+    from graphrag.retrieval.query_cache import get_query_cache
+    cache = await get_query_cache()
+    count = await cache.flush_tenant(tenant=tenant)
+    return {"flushed": count, "tenant": tenant}
+
+
+@router.get(
+    "/cache/stats",
+    dependencies=[Depends(require_scope("read"))],
+    summary="Return cache backend statistics",
+)
+async def cache_stats():
+    from graphrag.retrieval.query_cache import get_query_cache
+    cache = await get_query_cache()
+    return await cache.stats()
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# 17. Incremental Community Detection
+# ══════════════════════════════════════════════════════════════════════════════
+
+@router.get(
+    "/incremental-community/summary",
+    dependencies=[Depends(require_scope("read"))],
+    summary="Show how many entities changed since the last community build",
+)
+async def incremental_community_summary(tenant: str = "default"):
+    from graphrag.graph.incremental_community import IncrementalCommunityDetector
+    detector = IncrementalCommunityDetector(get_neo4j())
+    return await detector.community_change_summary(tenant=tenant)
+
+
+class IncrementalRebuildRequest(BaseModel):
+    tenant: str = "default"
+    dry_run: bool = False
+
+
+@router.post(
+    "/incremental-community/rebuild-affected",
+    dependencies=[Depends(require_scope("write"))],
+    summary="Rebuild only communities containing recently changed entities",
+)
+async def incremental_rebuild_affected(request: IncrementalRebuildRequest):
+    from graphrag.graph.incremental_community import IncrementalCommunityDetector
+    detector = IncrementalCommunityDetector(get_neo4j())
+    return await detector.rebuild_affected_communities(
+        tenant=request.tenant,
+        dry_run=request.dry_run,
+    )
+
+
+@router.post(
+    "/incremental-community/record-rebuild-point",
+    dependencies=[Depends(require_scope("write"))],
+    summary="Manually record a community rebuild point (normally set automatically)",
+)
+async def record_rebuild_point(tenant: str = "default"):
+    from graphrag.graph.incremental_community import IncrementalCommunityDetector
+    detector = IncrementalCommunityDetector(get_neo4j())
+    rp_id = await detector.record_rebuild_point(tenant=tenant)
+    return {"rebuild_point_id": rp_id, "tenant": tenant}
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# 18. Multi-Modal Entities
+# ══════════════════════════════════════════════════════════════════════════════
+
+class AttachMediaRequest(BaseModel):
+    entity_name: str
+    entity_type: str
+    tenant: str = "default"
+    modality: str = "image"
+    media_url: str = ""
+    caption: str = ""
+    mime_type: str = ""
+
+
+class SetEmbeddingRequest(BaseModel):
+    attachment_id: str
+    embedding: list[float]
+
+
+@router.post(
+    "/multimodal/attach",
+    dependencies=[Depends(require_scope("write"))],
+    summary="Attach a media reference (image, audio, video) to an entity",
+)
+async def attach_media(request: AttachMediaRequest):
+    from graphrag.graph.multimodal import MultiModalEntityService
+    svc = MultiModalEntityService(get_neo4j())
+    attachment_id = await svc.attach_media(
+        entity_name=request.entity_name,
+        entity_type=request.entity_type,
+        tenant=request.tenant,
+        modality=request.modality,
+        media_url=request.media_url,
+        caption=request.caption,
+        mime_type=request.mime_type,
+    )
+    return {"attachment_id": attachment_id}
+
+
+@router.get(
+    "/multimodal/entity",
+    dependencies=[Depends(require_scope("read"))],
+    summary="Return all media attachments for an entity",
+)
+async def get_entity_media(
+    entity_name: str,
+    entity_type: str,
+    tenant: str = "default",
+):
+    from graphrag.graph.multimodal import MultiModalEntityService
+    svc = MultiModalEntityService(get_neo4j())
+    return await svc.get_modalities(entity_name, entity_type, tenant)
+
+
+@router.post(
+    "/multimodal/set-embedding",
+    dependencies=[Depends(require_scope("write"))],
+    summary="Store a cross-modal embedding on a MediaAttachment",
+)
+async def set_media_embedding(request: SetEmbeddingRequest):
+    from graphrag.graph.multimodal import MultiModalEntityService
+    svc = MultiModalEntityService(get_neo4j())
+    await svc.set_embedding(
+        attachment_id=request.attachment_id,
+        embedding=request.embedding,
+    )
+    return {"status": "stored", "dim": len(request.embedding)}
+
+
+@router.get(
+    "/multimodal/unembedded",
+    dependencies=[Depends(require_scope("read"))],
+    summary="List MediaAttachments that have no embedding yet",
+)
+async def list_unembedded_media(
+    tenant: str = "default",
+    modality: str | None = None,
+    limit: int = 100,
+):
+    from graphrag.graph.multimodal import MultiModalEntityService
+    svc = MultiModalEntityService(get_neo4j())
+    return await svc.get_unembedded(tenant=tenant, modality=modality, limit=limit)
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# 19. Entity Type Migration
+# ══════════════════════════════════════════════════════════════════════════════
+
+class EntityTypeRenameRequest(BaseModel):
+    old_type: str
+    new_type: str
+    tenant: str = "default"
+    dry_run: bool = False
+
+
+@router.post(
+    "/ontology/rename-entity-type",
+    dependencies=[Depends(require_scope("write"))],
+    summary="Cascade-rename an entity type (entities, edges, WikidataLinks, Statements)",
+)
+async def rename_entity_type(request: EntityTypeRenameRequest):
+    from graphrag.graph.ontology_registry import get_ontology_registry
+    registry = get_ontology_registry(neo4j_client=get_neo4j())
+    return await registry.rename_entity_type(
+        old_type=request.old_type,
+        new_type=request.new_type,
+        tenant=request.tenant,
+        dry_run=request.dry_run,
+    )
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# 20. HDBSCAN Semantic Community Detection
+# ══════════════════════════════════════════════════════════════════════════════
+
+@router.post(
+    "/semantic-communities/build",
+    dependencies=[Depends(require_scope("write"))],
+    summary="Build HDBSCAN semantic communities as a parallel signal to Leiden",
+)
+async def build_semantic_communities(tenant: str = "default"):
+    from graphrag.graph.community_builder import CommunityBuilder
+    builder = CommunityBuilder(tenant=tenant)
+    return await builder.build_semantic_communities()

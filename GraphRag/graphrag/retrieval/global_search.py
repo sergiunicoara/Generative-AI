@@ -8,6 +8,7 @@ from google import genai
 import structlog
 
 from graphrag.core.config import get_settings
+from graphrag.core.llm_utils import safe_response_text
 from graphrag.graph.neo4j_client import get_neo4j
 from graphrag.ingestion.embedder import Embedder
 
@@ -97,8 +98,8 @@ class GlobalSearch:
 
         partial_answers = []
         for community, response in zip(communities, map_responses):
-            text = response.text.strip()
-            if "not relevant" not in text.lower():
+            text = safe_response_text(response)
+            if text and "not relevant" not in text.lower():
                 partial_answers.append(f"[Level {community['level']}] {text}")
 
         if not partial_answers:
@@ -123,5 +124,5 @@ class GlobalSearch:
         )
         return {
             "communities": communities,
-            "synthesized_answer": reduce_response.text.strip(),
+            "synthesized_answer": safe_response_text(reduce_response),
         }

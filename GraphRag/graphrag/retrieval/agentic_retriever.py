@@ -19,6 +19,7 @@ import structlog
 from google import genai
 
 from graphrag.core.config import get_settings
+from graphrag.core.llm_utils import safe_response_text
 from graphrag.core.models import QueryResult
 from graphrag.retrieval.local_search import LocalSearch
 from graphrag.retrieval.context_builder import ContextBuilder
@@ -89,16 +90,8 @@ class AgenticRetriever:
         self._ctx_builder = ContextBuilder()
         self._max_steps = max_steps
 
-    def _llm(self, prompt: str) -> str:
-        # generate_content is synchronous — call directly to avoid
-        # run_until_complete() on an already-running event loop.
-        resp = self._client.models.generate_content(
-            model=self._model,
-            contents=prompt,
-        )
-        return resp.text.strip()
-
     async def _llm_async(self, prompt: str) -> str:
+        """Run generate_content in a thread executor and return safe text."""
         loop = asyncio.get_running_loop()
         resp = await loop.run_in_executor(
             None,
@@ -107,7 +100,7 @@ class AgenticRetriever:
                 contents=prompt,
             ),
         )
-        return resp.text.strip()
+        return safe_response_text(resp)
 
     async def retrieve_and_answer(
         self,

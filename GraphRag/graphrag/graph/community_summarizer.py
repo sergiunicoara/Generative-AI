@@ -9,6 +9,7 @@ from google.genai import types as genai_types
 import structlog
 
 from graphrag.core.config import get_settings
+from graphrag.core.llm_utils import safe_response_text
 from graphrag.core.models import Community
 from graphrag.graph.neo4j_client import get_neo4j
 
@@ -57,7 +58,10 @@ class CommunitySummarizer:
                 contents=prompt,
             ),
         )
-        community.summary = response.text.strip()
+        community.summary = safe_response_text(
+            response,
+            default=f"[blocked] Community {community.id} summary unavailable.",
+        )
 
         # Embed the summary
         embed_response = await loop.run_in_executor(

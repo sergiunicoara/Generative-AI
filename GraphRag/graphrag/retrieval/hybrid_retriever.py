@@ -15,6 +15,7 @@ from graphrag.retrieval.global_search import GlobalSearch
 from graphrag.retrieval.context_builder import ContextBuilder
 from graphrag.retrieval.agentic_retriever import AgenticRetriever, _is_low_confidence
 from graphrag.retrieval.session_context import get_session_context
+from graphrag.core.llm_utils import safe_response_text
 
 log = structlog.get_logger(__name__)
 
@@ -87,7 +88,12 @@ class HybridRetriever:
                 contents=_ANSWER_PROMPT.format(context=context, question=question),
             ),
         )
-        answer = response.text.strip()
+        # safe_response_text returns the low-confidence sentinel when Gemini
+        # blocks the response — this naturally triggers the agentic fallback.
+        answer = safe_response_text(
+            response,
+            default="Insufficient context to answer this question.",
+        )
         latency_ms = (time.monotonic() - t0) * 1000
 
         # ── Record session turn with the real answer ───────────────────────────

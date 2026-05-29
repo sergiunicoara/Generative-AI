@@ -138,12 +138,27 @@ class RabbitMQClient:
                             retries=retries,
                         )
                         if retries < MAX_RETRIES:
-                            # Republish with incremented retry count instead of nack+requeue
+                            # Exponential backoff before requeue so transient
+                            # failures (Neo4j overload, rate limits) don't
+                            # hammer the downstream at full speed.
+                            # prefetch_count=1 means this sleep only delays
+                            # this message, not the whole consumer.
+                            backoff_s = min(2 ** retries, 30)  # 1s, 2s, 4s… cap 30s
+                            log.info(
+                                "rabbitmq.retry_backoff",
+                                backoff_s=backoff_s,
+                                attempt=retries + 1,
+                            )
+                            await asyncio.sleep(backoff_s)
+
                             new_headers = dict(message.headers or {})
                             new_headers["x-retry-count"] = retries + 1
                             retry_msg = Message(
                                 message.body,
                                 delivery_mode=message.delivery_mode,
+                                # Preserve original priority so high-priority
+                                # messages don't silently drop to 0 on retry.
+                                priority=message.priority or 0,
                                 headers=new_headers,
                             )
                             await channel.default_exchange.publish(
@@ -156,11 +171,25 @@ class RabbitMQClient:
 
 
 _client: RabbitMQClient | None = None
+_client_lock: asyncio.Lock | None = None
 
 
 async def get_rabbitmq() -> RabbitMQClient:
-    global _client
-    if _client is None:
-        _client = RabbitMQClient()
-        await _client.connect()
+    """Return the singleton RabbitMQClient, safe against concurrent cold-start.
+
+    Without a lock, two coroutines racing on startup both pass the ``None``
+    check, each create a connection pool, and one pool leaks silently.
+    The inner double-check after acquiring the lock prevents the race while
+    keeping the fast path (already connected) lock-free.
+    """
+    global _client, _client_lock
+    # Lazy lock creation — asyncio.Lock() must be created inside an event loop,
+    # so we can't create it at module level.  Creating it here is safe because
+    # asyncio does not yield between the check and the assignment (no `await`).
+    if _client_lock is None:
+        _client_lock = asyncio.Lock()
+    async with _client_lock:
+        if _client is None:
+            _client = RabbitMQClient()
+            await _client.connect()
     return _client

@@ -1085,6 +1085,90 @@ that trigger the POST requests ran for *any* browser that loaded the page.
 
 ---
 
+## A44 — Cross-process result passing requires shared external storage
+
+**What happened:**
+The async query flow used a module-level `_results: dict` in the API process.
+The query worker (separate container) computed the answer and wrote to `_results` via
+`from api.routes.query import store_result` — which succeeded silently, writing to
+the **worker's own memory**, not the API's. Clients polling `GET /query/{id}` from
+the API always saw `"queued"` forever.
+
+**Root cause:**
+Module-level mutable state is per-process. When the writer and reader run in different
+containers (different OS processes), in-process dicts are invisible across the boundary.
+The import succeeding is misleading — Python resolved the import, but the object lives
+in the importer's address space.
+
+**Rule:**
+> Any state that must be readable by a different process (worker → API, API replica A →
+> replica B) must live in an external store: Redis, a DB, a message queue.
+> The smell: a background worker importing from an API module to "write back" a result.
+> That import path works for code reuse but not for shared state.
+> Fix: introduce a dedicated Redis-backed store (SETEX/GET with TTL) that both processes
+> connect to independently.
+
+---
+
+## A45 — Scope gates must be unconditional, not token-type-conditional
+
+**What happened:**
+`require_scope` checked `if scope not in granted and user.get("type") == "m2m"`.
+Browser tokens (`type="browser"`) bypassed the scope check entirely.
+Today every browser token carried `"read write"` so it was masked.
+Adding any `require_scope("admin")` endpoint would silently grant all browser users admin.
+
+**Root cause:**
+The intent was "only M2M tokens have explicit scopes", but that assumption was wrong and
+the code encoded it as a logic gate that made scope enforcement conditional.
+
+**Rule:**
+> Authorization checks must be unconditional. Never add `and type == X` clauses to a
+> permission check — they silently exempt all other token types.
+> Correct form: `if scope not in granted: raise 403` — period.
+> If different token types need different scope vocabularies, enforce that at mint time,
+> not at verification time.
+
+---
+
+## A46 — Open redirect via unvalidated `next` parameter
+
+**What happened:**
+`/auth/login?next=https://evil.com` stored the `next` URL in the session and after
+Google OAuth redirected the user to the attacker's domain. Classic post-auth open redirect
+(phishing and token-theft vector).
+
+**Root cause:**
+The `next` parameter was stored and used without validating that it was a safe relative
+path. External URLs are indistinguishable from internal ones without explicit checking.
+
+**Rule:**
+> Any URL parameter that drives a redirect must be validated before use.
+> Safe check: `urlparse(url).scheme` and `.netloc` must both be empty; the string must
+> not start with `//`. Reject anything that fails; redirect to a safe default instead.
+> Never store an unvalidated redirect target, even in a session cookie.
+
+---
+
+## A47 — JWT signing secret and session cookie secret must be distinct
+
+**What happened:**
+`SessionMiddleware` used `settings.jwt_secret_key` as its secret. These are conceptually
+different keys: one signs bearer tokens for API auth, the other signs browser session
+cookies. Using the same key means rotating one invalidates the other.
+
+**Root cause:**
+Reuse was convenient — the key already existed. The distinction wasn't visible until
+the audit flagged that a JWT secret rotation would unexpectedly log out all browser users.
+
+**Rule:**
+> Signing keys should have single responsibilities. Add a `session_secret_key` config
+> field distinct from `jwt_secret_key`. In production, set both explicitly.
+> For backward compatibility, derive a fallback (`jwt_secret_key + ":session"`) so
+> existing deployments don't break on upgrade, but document the expectation clearly.
+
+---
+
 ## A43 — AsyncMock side_effect lists must exactly match actual call counts
 
 **What happened:**

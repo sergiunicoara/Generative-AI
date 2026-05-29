@@ -33,7 +33,10 @@ An end-to-end **GraphRAG** system that combines knowledge graph retrieval with L
                                        │
                   ┌────────────────────▼───────────────────────┐
                   │           Redis  :6379                      │
-                  │        Session context store (24h TTL)      │
+                  │  Session context store (24h TTL)           │
+                  │  Query result store (1h TTL, cross-worker) │
+                  │  M2M client registry (persistent)          │
+                  │  Alert history (last 100)                  │
                   └────────────────────────────────────────────┘
                                        │
                   ┌────────────────────▼───────────────────────┐
@@ -209,7 +212,8 @@ GraphRag/
 │       ├── bm25_search.py           # HybridBM25Search with RRF (k=60)
 │       ├── reranker.py              # CrossEncoderReranker (ms-marco-MiniLM-L-6-v2)
 │       ├── session_context.py       # Async session context: query enrichment from prior turns
-│       └── session_store.py         # Redis-backed turn store; in-memory fallback; strict startup mode
+│       ├── session_store.py         # Redis-backed turn store; in-memory fallback; strict startup mode
+│       └── result_store.py          # Redis-backed query result store (cross-worker, 1h TTL)
 │
 ├── workers/
 │   ├── ingestion_worker.py          # Consumes graphrag.ingest queue
@@ -294,6 +298,7 @@ TIMESCALE_URL=postgresql+asyncpg://graphrag:graphrag_dev@localhost:5432/graphrag
 
 # OAuth 2.0
 JWT_SECRET_KEY=<run: py -3.11 -c "import secrets; print(secrets.token_hex(32))">
+SESSION_SECRET_KEY=<run: py -3.11 -c "import secrets; print(secrets.token_hex(32))">
 GOOGLE_OAUTH_CLIENT_ID=your-client-id.apps.googleusercontent.com
 GOOGLE_OAUTH_CLIENT_SECRET=your-client-secret
 CORS_ORIGINS=["http://localhost:8000","http://localhost:8050"]

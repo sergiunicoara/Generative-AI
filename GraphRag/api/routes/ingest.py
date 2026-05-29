@@ -1,9 +1,10 @@
 """POST /ingest — publish document to the ingestion queue."""
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel
 
 from api.auth.dependencies import get_current_user, require_scope
+from api.limiter import INGEST_LIMIT, limiter
 from graphrag.core.models import Document
 from graphrag.messaging.publishers import publish_document
 
@@ -25,16 +26,22 @@ class IngestResponse(BaseModel):
 
 
 @router.post("", response_model=IngestResponse, dependencies=[Depends(require_scope("write"))])
-async def ingest_document(request: IngestRequest):
+@limiter.limit(INGEST_LIMIT)
+async def ingest_document(request: Request, body: IngestRequest):
+    """Publish a document to the ingestion queue.
+
+    Rate-limited to prevent LLM quota exhaustion and Neo4j write overload.
+    Default: 20 requests/minute per client IP (override via GRAPHRAG_RATE_LIMIT_INGEST).
+    """
     doc = Document(
-        filename=request.filename,
-        source_path=request.filename,
-        raw_text=request.text,
-        metadata=request.metadata,
-        tenant=request.tenant,
+        filename=body.filename,
+        source_path=body.filename,
+        raw_text=body.text,
+        metadata=body.metadata,
+        tenant=body.tenant,
     )
     try:
-        job_id = await publish_document(doc, priority=request.priority)
+        job_id = await publish_document(doc, priority=body.priority)
     except Exception as exc:
         raise HTTPException(status_code=503, detail=f"Queue unavailable: {exc}")
 

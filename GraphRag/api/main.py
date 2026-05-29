@@ -6,8 +6,11 @@ from contextlib import asynccontextmanager
 import structlog
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from slowapi import _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
 from starlette.middleware.sessions import SessionMiddleware
 
+from api.limiter import limiter
 from api.routes import auth, ingest, query, evaluation, kpis, corrections, kg_features
 from graphrag.core.config import get_settings
 
@@ -36,13 +39,27 @@ async def lifespan(app: FastAPI):
         )
         raise   # abort startup — let the process supervisor restart with correct config
 
+    # ── RabbitMQ connectivity check ────────────────────────────────────────────
+    # Non-fatal: the API can still serve read endpoints if the broker is down.
+    # Logs an error so ops is alerted without aborting the whole startup.
+    try:
+        from graphrag.messaging.rabbitmq_client import get_rabbitmq
+        await get_rabbitmq()
+        log.info("startup.rabbitmq_ok")
+    except Exception as exc:
+        log.error(
+            "startup.rabbitmq_unavailable",
+            error=str(exc),
+            impact="POST /ingest and POST /query will return 503 until broker is reachable",
+        )
+
     log.info("startup.complete")
     yield
     # ── Shutdown ──────────────────────────────────────────────────────────────
     log.info("shutdown.complete")
 
 
-app = FastAPI(
+app = FastAPI(  # noqa: E302 — rate limiter attached below
     title="GraphRAG API",
     description=(
         "Enterprise GraphRAG pipeline with Neo4j, RabbitMQ, RAGAS, and Google ADK.\n\n"
@@ -54,6 +71,10 @@ app = FastAPI(
     swagger_ui_parameters={"withCredentials": True},
     lifespan=lifespan,
 )
+
+# ── Rate limiting ─────────────────────────────────────────────────────────────
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 # ── Prometheus metrics ─────────────────────────────────────────────────────────
 # Exposes /metrics in Prometheus text format.  Requires:

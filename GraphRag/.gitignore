@@ -14,5 +14,4 @@ eval_data/*.json
 eval_data/*.jsonl
 eval_data/*.npy
 
-# Dependency lock (generated — regenerate with: make lock)
-requirements.lock
+# Dependency lock is committed — regenerate with: make lock

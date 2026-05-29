@@ -70,12 +70,16 @@ class KPITracker:
             )
             row = agg.one()
 
-            # Real p50 / p95 — fetch all latency values, sort in Python.
-            # SQLite has no PERCENTILE_CONT; this approach is correct for any
-            # store (Postgres/TimescaleDB would do this natively if needed).
+            # Real p50 / p95 — fetch latency values and compute in Python.
+            # SQLite has no PERCENTILE_CONT.  Capped at 10 000 rows (ordered
+            # by latency so the cap is stable for percentile computation) to
+            # bound memory use at high query volumes.  The recorded_at index
+            # ensures the WHERE filter doesn't require a full table scan.
             lat_result = await session.execute(
                 select(KPIEventRow.latency_ms)
                 .where(KPIEventRow.recorded_at >= since)
+                .order_by(KPIEventRow.latency_ms)
+                .limit(10_000)
             )
             latencies = [r[0] for r in lat_result.all() if r[0] is not None]
             p50 = _percentile(latencies, 0.50)

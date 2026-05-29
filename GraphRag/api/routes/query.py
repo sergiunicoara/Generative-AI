@@ -1,17 +1,16 @@
 """POST /query — publish question to the query queue; GET /query/{id} — poll result.
 
 Results are stored in Redis (via ResultStore) so the API and query worker —
-which run as separate containers — share the same result space.  The old
-in-process _results dict is gone; it was silently broken in any multi-worker
-or multi-container deployment because the worker wrote to its own memory.
+which run as separate containers — share the same result space.
 """
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel
 
 from api.auth.dependencies import require_scope
+from api.limiter import QUERY_LIMIT, limiter
 from graphrag.messaging.publishers import publish_query
 from graphrag.retrieval.result_store import get_result_store
 
@@ -32,14 +31,20 @@ class QueryResponse(BaseModel):
 
 
 @router.post("", response_model=QueryResponse, dependencies=[Depends(require_scope("read"))])
-async def submit_query(request: QueryRequest):
+@limiter.limit(QUERY_LIMIT)
+async def submit_query(request: Request, body: QueryRequest):
+    """Submit a question to the async query pipeline.
+
+    Rate-limited to prevent LLM quota exhaustion.
+    Default: 60 requests/minute per client IP (override via GRAPHRAG_RATE_LIMIT_QUERY).
+    """
     try:
         query_id = await publish_query(
-            question=request.question,
-            mode=request.mode,
-            ground_truth=request.ground_truth,
-            tenant=request.tenant,
-            session_id=request.session_id,
+            question=body.question,
+            mode=body.mode,
+            ground_truth=body.ground_truth,
+            tenant=body.tenant,
+            session_id=body.session_id,
         )
     except Exception as exc:
         raise HTTPException(status_code=503, detail=f"Queue unavailable: {exc}")

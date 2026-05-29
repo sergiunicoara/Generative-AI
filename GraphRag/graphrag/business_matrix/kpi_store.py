@@ -19,7 +19,7 @@ class KPIEventRow(Base):
 
     event_id = Column(String, primary_key=True)
     query_id = Column(String, nullable=False, index=True)
-    recorded_at = Column(DateTime, nullable=False)
+    recorded_at = Column(DateTime, nullable=False, index=True)   # index for window queries
     latency_ms = Column(Float, nullable=False)
     faithfulness = Column(Float, default=0.0)
     answer_relevancy = Column(Float, default=0.0)

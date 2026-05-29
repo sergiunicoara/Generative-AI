@@ -1169,6 +1169,92 @@ the audit flagged that a JWT secret rotation would unexpectedly log out all brow
 
 ---
 
+## A48 — Rate limiting is infrastructure, not an afterthought
+
+**What happened:**
+`POST /ingest` and `POST /query` had no rate limiting.  A single runaway client
+could saturate the Gemini API quota (per-minute token limit), exhaust the Neo4j
+connection pool (50 connections), or DDoS the RabbitMQ broker — with no feedback
+to the caller and no protection for other tenants.
+
+**Root cause:**
+Rate limiting was deferred because the prototype had one user.  It was never added
+when the system grew.
+
+**Rule:**
+> Add rate limiting before the first external user, not after the first incident.
+> Use a per-IP limiter (`slowapi` for FastAPI) and make limits configurable via
+> environment variables so they can be tuned per-deployment without a code change.
+> LLM-backed endpoints deserve stricter limits (quota-sensitive) than read endpoints.
+
+---
+
+## A49 — Worker processes need SIGTERM handlers or they corrupt in-flight messages
+
+**What happened:**
+All three workers called `asyncio.run(consumer.start())` with no signal handling.
+On `docker stop` (or Kubernetes pod eviction), the process received SIGTERM and
+was killed immediately.  Any message that had been received from RabbitMQ but not
+yet acked (mid-processing) was silently lost from the worker's perspective — the
+broker would requeue it after the consumer connection timed out, but not before
+the message was potentially half-written to Neo4j.
+
+**Root cause:**
+The worker was written as the simplest possible entry point.  Graceful shutdown
+was not considered.
+
+**Rule:**
+> Wrap the consumer in `asyncio.create_task()`.  Register SIGTERM/SIGINT handlers
+> that call `task.cancel()`.  Catch `asyncio.CancelledError` at the top level and
+> log a clean shutdown message.
+> With `prefetch_count=1`, cancellation happens at the next `await` boundary, which
+> is after the current message's handler finishes — so the message is always either
+> fully processed+acked or returned to the queue cleanly.
+
+---
+
+## A50 — Lock files prevent silent transitive dependency breaks
+
+**What happened:**
+`requirements.txt` pinned only direct dependencies with `>=` lower bounds.
+A transitive package (`ragas`, `sentence-transformers`, `graspologic`) could
+introduce a breaking change in a minor release and break the build on the next
+`pip install` — silently, in production, without any code change.
+
+**Root cause:**
+Lock files were known but deferred.  `make lock` was added but the lock file was
+gitignored, so it was never actually committed.
+
+**Rule:**
+> Commit a fully-pinned lock file (`requirements.lock` via `pip-compile`).
+> Never gitignore it.  Regenerate it with `make lock` after any requirements.txt
+> change, and treat the lock file as a dependency artifact that ships with the code.
+> CI must install from the lock file, not from the loose requirements.
+
+---
+
+## A51 — Unbounded aggregation queries grow with traffic
+
+**What happened:**
+`kpi_tracker.get_summary()` fetched ALL latency rows in the time window to compute
+p50/p95 in Python.  No `LIMIT` clause.  At 1 request/second for 7 days that's
+604,800 rows loaded into memory per dashboard refresh.  The `recorded_at` column
+also had no index, so the WHERE filter required a full table scan.
+
+**Root cause:**
+The query was written during development with small data sets where performance
+was not observable.
+
+**Rule:**
+> Any query that aggregates over a growing table must have:
+> 1. An index on the filter column (`recorded_at`).
+> 2. A `LIMIT` on any Python-side computation that loads raw values (cap at 10k
+>    rows for percentile — statistically accurate and memory-bounded).
+> For databases that support it (Postgres/TimescaleDB), use `PERCENTILE_CONT`
+> instead of loading values into Python.
+
+---
+
 ## A43 — AsyncMock side_effect lists must exactly match actual call counts
 
 **What happened:**

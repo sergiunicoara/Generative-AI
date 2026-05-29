@@ -153,14 +153,15 @@ The cross-encoder scores text similarity. It doesn't know that *Falcon 9* and *S
 GraphRag/
 ├── api/
 │   ├── main.py                      # FastAPI app, lifespan hook, middleware, routes
+│   ├── limiter.py                   # slowapi rate-limiter singleton (20/min ingest, 60/min query)
 │   ├── auth/
-│   │   ├── dependencies.py          # get_current_user, require_scope
+│   │   ├── dependencies.py          # get_current_user, require_scope (unconditional)
 │   │   ├── google.py                # Google OAuth 2.0 Authorization Code flow
 │   │   └── jwt.py                   # HS256 JWT creation & validation
 │   └── routes/
-│       ├── auth.py                  # /auth/login, /callback, /token, /clients
-│       ├── ingest.py                # POST /ingest
-│       ├── query.py                 # POST /query, GET /query/{id}
+│       ├── auth.py                  # /auth/login, /callback, /token, /clients (Redis-backed M2M)
+│       ├── ingest.py                # POST /ingest  (rate-limited)
+│       ├── query.py                 # POST /query, GET /query/{id}  (rate-limited; Redis result store)
 │       ├── evaluation.py            # GET /evaluation/summary
 │       ├── kpis.py                  # GET /kpis/summary, /kpis/timeseries
 │       └── corrections.py           # entity split · quarantine · edge override · conflict resolve
@@ -173,11 +174,13 @@ GraphRag/
 │   │   └── evaluation_agent.py      # RAGAS scoring agent
 │   ├── business_matrix/
 │   │   ├── dashboard_server.py      # Plotly Dash on :8050/dashboard/
-│   │   ├── kpi_store.py             # SQLAlchemy KPI event model
-│   │   └── kpi_tracker.py           # KPI aggregation queries
+│   │   ├── kpi_store.py             # SQLAlchemy KPI event model (recorded_at indexed)
+│   │   └── kpi_tracker.py           # KPI aggregation queries; real p50/p95 percentile (capped at 10k rows)
 │   ├── core/
-│   │   ├── config.py                # Settings (pydantic-settings, .env + YAML)
-│   │   └── models.py                # Domain models: Document, Chunk, Entity, Relation, Community, SessionTurn ...
+│   │   ├── config.py                # Settings (pydantic-settings, .env + YAML); production validators
+│   │   ├── llm_utils.py             # safe_response_text() — guards all Gemini response.text accesses
+│   │   ├── models.py                # Domain models: Document, Chunk, Entity, Relation, Community, SessionTurn ...
+│   │   └── retry.py                 # Async exponential-backoff decorator for Neo4j transient errors
 │   ├── graph/
 │   │   ├── neo4j_client.py          # Async Neo4j driver, MERGE helpers, vector + BM25 search
 │   │   ├── schema.cypher            # Constraints, vector indexes, fulltext indexes
@@ -216,9 +219,9 @@ GraphRag/
 │       └── result_store.py          # Redis-backed query result store (cross-worker, 1h TTL)
 │
 ├── workers/
-│   ├── ingestion_worker.py          # Consumes graphrag.ingest queue
-│   ├── query_worker.py              # Consumes graphrag.query queue
-│   └── evaluation_worker.py         # Consumes graphrag.eval queue
+│   ├── ingestion_worker.py          # Consumes graphrag.ingest queue; graceful SIGTERM shutdown
+│   ├── query_worker.py              # Consumes graphrag.query queue; graceful SIGTERM shutdown
+│   └── evaluation_worker.py         # Consumes graphrag.eval queue; graceful SIGTERM shutdown
 │
 ├── scripts/
 │   ├── init_neo4j.py                # Idempotent schema initializer (run once after docker up)
@@ -231,8 +234,9 @@ GraphRag/
 ├── config/
 │   └── settings.yml                 # All pipeline tuning (see Configuration section)
 ├── docker-compose.yml
-├── Dockerfile
-├── requirements.txt
+├── Dockerfile                       # Multi-stage build; non-root user; HEALTHCHECK
+├── requirements.txt                 # Direct dependencies
+├── requirements.lock                # Fully-pinned lock file (regenerate: make lock)
 └── .env                             # Secrets (never commit)
 ```
 

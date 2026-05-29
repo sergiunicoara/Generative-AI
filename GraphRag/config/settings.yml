@@ -100,3 +100,14 @@ business_matrix:
     contradiction_rate: 0.05   # breach if conflicts_per_1k_edges / 1000 exceeds 5 %
     orphan_rate: 0.10          # breach if orphan_rate exceeds 10 %
     low_confidence_rate: 0.30  # breach if noise_edge_rate exceeds 30 %
+  # Per-tenant threshold overrides — values here replace the global defaults for
+  # that tenant only.  Keys must match the metric names in alert_thresholds above.
+  # Example: tenant "finance" has a stricter contradiction_rate limit.
+  tenant_alert_thresholds:
+    finance:
+      contradiction_rate: 0.02   # 2 % — stricter for regulated tenant
+      orphan_rate: 0.05
+    sandbox:
+      contradiction_rate: 0.20   # 20 % — more permissive for experimental tenant
+      orphan_rate: 0.40
+      low_confidence_rate: 0.60

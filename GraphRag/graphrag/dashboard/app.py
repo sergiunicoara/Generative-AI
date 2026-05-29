@@ -38,17 +38,25 @@ API_TOKEN:    default ""  (set env var GRAPHRAG_API_TOKEN for Bearer auth)
 from __future__ import annotations
 
 import os
+import secrets
 
 import dash
+import flask
 import httpx
 import plotly.graph_objects as go
+import structlog
 from dash import Input, Output, State, callback, dcc, html
 from dash import dash_table
 
+log = structlog.get_logger(__name__)
+
 # ── Config ─────────────────────────────────────────────────────────────────────
 
-API_BASE = os.getenv("GRAPHRAG_API_URL", "http://localhost:8000")
-API_TOKEN = os.getenv("GRAPHRAG_API_TOKEN", "")
+API_BASE    = os.getenv("GRAPHRAG_API_URL",     "http://localhost:8000")
+API_TOKEN   = os.getenv("GRAPHRAG_API_TOKEN",   "")
+# Set GRAPHRAG_ADMIN_TOKEN to enable dashboard auth.  When empty, the dashboard
+# is open to all (dev mode only — never leave unset in production).
+ADMIN_TOKEN = os.getenv("GRAPHRAG_ADMIN_TOKEN", "")
 
 _HEADERS = {"Authorization": f"Bearer {API_TOKEN}"} if API_TOKEN else {}
 
@@ -59,7 +67,68 @@ app = dash.Dash(
     title="GraphRAG Admin",
     requests_pathname_prefix="/admin/",   # prefix when mounted under FastAPI
     suppress_callback_exceptions=True,
+    server=flask.Flask(__name__),         # explicit Flask server for before_request
 )
+# Use a random secret key so sessions survive restarts only when the env var is set
+app.server.secret_key = os.getenv("GRAPHRAG_ADMIN_SECRET", secrets.token_hex(32))
+
+# ── Auth guard ─────────────────────────────────────────────────────────────────
+
+_LOGIN_PATH  = "/admin/login"
+_LOGIN_POST  = "/admin/_login"
+_STATIC_PFXS = ("/admin/_dash", "/admin/assets")
+
+
+@app.server.before_request
+def _require_auth():
+    """Redirect unauthenticated browsers when GRAPHRAG_ADMIN_TOKEN is set."""
+    if not ADMIN_TOKEN:
+        return   # open dev mode — no token configured
+    path = flask.request.path
+    # Always allow the login page and Dash static assets
+    if path in (_LOGIN_PATH, _LOGIN_POST) or any(path.startswith(p) for p in _STATIC_PFXS):
+        return
+    # Accept X-Admin-Token header for scripted / API access
+    if flask.request.headers.get("X-Admin-Token") == ADMIN_TOKEN:
+        return
+    # Accept valid session cookie
+    if flask.session.get("admin_authenticated"):
+        return
+    log.warning("dashboard.unauthenticated", path=path,
+                ip=flask.request.remote_addr)
+    return flask.redirect(_LOGIN_PATH)
+
+
+@app.server.route(_LOGIN_PATH, methods=["GET"])
+def _login_page():
+    error = "Invalid token. Try again." if flask.request.args.get("error") else ""
+    return f"""<!DOCTYPE html>
+<html><head><title>GraphRAG Admin Login</title>
+<style>body{{font-family:system-ui;display:flex;justify-content:center;
+padding-top:120px;background:#f4f4f5}}
+form{{background:#fff;padding:36px;border-radius:8px;box-shadow:0 2px 12px rgba(0,0,0,.15);
+min-width:320px}}h2{{margin:0 0 24px;color:#1a1a2e}}
+input{{width:100%;padding:8px;margin:4px 0 16px;box-sizing:border-box;
+border:1px solid #ccc;border-radius:4px}}
+button{{width:100%;padding:10px;background:#1a1a2e;color:#fff;border:none;
+border-radius:4px;cursor:pointer;font-size:15px}}
+.err{{color:#c00;margin-bottom:12px}}</style></head>
+<body><form method="POST" action="{_LOGIN_POST}">
+<h2>🔐 GraphRAG Admin</h2>
+<p class="err">{error}</p>
+<label>Admin token</label>
+<input type="password" name="token" placeholder="Enter admin token" autofocus>
+<button type="submit">Sign in</button>
+</form></body></html>"""
+
+
+@app.server.route(_LOGIN_POST, methods=["POST"])
+def _login_submit():
+    token = flask.request.form.get("token", "")
+    if secrets.compare_digest(token, ADMIN_TOKEN):
+        flask.session["admin_authenticated"] = True
+        return flask.redirect("/admin/")
+    return flask.redirect(f"{_LOGIN_PATH}?error=1")
 
 # ── Layout ─────────────────────────────────────────────────────────────────────
 
@@ -143,22 +212,48 @@ def render_tab(tab: str, _n: int, tenant: str):
 # ── Helpers ────────────────────────────────────────────────────────────────────
 
 def _get(path: str, params: dict | None = None) -> dict | list | None:
-    """Synchronous HTTP GET against the REST API.  Returns None on failure."""
+    """Synchronous HTTP GET against the REST API.
+
+    Returns the parsed JSON on success, or a dict with key ``_http_error``
+    containing a human-readable error string on any failure.
+    """
     try:
         r = httpx.get(f"{API_BASE}{path}", params=params, headers=_HEADERS, timeout=10)
         r.raise_for_status()
         return r.json()
-    except Exception:
-        return None
+    except httpx.HTTPStatusError as exc:
+        detail = f"HTTP {exc.response.status_code} {exc.response.reason_phrase} — {path}"
+        log.warning("dashboard.http_error", path=path,
+                    status=exc.response.status_code, detail=detail)
+        return {"_http_error": detail}
+    except Exception as exc:
+        detail = f"{type(exc).__name__}: {exc} — {path}"
+        log.warning("dashboard.request_error", path=path, error=detail)
+        return {"_http_error": detail}
 
 
 def _post(path: str, json: dict | None = None) -> dict | None:
+    """Synchronous HTTP POST.  Returns parsed JSON or ``{"_http_error": …}``."""
     try:
         r = httpx.post(f"{API_BASE}{path}", json=json, headers=_HEADERS, timeout=10)
         r.raise_for_status()
         return r.json()
-    except Exception:
-        return None
+    except httpx.HTTPStatusError as exc:
+        detail = f"HTTP {exc.response.status_code} {exc.response.reason_phrase} — {path}"
+        log.warning("dashboard.http_error", path=path,
+                    status=exc.response.status_code, detail=detail)
+        return {"_http_error": detail}
+    except Exception as exc:
+        detail = f"{type(exc).__name__}: {exc} — {path}"
+        log.warning("dashboard.request_error", path=path, error=detail)
+        return {"_http_error": detail}
+
+
+def _http_error(data: dict | list | None) -> str | None:
+    """Return the HTTP error string if *data* is an error sentinel, else None."""
+    if isinstance(data, dict):
+        return data.get("_http_error")
+    return None
 
 
 def _kpi_card(label: str, value: str, color: str = "#1a1a2e") -> html.Div:
@@ -177,6 +272,9 @@ def _err(msg: str) -> html.P:
 def _render_health(tenant: str):
     data = _get("/kg/graph-snapshots/list", {"tenant": tenant})
     alerts_data = _get("/kg/health/alerts", {"limit": 10})
+
+    if err := _http_error(data):
+        return _err(f"Graph snapshots unavailable — {err}")
 
     # Latest snapshot KPIs
     snaps = data.get("snapshots", []) if isinstance(data, dict) else []
@@ -240,6 +338,8 @@ def _render_health(tenant: str):
 
 def _render_conflicts(tenant: str):
     data = _get("/corrections/list-conflicts", {"tenant": tenant, "limit": 100})
+    if err := _http_error(data):
+        return _err(f"Conflicts unavailable — {err}")
     conflicts = data if isinstance(data, list) else (data or {}).get("conflicts", [])
 
     if not conflicts:
@@ -311,6 +411,8 @@ def resolve_conflict(n_clicks, selected_rows, rows, resolution, winner_doc):
         "winner_doc_id": winner_doc or "",
         "resolved_by": "admin_ui",
     })
+    if err := _http_error(result):
+        return f"⚠ Resolve failed — {err}"
     if result:
         return f"✅ Conflict {conflict_id[:8]}… resolved as '{resolution}'."
     return "⚠ Failed to resolve conflict."
@@ -321,6 +423,9 @@ def resolve_conflict(n_clicks, selected_rows, rows, resolution, winner_doc):
 def _render_communities(tenant: str):
     stale_data = _get("/kg/incremental-community/summary", {"tenant": tenant})
     history_data = _get("/community-history", {"tenant": tenant, "limit": 20})
+
+    if err := _http_error(stale_data):
+        return _err(f"Community data unavailable — {err}")
 
     summary = stale_data or {}
     score = summary.get("change_fraction", None)
@@ -374,6 +479,8 @@ def _render_communities(tenant: str):
 def trigger_rebuild(n_clicks, tenant):
     result = _post("/kg/incremental-community/rebuild-affected",
                    {"tenant": tenant or "default", "dry_run": False})
+    if err := _http_error(result):
+        return html.P(f"⚠ Rebuild failed — {err}", style={"color": "#c00"})
     if result:
         rebuilt = result.get("communities_rebuilt", "?")
         return html.P(f"✅ Rebuilt {rebuilt} communities.", style={"color": "#2a9d4f"})
@@ -384,6 +491,8 @@ def trigger_rebuild(n_clicks, tenant):
 
 def _render_gdpr(tenant: str):
     audit_data = _get("/kg/gdpr/audit-log", {"tenant": tenant, "limit": 50})
+    if err := _http_error(audit_data):
+        return _err(f"GDPR audit log unavailable — {err}")
     audit = audit_data if isinstance(audit_data, list) else (audit_data or {}).get("log", [])
 
     audit_table = dash_table.DataTable(
@@ -438,6 +547,8 @@ def forget_entity(n_clicks, name, etype, requested_by, tenant):
         "tenant":       tenant or "default",
         "requested_by": requested_by or "admin_ui",
     })
+    if err := _http_error(result):
+        return html.P(f"⚠ Erasure failed — {err}", style={"color": "#c00"})
     if result:
         return html.P(f"✅ Entity '{name}' erasure complete.", style={"color": "#2a9d4f"})
     return html.P("⚠ Erasure failed.", style={"color": "#c00"})
@@ -447,6 +558,8 @@ def forget_entity(n_clicks, name, etype, requested_by, tenant):
 
 def _render_calibration(tenant: str):
     cal_data = _get("/kg/calibration/snapshots", {"tenant": tenant, "limit": 20})
+    if err := _http_error(cal_data):
+        return _err(f"Calibration data unavailable — {err}")
     snaps = cal_data if isinstance(cal_data, list) else (cal_data or {}).get("snapshots", [])
 
     fig_brier = go.Figure()

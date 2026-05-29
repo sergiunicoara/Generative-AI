@@ -158,6 +158,60 @@ All work completed across two sessions. Tracked retroactively per CLAUDE.md.
 
 ---
 
+## Phase 10 — Audit Corrections
+
+All 20 issues from the code audit corrected.
+
+### P0 — Runtime failures (fixed)
+- [x] Create `graphrag/core/retry.py` — async exponential-backoff retry decorator
+- [x] Apply `@with_retry(TransientError, ServiceUnavailable)` to `Neo4jClient.run()`
+- [x] Move `from pathlib import Path` to top of `neo4j_client.py` (was line 561, used at line 41)
+- [x] Remove stale deferred `from pathlib import Path` comment at bottom of file
+- [x] Fix `entity_linker._search_wikidata()` — wrap `urllib.request.urlopen` in `run_in_executor`
+- [x] Add `before_request` auth guard to `dashboard/app.py` — login form + session cookie check; GDPR/rebuild/resolve callbacks now blocked without `GRAPHRAG_ADMIN_TOKEN`
+- [x] Migrate `_recent_alerts` deque to Redis `LPUSH/LTRIM` in `alerts.py`; in-process deque is fallback
+
+### P1 — Technical debt (fixed)
+- [x] Replace `asyncio.get_event_loop()` → `asyncio.get_running_loop()` in 11 async files
+- [x] Fix `agentic_retriever._llm()` — remove `loop.run_until_complete()` on already-running loop; call `generate_content()` directly (it is sync)
+- [x] Wire `prometheus-fastapi-instrumentator` in `api/main.py` → exposes `GET /metrics`
+- [x] Add `tenacity>=8.3.0` to `requirements.txt`
+
+### P2 — Coverage gaps (fixed)
+- [x] Create `tests/conftest.py` — shared fixtures (`neo4j_mock`, `make_entity`, `make_chunk`, `make_relation`, `make_turn`, `memory_session_store`)
+- [x] Create `tests/unit/__init__.py`
+- [x] Create `tests/unit/test_retry.py` — 9 async unit tests for retry decorator
+- [x] Create `tests/unit/test_alert_service.py` — 12 unit tests for AlertService
+- [x] Create `tests/unit/test_pii_guard.py` — 15 unit tests for PIIGuard
+- [x] Create `tests/e2e/__init__.py` + `test_live_services.py` — testcontainers scaffold for Neo4j + Redis (auto-skipped without Docker)
+- [x] Add `[tool.pytest.ini_options]` to `pyproject.toml` — `asyncio_mode = "auto"` so `@pytest.mark.asyncio` is not needed on every test
+
+### P3 — Quality of life (fixed)
+- [x] Add `.dockerignore` — excludes tests/, eval_data/, results/, .git, .venv, *.md, .env
+- [x] Surface HTTP error cause/status in all dashboard render functions and action callbacks
+- [x] Add per-tenant alert threshold overrides (`tenant_alert_thresholds` in `settings.yml`; `AlertService._effective_thresholds()`)
+- [x] Add `Makefile` with `make test`, `make api`, `make dashboard`, `make backup`, `make lint`
+- [x] Update README — added full Admin Dashboard section (5 tabs, auth, standalone mode, service URL table updated)
+- [x] Narrow 4 key bare `except Exception` blocks to specific types (`extractor.py`, `ontology_registry.py`, `consumers.py`)
+- [x] Add 5 new lessons to `tasks/lessons.md` (A38–A42)
+
+### Bonus: 4 pre-existing bugs fixed in test_safety_paths.py
+Running the full suite exposed 4 pre-existing test failures (first time safety paths were included in a full run):
+- [x] `test_multi_source_conflict_created` — mock used `sources` key but code accesses `doc_ids`; fixed field name + added `independent_pairs` + `positive_negative_pairs` slot
+- [x] `test_directional_reversal_detected` — phantom "CREATE for empty query" slots displaced real conflict row into exclusive_state slot; removed phantom slots
+- [x] `test_functional_violation_detected` — same phantom slot issue with 2+2+8 fake slots; corrected to 1+1+4 actual slots
+- [x] `test_mark_rebuilt_creates_new_snapshot` — mock used `entities`/`edges` but code accesses `entity_count`/`edge_count`; added missing `community_count` and 3rd call slot for SET milestone; updated assertion from 2 to 3 calls
+- [x] Lesson A43 added to `tasks/lessons.md` — AsyncMock side_effect lists must exactly match actual conditional call counts
+
+### Test counts after Phase 10
+- Unit tests: 36 (test_retry: 9, test_alert_service: 12, test_pii_guard: 15)
+- Integration tests: 33 (test_operational_paths: 14, test_safety_paths: 19)
+- Load tests: 5 (test_load_scenarios)
+- E2e scaffold: auto-skipped without Docker
+- Total runnable without live services: **73 tests, all pass**
+
+---
+
 ## Review
 
 ### What was built

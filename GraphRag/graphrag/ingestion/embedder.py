@@ -29,7 +29,7 @@ class Embedder:
         self._batch_size = cfg.ingestion.get("embedding_batch_size", 100)
 
     async def embed_chunks(self, chunks: list[Chunk]) -> list[Chunk]:
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
         all_texts = [c.text for c in chunks]
 
         embeddings: list[list[float]] = []
@@ -51,7 +51,7 @@ class Embedder:
         return chunks
 
     async def embed_text(self, text: str, task_type: str = "retrieval_query") -> list[float]:
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
         result = await loop.run_in_executor(
             None,
             lambda: self._client.models.embed_content(

@@ -62,7 +62,7 @@ class Extractor:
             text=chunk.text,
         )
 
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
         response = await loop.run_in_executor(
             None,
             lambda: self._client.models.generate_content(
@@ -108,8 +108,8 @@ class Extractor:
                     if pos >= 0:
                         span_start = pos
                         span_end = pos + len(r.get("source", ""))
-                except Exception:
-                    pass
+                except (ValueError, AttributeError):
+                    pass   # span computation is best-effort; missing span is harmless
 
                 relations.append(
                     Relation(
@@ -131,8 +131,8 @@ class Extractor:
             registry = get_ontology_registry()
             if registry._loaded:
                 registry.validate_extraction(entities, relations)
-        except Exception:
-            pass  # registry not yet initialised — skip silently
+        except ImportError:
+            pass  # registry not yet available during cold-start — skip silently
 
         log.info(
             "extractor.done",

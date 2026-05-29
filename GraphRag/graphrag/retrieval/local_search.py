@@ -167,7 +167,7 @@ class LocalSearch:
                     entity_edges
                 )
 
-            loop = asyncio.get_event_loop()
+            loop = asyncio.get_running_loop()
             all_chunks = await loop.run_in_executor(
                 None,
                 lambda: self._gnn.score(

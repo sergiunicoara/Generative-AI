@@ -85,8 +85,8 @@ class OntologyRegistry:
             self._migration_map = {
                 str(k).upper(): str(v).upper() for k, v in raw_map.items()
             }
-        except Exception:
-            self._migration_map = {}
+        except (AttributeError, KeyError, TypeError):
+            self._migration_map = {}   # config section absent or malformed
 
         # Load known relation types from existing graph
         rows = await self._neo4j.run(

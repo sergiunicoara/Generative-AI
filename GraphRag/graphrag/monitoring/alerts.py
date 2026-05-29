@@ -34,6 +34,8 @@ runs the alert check automatically.
 
 from __future__ import annotations
 
+import json
+import os
 from collections import deque
 from datetime import datetime, timezone
 
@@ -41,8 +43,9 @@ import structlog
 
 log = structlog.get_logger(__name__)
 
-ALERT_HISTORY = 100   # how many recent alerts to keep in memory
-
+ALERT_HISTORY  = 100   # how many recent alerts to keep
+_REDIS_KEY     = "graphrag:alerts:recent"
+_REDIS_URL     = os.getenv("REDIS_URL", "")
 
 # ── Default thresholds ─────────────────────────────────────────────────────────
 
@@ -55,8 +58,61 @@ _DEFAULT_THRESHOLDS: dict[str, float] = {
     "low_confidence_rate": 0.30,
 }
 
-# Module-level accumulator — populated by AlertService.fire()
+# Module-level in-process accumulator (fallback when Redis unavailable)
 _recent_alerts: deque[dict] = deque(maxlen=ALERT_HISTORY)
+
+
+# ── Redis-backed alert storage ─────────────────────────────────────────────────
+
+def _redis_client():
+    """Return a sync Redis client if redis-py is installed and REDIS_URL is set.
+
+    This module is imported before the event loop starts, so we use the
+    sync redis client (not aioredis) for the fire() call-path.
+
+    Returns None if Redis is unavailable — the in-process deque is the fallback.
+    """
+    if not _REDIS_URL:
+        return None
+    try:
+        import redis as redis_lib   # sync redis-py
+        return redis_lib.from_url(_REDIS_URL, socket_connect_timeout=1,
+                                  socket_timeout=1, decode_responses=True)
+    except Exception:
+        return None
+
+
+def _push_to_redis(alert: dict) -> bool:
+    """LPUSH + LTRIM to keep the most recent ALERT_HISTORY entries.
+
+    Returns True on success, False on any error.
+    """
+    try:
+        r = _redis_client()
+        if r is None:
+            return False
+        r.lpush(_REDIS_KEY, json.dumps(alert))
+        r.ltrim(_REDIS_KEY, 0, ALERT_HISTORY - 1)
+        return True
+    except Exception as exc:
+        log.warning("alerts.redis_push_failed", error=str(exc))
+        return False
+
+
+def _read_from_redis(limit: int) -> list[dict] | None:
+    """LRANGE the most recent *limit* alerts from Redis.
+
+    Returns None on error so the caller can fall back to the in-process deque.
+    """
+    try:
+        r = _redis_client()
+        if r is None:
+            return None
+        raw = r.lrange(_REDIS_KEY, 0, limit - 1)
+        return [json.loads(item) for item in raw]
+    except Exception as exc:
+        log.warning("alerts.redis_read_failed", error=str(exc))
+        return None
 
 
 class AlertService:
@@ -71,17 +127,36 @@ class AlertService:
         # Each breach fires a structlog ERROR that any log aggregator can route.
     """
 
-    def __init__(self, thresholds: dict | None = None):
+    def __init__(
+        self,
+        thresholds: dict | None = None,
+        tenant_thresholds: dict[str, dict] | None = None,
+    ):
         """
         Parameters
         ----------
         thresholds:
             Override or extend the default thresholds.  Keys must match the
             metric names listed in the module docstring.
+        tenant_thresholds:
+            Per-tenant threshold overrides keyed by tenant name.  When
+            ``check()`` is called with a matching tenant, these values take
+            precedence over both the defaults and *thresholds*.
+            Example: ``{"finance": {"contradiction_rate": 0.02}}``.
         """
         self._thresholds = dict(_DEFAULT_THRESHOLDS)
         if thresholds:
             self._thresholds.update(thresholds)
+        self._tenant_thresholds: dict[str, dict] = tenant_thresholds or {}
+
+    def _effective_thresholds(self, tenant: str) -> dict[str, float]:
+        """Return thresholds merged with any per-tenant overrides for *tenant*."""
+        overrides = self._tenant_thresholds.get(tenant, {})
+        if not overrides:
+            return self._thresholds
+        merged = dict(self._thresholds)
+        merged.update(overrides)
+        return merged
 
     # ── Threshold access ───────────────────────────────────────────────────────
 
@@ -111,6 +186,7 @@ class AlertService:
         """
         alerts: list[dict] = []
         now = datetime.now(timezone.utc).isoformat()
+        thr_map = self._effective_thresholds(tenant)   # respects per-tenant overrides
 
         def _alert(metric: str, value: float, threshold: float, direction: str = "above") -> None:
             alerts.append({
@@ -130,13 +206,13 @@ class AlertService:
             report.get("contradiction", {}).get("conflicts_per_1k_edges", 0) or 0
         )
         contradiction_rate = contradiction_raw / 1000.0   # convert to 0-1 scale
-        thr = self._thresholds.get("contradiction_rate", _DEFAULT_THRESHOLDS["contradiction_rate"])
+        thr = thr_map.get("contradiction_rate", _DEFAULT_THRESHOLDS["contradiction_rate"])
         if contradiction_rate > thr:
             _alert("contradiction_rate", contradiction_rate, thr)
 
         # ── Orphan rate ────────────────────────────────────────────────────────
         orphan_rate = report.get("orphan_growth", {}).get("orphan_rate", 0) or 0
-        thr = self._thresholds.get("orphan_rate", _DEFAULT_THRESHOLDS["orphan_rate"])
+        thr = thr_map.get("orphan_rate", _DEFAULT_THRESHOLDS["orphan_rate"])
         if orphan_rate > thr:
             _alert("orphan_rate", orphan_rate, thr)
 
@@ -144,28 +220,28 @@ class AlertService:
         low_conf_rate = (
             report.get("relation_precision", {}).get("noise_edge_rate", 0) or 0
         )
-        thr = self._thresholds.get("low_confidence_rate", _DEFAULT_THRESHOLDS["low_confidence_rate"])
+        thr = thr_map.get("low_confidence_rate", _DEFAULT_THRESHOLDS["low_confidence_rate"])
         if low_conf_rate > thr:
             _alert("low_confidence_rate", low_conf_rate, thr)
 
         # ── RAGAS faithfulness (if present in report) ─────────────────────────
         faithfulness = report.get("faithfulness")
         if faithfulness is not None:
-            thr = self._thresholds.get("faithfulness", _DEFAULT_THRESHOLDS["faithfulness"])
+            thr = thr_map.get("faithfulness", _DEFAULT_THRESHOLDS["faithfulness"])
             if faithfulness < thr:   # direction: "below" is bad
                 _alert("faithfulness", faithfulness, thr, direction="below")
 
         # ── RAGAS context recall (if present in report) ───────────────────────
         context_recall = report.get("context_recall")
         if context_recall is not None:
-            thr = self._thresholds.get("context_recall", _DEFAULT_THRESHOLDS["context_recall"])
+            thr = thr_map.get("context_recall", _DEFAULT_THRESHOLDS["context_recall"])
             if context_recall < thr:
                 _alert("context_recall", context_recall, thr, direction="below")
 
         # ── API latency p95 (if present in report) ────────────────────────────
         latency = report.get("latency_p95_ms")
         if latency is not None:
-            thr = self._thresholds.get("latency_p95_ms", _DEFAULT_THRESHOLDS["latency_p95_ms"])
+            thr = thr_map.get("latency_p95_ms", _DEFAULT_THRESHOLDS["latency_p95_ms"])
             if latency > thr:
                 _alert("latency_p95_ms", latency, thr)
 
@@ -174,9 +250,10 @@ class AlertService:
     # ── Fire ──────────────────────────────────────────────────────────────────
 
     def fire(self, alerts: list[dict]) -> None:
-        """
-        Emit a structlog ERROR for each alert and append to the in-memory
-        history deque so GET /kg/health/alerts can retrieve them.
+        """Emit a structlog ERROR for each alert.
+
+        Persists each alert to Redis (shared across workers) with an in-process
+        deque as the fallback when Redis is unavailable.
         """
         for alert in alerts:
             log.error(
@@ -188,7 +265,10 @@ class AlertService:
                 tenant=alert["tenant"],
                 fired_at=alert["fired_at"],
             )
-            _recent_alerts.append(alert)
+            # Try Redis first so all uvicorn workers share the same history.
+            # Fall back to the in-process deque if Redis is down.
+            if not _push_to_redis(alert):
+                _recent_alerts.append(alert)
 
     # ── Convenience ───────────────────────────────────────────────────────────
 
@@ -203,7 +283,14 @@ class AlertService:
 # ── Module-level helpers ───────────────────────────────────────────────────────
 
 def get_recent_alerts(limit: int = ALERT_HISTORY) -> list[dict]:
-    """Return the most recently fired alerts (newest first)."""
+    """Return the most recently fired alerts (newest first).
+
+    Reads from Redis when available so multi-worker deployments return a
+    unified view.  Falls back to the in-process deque.
+    """
+    redis_items = _read_from_redis(limit)
+    if redis_items is not None:
+        return redis_items[:limit]
     items = list(_recent_alerts)
     items.reverse()
     return items[:limit]
@@ -215,19 +302,25 @@ _svc: AlertService | None = None
 def get_alert_service() -> AlertService:
     """Return the process-level AlertService singleton (created lazily).
 
-    Reads ``business_matrix.alert_thresholds`` from ``config/settings.yml``
-    and merges them over the defaults.
+    Reads from ``config/settings.yml → business_matrix``:
+    - ``alert_thresholds``         — global metric thresholds
+    - ``tenant_alert_thresholds``  — per-tenant overrides (dict of dicts)
     """
     global _svc
     if _svc is None:
+        thresholds: dict = {}
+        tenant_thresholds: dict[str, dict] = {}
         try:
             from graphrag.core.config import get_settings
             cfg = get_settings()
-            bm_thresholds = (
-                getattr(cfg, "business_matrix", None) or {}
-            )
-            thresholds = bm_thresholds.get("alert_thresholds", {}) if isinstance(bm_thresholds, dict) else {}
+            bm = getattr(cfg, "business_matrix", None) or {}
+            if isinstance(bm, dict):
+                thresholds = bm.get("alert_thresholds", {}) or {}
+                tenant_thresholds = bm.get("tenant_alert_thresholds", {}) or {}
         except Exception:
-            thresholds = {}
-        _svc = AlertService(thresholds=thresholds or None)
+            pass
+        _svc = AlertService(
+            thresholds=thresholds or None,
+            tenant_thresholds=tenant_thresholds or None,
+        )
     return _svc

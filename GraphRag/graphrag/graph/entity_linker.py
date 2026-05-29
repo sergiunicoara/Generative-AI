@@ -279,8 +279,14 @@ class WikidataEntityLinker:
             headers = {"User-Agent": "GraphRAG-EntityLinker/1.0 (research@example.com)"}
 
             req = urllib.request.Request(url, headers=headers)
-            with urllib.request.urlopen(req, timeout=10) as resp:
-                data = json.loads(resp.read().decode("utf-8"))
+
+            def _fetch() -> bytes:
+                with urllib.request.urlopen(req, timeout=10) as resp:
+                    return resp.read()
+
+            loop = asyncio.get_running_loop()
+            raw = await loop.run_in_executor(None, _fetch)
+            data = json.loads(raw.decode("utf-8"))
 
             results = data.get("search", [])
             if not results:

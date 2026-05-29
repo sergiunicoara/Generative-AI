@@ -4,14 +4,17 @@ from __future__ import annotations
 
 import asyncio
 from contextlib import asynccontextmanager
+from pathlib import Path
 from typing import Any
 
 import structlog
 from neo4j import AsyncGraphDatabase, AsyncDriver
+from neo4j.exceptions import ServiceUnavailable, TransientError
 
 from graphrag.core.config import get_settings
 from graphrag.core.exceptions import GraphRAGError
 from graphrag.core.models import Chunk, Community, Entity, Relation
+from graphrag.core.retry import with_retry
 
 log = structlog.get_logger(__name__)
 
@@ -30,6 +33,7 @@ class Neo4jClient:
     async def close(self):
         await self._driver.close()
 
+    @with_retry(exceptions=(TransientError, ServiceUnavailable), max_attempts=3)
     async def run(self, cypher: str, **params) -> list[dict]:
         async with self._driver.session() as session:
             result = await session.run(cypher, parameters=params)
@@ -556,9 +560,6 @@ class Neo4jClient:
             """,
             tenant=tenant,
         )
-
-
-from pathlib import Path  # noqa: E402 — placed here to avoid circular import in type stubs
 
 
 _client: Neo4jClient | None = None

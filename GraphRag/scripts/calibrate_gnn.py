@@ -84,7 +84,7 @@ async def _retrieve_with_params(
         beta                      = beta,
         edge_confidence_threshold = cfg.get("gnn_edge_confidence_threshold", 0.7),
     )
-    loop = asyncio.get_event_loop()
+    loop = asyncio.get_running_loop()
     ranked = await loop.run_in_executor(
         None,
         lambda: scorer.score(

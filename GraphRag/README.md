@@ -570,14 +570,48 @@ Evaluation is sampled at **20%** of queries automatically. View results:
 
 ---
 
+## Admin Dashboard
+
+The built-in Dash admin panel is available at **`/admin`** after starting the API server.
+It is mounted directly on FastAPI — no separate process is needed.
+
+### Five tabs
+
+| Tab | What it shows |
+|-----|---------------|
+| 📊 **Graph Health** | Entity/edge counts, alias coverage, contradiction rate, orphan rate, community coherence. Line chart of contradiction rate over time. Recent threshold-breach alerts. |
+| ⚡ **Conflicts** | DataTable of all open Conflict nodes. Select a row and choose a resolution type to call `POST /corrections/resolve-conflict` directly. |
+| 🏘️ **Communities** | Staleness badge (entity change fraction since last rebuild). "Rebuild Affected Communities" button. Version history table with rebuild milestone flags. |
+| 🔒 **GDPR & PII** | Audit log of all `forget_entity` / `forget_document` operations. "Forget Entity" form that calls `POST /kg/gdpr/forget-entity`. |
+| 📐 **Calibration** | Brier score trend line. Latest isotonic calibration curve (predicted vs actual confidence). |
+
+### Auth
+
+Set `GRAPHRAG_ADMIN_TOKEN` in your environment to require a password before accessing `/admin`.
+When the variable is empty the dashboard is open (dev mode).
+
+```bash
+export GRAPHRAG_ADMIN_TOKEN="your-secret-token"
+uvicorn api.main:app            # → http://localhost:8000/admin
+```
+
+Standalone mode (dev, without FastAPI):
+
+```bash
+make dashboard                  # → http://localhost:8050
+```
+
+---
+
 ## Service URLs
 
 | Service | URL | Credentials |
 |---------|-----|-------------|
 | API + Swagger | http://localhost:8000/docs | Bearer token via /auth/dev-token |
+| Admin Dashboard | http://localhost:8000/admin | `GRAPHRAG_ADMIN_TOKEN` (empty = open) |
+| Prometheus metrics | http://localhost:8000/metrics | — |
 | Neo4j Browser | http://localhost:7474 | neo4j / graphrag_dev |
 | RabbitMQ UI | http://localhost:15672 | graphrag / graphrag_dev |
-| Dashboard | http://localhost:8050/dashboard/ | — |
 
 ---
 

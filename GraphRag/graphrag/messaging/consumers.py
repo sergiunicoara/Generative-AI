@@ -54,7 +54,7 @@ class QueryConsumer:
                     "citations": result.citations,
                     "latency_ms": result.latency_ms,
                 })
-            except Exception:
+            except (RuntimeError, ImportError):
                 pass  # worker may run standalone without API context
 
             # Async RAGAS evaluation on sampled queries

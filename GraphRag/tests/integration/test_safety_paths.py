@@ -206,17 +206,28 @@ class TestContradictionDetection:
 
     @pytest.mark.asyncio
     async def test_multi_source_conflict_created(self, neo4j_mock):
-        """A (src, rel, tgt) from two non-superseding docs creates a Conflict node."""
+        """A (src, rel, tgt) from two non-superseding docs creates a Conflict node.
+
+        Call sequence inside scan():
+          1. _detect_multi_source_conflicts query  (1 row → 1 CREATE)
+          2. CREATE Conflict node
+          3. _detect_directional_reversals query   (empty → no CREATE)
+          4-7. _detect_exclusive_states 4 pairs   (empty each)
+          8-10. _detect_functional_violations 3 rels (empty each)
+          11. _detect_positive_negative_pairs query  (empty)
+        """
         neo4j_mock.run = AsyncMock(side_effect=[
-            # _detect_multi_source_conflicts returns one row
+            # 1: multi_source query — Cypher returns doc_ids (list), not sources
             [{"src": "EngineA", "tgt": "PumpB", "rel": "USES",
-              "sources": [{"doc_id": "doc1", "conf": 0.9}, {"doc_id": "doc2", "conf": 0.8}]}],
-            [],   # CREATE Conflict
-            [],   # _detect_directional_reversals
-            [],   # _detect_exclusive_states (each pair)
-            [], [], [],
-            [],   # _detect_functional_violations (each rel)
-            [], [],
+              "doc_ids": ["doc1", "doc2"],
+              "independent_pairs": [{"a": "doc1", "b": "doc2"}]}],
+            [],   # 2: CREATE Conflict
+            [],   # 3: directional reversals query (empty → no CREATE)
+            [],   # 4: exclusive_state pair 1
+            [], [], [],   # 5-7: exclusive_state pairs 2-4
+            [],   # 8: functional_violation CEO_OF
+            [], [],   # 9-10: FOUNDED_BY, MANUFACTURES
+            [],   # 11: positive_negative_pairs
         ])
         detector = ContradictionDetector(neo4j_mock)
         conflicts = await detector.scan()
@@ -228,14 +239,27 @@ class TestContradictionDetection:
 
     @pytest.mark.asyncio
     async def test_directional_reversal_detected(self, neo4j_mock):
-        """A→B and B→A for same relation creates a directional_reversal Conflict."""
+        """A→B and B→A for same relation creates a directional_reversal Conflict.
+
+        Call sequence:
+          1. multi_source query      (empty → no CREATE)
+          2. directional query       (1 row → 1 CREATE)
+          3. CREATE directional_reversal
+          4-7. exclusive_state 4 pairs (empty each → no CREATEs)
+          8-10. functional_violation 3 rels (empty each)
+          11. positive_negative_pairs (empty)
+
+        Note: when a query returns empty there is NO subsequent CREATE call —
+        the for-loop body is never entered.  The original mock had phantom
+        "CREATE for multi_source (none)" calls that never happened.
+        """
         neo4j_mock.run = AsyncMock(side_effect=[
-            [],   # multi_source — nothing
-            [],   # CREATE for multi_source (none)
-            [{"src": "A", "tgt": "B", "rel": "CEO_OF", "doc1": "d1", "doc2": "d2"}],
-            [],   # CREATE directional_reversal
-            [], [], [], [],   # exclusive_state
-            [], [], [],       # functional_violation
+            [],   # 1: multi_source query → empty (no CREATE follows)
+            [{"src": "A", "tgt": "B", "rel": "CEO_OF", "doc1": "d1", "doc2": "d2"}],  # 2: directional
+            [],   # 3: CREATE directional_reversal
+            [], [], [], [],   # 4-7: exclusive_state 4 pairs (empty)
+            [], [], [],       # 8-10: functional_violation 3 rels (empty)
+            [],               # 11: positive_negative_pairs (empty)
         ])
         detector = ContradictionDetector(neo4j_mock)
         conflicts = await detector.scan()
@@ -259,22 +283,32 @@ class TestContradictionDetection:
 
     @pytest.mark.asyncio
     async def test_functional_violation_detected(self, neo4j_mock):
-        """Multiple targets for a functional relation creates functional_violation."""
-        # CEO_OF is the first functional relation checked
-        # side_effect order: multi_source (query+creates), directional (query+creates),
-        # exclusive_state (4 pairs × each: 1 query + 0-N creates),
-        # functional_violation (3 rels × 1 query + N creates)
-        side_effects = (
-            [[], []]                    # multi_source: no rows, no create
-            + [[], []]                  # directional: no rows, no create
-            + [[], [], [], [], [], [], [], []]   # exclusive_state: 4 pairs × 2 calls each
-            + [
-                [{"src": "E. Musk", "targets": ["Tesla", "SpaceX"], "docs": ["d1", "d2"]}],
-                [],   # CREATE functional_violation for CEO_OF
-                [],   # FOUNDED_BY: no rows
-                [],   # MANUFACTURES: no rows
-            ]
-        )
+        """Multiple targets for a functional relation creates functional_violation.
+
+        Call sequence inside scan() when all pre-functional queries return empty:
+          1.  multi_source query              → [] (no rows → no CREATE)
+          2.  directional query               → [] (no rows → no CREATE)
+          3-6. exclusive_state 4 pairs        → [] each (no rows → no CREATEs)
+          7.  functional CEO_OF query         → 1 row → 1 CREATE
+          8.  CREATE functional_violation
+          9.  functional FOUNDED_BY query     → []
+          10. functional MANUFACTURES query   → []
+          11. positive_negative_pairs query   → []
+
+        Root cause of previous failure: the old mock had phantom "no-row CREATE"
+        slots (one per empty query) that were never called, displacing the CEO_OF
+        row into the exclusive_state slot where `row["entity"]` was accessed.
+        """
+        side_effects = [
+            [],   # 1: multi_source query (empty → no CREATE)
+            [],   # 2: directional query  (empty → no CREATE)
+            [], [], [], [],   # 3-6: exclusive_state 4 pairs (empty each)
+            [{"src": "E. Musk", "targets": ["Tesla", "SpaceX"], "docs": ["d1", "d2"]}],  # 7: CEO_OF
+            [],   # 8: CREATE functional_violation
+            [],   # 9: FOUNDED_BY query (empty)
+            [],   # 10: MANUFACTURES query (empty)
+            [],   # 11: positive_negative_pairs (empty)
+        ]
         neo4j_mock.run = AsyncMock(side_effect=side_effects)
         detector = ContradictionDetector(neo4j_mock)
         conflicts = await detector.scan()
@@ -326,18 +360,27 @@ class TestCommunityRebuildLifecycle:
 
     @pytest.mark.asyncio
     async def test_mark_rebuilt_creates_new_snapshot(self, neo4j_mock):
+        """mark_rebuilt() takes a snapshot then sets the rebuild milestone flag.
+
+        Call sequence (3 total):
+          1. snapshot() stats query  — returns entity_count/edge_count/community_count
+          2. snapshot() CREATE       — persists the snapshot node
+          3. mark_rebuilt() SET      — stamps is_rebuild_milestone = true
+        """
         from graphrag.graph.community_manager import CommunityManager
 
-        # mark_rebuilt calls snapshot() which calls current counts + CREATE
         neo4j_mock.run = AsyncMock(side_effect=[
-            [{"entities": 120, "edges": 250}],   # snapshot current counts
-            [],                                   # CREATE CommunitySnapshot
+            # 1: snapshot stats — field names must match what snapshot() returns from Cypher
+            [{"entity_count": 120, "edge_count": 250, "community_count": 5}],
+            [],   # 2: CREATE CommunitySnapshot
+            [],   # 3: SET is_rebuild_milestone = true
         ])
         manager = CommunityManager(neo4j_mock)
-        await manager.mark_rebuilt(tenant="default")
+        snap_id = await manager.mark_rebuilt(tenant="default")
 
-        # Two run() calls: one for current state, one for CREATE
-        assert neo4j_mock.run.call_count == 2
+        # Three run() calls: stats query, CREATE, SET milestone
+        assert neo4j_mock.run.call_count == 3
+        assert isinstance(snap_id, str) and len(snap_id) > 0
 
 
 # ── 5. Quarantine exclusion ────────────────────────────────────────────────────

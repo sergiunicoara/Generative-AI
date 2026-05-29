@@ -1,0 +1,60 @@
+# ── Version control ────────────────────────────────────────────────────────────
+.git
+.gitignore
+.gitattributes
+
+# ── Python cache ───────────────────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+*.egg-info/
+dist/
+build/
+*.egg
+.eggs/
+
+# ── Virtual environments ───────────────────────────────────────────────────────
+.venv/
+venv/
+env/
+ENV/
+
+# ── Test artefacts ─────────────────────────────────────────────────────────────
+tests/
+.pytest_cache/
+htmlcov/
+.coverage
+coverage.xml
+*.coveragerc
+
+# ── Evaluation & result data ───────────────────────────────────────────────────
+eval_data/
+results/
+*.jsonl
+*.parquet
+*.npy
+*.npz
+
+# ── IDE & OS ───────────────────────────────────────────────────────────────────
+.idea/
+.vscode/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+
+# ── Docs & tasks ──────────────────────────────────────────────────────────────
+tasks/
+*.md
+docs/
+
+# ── Local config overrides (never bake secrets into images) ───────────────────
+.env
+.env.*
+config/settings.local.yml
+
+# ── Notebooks ─────────────────────────────────────────────────────────────────
+notebooks/
+*.ipynb

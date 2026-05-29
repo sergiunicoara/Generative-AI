@@ -979,3 +979,134 @@ bootstrap — creating hidden coupling.
 > through the public REST API (`httpx.get(API_BASE + path)`), not through internal
 > service singletons.  This keeps auth, validation, and rate limiting in one place and
 > makes the dashboard independently deployable.
+
+---
+
+## A38 — Module-level import order: use before first use
+
+**What happened:**
+`neo4j_client.py` had `from pathlib import Path` at line 561, but `Path` was used at
+line 41 inside `init_schema()`.  The import worked only because `init_schema()` is
+called after the full module loads.  Any refactor that called it during module
+import would have caused a `NameError`.
+
+**Root cause:**
+The import was placed at the bottom "to avoid circular imports" — a comment that was
+never verified.  The actual circular-import risk did not exist.
+
+**Rule:**
+> Imports must appear at the top of the module unless there is a verified circular-import
+> reason.  "Placed here to avoid circular import" is not a reason — prove it by checking
+> what the imported symbol's module actually imports at the top level.  Fix the circular
+> import properly (move code, use `TYPE_CHECKING` guard, or restructure) rather than
+> deferring.
+
+---
+
+## A39 — Blocking I/O in async functions silently stalls the event loop
+
+**What happened:**
+`entity_linker.py._search_wikidata()` was declared `async` but used
+`urllib.request.urlopen(req, timeout=10)` — a blocking call — directly inside the
+coroutine body.  The 10-second network timeout blocked the *entire* event loop,
+freezing all concurrent requests.
+
+**Root cause:**
+`urllib.request` is inherently synchronous.  Marking a function `async` does not make
+its blocking calls non-blocking.
+
+**Rule:**
+> Any blocking I/O (file reads, `urllib`, `requests`, `subprocess`) inside an `async`
+> function must be wrapped in `await loop.run_in_executor(None, fn)`.  Alternatively,
+> use an async-native library (`httpx.AsyncClient`, `aiofiles`, `asyncio.create_subprocess_exec`).
+> Grep for `urllib.request`, `requests.get`, `open()`, `time.sleep()` inside `async def`
+> blocks as part of every code review.
+
+---
+
+## A40 — asyncio.get_event_loop() is deprecated in Python 3.10+
+
+**What happened:**
+12 files used `asyncio.get_event_loop()` inside `async def` functions.
+In Python 3.10+, calling `get_event_loop()` when there is no running loop emits a
+`DeprecationWarning` and will raise `RuntimeError` in a future version.
+Inside a running coroutine, the correct call is `asyncio.get_running_loop()`.
+
+**Root cause:**
+The code predated the Python 3.10 deprecation and was not updated during the upgrade.
+
+**Rule:**
+> Inside any `async def` block, always use `asyncio.get_running_loop()` — it raises
+> `RuntimeError` immediately if there is no running loop (a clear signal of misuse)
+> rather than silently creating one.  `asyncio.get_event_loop()` is only appropriate
+> in synchronous code that is guaranteed to run before the event loop starts.
+
+---
+
+## A41 — Module-level mutable state breaks multi-worker deployments
+
+**What happened:**
+`graphrag/monitoring/alerts.py` stored recent alerts in a module-level `deque`.
+Under `uvicorn --workers 4`, each worker process has its own copy of the deque.
+`GET /kg/health/alerts` returned only the alerts fired by the *current* worker —
+other workers' alerts were invisible.
+
+**Root cause:**
+In-process mutable state is invisible across OS-process boundaries.  Multi-worker
+deployments (gunicorn, uvicorn, celery) spawn separate processes that do not share
+memory.
+
+**Rule:**
+> Any mutable state that needs to be visible across multiple workers must live in a
+> shared store (Redis, Postgres, a queue).  Use the in-process structure only as a
+> fallback when the shared store is unavailable.  Pattern:
+> `_push_to_redis(item) or _local_deque.append(item)`.
+
+---
+
+## A42 — Admin dashboards need auth on every mutation path
+
+**What happened:**
+The Dash admin dashboard at `/admin` had zero authentication on callbacks including
+"Forget Entity" (GDPR deletion), "Rebuild Communities", and "Resolve Conflict".
+Any unauthenticated visitor could trigger these operations.
+
+**Root cause:**
+The Dash app was added quickly and the REST endpoints (protected by OAuth scopes)
+were called server-side, creating the illusion of security.  But the Dash callbacks
+that trigger the POST requests ran for *any* browser that loaded the page.
+
+**Rule:**
+> A WSGI dashboard mounted inside a FastAPI app is **not** automatically protected by
+> FastAPI's middleware.  Add `before_request` on the Flask server to check a session
+> cookie or token header.  Protect any callback that performs mutations (POST/DELETE)
+> even if the downstream API has its own auth — defense in depth requires the UI layer
+> to gate access too.
+
+---
+
+## A43 — AsyncMock side_effect lists must exactly match actual call counts
+
+**What happened:**
+Four tests in `test_safety_paths.py` had `side_effect` lists with phantom "CREATE" call
+slots inserted after queries that returned `[]`.  When a query returns an empty list,
+the `for row in rows:` loop body is never entered, so no CREATE is issued.  The tests
+assumed a CREATE always follows a query, which drifted the mock's slot mapping —
+the actual conflict row landed in the wrong slot, causing `KeyError` on unexpected
+field names.
+
+**Root cause:**
+The mock sequence was designed assuming "query → create" pairs, but the real code
+pattern is "query → *conditional* create per row".  Zero rows = zero creates.
+
+**Rule:**
+> When writing `AsyncMock(side_effect=[...])`, trace through the production code path
+> explicitly:
+> 1. List every `await db.run()` call and mark which ones are conditional (inside a
+>    for-loop over rows).
+> 2. Only include CREATE/UPDATE mocks when your mock rows will actually trigger that
+>    code path.
+> 3. Name each slot in a comment: `# 3: directional CREATE (only if row returned)`.
+> Zero-row queries produce zero subsequent CREATE calls.  Every phantom slot shifts
+> all subsequent slots by one, causing cascade KeyError failures on the next test run.
+

@@ -74,7 +74,7 @@ class RagasEvaluator:
 
         metrics = self._build_metrics()
 
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
         try:
             from ragas import evaluate
 

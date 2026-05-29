@@ -55,6 +55,17 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+# ── Prometheus metrics ─────────────────────────────────────────────────────────
+# Exposes /metrics in Prometheus text format.  Requires:
+#   prometheus-fastapi-instrumentator>=2.3.0  (already in requirements.txt)
+try:
+    from prometheus_fastapi_instrumentator import Instrumentator
+    Instrumentator().instrument(app).expose(app, endpoint="/metrics", tags=["Observability"])
+    log.info("startup.prometheus_metrics_enabled", endpoint="/metrics")
+except ImportError:
+    log.warning("startup.prometheus_unavailable",
+                hint="pip install prometheus-fastapi-instrumentator")
+
 # ── Middleware ─────────────────────────────────────────────────────────────────
 app.add_middleware(
     SessionMiddleware,

@@ -90,20 +90,16 @@ class AgenticRetriever:
         self._max_steps = max_steps
 
     def _llm(self, prompt: str) -> str:
-        loop = asyncio.get_event_loop()
-        resp = loop.run_until_complete(
-            loop.run_in_executor(
-                None,
-                lambda: self._client.models.generate_content(
-                    model=self._model,
-                    contents=prompt,
-                ),
-            )
+        # generate_content is synchronous — call directly to avoid
+        # run_until_complete() on an already-running event loop.
+        resp = self._client.models.generate_content(
+            model=self._model,
+            contents=prompt,
         )
         return resp.text.strip()
 
     async def _llm_async(self, prompt: str) -> str:
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
         resp = await loop.run_in_executor(
             None,
             lambda: self._client.models.generate_content(

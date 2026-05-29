@@ -37,11 +37,17 @@ async def get_current_user(
 
 
 def require_scope(scope: str):
-    """Dependency factory — enforce a specific scope on M2M tokens."""
+    """Dependency factory — enforce a specific scope on ALL token types.
+
+    Previously this only checked scopes when ``type == "m2m"``, which meant
+    any browser token (type="browser") bypassed the scope gate entirely.
+    The check is now unconditional: if the token doesn't carry the required
+    scope, access is denied regardless of how the token was issued.
+    """
 
     async def _check(user: dict = Depends(get_current_user)) -> dict:
         granted = set(user.get("scope", "").split())
-        if scope not in granted and user.get("type") == "m2m":
+        if scope not in granted:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail=f"Scope '{scope}' required",

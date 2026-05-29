@@ -69,11 +69,14 @@ except ImportError:
 # ── Middleware ─────────────────────────────────────────────────────────────────
 app.add_middleware(
     SessionMiddleware,
-    secret_key=settings.jwt_secret_key,
+    # Use a dedicated session secret distinct from the JWT signing key so
+    # rotating one doesn't invalidate the other.  Falls back to a derived
+    # value from jwt_secret_key for backward compatibility when not set.
+    secret_key=settings.session_secret_key or (settings.jwt_secret_key + ":session"),
     session_cookie="graphrag_session",
     max_age=3600,
     same_site="lax",
-    https_only=False,  # set True behind HTTPS
+    https_only=(settings.env == "production"),   # enforce HTTPS in prod
 )
 
 app.add_middleware(

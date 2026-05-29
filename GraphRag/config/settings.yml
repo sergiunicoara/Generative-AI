@@ -51,6 +51,7 @@ retrieval:
   redis_url: redis://localhost:6379/0  # update to your Redis instance in production
   session_ttl_seconds: 86400        # Redis key TTL for session turns (24h)
   session_store_strict: true        # true = fail startup if Redis unreachable; false = silent in-memory fallback
+  query_result_ttl_seconds: 3600   # how long to keep query results in Redis (1 hour)
   # ── GNN scoring (after multi-hop traversal) ───────────────────────────────
   gnn_enabled: true        # GCN/GAT graph-propagated re-scoring
   gnn_type: gat            # "gcn" (Kipf & Welling 2017) | "gat" (Veličković 2018)

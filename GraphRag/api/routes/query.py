@@ -1,4 +1,10 @@
-"""POST /query — publish question to the query queue; GET /query/{id} — poll result."""
+"""POST /query — publish question to the query queue; GET /query/{id} — poll result.
+
+Results are stored in Redis (via ResultStore) so the API and query worker —
+which run as separate containers — share the same result space.  The old
+in-process _results dict is gone; it was silently broken in any multi-worker
+or multi-container deployment because the worker wrote to its own memory.
+"""
 
 from __future__ import annotations
 
@@ -7,15 +13,9 @@ from pydantic import BaseModel
 
 from api.auth.dependencies import require_scope
 from graphrag.messaging.publishers import publish_query
+from graphrag.retrieval.result_store import get_result_store
 
 router = APIRouter()
-
-# Simple in-process result store: query_id -> result dict
-_results: dict[str, dict] = {}
-
-
-def store_result(query_id: str, result: dict) -> None:
-    _results[query_id] = result
 
 
 class QueryRequest(BaseModel):
@@ -44,13 +44,13 @@ async def submit_query(request: QueryRequest):
     except Exception as exc:
         raise HTTPException(status_code=503, detail=f"Queue unavailable: {exc}")
 
-    _results[query_id] = {"status": "queued"}
+    await get_result_store().set_status(query_id, "queued")
     return QueryResponse(query_id=query_id)
 
 
 @router.get("/{query_id}", dependencies=[Depends(require_scope("read"))])
 async def get_query_result(query_id: str):
-    result = _results.get(query_id)
+    result = await get_result_store().get(query_id)
     if result is None:
         raise HTTPException(status_code=404, detail="Query not found")
     return result

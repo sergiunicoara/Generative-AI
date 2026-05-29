@@ -1,4 +1,10 @@
-"""Google OAuth 2.0 — Authorization Code flow."""
+"""Google OAuth 2.0 — Authorization Code flow.
+
+State validation uses the session cookie (request.session["oauth_state"]) —
+not the old _state_store dict.  The dict was dead code: the redirect_uri
+stored in it was never read (it was recomputed at callback time), and the
+state value was already validated from the session before pop_state was called.
+"""
 
 from __future__ import annotations
 
@@ -9,35 +15,26 @@ import httpx
 
 from graphrag.core.config import get_settings
 
-GOOGLE_AUTH_URL = "https://accounts.google.com/o/oauth2/v2/auth"
-GOOGLE_TOKEN_URL = "https://oauth2.googleapis.com/token"
+GOOGLE_AUTH_URL   = "https://accounts.google.com/o/oauth2/v2/auth"
+GOOGLE_TOKEN_URL  = "https://oauth2.googleapis.com/token"
 GOOGLE_USERINFO_URL = "https://www.googleapis.com/oauth2/v3/userinfo"
-GOOGLE_CERTS_URL = "https://www.googleapis.com/oauth2/v3/certs"
-
-# Short-lived state store (in-memory; swap for Redis in prod)
-_state_store: dict[str, str] = {}
 
 
 def build_authorization_url(redirect_uri: str) -> tuple[str, str]:
     """Return (redirect_url, state) for the browser login flow."""
     settings = get_settings()
-    state = secrets.token_urlsafe(32)
-    _state_store[state] = redirect_uri
+    state    = secrets.token_urlsafe(32)
 
     params = {
-        "client_id": settings.google_oauth_client_id,
-        "redirect_uri": redirect_uri,
+        "client_id":     settings.google_oauth_client_id,
+        "redirect_uri":  redirect_uri,
         "response_type": "code",
-        "scope": "openid email profile",
-        "state": state,
-        "access_type": "offline",
-        "prompt": "select_account",
+        "scope":         "openid email profile",
+        "state":         state,
+        "access_type":   "offline",
+        "prompt":        "select_account",
     }
     return f"{GOOGLE_AUTH_URL}?{urlencode(params)}", state
-
-
-def pop_state(state: str) -> str | None:
-    return _state_store.pop(state, None)
 
 
 async def exchange_code_for_userinfo(code: str, redirect_uri: str) -> dict:
@@ -47,11 +44,11 @@ async def exchange_code_for_userinfo(code: str, redirect_uri: str) -> dict:
         token_resp = await client.post(
             GOOGLE_TOKEN_URL,
             data={
-                "code": code,
-                "client_id": settings.google_oauth_client_id,
+                "code":          code,
+                "client_id":     settings.google_oauth_client_id,
                 "client_secret": settings.google_oauth_client_secret,
-                "redirect_uri": redirect_uri,
-                "grant_type": "authorization_code",
+                "redirect_uri":  redirect_uri,
+                "grant_type":    "authorization_code",
             },
         )
         token_resp.raise_for_status()

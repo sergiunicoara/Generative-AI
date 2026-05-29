@@ -36,6 +36,10 @@ class Settings(BaseSettings):
 
     # ── OAuth / JWT ──────────────────────────────────────────────────────────────
     jwt_secret_key: str = "change-me-in-production"
+    # Separate secret for SessionMiddleware cookie signing.
+    # When empty, main.py derives one from jwt_secret_key + ":session".
+    # Set explicitly in production to allow independent rotation.
+    session_secret_key: str = ""
     google_oauth_client_id: str = ""
     google_oauth_client_secret: str = ""
     cors_origins: list[str] = ["http://localhost:8000", "http://localhost:8050"]

@@ -44,18 +44,17 @@ class QueryConsumer:
             msg = QueryMessage(**payload)
             result = await agent.run(msg)
 
-            # Store result for API polling
-            try:
-                from api.routes.query import store_result
-                store_result(msg.query_id, {
-                    "status": "completed",
-                    "query_id": msg.query_id,
-                    "answer": result.answer,
-                    "citations": result.citations,
-                    "latency_ms": result.latency_ms,
-                })
-            except (RuntimeError, ImportError):
-                pass  # worker may run standalone without API context
+            # Persist result via Redis-backed ResultStore so the API process
+            # (a separate container) can read it.  The old in-process dict
+            # import was silently broken in multi-container deployments.
+            from graphrag.retrieval.result_store import get_result_store
+            await get_result_store().set(msg.query_id, {
+                "status":     "completed",
+                "query_id":   msg.query_id,
+                "answer":     result.answer,
+                "citations":  result.citations,
+                "latency_ms": result.latency_ms,
+            })
 
             # Async RAGAS evaluation on sampled queries
             if random.random() < eval_sample_rate:

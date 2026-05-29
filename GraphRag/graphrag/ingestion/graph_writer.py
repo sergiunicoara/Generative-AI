@@ -16,7 +16,7 @@ import structlog
 
 from graphrag.core.config import get_settings
 from graphrag.core.models import Chunk, Document, Entity, Relation
-from graphrag.graph.alias_registry import get_alias_registry
+from graphrag.graph.alias_registry import get_alias_registry, _normalize as _alias_normalize
 from graphrag.graph.audit_trail import AuditTrail
 from graphrag.graph.community_builder import CommunityBuilder
 from graphrag.graph.community_manager import CommunityManager
@@ -177,10 +177,11 @@ class GraphWriter:
                 chunk.id, entity.name, entity.type, tenant=tenant
             )
 
-            # Register canonical name in alias registry in-memory cache
-            registry._exact[
-                __import__("re").sub(r"[^a-z0-9\s]", " ", entity.name.lower()).strip()
-            ] = (entity.name, entity.type)
+            # Register canonical name in alias registry in-memory cache.
+            # Must use the same _normalize() the registry uses for lookups —
+            # a partial inline normalization (missing whitespace-collapse) would
+            # write under a key resolve() never queries, silently breaking dedup.
+            registry._exact[_alias_normalize(entity.name)] = (entity.name, entity.type)
 
             await self._audit.log_entity_change(
                 entity_name=entity.name,

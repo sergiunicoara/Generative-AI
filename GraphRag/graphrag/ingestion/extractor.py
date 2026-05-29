@@ -73,8 +73,13 @@ class Extractor:
         )
 
         try:
-            data = json.loads(response.text)
-        except json.JSONDecodeError:
+            raw = response.text
+            if not raw:
+                # Gemini blocked the response (safety filter) or returned no candidates
+                log.warning("extractor.empty_response", chunk_id=chunk.id)
+                return [], []
+            data = json.loads(raw)
+        except (json.JSONDecodeError, TypeError):
             log.warning("extractor.parse_error", chunk_id=chunk.id)
             return [], []
 
@@ -116,7 +121,10 @@ class Extractor:
                         source_entity_id=src.id,
                         target_entity_id=tgt.id,
                         relation=r.get("relation", "RELATED_TO"),
-                        confidence=float(r.get("confidence", 1.0)),
+                        # Clamp to [0, 1] — LLMs occasionally return values outside
+                    # this range; the Bayesian merge formula breaks for out-of-range
+                    # inputs (confidence > 1 → merged confidence > 1 → corrupts graph).
+                    confidence=max(0.0, min(1.0, float(r.get("confidence", 1.0)))),
                         source_chunk_id=chunk.id,
                         extraction_model=self._model_name,
                         prompt_version="v1",

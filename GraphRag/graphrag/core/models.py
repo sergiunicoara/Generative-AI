@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timezone
 from enum import Enum
 from typing import Any
 from uuid import uuid4
@@ -44,7 +44,7 @@ class Document(BaseModel):
     source_path: str
     raw_text: str
     metadata: dict[str, Any] = Field(default_factory=dict)
-    ingested_at: datetime = Field(default_factory=datetime.utcnow)
+    ingested_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     status: str = "pending"   # pending | processing | done | failed
     authority_level: int = AuthorityLevel.INFORMAL
     supersedes: list[str] = Field(default_factory=list)   # doc IDs this replaces
@@ -86,7 +86,7 @@ class Relation(BaseModel):
     relation: str
     weight: float = 1.0
     confidence: float = 1.0
-    extracted_at: datetime = Field(default_factory=datetime.utcnow)
+    extracted_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     source_chunk_id: str = ""
     source_doc_id: str = ""
     source_type: SourceType = SourceType.DOCUMENT
@@ -121,7 +121,7 @@ class CanonicalPart(BaseModel):
     material: str = ""
     supplier: str = ""
     embedding: list[float] = Field(default_factory=list)
-    updated_at: datetime = Field(default_factory=datetime.utcnow)
+    updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 
 class AliasEntry(BaseModel):
@@ -141,7 +141,7 @@ class ChangeLog(BaseModel):
     target_id: str
     target_label: str   # Entity | Relation | Document | etc.
     changed_by: str = "system"
-    changed_at: datetime = Field(default_factory=datetime.utcnow)
+    changed_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     operation: str = "update"   # create | update | delete | merge
     old_values: dict[str, Any] = Field(default_factory=dict)
     new_values: dict[str, Any] = Field(default_factory=dict)
@@ -188,7 +188,7 @@ class Statement(BaseModel):
     confidence: float = 1.0
     source_doc_ids: list[str] = Field(default_factory=list)
     tenant: str = "default"
-    reified_at: datetime = Field(default_factory=datetime.utcnow)
+    reified_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 
 class CalibrationSample(BaseModel):
@@ -201,7 +201,7 @@ class CalibrationSample(BaseModel):
     prompt_version: str = ""
     tenant: str = "default"
     verified_by: str = "system"
-    recorded_at: datetime = Field(default_factory=datetime.utcnow)
+    recorded_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 
 class GraphSnapshot(BaseModel):
@@ -216,7 +216,7 @@ class GraphSnapshot(BaseModel):
     community_count: int = 0
     orphan_count: int = 0
     avg_confidence: float = 0.0
-    created_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 
 # ── Query / retrieval models ───────────────────────────────────────────────────
@@ -239,7 +239,7 @@ class SessionTurn(BaseModel):
     answer: str
     referenced_entities: list[str] = Field(default_factory=list)
     referenced_chunks: list[str] = Field(default_factory=list)
-    timestamp: datetime = Field(default_factory=datetime.utcnow)
+    timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 
 # ── Evaluation models ──────────────────────────────────────────────────────────
@@ -248,7 +248,7 @@ class EvalJob(BaseModel):
     job_id: str = Field(default_factory=lambda: str(uuid4()))
     query_result: QueryResult
     ground_truth: str = ""
-    created_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 
 class EvalResult(BaseModel):
@@ -258,7 +258,7 @@ class EvalResult(BaseModel):
     answer_relevancy: float = 0.0
     context_precision: float = 0.0
     context_recall: float = 0.0
-    scored_at: datetime = Field(default_factory=datetime.utcnow)
+    scored_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 
 # ── Business Matrix models ─────────────────────────────────────────────────────
@@ -266,7 +266,7 @@ class EvalResult(BaseModel):
 class KPIEvent(BaseModel):
     event_id: str = Field(default_factory=lambda: str(uuid4()))
     query_id: str
-    recorded_at: datetime = Field(default_factory=datetime.utcnow)
+    recorded_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     latency_ms: float
     faithfulness: float = 0.0
     answer_relevancy: float = 0.0

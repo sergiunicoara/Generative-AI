@@ -45,6 +45,17 @@ class Embedder:
             embeddings.extend([e.values for e in result.embeddings])
             log.info("embedder.batch_done", count=len(batch_texts))
 
+        # Guard: if the API returned fewer embeddings than chunks (partial failure,
+        # truncation, or batch-size mismatch), zip() would silently assign wrong
+        # embeddings to trailing chunks — corrupting every subsequent retrieval.
+        # Fail loudly instead so the caller can retry or surface the error.
+        if len(embeddings) != len(chunks):
+            raise ValueError(
+                f"Embedder count mismatch: expected {len(chunks)} embeddings "
+                f"but received {len(embeddings)}. "
+                "A partial API response would silently corrupt chunk-to-embedding mapping."
+            )
+
         for chunk, emb in zip(chunks, embeddings):
             chunk.embedding = emb
 

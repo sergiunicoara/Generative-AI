@@ -7,7 +7,7 @@ PYTEST    ?= $(PYTHON) -m pytest
 UVICORN   ?= $(PYTHON) -m uvicorn
 PIP       ?= $(PYTHON) -m pip
 
-.PHONY: help install test test-integration test-load test-all lint \
+.PHONY: help install install-dev lock test test-integration test-load test-all lint \
         api dashboard backup services-up services-down \
         community-rebuild re-embed entity-migrate
 
@@ -22,8 +22,11 @@ help:          ## Show this help
 install:       ## Install all Python dependencies
 	$(PIP) install -r requirements.txt
 
-install-dev:   ## Install + development extras (pytest, ruff)
-	$(PIP) install -r requirements.txt ruff
+install-dev:   ## Install + development extras (pytest, ruff, pip-tools)
+	$(PIP) install -r requirements.txt ruff pip-tools
+
+lock:          ## Regenerate requirements.lock from requirements.txt (reproducible builds)
+	pip-compile requirements.txt --output-file requirements.lock --strip-extras
 
 # ── Testing ────────────────────────────────────────────────────────────────────
 

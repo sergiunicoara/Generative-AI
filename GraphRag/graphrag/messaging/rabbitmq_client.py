@@ -131,7 +131,7 @@ class RabbitMQClient:
                         payload = json.loads(message.body)
                         await handler(payload)
                         await message.ack()
-                    except Exception as exc:
+                    except Exception as exc:  # broad: handler may raise anything; must not kill consumer loop
                         log.error(
                             "rabbitmq.handler_error",
                             error=str(exc),

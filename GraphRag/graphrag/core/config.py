@@ -6,7 +6,7 @@ from functools import lru_cache
 from pathlib import Path
 
 import yaml
-from pydantic import Field
+from pydantic import model_validator
 from pydantic_settings import BaseSettings
 
 
@@ -48,6 +48,21 @@ class Settings(BaseSettings):
     _yaml: dict = {}
 
     model_config = {"env_file": str(ROOT / ".env"), "extra": "ignore"}
+
+    @model_validator(mode="after")
+    def _validate_production_secrets(self) -> "Settings":
+        """Fail fast if production is running with insecure defaults."""
+        if self.env == "production":
+            if self.jwt_secret_key == "change-me-in-production":
+                raise ValueError(
+                    "jwt_secret_key must be set to a strong random secret in production. "
+                    "Generate one with: python -c \"import secrets; print(secrets.token_hex(32))\""
+                )
+            if self.neo4j_password == "graphrag_dev":
+                raise ValueError(
+                    "neo4j_password must be changed from the default 'graphrag_dev' in production."
+                )
+        return self
 
     def __init__(self, **data):
         super().__init__(**data)

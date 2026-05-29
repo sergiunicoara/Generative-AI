@@ -81,9 +81,16 @@ _STATIC_PFXS = ("/admin/_dash", "/admin/assets")
 
 @app.server.before_request
 def _require_auth():
-    """Redirect unauthenticated browsers when GRAPHRAG_ADMIN_TOKEN is set."""
+    """Redirect unauthenticated browsers; fail closed in production."""
     if not ADMIN_TOKEN:
-        return   # open dev mode — no token configured
+        # No token configured: open in dev/test, but hard-deny in production.
+        try:
+            from graphrag.core.config import get_settings
+            if get_settings().env == "production":
+                flask.abort(403)  # fail closed — never open-access in prod
+        except Exception:  # noqa: BLE001 — config error must not expose dashboard
+            flask.abort(403)
+        return  # dev mode
     path = flask.request.path
     # Always allow the login page and Dash static assets
     if path in (_LOGIN_PATH, _LOGIN_POST) or any(path.startswith(p) for p in _STATIC_PFXS):

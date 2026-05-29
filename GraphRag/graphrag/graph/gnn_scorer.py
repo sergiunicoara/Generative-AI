@@ -189,6 +189,7 @@ class GNNScorer:
                 #   final = α·text + β·0 = α·text
                 c["final_score"] = alpha * text_score
                 c["explanation"] = f"GNN skipped: no entities (text={text_score:.3f})"
+            chunks.sort(key=lambda c: c["final_score"], reverse=True)
             return chunks
 
         q = np.array(query_vec, dtype=np.float32)

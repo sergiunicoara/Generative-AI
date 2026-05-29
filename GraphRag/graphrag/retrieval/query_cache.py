@@ -96,7 +96,7 @@ class QueryCache:
             self._redis = aioredis.from_url(redis_url, decode_responses=True)
             await self._redis.ping()
             log.info("query_cache.redis_connected")
-        except Exception as exc:
+        except (ImportError, OSError, ConnectionError) as exc:
             log.warning("query_cache.redis_unavailable", error=str(exc),
                         fallback="in-memory")
             self._redis = None
@@ -217,7 +217,8 @@ class QueryCache:
                     await self._redis.delete(key)
                     count += 1
                 return count
-            except Exception:
+            except Exception as exc:  # broad: redis.RedisError hierarchy; redis pkg may not be installed at module scope
+                log.warning("query_cache.flush_error", tenant=tenant, error=str(exc))
                 return 0
         else:
             before = len(self._memory)

@@ -49,3 +49,6 @@ structlog>=24.2.0
 
 # ── Resilience ─────────────────────────────────────────────────────────────────
 tenacity>=8.3.0
+
+# ── WSGI→ASGI bridge (admin dashboard under FastAPI) ──────────────────────────
+a2wsgi>=1.10.0

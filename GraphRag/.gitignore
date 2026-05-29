@@ -8,3 +8,11 @@ results/kpi_snapshots/kpis.db
 results/ragas_reports/
 *.egg-info/
 .pytest_cache/
+
+# Sample/eval data — not tracked; add real samples per project
+eval_data/*.json
+eval_data/*.jsonl
+eval_data/*.npy
+
+# Dependency lock (generated — regenerate with: make lock)
+requirements.lock

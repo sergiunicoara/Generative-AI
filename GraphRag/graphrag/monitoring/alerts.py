@@ -78,7 +78,7 @@ def _redis_client():
         import redis as redis_lib   # sync redis-py
         return redis_lib.from_url(_REDIS_URL, socket_connect_timeout=1,
                                   socket_timeout=1, decode_responses=True)
-    except Exception:
+    except (ImportError, OSError, ConnectionError, ValueError):
         return None
 
 
@@ -94,7 +94,7 @@ def _push_to_redis(alert: dict) -> bool:
         r.lpush(_REDIS_KEY, json.dumps(alert))
         r.ltrim(_REDIS_KEY, 0, ALERT_HISTORY - 1)
         return True
-    except Exception as exc:
+    except (OSError, ConnectionError, ValueError) as exc:
         log.warning("alerts.redis_push_failed", error=str(exc))
         return False
 
@@ -110,7 +110,7 @@ def _read_from_redis(limit: int) -> list[dict] | None:
             return None
         raw = r.lrange(_REDIS_KEY, 0, limit - 1)
         return [json.loads(item) for item in raw]
-    except Exception as exc:
+    except (OSError, ConnectionError, ValueError, json.JSONDecodeError) as exc:
         log.warning("alerts.redis_read_failed", error=str(exc))
         return None
 
@@ -317,8 +317,8 @@ def get_alert_service() -> AlertService:
             if isinstance(bm, dict):
                 thresholds = bm.get("alert_thresholds", {}) or {}
                 tenant_thresholds = bm.get("tenant_alert_thresholds", {}) or {}
-        except Exception:
-            pass
+        except (ImportError, AttributeError, KeyError, TypeError):
+            pass  # config unavailable — use defaults
         _svc = AlertService(
             thresholds=thresholds or None,
             tenant_thresholds=tenant_thresholds or None,

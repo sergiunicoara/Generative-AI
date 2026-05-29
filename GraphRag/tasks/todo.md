@@ -212,6 +212,43 @@ Running the full suite exposed 4 pre-existing test failures (first time safety p
 
 ---
 
+---
+
+## Phase 11 — Audit Follow-ups
+
+All 12 findings from the second code audit implemented.
+
+### P0 — Security
+- [x] `graphrag/core/config.py` — add `model_validator` that raises in production when `jwt_secret_key` or `neo4j_password` are default values
+- [x] `graphrag/dashboard/app.py` — fail closed when `GRAPHRAG_ADMIN_TOKEN` is unset and `env=production` (previously open to all with no token)
+- [x] `api/main.py` — tighten CORS: `allow_methods` to explicit list, `allow_headers` to explicit set
+
+### P1 — Reliability / Ops
+- [x] `.github/workflows/ci.yml` — create GitHub Actions CI: test matrix on push/PR, ruff lint job
+- [x] `api/main.py` — add `GET /health/ready` readiness probe that pings Neo4j and Redis
+- [x] `api/main.py` — replace deprecated `starlette.middleware.wsgi.WSGIMiddleware` with `a2wsgi.WSGIMiddleware`; add `a2wsgi>=1.10.0` to `requirements.txt`
+- [x] Narrow key `except Exception` blocks in `alerts.py` (4 blocks), `query_cache.py` (2 blocks), `graph_snapshots.py` (1 block), `rabbitmq_client.py` (add intent comment)
+
+### P2 — Reproducibility & Test depth
+- [x] `Makefile` — add `make lock` target using `pip-compile`; add `pip-tools` to `install-dev`
+- [x] `tests/unit/test_gnn_scorer.py` — 23 tests: adjacency normalisation, GCN/GAT math, edge filtering, hub dampening, text score, confidence propagation
+- [x] `tests/unit/test_inference_engine.py` — 18 tests: rule defaults, dispatch, fixpoint, dry-run, tenant, run_for_document
+- [x] `tests/unit/test_confidence_calibration.py` — 20 tests: add_sample clamping, Brier score, calibration curve binning, apply_calibration, summary verdict
+
+### P3 — Repo hygiene
+- [x] Move `check_db.py`, `check_embed.py`, `check_key.py`, `test_gnn.py`, `test_hybrid.py` → `scripts/dev/`; add `scripts/dev/README.md`
+- [x] Move `d1.json`, `d2.json`, `d3.json` → `eval_data/`; add `eval_data/*.json` to `.gitignore`
+- [x] `Dockerfile` — multi-stage build (builder + runtime stages); non-root `app` user; `HEALTHCHECK` instruction
+- [x] `.gitignore` — add `eval_data/` patterns, `requirements.lock`
+
+### Test counts after Phase 11
+- Unit: 97 (prev 36 + 23 gnn_scorer + 18 inference_engine + 20 confidence_calibration)
+- Integration: 33 (unchanged)
+- Load: 5 (unchanged)
+- **Total: 135 tests, all pass**
+
+---
+
 ## Review
 
 ### What was built

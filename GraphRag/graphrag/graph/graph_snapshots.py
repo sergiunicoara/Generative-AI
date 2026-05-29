@@ -126,7 +126,7 @@ class GraphSnapshotService:
                     "orphan_rate":         report.get("orphan_growth", {}).get("orphan_rate", 0.0),
                     "community_coherence": report.get("community_coherence", {}).get("avg_community_coherence", 0.0),
                 }
-            except Exception as exc:
+            except (KeyError, TypeError, AttributeError) as exc:
                 log.warning("graph_snapshots.health_skipped", error=str(exc))
 
         snap_id = str(uuid4())

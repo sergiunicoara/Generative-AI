@@ -80,8 +80,8 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.cors_origins,
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+    allow_headers=["Authorization", "Content-Type", "X-Admin-Token", "X-Requested-With"],
 )
 
 # ── Routes ────────────────────────────────────────────────────────────────────
@@ -96,16 +96,57 @@ app.include_router(kg_features.router, prefix="/kg",          tags=["KG Features
 
 @app.get("/health", tags=["Health"])
 async def health():
+    """Liveness probe — always returns 200 if the process is alive."""
     return {"status": "ok"}
 
 
+@app.get("/health/ready", tags=["Health"])
+async def health_ready():
+    """Readiness probe — verifies Neo4j and Redis are reachable.
+
+    Returns HTTP 200 when all dependencies are healthy, HTTP 503 otherwise.
+    Orchestrators (Kubernetes, ECS, docker-compose healthcheck) should use
+    this endpoint to gate traffic.
+    """
+    from fastapi import HTTPException
+
+    checks: dict[str, str] = {}
+    failed = False
+
+    # ── Neo4j ──────────────────────────────────────────────────────────────────
+    try:
+        from graphrag.graph.neo4j_client import get_neo4j
+        await get_neo4j().run("RETURN 1 AS ok")
+        checks["neo4j"] = "ok"
+    except Exception as exc:  # noqa: BLE001
+        checks["neo4j"] = f"error: {exc}"
+        failed = True
+
+    # ── Redis (session store) ───────────────────────────────────────────────────
+    try:
+        from graphrag.retrieval.session_store import get_session_store
+        alive = await get_session_store().ping()
+        checks["redis"] = "ok" if alive else "unavailable (in-memory fallback active)"
+    except Exception as exc:  # noqa: BLE001
+        checks["redis"] = f"error: {exc}"
+        # Redis is non-critical when strict=False — don't mark as failed
+
+    if failed:
+        raise HTTPException(status_code=503, detail={"status": "unhealthy", "checks": checks})
+    return {"status": "healthy", "checks": checks}
+
+
 # ── Admin dashboard ────────────────────────────────────────────────────────────
-# Mount the Dash admin panel at /admin using the WSGI bridge.
-# Dash renders server-side via Flask/Werkzeug; WSGIMiddleware adapts it to ASGI.
+# Mount the Dash admin panel at /admin using a2wsgi (the modern WSGI→ASGI bridge;
+# starlette.middleware.wsgi.WSGIMiddleware is deprecated and removed in newer
+# Starlette versions).
 try:
-    from starlette.middleware.wsgi import WSGIMiddleware
+    from a2wsgi import WSGIMiddleware
     from graphrag.dashboard.app import app as dash_app
     app.mount("/admin", WSGIMiddleware(dash_app.server))
     log.info("startup.admin_dashboard_mounted", path="/admin")
-except Exception as _dash_exc:
+except ImportError:
+    log.warning("startup.admin_dashboard_unavailable",
+                hint="pip install a2wsgi to enable the admin dashboard")
+except Exception as _dash_exc:  # noqa: BLE001
     log.warning("startup.admin_dashboard_unavailable", error=str(_dash_exc))

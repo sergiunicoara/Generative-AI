@@ -1,5 +1,5 @@
-#!/usr/bin/env python
-"""kg_backup.py — Export and restore the GraphRAG knowledge graph.
+﻿#!/usr/bin/env python
+"""kg_backup.py â€” Export and restore the knowledge graph.
 
 Usage
 -----
@@ -16,7 +16,7 @@ Usage
 
 File format
 -----------
-NDJSON — one JSON object per line.  Each line is tagged with a ``_type`` field:
+NDJSON â€” one JSON object per line.  Each line is tagged with a ``_type`` field:
   {"_type": "entity",   "name": ..., "type": ..., "tenant": ..., ...}
   {"_type": "relation", "src": ...,  "tgt": ...,  "relation": ..., ...}
   {"_type": "chunk",    "id": ...,   "text": ..., ...}
@@ -44,7 +44,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 BACKUP_VERSION = "1.0"
 
 
-# ── I/O helpers ───────────────────────────────────────────────────────────────
+# â”€â”€ I/O helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 def _is_s3(path: str) -> bool:
     return path.startswith("s3://")
@@ -97,7 +97,7 @@ def _open_read_lines(path: str):
     return open(path, "r", encoding="utf-8").readlines()
 
 
-# ── Backup ────────────────────────────────────────────────────────────────────
+# â”€â”€ Backup â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 async def do_backup(args: argparse.Namespace) -> None:
     from graphrag.graph.neo4j_client import get_neo4j
@@ -107,12 +107,12 @@ async def do_backup(args: argparse.Namespace) -> None:
     output = args.output
     is_s3  = _is_s3(output)
 
-    print(f"[kg_backup] Backing up tenant={tenant!r} → {output}")
+    print(f"[kg_backup] Backing up tenant={tenant!r} â†’ {output}")
 
     f = _open_write(output)
     n_entities = n_relations = n_chunks = 0
 
-    # ── Metadata header ──────────────────────────────────────────────────────
+    # â”€â”€ Metadata header â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     meta = {
         "_type":       "meta",
         "tenant":      tenant,
@@ -121,7 +121,7 @@ async def do_backup(args: argparse.Namespace) -> None:
     }
     _write_ndjson_line(f, meta)
 
-    # ── Entities ─────────────────────────────────────────────────────────────
+    # â”€â”€ Entities â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     entity_rows = await neo4j.run(
         """
         MATCH (e:Entity {tenant: $tenant})
@@ -142,7 +142,7 @@ async def do_backup(args: argparse.Namespace) -> None:
     n_entities = len(entity_rows)
     print(f"[kg_backup]   entities : {n_entities}")
 
-    # ── Relations ─────────────────────────────────────────────────────────────
+    # â”€â”€ Relations â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     rel_rows = await neo4j.run(
         """
         MATCH (s:Entity {tenant: $tenant})-[r:RELATES_TO]->(t:Entity {tenant: $tenant})
@@ -165,7 +165,7 @@ async def do_backup(args: argparse.Namespace) -> None:
     n_relations = len(rel_rows)
     print(f"[kg_backup]   relations: {n_relations}")
 
-    # ── Chunks ────────────────────────────────────────────────────────────────
+    # â”€â”€ Chunks â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     chunk_rows = await neo4j.run(
         """
         MATCH (c:Chunk {tenant: $tenant})
@@ -192,12 +192,12 @@ async def do_backup(args: argparse.Namespace) -> None:
         print(f"[kg_backup] Written to {output}")
 
     print(
-        f"[kg_backup] Backup complete — "
+        f"[kg_backup] Backup complete â€” "
         f"{n_entities} entities, {n_relations} relations, {n_chunks} chunks"
     )
 
 
-# ── Restore ───────────────────────────────────────────────────────────────────
+# â”€â”€ Restore â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 async def do_restore(args: argparse.Namespace) -> None:
     from graphrag.graph.neo4j_client import get_neo4j
@@ -294,13 +294,13 @@ async def do_restore(args: argparse.Namespace) -> None:
             n_chunks += 1
 
     print(
-        f"[kg_backup] Restore complete — "
+        f"[kg_backup] Restore complete â€” "
         f"{n_entities} entities, {n_relations} relations, {n_chunks} chunks  "
         f"(skipped {skipped} malformed lines)"
     )
 
 
-# ── List S3 ───────────────────────────────────────────────────────────────────
+# â”€â”€ List S3 â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 def do_list(args: argparse.Namespace) -> None:
     prefix = args.prefix
@@ -327,11 +327,11 @@ def do_list(args: argparse.Namespace) -> None:
         print(f"  s3://{bucket}/{obj['Key']}  ({obj['Size']} bytes,  {obj['LastModified']})")
 
 
-# ── CLI ───────────────────────────────────────────────────────────────────────
+# â”€â”€ CLI â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Export or restore the GraphRAG knowledge graph."
+        description="Export or restore the knowledge graph."
     )
     sub = parser.add_subparsers(dest="command", required=True)
 
@@ -364,3 +364,4 @@ if __name__ == "__main__":
         asyncio.run(do_restore(args))
     elif args.command == "list":
         do_list(args)
+

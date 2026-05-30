@@ -332,7 +332,7 @@ async def step6_summary() -> None:
 
 async def run_demo() -> None:
     print(f"\n{BOLD}{'=' * 60}{RESET}")
-    print(f"{BOLD}  GraphRAG — Regulatory Knowledge Graph Demo{RESET}")
+    print(f"{BOLD}  AI Knowledge Graph & Ontology Platform — Regulatory Demo{RESET}")
     print(f"{BOLD}  Domain: Aerospace / Airworthiness Intelligence{RESET}")
     print(f"{BOLD}{'═' * 60}{RESET}")
 
@@ -357,7 +357,7 @@ async def run_demo() -> None:
 
 def main() -> None:
     parser = argparse.ArgumentParser(
-        description="GraphRAG regulatory knowledge graph demonstration"
+        description="AI Knowledge Graph & Ontology Platform — regulatory demonstration"
     )
     parser.add_argument("--live", action="store_true",
                         help="Use live Neo4j instead of mocks (requires :7687)")

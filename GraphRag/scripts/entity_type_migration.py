@@ -1,5 +1,5 @@
-#!/usr/bin/env python
-"""entity_type_migration.py — Cascade-rename an entity type in the graph.
+﻿#!/usr/bin/env python
+"""entity_type_migration.py â€” Cascade-rename an entity type in the graph.
 
 Usage
 -----
@@ -60,8 +60,8 @@ async def main(args: argparse.Namespace) -> None:
 
     print(
         f"[entity_type_migration] "
-        f"{'DRY RUN — ' if dry_run else ''}"
-        f"Renaming '{old_type}' → '{new_type}'  tenant={tenant!r}"
+        f"{'DRY RUN â€” ' if dry_run else ''}"
+        f"Renaming '{old_type}' â†’ '{new_type}'  tenant={tenant!r}"
     )
 
     report = await registry.rename_entity_type(
@@ -87,14 +87,14 @@ async def main(args: argparse.Namespace) -> None:
         if status == "complete":
             print("[entity_type_migration] Migration applied successfully.")
         elif status == "no_entities":
-            print("[entity_type_migration] No entities found with that type — nothing to do.")
+            print("[entity_type_migration] No entities found with that type â€” nothing to do.")
         elif status == "no_op":
-            print("[entity_type_migration] Old and new types are identical — no action taken.")
+            print("[entity_type_migration] Old and new types are identical â€” no action taken.")
 
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Cascade-rename an entity type across the GraphRAG knowledge graph."
+        description="Cascade-rename an entity type across the knowledge graph."
     )
     parser.add_argument(
         "--old-type", required=True, dest="old_type",
@@ -117,3 +117,4 @@ def parse_args() -> argparse.Namespace:
 
 if __name__ == "__main__":
     asyncio.run(main(parse_args()))
+

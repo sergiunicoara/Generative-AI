@@ -1,4 +1,4 @@
-"""Standalone community rebuild script — decoupled from the ingestion path.
+﻿"""Standalone community rebuild script â€” decoupled from the ingestion path.
 
 Problem solved
 --------------
@@ -26,9 +26,9 @@ Usage
 
 Exit codes
 ----------
-  0  — completed successfully (rebuilt or not stale)
-  1  — rebuild failed (exception)
-  2  — dry-run found stale graph (rebuild needed, none performed)
+  0  â€” completed successfully (rebuilt or not stale)
+  1  â€” rebuild failed (exception)
+  2  â€” dry-run found stale graph (rebuild needed, none performed)
 """
 
 from __future__ import annotations
@@ -196,7 +196,7 @@ async def main(args: argparse.Namespace) -> int:
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
-        description="Rebuild GraphRAG community summaries for one or all tenants."
+        description="Rebuild community summaries for one or all tenants."
     )
     parser.add_argument(
         "--tenant",
@@ -215,3 +215,4 @@ if __name__ == "__main__":
     )
     parsed = parser.parse_args()
     sys.exit(asyncio.run(main(parsed)))
+

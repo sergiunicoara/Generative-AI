@@ -1,12 +1,12 @@
-"""Graph maintenance — long-term decay cleanup and health monitoring.
+﻿"""Graph maintenance â€” long-term decay cleanup and health monitoring.
 
 Problems solved
 ---------------
-1. Long-term graph decay — stale nodes, orphaned relationships, and
+1. Long-term graph decay â€” stale nodes, orphaned relationships, and
    low-confidence edges accumulate silently over months. Without
    scheduled cleanup, graph quality degrades and retrieval worsens.
 
-2. Emergent graph complexity — the graph structure grows in unexpected
+2. Emergent graph complexity â€” the graph structure grows in unexpected
    ways as more documents are ingested. This script monitors structural
    health metrics so degradation is visible before it becomes a problem.
 
@@ -74,7 +74,7 @@ async def run_stale_cleanup(neo4j) -> dict:
 async def run_orphan_cleanup(neo4j) -> dict:
     """
     Flag orphan entities (no chunk link, older than ORPHAN_AGE_DAYS).
-    Does NOT delete — flags for human review.
+    Does NOT delete â€” flags for human review.
     """
     result = await neo4j.run(
         """
@@ -145,7 +145,7 @@ async def run_health_report(neo4j) -> dict:
 
 
 async def main():
-    parser = argparse.ArgumentParser(description="GraphRAG graph maintenance")
+    parser = argparse.ArgumentParser(description="Knowledge graph maintenance")
     parser.add_argument(
         "--mode",
         choices=["stale", "orphans", "dirty", "cycles", "report", "full"],
@@ -172,7 +172,7 @@ async def main():
     if args.mode in ("report", "full"):
         results.update(await run_health_report(neo4j))
 
-    print("\n── Maintenance Report ──────────────────────────")
+    print("\nâ”€â”€ Maintenance Report â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€")
     for key, value in results.items():
         print(f"  {key:<35} {value}")
     print()
@@ -182,3 +182,4 @@ async def main():
 
 if __name__ == "__main__":
     asyncio.run(main())
+

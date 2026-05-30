@@ -1,5 +1,5 @@
-#!/usr/bin/env python
-"""re_embed.py — Re-embed entities whose embedding model/version is stale.
+﻿#!/usr/bin/env python
+"""re_embed.py â€” Re-embed entities whose embedding model/version is stale.
 
 Usage
 -----
@@ -44,7 +44,7 @@ async def main(args: argparse.Namespace) -> None:
 
     print(f"[re_embed] tenant={tenant!r}  model={model!r}  version={version!r}")
 
-    # ── Compatibility check ──────────────────────────────────────────────────
+    # â”€â”€ Compatibility check â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     expected_dim = getattr(cfg, "embedding_dim", 768)
     compat = await registry.check_compatibility(
         current_model=model,
@@ -58,7 +58,7 @@ async def main(args: argparse.Namespace) -> None:
     if compat.get("action_required"):
         print(f"[re_embed] WARNING: {compat.get('reason')}")
 
-    # ── Queue stale entities ─────────────────────────────────────────────────
+    # â”€â”€ Queue stale entities â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     queued = await registry.queue_re_embed(
         model=model,
         version=version,
@@ -73,10 +73,10 @@ async def main(args: argparse.Namespace) -> None:
         return
 
     if queued == 0:
-        print("[re_embed] Nothing to do — all embeddings are current.")
+        print("[re_embed] Nothing to do â€” all embeddings are current.")
         return
 
-    # ── Build embedder callable ───────────────────────────────────────────────
+    # â”€â”€ Build embedder callable â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     async def embedder(texts: list[str]) -> list[list[float]]:
         """Embed a batch of texts using the configured embedding service."""
         try:
@@ -86,7 +86,7 @@ async def main(args: argparse.Namespace) -> None:
             print(f"[re_embed] Embedding error: {exc}", file=sys.stderr)
             raise
 
-    # ── Apply re-embedding ────────────────────────────────────────────────────
+    # â”€â”€ Apply re-embedding â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     print(f"[re_embed] Starting re-embedding with batch_size={args.batch_size} ...")
     result = await registry.apply_re_embedding(
         embedder=embedder,
@@ -103,7 +103,7 @@ async def main(args: argparse.Namespace) -> None:
         f"skipped={result.get('skipped', 0)}"
     )
 
-    # ── Record version in audit node ─────────────────────────────────────────
+    # â”€â”€ Record version in audit node â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     await registry.record_version(
         model=model,
         version=version,
@@ -114,7 +114,7 @@ async def main(args: argparse.Namespace) -> None:
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Re-embed stale entities in the GraphRAG knowledge graph."
+        description="Re-embed stale entities in the knowledge graph."
     )
     parser.add_argument("--tenant",     default="default",
                         help="Tenant to process (default: 'default')")
@@ -128,7 +128,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--limit",      type=int, default=10000,
                         help="Max entities to queue per run (default: 10000)")
     parser.add_argument("--dry-run",    action="store_true", dest="dry_run",
-                        help="Queue only — do not write embeddings")
+                        help="Queue only â€” do not write embeddings")
     parser.add_argument("--force",      action="store_true",
                         help="Re-embed ALL entities, even non-stale")
     return parser.parse_args()
@@ -136,3 +136,4 @@ def parse_args() -> argparse.Namespace:
 
 if __name__ == "__main__":
     asyncio.run(main(parse_args()))
+

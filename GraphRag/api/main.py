@@ -1,4 +1,4 @@
-"""FastAPI application — GraphRAG API with OAuth 2.0."""
+"""FastAPI application — AI Knowledge Graph & Ontology Platform API with OAuth 2.0."""
 
 import secrets
 from contextlib import asynccontextmanager
@@ -60,9 +60,9 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(  # noqa: E302 — rate limiter attached below
-    title="GraphRAG API",
+    title="AI Knowledge Graph & Ontology Platform API",
     description=(
-        "Enterprise GraphRAG pipeline with Neo4j, RabbitMQ, RAGAS, and Google ADK.\n\n"
+        "Production knowledge graph platform with Neo4j, OWL-RL reasoning, SPARQL, TransE link prediction, RabbitMQ, RAGAS, and Google ADK.\n\n"
         "**Browser auth:** visit [`/auth/dev-login`](/auth/dev-login) (dev) "
         "or [`/auth/login`](/auth/login) (Google)\n\n"
         "**M2M auth:** `POST /auth/token` with `client_credentials` grant"

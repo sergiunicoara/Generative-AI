@@ -1,6 +1,6 @@
-# GraphRAG — Production Knowledge Graph Platform
+# AI Knowledge Graph & Ontology Platform
 
-A production-grade **knowledge graph platform** that turns unstructured documents into a structured, queryable intelligence layer — with formal ontology enforcement, multi-type inference, entity resolution, bitemporal modeling, and an LLM-augmented retrieval pipeline on top.
+A production-grade platform for building, querying, and reasoning over enterprise knowledge graphs — with formal OWL ontology enforcement, SPARQL querying, OWL-RL reasoning, TransE link prediction, forward-chaining inference, and an LLM-augmented retrieval pipeline.
 
 Built for domains where **graph quality is a first-class requirement**: regulatory compliance, aerospace engineering, and other knowledge-intensive fields where facts must be provenance-tracked, time-aware, and semantically consistent across sources.
 

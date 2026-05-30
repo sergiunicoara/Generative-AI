@@ -84,8 +84,8 @@ def _init_graph() -> Graph:
     # Ontology declaration
     ont = URIRef("https://graphrag.example.com/ontology")
     g.add((ont, RDF.type, OWL.Ontology))
-    g.add((ont, RDFS.label, Literal("GraphRAG Knowledge Graph Ontology")))
-    g.add((ont, RDFS.comment, Literal("Exported from the GraphRAG platform.")))
+    g.add((ont, RDFS.label, Literal("AI Knowledge Graph & Ontology Platform")))
+    g.add((ont, RDFS.comment, Literal("Exported from the AI Knowledge Graph & Ontology Platform.")))
 
     # Annotation properties
     for prop_name, range_type in [

@@ -191,7 +191,7 @@ The cross-encoder scores text similarity. It doesn't know that *Falcon 9* and *S
 ## Project Structure
 
 ```
-GraphRag/
+graphrag/
 ├── api/
 │   ├── main.py                      # FastAPI app, lifespan hook, middleware, routes
 │   ├── limiter.py                   # slowapi rate-limiter singleton (20/min ingest, 60/min query)
@@ -325,7 +325,7 @@ Full end-to-end test completed 2026-03-21:
 
 ```bash
 git clone <repo>
-cd GraphRag
+cd graphrag
 py -3.11 -m pip install -r requirements.txt
 ```
 

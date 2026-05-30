@@ -1,0 +1,12 @@
+-r base.txt
+
+# ── Dashboard ──────────────────────────────────────────────────────────────────
+dash>=2.17.0
+plotly>=5.22.0
+flask>=3.0.0
+httpx>=0.27.0
+
+# ── API (dashboard is mounted under FastAPI) ───────────────────────────────────
+fastapi>=0.111.0
+uvicorn[standard]>=0.30.0
+a2wsgi>=1.10.0

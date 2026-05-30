@@ -1,6 +1,9 @@
 # ── Stage 1: builder ──────────────────────────────────────────────────────────
-# Install all Python dependencies in an isolated layer so the final image
-# only copies the installed packages, not build tools.
+# SERVICE build arg selects which per-service requirements file to install.
+# Valid values: api | ingestion | query | evaluation | dashboard
+# Defaults to "api" so local `docker build .` still works without args.
+ARG SERVICE=api
+
 FROM python:3.11-slim AS builder
 
 WORKDIR /build
@@ -9,8 +12,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     gcc \
     && rm -rf /var/lib/apt/lists/*
 
-COPY requirements.txt .
-RUN pip install --no-cache-dir --prefix=/install -r requirements.txt
+# Copy only the requirements directory — keeps the layer cache valid when
+# source code changes but requirements do not.
+COPY requirements/ requirements/
+RUN pip install --no-cache-dir --prefix=/install -r requirements/${SERVICE}.txt
 
 
 # ── Stage 2: runtime ──────────────────────────────────────────────────────────

@@ -3,6 +3,8 @@ primary_region = "ams"
 
 [build]
   dockerfile = "../../Dockerfile"
+  [build.args]
+    SERVICE = "workers"
 
 [env]
   PYTHONUNBUFFERED = "1"
@@ -20,8 +22,7 @@ primary_region = "ams"
   cpu_kind = "shared"
   cpus = 1
 
-# Run all workers in one process via supervisor script
+# Evaluation worker runs in its own app (fly/evaluation/) with a leaner image
 [processes]
   ingestion = "python workers/ingestion_worker.py"
   query = "python workers/query_worker.py"
-  evaluation = "python workers/evaluation_worker.py"

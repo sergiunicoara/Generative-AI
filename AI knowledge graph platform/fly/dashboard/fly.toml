@@ -3,6 +3,8 @@ primary_region = "ams"
 
 [build]
   dockerfile = "../../Dockerfile"
+  [build.args]
+    SERVICE = "dashboard"
 
 [env]
   PYTHONUNBUFFERED = "1"

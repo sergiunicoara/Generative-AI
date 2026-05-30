@@ -1,5 +1,5 @@
-# GraphRAG - Fly.io Deployment Script
-# Run from: C:\...\GraphRag\fly\
+# AI Knowledge Graph Platform - Fly.io Deployment Script
+# Run from: fly\
 # Usage: .\deploy.ps1
 
 $ROOT = Split-Path -Parent $PSScriptRoot
@@ -34,7 +34,7 @@ flyctl secrets set `
   -a graphrag-api
 flyctl deploy --ha=false -c "$PSScriptRoot\api\fly.toml" --dockerfile "$ROOT\Dockerfile" --path "$ROOT"
 
-Write-Host "`n=== Step 4: Deploy Workers ===" -ForegroundColor Cyan
+Write-Host "`n=== Step 4: Deploy Workers (ingestion + query) ===" -ForegroundColor Cyan
 Set-Location "$PSScriptRoot\workers"
 flyctl apps create graphrag-workers --machines 2>$null
 flyctl volumes create kpi_data --size 1 --region ams -a graphrag-workers 2>$null
@@ -48,7 +48,21 @@ flyctl secrets set `
   -a graphrag-workers
 flyctl deploy --ha=false -c "$PSScriptRoot\workers\fly.toml" --dockerfile "$ROOT\Dockerfile" --path "$ROOT"
 
-Write-Host "`n=== Step 5: Deploy Dashboard ===" -ForegroundColor Cyan
+Write-Host "`n=== Step 5: Deploy Evaluation Worker ===" -ForegroundColor Cyan
+Set-Location "$PSScriptRoot\evaluation"
+flyctl apps create graphrag-evaluation --machines 2>$null
+flyctl volumes create kpi_data --size 1 --region ams -a graphrag-evaluation 2>$null
+flyctl secrets set `
+  GOOGLE_API_KEY="$env:GOOGLE_API_KEY" `
+  NEO4J_URI="bolt://graphrag-neo4j.internal:7687" `
+  NEO4J_USER="neo4j" `
+  NEO4J_PASSWORD="graphrag_dev" `
+  RABBITMQ_URL="amqp://graphrag:graphrag_dev@graphrag-rabbit.internal:5672/" `
+  KPI_DB_PATH="/data/kpis.db" `
+  -a graphrag-evaluation
+flyctl deploy --ha=false -c "$PSScriptRoot\evaluation\fly.toml" --dockerfile "$ROOT\Dockerfile" --path "$ROOT"
+
+Write-Host "`n=== Step 6: Deploy Dashboard ===" -ForegroundColor Cyan
 Set-Location "$PSScriptRoot\dashboard"
 flyctl apps create graphrag-dashboard --machines 2>$null
 flyctl volumes create kpi_data --size 1 --region ams -a graphrag-dashboard 2>$null
@@ -58,7 +72,7 @@ flyctl secrets set `
 flyctl deploy --ha=false -c "$PSScriptRoot\dashboard\fly.toml" --dockerfile "$ROOT\Dockerfile" --path "$ROOT"
 
 Write-Host "`n=== Deployment Complete ===" -ForegroundColor Green
-Write-Host "API:       https://graphrag-api.fly.dev"
-Write-Host "Dashboard: https://graphrag-dashboard.fly.dev"
-Write-Host "Neo4j:     bolt://graphrag-neo4j.internal:7687 (internal only)"
-Write-Host "RabbitMQ:  amqp://graphrag-rabbit.internal:5672 (internal only)"
+Write-Host "API:        https://graphrag-api.fly.dev"
+Write-Host "Dashboard:  https://graphrag-dashboard.fly.dev"
+Write-Host "Neo4j:      bolt://graphrag-neo4j.internal:7687 (internal only)"
+Write-Host "RabbitMQ:   amqp://graphrag-rabbit.internal:5672 (internal only)"

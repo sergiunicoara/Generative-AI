@@ -1255,6 +1255,81 @@ was not observable.
 
 ---
 
+## A52 — Portfolio code must actually execute the claimed capabilities
+
+**What happened:**
+Added aerospace ontology YAML, export_rdf.py, and domain_ontology.py as portfolio
+pieces for an "AI Knowledge Graph/Ontology Lead" JD. An Opus audit found 8 credibility
+gaps: the YAML was never loaded, `add_domain_range_rules()` didn't exist, the RDF
+script used hand-rolled string concatenation instead of rdflib, and there was no
+runnable proof of the pipeline.
+
+**Root cause:**
+The first pass added the *description* of the capability without completing the
+*wiring*. A technical reviewer will grep for the method call, find it missing, and
+stop reading.
+
+**Rule:**
+> For any portfolio capability claim, verify three things before committing:
+> 1. **The code path executes**: import the module and call the entry point in a
+>    smoke test or demo script. If it can't be imported, it doesn't count.
+> 2. **Config is wired**: grep for every YAML key added; trace it to the code that
+>    reads and uses it. Dead config silently fails — `getattr(settings, "x", {})` on
+>    a property that doesn't exist always returns `{}`.
+> 3. **Use the standard library**: hand-rolled Turtle, hand-rolled JSON parsing, or
+>    hand-rolled crypto are all red flags. If a mature library exists (rdflib, rdflib,
+>    cryptography), use it.
+
+---
+
+## A53 — Settings properties must be explicitly declared; getattr fallback hides missing fields
+
+**What happened:**
+`OntologyRegistry.load()` called `getattr(get_settings(), "ontology", {})`. The
+`Settings` class had no `ontology` property, so it always returned `{}`. The
+migration_map was silently never loaded from `settings.yml`. No error, no warning —
+just wrong behaviour.
+
+**Root cause:**
+`getattr(obj, "x", default)` returns the default for *any* reason the attribute is
+missing — including typos, missing properties, or runtime exceptions in the property.
+It's a silent failure pattern.
+
+**Rule:**
+> Never use `getattr(settings, "key", {})` as an access pattern. Always:
+> 1. Declare the property explicitly on the Settings class.
+> 2. Access it as `get_settings().ontology` — if the property is missing the
+>    AttributeError is loud and immediate.
+> 3. After adding a new settings section, grep for every call site and verify the
+>    property exists before committing.
+
+---
+
+## A54 — Demo scripts: count every mock call before writing side_effect
+
+**What happened:**
+`demo_regulatory.py` step 4 (ForwardChainingEngine) and step 5 (ContradictionDetector)
+both raised `StopIteration` because the `side_effect` list had fewer slots than
+actual `await db.run()` calls. Step 4 needed 9 slots (4 rule queries per iteration ×
+2 iterations + 1 MERGE write); step 5 needed 11 slots.
+
+**Root cause:**
+The mock was written from the outside ("query then create") rather than tracing the
+actual code path. ForwardChainingEngine runs all rules in each fixpoint iteration, not
+just the ones with matches.
+
+**Rule:**
+> Before writing `AsyncMock(side_effect=[...])` for a multi-step engine:
+> 1. Read the source of the method under test and count every `await db.run()` call.
+> 2. Note which calls are conditional (inside `for row in rows:`) — zero rows = zero
+>    conditional calls.
+> 3. Label each slot in a comment: `# iter1: supersedes_transitivity → 1 candidate`.
+> 4. For fixpoint loops: slots = rules_per_iter × num_iterations + conditional_merges.
+> StopIteration from a mock means you undercounted by exactly one call — add one slot
+> at a time until the demo runs.
+
+---
+
 ## A43 — AsyncMock side_effect lists must exactly match actual call counts
 
 **What happened:**

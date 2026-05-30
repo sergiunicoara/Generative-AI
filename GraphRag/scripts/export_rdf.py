@@ -1,4 +1,4 @@
-"""Export the knowledge graph to Turtle (RDF) format.
+"""Export the knowledge graph to Turtle (RDF) using rdflib.
 
 Produces a standards-compliant Turtle file that can be loaded into:
   - Protégé (ontology editor / OWL reasoner)
@@ -10,11 +10,14 @@ Mapping
 -------
   Entity nodes          → owl:NamedIndividual + rdf:type
   EntityType nodes      → owl:Class + rdfs:subClassOf hierarchy
-  RELATES_TO edges      → owl:ObjectProperty assertions
-  NEGATIVE_RELATES_TO   → annotated negative assertions (owl:complementOf pattern)
+  RELATES_TO edges      → owl:ObjectProperty assertions with reified confidence
+  NEGATIVE_RELATES_TO   → annotated negative assertions
   SUBCLASS_OF edges     → rdfs:subClassOf
-  confidence            → custom annotation property :confidence (xsd:float)
-  valid_from / valid_to → :validFrom / :validTo (xsd:dateTime)
+  confidence            → :confidence annotation (xsd:float)
+  valid_from / valid_to → :validFrom / :validTo annotations
+
+Uses rdflib for guaranteed valid Turtle output (handles unicode, quotes,
+special characters that hand-rolled string concatenation cannot).
 
 Usage
 -----
@@ -27,91 +30,89 @@ from __future__ import annotations
 
 import argparse
 import asyncio
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 
 import structlog
+from rdflib import Graph, Literal, Namespace, URIRef
+from rdflib.namespace import OWL, RDF, RDFS, XSD
 
 log = structlog.get_logger(__name__)
 
-# ── RDF namespace constants ────────────────────────────────────────────────────
+# ── Namespaces ─────────────────────────────────────────────────────────────────
 
-BASE_URI   = "https://graphrag.example.com/ontology#"
-INST_URI   = "https://graphrag.example.com/entity/"
-OWL_URI    = "http://www.w3.org/2002/07/owl#"
-RDF_URI    = "http://www.w3.org/1999/02/22-rdf-syntax-ns#"
-RDFS_URI   = "http://www.w3.org/2000/01/rdf-schema#"
-XSD_URI    = "http://www.w3.org/2001/XMLSchema#"
-
-TURTLE_PREFIXES = f"""@prefix :        <{BASE_URI}> .
-@prefix inst:    <{INST_URI}> .
-@prefix owl:     <{OWL_URI}> .
-@prefix rdf:     <{RDF_URI}> .
-@prefix rdfs:    <{RDFS_URI}> .
-@prefix xsd:     <{XSD_URI}> .
-
-"""
+BASE  = Namespace("https://graphrag.example.com/ontology#")
+INST  = Namespace("https://graphrag.example.com/entity/")
+ANNOT = Namespace("https://graphrag.example.com/annotation#")
 
 
-def _uri_safe(s: str) -> str:
-    """Percent-encode characters that are not URI-safe."""
-    return s.replace(" ", "_").replace(",", "%2C").replace("(", "%28").replace(")", "%29").replace("/", "%2F")
+def _entity_uri(name: str, etype: str, tenant: str) -> URIRef:
+    """Stable entity URI — tenant-scoped to prevent cross-tenant collisions."""
+    def _safe(s: str) -> str:
+        import urllib.parse
+        return urllib.parse.quote(s, safe="")
+    return INST[f"{_safe(tenant)}/{_safe(etype)}/{_safe(name)}"]
 
 
-def _entity_uri(name: str, etype: str, tenant: str) -> str:
-    return f"inst:{_uri_safe(tenant)}/{_uri_safe(etype)}/{_uri_safe(name)}"
+def _type_uri(etype: str) -> URIRef:
+    return BASE[etype.upper()]
 
 
-def _type_uri(etype: str) -> str:
-    return f":{_uri_safe(etype)}"
+def _rel_uri(relation: str) -> URIRef:
+    return BASE[relation.upper()]
 
 
-def _rel_uri(relation: str) -> str:
-    return f":{_uri_safe(relation.upper())}"
+def _axiom_uri(s_name: str, rel: str, t_name: str) -> URIRef:
+    import hashlib
+    key = f"{s_name}|{rel}|{t_name}"
+    h = hashlib.md5(key.encode()).hexdigest()[:12]
+    return INST[f"axiom/{h}"]
 
 
-def _literal(value: str) -> str:
-    escaped = value.replace("\\", "\\\\").replace('"', '\\"').replace("\n", "\\n")
-    return f'"{escaped}"'
+# ── Graph builder ──────────────────────────────────────────────────────────────
 
+def _init_graph() -> Graph:
+    g = Graph()
+    g.bind("base",  BASE)
+    g.bind("inst",  INST)
+    g.bind("annot", ANNOT)
+    g.bind("owl",   OWL)
+    g.bind("rdf",   RDF)
+    g.bind("rdfs",  RDFS)
+    g.bind("xsd",   XSD)
 
-# ── Ontology header block ──────────────────────────────────────────────────────
+    # Ontology declaration
+    ont = URIRef("https://graphrag.example.com/ontology")
+    g.add((ont, RDF.type, OWL.Ontology))
+    g.add((ont, RDFS.label, Literal("GraphRAG Knowledge Graph Ontology")))
+    g.add((ont, RDFS.comment, Literal("Exported from the GraphRAG platform.")))
 
-ONTOLOGY_HEADER = f"""# ─────────────────────────────────────────────────────────────────
-# GraphRAG Knowledge Graph — Turtle export
-# Generated: {{timestamp}}
-# Tenant:    {{tenant}}
-# ─────────────────────────────────────────────────────────────────
+    # Annotation properties
+    for prop_name, range_type in [
+        ("confidence", XSD.float),
+        ("validFrom",  XSD.string),
+        ("validTo",    XSD.string),
+        ("sourceDoc",  XSD.string),
+        ("tenant",     XSD.string),
+    ]:
+        prop = ANNOT[prop_name]
+        g.add((prop, RDF.type, OWL.AnnotationProperty))
+        g.add((prop, RDFS.range, range_type))
 
-<{BASE_URI.rstrip("#")}>
-    a owl:Ontology ;
-    rdfs:label "GraphRAG Knowledge Graph Ontology" ;
-    rdfs:comment "Exported from the GraphRAG platform." .
-
-# ── Annotation properties ─────────────────────────────────────────
-:confidence  a owl:AnnotationProperty ; rdfs:range xsd:float .
-:validFrom   a owl:AnnotationProperty ; rdfs:range xsd:dateTime .
-:validTo     a owl:AnnotationProperty ; rdfs:range xsd:dateTime .
-:sourceDoc   a owl:AnnotationProperty ; rdfs:range xsd:string .
-:tenant      a owl:AnnotationProperty ; rdfs:range xsd:string .
-
-"""
+    return g
 
 
 async def export(tenant: str, output: Path, limit: int) -> None:
     from graphrag.graph.neo4j_client import get_neo4j
 
     neo4j = get_neo4j()
-    lines: list[str] = []
+    g = _init_graph()
 
-    lines.append(TURTLE_PREFIXES)
-    lines.append(ONTOLOGY_HEADER.format(
-        timestamp=datetime.utcnow().isoformat(),
-        tenant=tenant,
-    ))
+    g.add((URIRef("https://graphrag.example.com/ontology"),
+           RDFS.comment,
+           Literal(f"Generated: {datetime.now(timezone.utc).isoformat()}  Tenant: {tenant}")))
 
     # ── Entity type hierarchy ──────────────────────────────────────────────────
-    lines.append("# ── Entity type hierarchy (owl:Class + rdfs:subClassOf) ───\n")
     type_rows = await neo4j.run(
         "MATCH (c:EntityType)-[:SUBCLASS_OF]->(p:EntityType) RETURN c.name AS child, p.name AS parent"
     )
@@ -120,33 +121,31 @@ async def export(tenant: str, output: Path, limit: int) -> None:
         child, parent = row["child"], row["parent"]
         for t in (child, parent):
             if t not in declared_types:
-                lines.append(f"{_type_uri(t)} a owl:Class ; rdfs:label {_literal(t)} .\n")
+                t_uri = _type_uri(t)
+                g.add((t_uri, RDF.type, OWL.Class))
+                g.add((t_uri, RDFS.label, Literal(t)))
                 declared_types.add(t)
-        lines.append(f"{_type_uri(child)} rdfs:subClassOf {_type_uri(parent)} .\n")
-    lines.append("\n")
+        g.add((_type_uri(child), RDFS.subClassOf, _type_uri(parent)))
 
-    # ── Relation properties ────────────────────────────────────────────────────
-    lines.append("# ── Object properties (owl:ObjectProperty) ──────────────────\n")
+    # ── Object properties ──────────────────────────────────────────────────────
     rel_rows = await neo4j.run(
         """
         MATCH ()-[r:RELATES_TO]->()
         WHERE ($tenant = 'default' OR r.tenant = $tenant)
-        RETURN DISTINCT r.relation AS rel
-        LIMIT $limit
+        RETURN DISTINCT r.relation AS rel LIMIT $limit
         """,
-        tenant=tenant,
-        limit=limit,
+        tenant=tenant, limit=limit,
     )
     declared_rels: set[str] = set()
     for row in rel_rows:
-        rel = row.get("rel") or "RELATED_TO"
+        rel = (row.get("rel") or "RELATED_TO").upper()
         if rel not in declared_rels:
-            lines.append(f"{_rel_uri(rel)} a owl:ObjectProperty ; rdfs:label {_literal(rel)} .\n")
+            r_uri = _rel_uri(rel)
+            g.add((r_uri, RDF.type, OWL.ObjectProperty))
+            g.add((r_uri, RDFS.label, Literal(rel)))
             declared_rels.add(rel)
-    lines.append("\n")
 
-    # ── Entities (owl:NamedIndividual) ─────────────────────────────────────────
-    lines.append("# ── Entities (owl:NamedIndividual) ──────────────────────────\n")
+    # ── Entities ───────────────────────────────────────────────────────────────
     ent_rows = await neo4j.run(
         """
         MATCH (e:Entity)
@@ -155,34 +154,26 @@ async def export(tenant: str, output: Path, limit: int) -> None:
                e.valid_from AS vf, e.valid_to AS vt, e.tenant AS tenant
         LIMIT $limit
         """,
-        tenant=tenant,
-        limit=limit,
+        tenant=tenant, limit=limit,
     )
     for row in ent_rows:
-        name   = row["name"] or ""
-        etype  = row["type"] or "CONCEPT"
-        desc   = row.get("desc") or ""
-        t      = row["tenant"] or "default"
-        uri    = _entity_uri(name, etype, t)
-        tclass = _type_uri(etype)
+        name  = row["name"] or ""
+        etype = row["type"] or "CONCEPT"
+        t     = row["tenant"] or "default"
+        uri   = _entity_uri(name, etype, t)
 
-        triples = [
-            f"{uri} a owl:NamedIndividual, {tclass} ;",
-            f"    rdfs:label {_literal(name)} ;",
-            f"    :tenant {_literal(t)} ;",
-        ]
-        if desc:
-            triples.append(f"    rdfs:comment {_literal(desc[:500])} ;")
+        g.add((uri, RDF.type, OWL.NamedIndividual))
+        g.add((uri, RDF.type, _type_uri(etype)))
+        g.add((uri, RDFS.label, Literal(name)))
+        g.add((uri, ANNOT.tenant, Literal(t)))
+        if row.get("desc"):
+            g.add((uri, RDFS.comment, Literal(str(row["desc"])[:500])))
         if row.get("vf"):
-            triples.append(f'    :validFrom "{row["vf"]}"^^xsd:string ;')
+            g.add((uri, ANNOT.validFrom, Literal(str(row["vf"]))))
         if row.get("vt"):
-            triples.append(f'    :validTo "{row["vt"]}"^^xsd:string ;')
-        # Close with period on last triple
-        triples[-1] = triples[-1].rstrip(" ;") + " ."
-        lines.append("\n".join(triples) + "\n\n")
+            g.add((uri, ANNOT.validTo, Literal(str(row["vt"]))))
 
-    # ── Relations (owl:ObjectProperty assertions) ──────────────────────────────
-    lines.append("# ── Relations (ObjectProperty assertions) ───────────────────\n")
+    # ── Relations with reified confidence ─────────────────────────────────────
     edge_rows = await neo4j.run(
         """
         MATCH (s:Entity)-[r:RELATES_TO]->(t:Entity)
@@ -195,8 +186,7 @@ async def export(tenant: str, output: Path, limit: int) -> None:
                r.tenant AS tenant
         LIMIT $limit
         """,
-        tenant=tenant,
-        limit=limit,
+        tenant=tenant, limit=limit,
     )
     for row in edge_rows:
         t      = row["tenant"] or "default"
@@ -206,23 +196,20 @@ async def export(tenant: str, output: Path, limit: int) -> None:
         conf   = row.get("conf")
         sdoc   = row.get("src_doc") or ""
 
-        # Main assertion
-        triple = f"{s_uri} {p_uri} {o_uri}"
+        # Main triple
+        g.add((s_uri, p_uri, o_uri))
+
+        # Reify with owl:Axiom to carry confidence + provenance annotations
         if conf is not None or sdoc:
-            # Use reification (owl:Axiom) to annotate with confidence + provenance
-            axiom_id = f"inst:axiom/{_uri_safe(row['sname'])}_{_uri_safe(row['rel'])}_{_uri_safe(row['tname'])}"
-            lines.append(f"{triple} .\n")
-            lines.append(f"{axiom_id} a owl:Axiom ;\n")
-            lines.append(f"    owl:annotatedSource {s_uri} ;\n")
-            lines.append(f"    owl:annotatedProperty {p_uri} ;\n")
-            lines.append(f"    owl:annotatedTarget {o_uri} ;\n")
+            ax = _axiom_uri(row["sname"], row["rel"], row["tname"])
+            g.add((ax, RDF.type, OWL.Axiom))
+            g.add((ax, OWL.annotatedSource,   s_uri))
+            g.add((ax, OWL.annotatedProperty, p_uri))
+            g.add((ax, OWL.annotatedTarget,   o_uri))
             if conf is not None:
-                lines.append(f"    :confidence \"{float(conf):.4f}\"^^xsd:float ;\n")
+                g.add((ax, ANNOT.confidence, Literal(round(float(conf), 4), datatype=XSD.float)))
             if sdoc:
-                lines.append(f"    :sourceDoc {_literal(sdoc)} ;\n")
-            lines[-1] = lines[-1].rstrip(" ;\n") + " .\n"
-        else:
-            lines.append(f"{triple} .\n")
+                g.add((ax, ANNOT.sourceDoc, Literal(sdoc)))
 
     # ── Negative relations ─────────────────────────────────────────────────────
     neg_rows = await neo4j.run(
@@ -235,49 +222,57 @@ async def export(tenant: str, output: Path, limit: int) -> None:
                r.tenant AS tenant
         LIMIT $limit
         """,
-        tenant=tenant,
-        limit=limit,
+        tenant=tenant, limit=limit,
     )
-    if neg_rows:
-        lines.append("\n# ── Negative assertions ───────────────────────────────────\n")
-        for row in neg_rows:
-            t     = row["tenant"] or "default"
-            s_uri = _entity_uri(row["sname"], row["stype"], t)
-            o_uri = _entity_uri(row["tname"], row["ttype"], t)
-            p_uri = _rel_uri(row["rel"] or "RELATED_TO")
-            conf  = row.get("conf")
-            # Model as: s :rel_complement o (annotation-based, not OWL DL)
-            neg_uri = f":{_uri_safe(row['rel'])}_NEGATED"
-            lines.append(f"# NEGATED: {row['sname']} -[{row['rel']}]-> {row['tname']}\n")
-            lines.append(f"{s_uri} {neg_uri} {o_uri}")
-            if conf is not None:
-                lines.append(f" ; :confidence \"{float(conf):.4f}\"^^xsd:float")
-            lines.append(" .\n")
+    for row in neg_rows:
+        t     = row["tenant"] or "default"
+        s_uri = _entity_uri(row["sname"], row["stype"], t)
+        o_uri = _entity_uri(row["tname"], row["ttype"], t)
+        rel   = (row["rel"] or "RELATED_TO").upper()
+        # Use a negated property URI (annotation-based, OWL-DL friendly approach)
+        neg_uri = BASE[f"{rel}_NEGATED"]
+        g.add((neg_uri, RDF.type, OWL.ObjectProperty))
+        g.add((neg_uri, RDFS.label, Literal(f"NOT {rel}")))
+        g.add((s_uri, neg_uri, o_uri))
+        if row.get("conf") is not None:
+            ax = _axiom_uri(f"NEG_{row['sname']}", rel, row["tname"])
+            g.add((ax, RDF.type, OWL.Axiom))
+            g.add((ax, OWL.annotatedSource,   s_uri))
+            g.add((ax, OWL.annotatedProperty, neg_uri))
+            g.add((ax, OWL.annotatedTarget,   o_uri))
+            g.add((ax, ANNOT.confidence,
+                   Literal(round(float(row["conf"]), 4), datatype=XSD.float)))
 
     await neo4j.close()
 
     output.parent.mkdir(parents=True, exist_ok=True)
-    output.write_text("".join(lines), encoding="utf-8")
+    g.serialize(destination=str(output), format="turtle")
 
     entity_count = len(ent_rows)
     edge_count   = len(edge_rows)
+    triple_count = len(g)
     log.info(
         "export_rdf.complete",
         output=str(output),
         entities=entity_count,
         edges=edge_count,
+        triples=triple_count,
         tenant=tenant,
     )
-    print(f"✅  Exported {entity_count} entities, {edge_count} edges → {output}")
+    print(f"✅  Exported {entity_count} entities, {edge_count} edges, "
+          f"{triple_count} RDF triples → {output}")
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Export knowledge graph to Turtle (RDF)")
-    parser.add_argument("--tenant", default="default", help="Tenant to export (default: all)")
-    parser.add_argument("--output", default="exports/graph_export.ttl",
+    parser = argparse.ArgumentParser(
+        description="Export knowledge graph to Turtle (RDF) using rdflib"
+    )
+    parser.add_argument("--tenant",  default="default",
+                        help="Tenant to export (default: default)")
+    parser.add_argument("--output",  default="exports/graph_export.ttl",
                         help="Output Turtle file path")
-    parser.add_argument("--limit", type=int, default=50_000,
-                        help="Max entities and edges to export (default: 50000)")
+    parser.add_argument("--limit",   type=int, default=50_000,
+                        help="Max entities and edges per query (default: 50000)")
     args = parser.parse_args()
 
     asyncio.run(export(

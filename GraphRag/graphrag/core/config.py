@@ -90,6 +90,10 @@ class Settings(BaseSettings):
         return self._yaml.get("evaluation", {})
 
     @property
+    def ontology(self) -> dict:
+        return self._yaml.get("ontology", {})
+
+    @property
     def business_matrix(self) -> dict:
         return self._yaml.get("business_matrix", {})
 

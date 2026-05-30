@@ -70,23 +70,86 @@ class OntologyRegistry:
         self._allowed_types: set[str] = set()
         self._known_relations: set[str] = set()
         self._migration_map: dict[str, str] = {}   # deprecated → canonical name
+        self._domain_rules: dict[str, set[tuple[str, str]]] = {}  # domain-specific constraints
         self._version_id: str = ""
         self._loaded: bool = False
 
+    def add_domain_range_rules(self, rules: dict) -> None:
+        """
+        Extend the instance-level domain/range constraints with domain-specific rules.
+
+        Called by OntologyRegistry.load() after reading a domain ontology YAML file.
+        Also callable directly for runtime extension.
+
+        Parameters
+        ----------
+        rules : dict mapping relation name → {"domain": [...], "target": [...]}
+            as produced by ``domain_ontology.get_relation_rules()``.
+
+        Example::
+
+            registry.add_domain_range_rules({
+                "SUPERSEDES": {
+                    "domain": ["REGULATION", "AIRWORTHINESS_DIRECTIVE"],
+                    "target": ["REGULATION", "AIRWORTHINESS_DIRECTIVE"],
+                }
+            })
+        """
+        for relation, spec in rules.items():
+            rel_upper    = str(relation).upper()
+            domain_types = [str(t).upper() for t in (spec.get("domain") or [])]
+            target_types = [str(t).upper() for t in (spec.get("target") or [])]
+            pairs: set[tuple[str, str]] = set()
+            for d in domain_types:
+                for t in target_types:
+                    pairs.add((d, t))
+            if rel_upper in self._domain_rules:
+                self._domain_rules[rel_upper].update(pairs)
+            else:
+                self._domain_rules[rel_upper] = pairs
+            # Also register the relation as known so drift detection doesn't flag it
+            self._known_relations.add(rel_upper)
+
+        log.info("ontology_registry.domain_rules_added",
+                 relations=len(rules),
+                 total_domain_rules=len(self._domain_rules))
+
     async def load(self, entity_types: list[str]) -> None:
-        """Load registry from settings and seed Neo4j OntologyVersion."""
+        """Load registry from settings, domain ontology, and seed Neo4j OntologyVersion."""
         self._allowed_types = set(entity_types)
 
-        # Load migration map from settings (deprecated relation name → canonical)
+        # Load migration map + domain ontology path from settings
         try:
             from graphrag.core.config import get_settings
-            onto_cfg = getattr(get_settings(), "ontology", {}) or {}
+            onto_cfg = get_settings().ontology or {}
             raw_map = onto_cfg.get("migration_map", {}) or {}
             self._migration_map = {
                 str(k).upper(): str(v).upper() for k, v in raw_map.items()
             }
-        except (AttributeError, KeyError, TypeError):
-            self._migration_map = {}   # config section absent or malformed
+            # Load domain ontology if path is configured
+            domain_path = onto_cfg.get("domain_ontology_path", "") or ""
+            if domain_path:
+                from graphrag.graph.domain_ontology import (
+                    load_domain_ontology,
+                    get_relation_rules,
+                    get_type_hierarchy_pairs,
+                )
+                from pathlib import Path
+                from graphrag.core.config import ROOT
+                full_path = ROOT / domain_path
+                ontology  = load_domain_ontology(full_path)
+                if ontology:
+                    self.add_domain_range_rules(get_relation_rules(ontology))
+                    # Extend allowed types from the domain hierarchy
+                    for child, _ in get_type_hierarchy_pairs(ontology):
+                        self._allowed_types.add(child)
+                    log.info("ontology_registry.domain_ontology_loaded",
+                             path=domain_path,
+                             added_types=len(get_type_hierarchy_pairs(ontology)),
+                             added_relations=len(get_relation_rules(ontology)))
+        except (AttributeError, KeyError, TypeError) as exc:
+            log.warning("ontology_registry.config_load_error", error=str(exc))
+            self._migration_map = {}
 
         # Load known relation types from existing graph
         rows = await self._neo4j.run(
@@ -179,8 +242,11 @@ class OntologyRegistry:
             src = next((e for e in entities if e.id == relation.source_entity_id), None)
             tgt = next((e for e in entities if e.id == relation.target_entity_id), None)
             if src and tgt:
+                # Check built-in rules first, then domain-specific rules
                 allowed_pairs = _RELATION_RULES.get(relation.relation, set())
-                if allowed_pairs and (src.type, tgt.type) not in allowed_pairs:
+                domain_pairs  = self._domain_rules.get(relation.relation, set())
+                all_pairs     = allowed_pairs | domain_pairs
+                if all_pairs and (src.type, tgt.type) not in all_pairs:
                     invalid_relation_pairs.append(
                         f"{src.name}:{src.type}-{relation.relation}->{tgt.name}:{tgt.type}"
                     )
@@ -217,7 +283,8 @@ class OntologyRegistry:
         normalized = self._migration_map.get(normalized, normalized)
         if not _RELATION_RE.match(normalized):
             normalized = "RELATED_TO"
-        allowed_pairs = _RELATION_RULES.get(normalized, set())
+        # Merge built-in and domain-specific constraints
+        allowed_pairs = _RELATION_RULES.get(normalized, set()) | self._domain_rules.get(normalized, set())
         if not allowed_pairs:
             return True, normalized
         return (source_type, target_type) in allowed_pairs, normalized

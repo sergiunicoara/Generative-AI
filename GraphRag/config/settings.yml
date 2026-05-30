@@ -79,6 +79,10 @@ evaluation:
 ontology:
   enforce_domain_range: true        # reject relations that violate domain/range rules
   allow_migration_renames: true     # auto-rename deprecated relation names on ingestion
+  # Optional: path to a domain-specific ontology YAML (relative to repo root).
+  # Leave empty ("") for the general-purpose ontology.
+  # Example: config/ontologies/aerospace_regulatory.yml
+  domain_ontology_path: ""
   migration_map:                    # old_relation: new_relation
     IS_CEO: CEO_OF
     FOUNDED_BY_PERSON: FOUNDED_BY

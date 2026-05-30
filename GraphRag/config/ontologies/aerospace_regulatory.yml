@@ -1,0 +1,181 @@
+# Aerospace & Regulatory Knowledge Graph Ontology
+#
+# Domain-specific type hierarchy and relation schema for aerospace intelligence
+# platforms — certification, airworthiness, regulatory compliance, and
+# engineering change management.
+#
+# Load at startup:
+#   from graphrag.graph.type_taxonomy import TypeTaxonomy
+#   await taxonomy.load(extra_pairs=config["type_hierarchy"])
+#
+# Entity types extend the base hierarchy in graphrag/graph/type_taxonomy.py.
+# Relation rules extend config/settings.yml → ontology (via migration_map and
+# the domain_range validation in ontology_registry.py).
+
+# ── Entity type extensions ─────────────────────────────────────────────────────
+# Format: [child_type, parent_type]  (parent must exist in base hierarchy or here)
+
+type_hierarchy:
+  # Regulatory bodies
+  - [REGULATOR,                    ORG]          # FAA, EASA, ITAR control authority
+  - [CERTIFICATION_AUTHORITY,      REGULATOR]    # bodies that issue type certificates
+  - [STANDARDS_BODY,               ORG]          # RTCA, SAE, EUROCAE, ISO
+
+  # Aircraft & systems
+  - [AIRCRAFT_TYPE,                PRODUCT]      # Boeing 737, Airbus A320
+  - [AIRCRAFT_CONFIGURATION,       PRODUCT]      # specific variant of an aircraft type
+  - [AIRCRAFT_COMPONENT,           PRODUCT]      # LRU, sub-assembly, part
+  - [LINE_REPLACEABLE_UNIT,        AIRCRAFT_COMPONENT]
+  - [SOFTWARE_COMPONENT,           AIRCRAFT_COMPONENT]
+
+  # Regulatory documents
+  - [REGULATION,                   CONCEPT]      # 14 CFR, CS-25, ITAR
+  - [AIRWORTHINESS_DIRECTIVE,      REGULATION]   # FAA AD, EASA AD
+  - [AIRWORTHINESS_LIMITATION,     REGULATION]   # ALI, AWL — life limits
+  - [SPECIAL_AIRWORTHINESS_INFO,   REGULATION]   # SAIBs, non-mandatory guidance
+  - [TYPE_CERTIFICATE,             REGULATION]   # TC, STC, ASTC
+  - [SUPPLEMENTAL_TYPE_CERTIFICATE, TYPE_CERTIFICATE]
+  - [PARTS_MANUFACTURER_APPROVAL,  REGULATION]   # PMA authorisation
+  - [TECHNICAL_STANDARD_ORDER,     REGULATION]   # TSO authorisation
+  - [AIRWORTHINESS_APPROVAL,       REGULATION]   # broad approval category
+  - [MAINTENANCE_PROCEDURE,        CONCEPT]      # AMM, CMM, SRM, IPC procedures
+  - [SERVICE_BULLETIN,             CONCEPT]      # OEM maintenance recommendation
+  - [SERVICE_INFORMATION_LETTER,   CONCEPT]      # SIL — advisory, non-mandatory
+  - [ENGINEERING_ORDER,            CONCEPT]      # internal mod / repair instruction
+  - [AIRCRAFT_FLIGHT_MANUAL,       CONCEPT]      # AFM, POH — operational limits
+
+  # Failure and hazard taxonomy
+  - [FAILURE_MODE,                 CONCEPT]      # specific failure mechanism
+  - [HAZARD,                       CONCEPT]      # safety hazard per ARP4761
+  - [DESIGN_ASSURANCE_LEVEL,       CONCEPT]      # DAL A/B/C/D/E per DO-178C/DO-254
+
+  # Operational concepts
+  - [FLIGHT_OPERATION,             EVENT]        # specific flight or sortie
+  - [MAINTENANCE_EVENT,            EVENT]        # inspection, repair, modification
+  - [INCIDENT_OR_ACCIDENT,         EVENT]        # SDR, ASRS, accident report
+
+# ── Relation schema extensions ─────────────────────────────────────────────────
+# These extend the domain/range rules in graphrag/graph/ontology_registry.py.
+# At startup, load via: registry.add_domain_range_rules(config["relation_rules"])
+
+relation_rules:
+  # Regulatory supersession chain
+  SUPERSEDES:
+    domain: [REGULATION, AIRWORTHINESS_DIRECTIVE, SERVICE_BULLETIN]
+    target: [REGULATION, AIRWORTHINESS_DIRECTIVE, SERVICE_BULLETIN]
+    note: "AD 2024-01-02 supersedes AD 2023-05-01 for same component"
+
+  # Compliance scope
+  APPLIES_TO:
+    domain: [REGULATION, AIRWORTHINESS_DIRECTIVE, TYPE_CERTIFICATE]
+    target: [AIRCRAFT_TYPE, AIRCRAFT_COMPONENT, AIRCRAFT_CONFIGURATION, ORG]
+    note: "AD applies to specific aircraft type or component P/N"
+
+  # Regulatory mandate chain
+  MANDATED_BY:
+    domain: [REGULATION, MAINTENANCE_PROCEDURE, AIRWORTHINESS_LIMITATION]
+    target: [REGULATOR, CERTIFICATION_AUTHORITY]
+    inverse: MANDATES
+
+  # Certification relationships
+  CERTIFIES:
+    domain: [REGULATOR, CERTIFICATION_AUTHORITY]
+    target: [AIRCRAFT_TYPE, AIRCRAFT_COMPONENT, ORG]
+    inverse: CERTIFIED_BY
+
+  CERTIFIED_BY:
+    domain: [AIRCRAFT_TYPE, AIRCRAFT_COMPONENT, ORG]
+    target: [REGULATOR, CERTIFICATION_AUTHORITY]
+
+  # Engineering & manufacturing
+  MANUFACTURED_UNDER:
+    domain: [AIRCRAFT_COMPONENT]
+    target: [PARTS_MANUFACTURER_APPROVAL, TYPE_CERTIFICATE]
+
+  DESIGNED_TO:
+    domain: [AIRCRAFT_COMPONENT, SOFTWARE_COMPONENT]
+    target: [DESIGN_ASSURANCE_LEVEL]
+
+  ADDRESSES:
+    domain: [AIRWORTHINESS_DIRECTIVE, SERVICE_BULLETIN, ENGINEERING_ORDER]
+    target: [FAILURE_MODE, HAZARD]
+
+  CORRECTS:
+    domain: [SERVICE_BULLETIN, ENGINEERING_ORDER, AIRWORTHINESS_DIRECTIVE]
+    target: [FAILURE_MODE, INCIDENT_OR_ACCIDENT]
+
+  # Operational relationships
+  OPERATED_BY:
+    domain: [AIRCRAFT_TYPE, AIRCRAFT_CONFIGURATION]
+    target: [ORG]     # airline, operator
+    inverse: OPERATES
+
+  MAINTAINED_BY:
+    domain: [AIRCRAFT_TYPE, AIRCRAFT_COMPONENT]
+    target: [ORG]     # MRO, operator maintenance organisation
+    inverse: MAINTAINS
+
+  INSPECTED_UNDER:
+    domain: [MAINTENANCE_EVENT]
+    target: [MAINTENANCE_PROCEDURE, AIRWORTHINESS_DIRECTIVE]
+
+# ── Inference rules (aerospace-specific) ──────────────────────────────────────
+# These supplement the built-in rules in graphrag/graph/inference_engine.py.
+
+inference_rules:
+  - name: supersedes_transitivity
+    relation: SUPERSEDES
+    rule_type: transitivity
+    max_depth: 5
+    confidence_decay: 0.95
+    note: >
+      If AD-2024 supersedes AD-2022 which supersedes AD-2020, then
+      AD-2024 transitively supersedes AD-2020. Essential for querying
+      "what is the current authority on this component?"
+
+  - name: mandated_by_inverse
+    relation: MANDATED_BY
+    rule_type: inverse
+    derived_relation: MANDATES
+    note: "FAA MANDATES the AD if the AD is MANDATED_BY FAA."
+
+  - name: certified_by_inverse
+    relation: CERTIFIED_BY
+    rule_type: inverse
+    derived_relation: CERTIFIES
+
+  - name: compliance_chain_composition
+    relation: APPLIES_TO
+    body_relation_2: PART_OF
+    rule_type: composition
+    derived_relation: APPLIES_TO
+    confidence_decay: 0.85
+    note: >
+      If AD APPLIES_TO component A, and component A is PART_OF aircraft X,
+      then AD transitively APPLIES_TO aircraft X.
+      Enables: "which ADs apply to this aircraft?" across component hierarchy.
+
+# ── Exclusive state pairs (contradiction detection) ────────────────────────────
+# Extends the default pairs in contradiction_strategies.py.
+
+exclusive_state_pairs:
+  - [IS_AIRWORTHY,     IS_UNAIRWORTHY]
+  - [IS_CERTIFIED,     IS_DECERTIFIED]
+  - [IS_ACTIVE,        IS_SUPERSEDED]
+  - [IN_SERVICE,       RETIRED]
+  - [MANDATORY,        ADVISORY]        # AD vs SB compliance requirement
+
+# ── Functional relations (one-to-one per time window) ─────────────────────────
+# Extends functional_relations in contradiction_strategies.py.
+
+functional_relations:
+  - TYPE_CERTIFICATE_OF   # each aircraft type has exactly one TC holder
+  - AIRWORTHINESS_AUTHORITY_FOR  # each jurisdiction has one primary authority
+
+# ── Authority levels for this domain ──────────────────────────────────────────
+authority_levels:
+  REGULATORY_DIRECTIVE: 1    # FAA AD, EASA AD — mandatory compliance
+  TYPE_CERTIFICATE_DATA: 2   # TC Data Sheet, approved type design data
+  MANUFACTURER_SERVICE_DOC: 3  # Service Bulletins, Service Letters
+  OPERATOR_PROCEDURE: 4      # Airline MEL, maintenance programme
+  INFORMAL: 5                # meeting notes, email, internal wiki

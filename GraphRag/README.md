@@ -1,6 +1,34 @@
-# GraphRAG — Enterprise Knowledge Graph RAG Pipeline
+# GraphRAG — Production Knowledge Graph Platform
 
-An end-to-end **GraphRAG** system that combines knowledge graph retrieval with LLMs to answer complex, multi-document questions. Built with Neo4j, RabbitMQ, Google ADK, RAGAS, and a live KPI dashboard.
+A production-grade **knowledge graph platform** that turns unstructured documents into a structured, queryable intelligence layer — with formal ontology enforcement, multi-type inference, entity resolution, bitemporal modeling, and an LLM-augmented retrieval pipeline on top.
+
+Built for domains where **graph quality is a first-class requirement**: regulatory compliance, aerospace engineering, and other knowledge-intensive fields where facts must be provenance-tracked, time-aware, and semantically consistent across sources.
+
+---
+
+## Knowledge Graph Layer
+
+The graph is not a RAG index. It is a formally modeled knowledge base:
+
+| Capability | Implementation |
+|---|---|
+| **Ontology enforcement** | Versioned entity type taxonomy (`SUBCLASS_OF` hierarchy); domain/range constraints on every relation write; deprecated relation auto-migration |
+| **Forward-chaining inference** | Datalog-style rules (transitivity, symmetry, inverse, composition); derived edges tagged `source_type=inferred` with per-hop confidence decay |
+| **Entity resolution** | 4-stage pipeline: exact/normalised → fuzzy (Levenshtein ≥ 85) → embedding cosine (≥ 0.92) → new entity |
+| **Bitemporal modeling** | Valid time (`valid_from`/`valid_to`) + transaction time (`recorded_at`, immutable); `as_of(vt, tt)` queries for point-in-time reconstruction |
+| **Contradiction detection** | 5 typed conflict classes: multi-source, directional reversal, exclusive state, functional violation, positive/negative pair |
+| **Negative knowledge** | `NEGATIVE_RELATES_TO` edges with full provenance; conflict detection when positive and negative assertions coexist |
+| **Reification** | `Statement` nodes for meta-assertions (endorsements, epistemic annotations) |
+| **Confidence model** | Bayesian accumulation across sources: `1−(1−c₁)(1−c₂)`; authority-weighted decay; temporal half-life; isotonic calibration correction |
+| **Document authority** | 4-level hierarchy (Regulatory → Manufacturer → Internal → Informal); `SUPERSEDES` chains penalise outdated sources |
+| **Graph health metrics** | 6 semantic indicators (alias coverage, contradiction rate, orphan rate, community coherence…) with per-tenant trend snapshots and alert thresholds |
+| **RDF / OWL export** | `scripts/export_rdf.py` serialises to Turtle with `owl:NamedIndividual`, `owl:ObjectProperty`, `rdfs:subClassOf`, and reified confidence annotations |
+| **Domain ontologies** | Config-driven domain overlays (see `config/ontologies/aerospace_regulatory.yml`) — extend type hierarchy and relation schema without code changes |
+
+**Further reading:**
+- [`docs/ontology-model.md`](docs/ontology-model.md) — formal type hierarchy, relation schema, inference rules, design decisions
+- [`docs/entity-resolution.md`](docs/entity-resolution.md) — 4-stage resolution pipeline with examples
+- [`docs/knowledge-graph-architecture.md`](docs/knowledge-graph-architecture.md) — architectural decisions and data model
 
 ---
 
@@ -232,7 +260,15 @@ GraphRag/
 │       └── test_safety_paths.py     # Tenant isolation · ontology · contradiction · quarantine · community
 │
 ├── config/
-│   └── settings.yml                 # All pipeline tuning (see Configuration section)
+│   ├── settings.yml                 # All pipeline tuning (see Configuration section)
+│   └── ontologies/
+│       └── aerospace_regulatory.yml # Domain ontology: types, relations, inference rules, authority levels
+│
+├── docs/
+│   ├── ontology-model.md            # Formal type hierarchy, relation schema, inference rules, design decisions
+│   ├── entity-resolution.md         # 4-stage entity resolution pipeline with examples
+│   └── knowledge-graph-architecture.md  # Architectural decisions, data model, scalability
+│
 ├── docker-compose.yml
 ├── Dockerfile                       # Multi-stage build; non-root user; HEALTHCHECK
 ├── requirements.txt                 # Direct dependencies

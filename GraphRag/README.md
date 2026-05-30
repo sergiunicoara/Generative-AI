@@ -22,8 +22,11 @@ The graph is not a RAG index. It is a formally modeled knowledge base:
 | **Confidence model** | Bayesian accumulation across sources: `1−(1−c₁)(1−c₂)`; authority-weighted decay; temporal half-life; isotonic calibration correction |
 | **Document authority** | 4-level hierarchy (Regulatory → Manufacturer → Internal → Informal); `SUPERSEDES` chains penalise outdated sources |
 | **Graph health metrics** | 6 semantic indicators (alias coverage, contradiction rate, orphan rate, community coherence…) with per-tenant trend snapshots and alert thresholds |
-| **RDF / OWL export** | `scripts/export_rdf.py` serialises to Turtle with `owl:NamedIndividual`, `owl:ObjectProperty`, `rdfs:subClassOf`, and reified confidence annotations |
-| **Domain ontologies** | Config-driven domain overlays (see `config/ontologies/aerospace_regulatory.yml`) — extend type hierarchy and relation schema without code changes |
+| **RDF / OWL export** | `scripts/export_rdf.py` serialises to Turtle with `owl:NamedIndividual`, `owl:ObjectProperty`, `rdfs:subClassOf`, and reified confidence annotations; `--infer` applies OWL-RL closure before writing |
+| **OWL-RL reasoning** | `OWLRLReasoner` (owlrl) materialises subClassOf chains, symmetric/inverse properties; `is_consistent()` detects owl:Nothing entailments |
+| **SPARQL bridge** | `SPARQLBridge.from_turtle()` + `POST /kg/sparql` — SPARQL 1.1 SELECT in-process over any Turtle export; pre-built queries for entity relations, subclass hierarchy, confidence summary |
+| **Link prediction** | `LinkPredictor` wraps trained `TransXTrainer` (TransE): `predict_tail(h,r,?)`, `predict_relation(h,?,t)`, `find_missing_links()` via Neo4j vector ANN; `POST /kg/predict-links` |
+| **Domain ontologies** | Config-driven domain overlays (see `config/ontologies/aerospace_regulatory.yml`) — extend type hierarchy and relation schema without code changes; `generate_synthetic_ontology.py` benchmarks at 500 types, 170k relations/sec |
 
 **Further reading:**
 - [`docs/ontology-model.md`](docs/ontology-model.md) — formal type hierarchy, relation schema, inference rules, design decisions

@@ -1330,6 +1330,56 @@ just the ones with matches.
 
 ---
 
+## A55 — Test assumptions about library behaviour must match the library's actual semantics
+
+**What happened:**
+`test_empty_graph_returns_zero` asserted that applying `owlrl.DeductiveClosure` to an
+empty rdflib Graph returns 0 new triples.  It returned 106.  owlrl bootstraps the OWL
+built-in axioms (`owl:Thing`, `owl:Nothing`, etc.) even on an empty graph — that is
+correct OWL-RL behaviour, not a bug.
+
+Similarly, `test_valid_graph_is_consistent` used `(None, None, OWL.Nothing) in graph`
+which is True whenever `owl:Nothing` appears as *any* object (e.g. as an object of a
+built-in OWL axiom).  The correct check is `(None, RDF.type, OWL.Nothing)` —
+i.e. an *individual* typed as owl:Nothing.
+
+**Root cause:**
+Tests were written from first-principles reasoning about the library, not from reading
+the library's actual output.
+
+**Rule:**
+> Before writing assertions about a third-party library's output:
+> 1. Run the library on a minimal example and inspect the actual result.
+> 2. Do not assert exact counts unless you have run the code and confirmed the number.
+>    Use `>= 0` / `> 0` / `isinstance(n, int)` instead of `== 0` for things the library controls.
+> 3. For consistency checks in OWL-RL: check `(None, RDF.type, OWL.Nothing)` —
+>    an individual typed as the empty class — not `(None, None, OWL.Nothing)` which
+>    matches any triple with owl:Nothing as object (including built-in axioms).
+
+---
+
+## A56 — Re-explore before assuming gaps are real; previously built items may already exist
+
+**What happened:**
+A gap analysis listed 7 items as missing (integration tests, load tests, alert service,
+admin dashboard, TransE training, SPARQL, OWL reasoner, link predictor).  Re-exploration
+found 5 of those 7 were already fully built in prior sessions.  Only 4 were genuinely
+missing.
+
+**Root cause:**
+The analysis was based on the initial JD audit which happened before Phase 9
+implementation.  The gap list was never reconciled against what was actually committed.
+
+**Rule:**
+> Before implementing a list of "missing" items:
+> 1. Grep/glob for the file that would exist if it were already done.
+> 2. Check git log for commits that sound like they implement the item.
+> 3. If the file exists, read it — it may be complete, partial, or wrong.
+> Only after confirming absence should you write new code.
+> False-positive gaps waste time and create duplicate implementations.
+
+---
+
 ## A43 — AsyncMock side_effect lists must exactly match actual call counts
 
 **What happened:**

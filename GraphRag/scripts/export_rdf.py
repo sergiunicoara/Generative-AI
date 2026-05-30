@@ -102,7 +102,7 @@ def _init_graph() -> Graph:
     return g
 
 
-async def export(tenant: str, output: Path, limit: int) -> None:
+async def export(tenant: str, output: Path, limit: int, infer: bool = False) -> None:
     from graphrag.graph.neo4j_client import get_neo4j
 
     neo4j = get_neo4j()
@@ -243,6 +243,18 @@ async def export(tenant: str, output: Path, limit: int) -> None:
             g.add((ax, ANNOT.confidence,
                    Literal(round(float(row["conf"]), 4), datatype=XSD.float)))
 
+    # ── Optional OWL-RL closure ────────────────────────────────────────────────
+    if infer:
+        from graphrag.graph.owl_reasoner import OWLRLReasoner
+        reasoner   = OWLRLReasoner(g)
+        n_inferred = reasoner.apply_closure()
+        consistent = reasoner.is_consistent()
+        log.info("export_rdf.owl_rl",
+                 new_triples=n_inferred, consistent=consistent)
+        print(f"  OWL-RL closure: {n_inferred} triples inferred  "
+              f"(consistent={consistent})")
+        g = reasoner._g   # use the expanded graph for serialisation
+
     await neo4j.close()
 
     output.parent.mkdir(parents=True, exist_ok=True)
@@ -273,12 +285,16 @@ def main():
                         help="Output Turtle file path")
     parser.add_argument("--limit",   type=int, default=50_000,
                         help="Max entities and edges per query (default: 50000)")
+    parser.add_argument("--infer", action="store_true",
+                        help="Apply OWL-RL closure after export (materialises "
+                             "subClass propagation, symmetric/inverse properties)")
     args = parser.parse_args()
 
     asyncio.run(export(
         tenant=args.tenant,
         output=Path(args.output),
         limit=args.limit,
+        infer=args.infer,
     ))
 
 

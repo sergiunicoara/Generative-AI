@@ -530,6 +530,92 @@ async def list_unembedded_media(
     return await svc.get_unembedded(tenant=tenant, modality=modality, limit=limit)
 
 
+# ── SPARQL Bridge ────────────────────────────────────────────────────────────
+
+class SPARQLRequest(BaseModel):
+    query: str
+    namespaces: dict[str, str] = {}
+    export_path: str = "exports/graph_export.ttl"
+
+
+@router.post(
+    "/sparql",
+    dependencies=[Depends(require_scope("read"))],
+    summary="Execute a SPARQL 1.1 SELECT query against the exported Turtle graph",
+)
+async def sparql_query(request: SPARQLRequest):
+    """Run a SPARQL SELECT query against the last RDF export.
+
+    The export is produced by ``scripts/export_rdf.py``.  If no export
+    exists at ``export_path``, returns a 404 with a hint to run the script.
+    """
+    from pathlib import Path
+
+    from graphrag.graph.sparql_bridge import SPARQLBridge
+
+    path = Path(request.export_path)
+    if not path.exists():
+        raise HTTPException(
+            status_code=404,
+            detail=f"RDF export not found at '{path}'. "
+                   "Run: python scripts/export_rdf.py",
+        )
+    try:
+        bridge = SPARQLBridge.from_turtle(path)
+        rows   = bridge.query(request.query, init_ns=request.namespaces)
+        return {"rows": rows, "count": len(rows)}
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+# ── Link Prediction ───────────────────────────────────────────────────────────
+
+class LinkPredictionRequest(BaseModel):
+    head_id: str
+    relation: str
+    top_k: int = 10
+    tenant: str = "default"
+
+
+@router.post(
+    "/predict-links",
+    dependencies=[Depends(require_scope("read"))],
+    summary="Predict candidate tail entities using trained TransE embeddings",
+)
+async def predict_links(request: LinkPredictionRequest):
+    """Rank candidate tail entities for (head, relation, ?).
+
+    Requires a trained ``TransXTrainer`` — call ``POST /kg/train-embeddings``
+    first to learn relation vectors, then this endpoint scores candidates via
+    TransE: h + r ≈ t.
+    """
+    from graphrag.graph.edge_embeddings import EdgeEmbeddingService
+    from graphrag.graph.link_predictor import LinkPredictor
+    from graphrag.graph.transx_trainer import TransXTrainer
+
+    neo4j = get_neo4j()
+    svc   = EdgeEmbeddingService(neo4j)
+
+    # Load persisted relation embeddings into the shared dict
+    await svc.load_relation_embeddings(tenant=request.tenant)
+
+    trainer   = TransXTrainer(neo4j, rel_emb=svc._rel_emb, embed_dim=svc._embed_dim)
+    predictor = LinkPredictor(neo4j, trainer)
+
+    try:
+        candidates = await predictor.predict_tail(
+            head_id=request.head_id,
+            relation=request.relation,
+            top_k=request.top_k,
+            tenant=request.tenant,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+    return {"candidates": candidates, "head_id": request.head_id,
+            "relation": request.relation}
+
+
 # ── Entity Type Migration ─────────────────────────────────────────────────────
 
 class EntityTypeRenameRequest(BaseModel):

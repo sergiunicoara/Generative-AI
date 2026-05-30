@@ -1,0 +1,1382 @@
+domain: synthetic
+version: '1.0'
+type_hierarchy:
+- child: DOMAIN_TYPE_0000
+  parent: CONCEPT
+- child: DOMAIN_TYPE_0001
+  parent: DOMAIN_TYPE_0000
+- child: DOMAIN_TYPE_0002
+  parent: DOMAIN_TYPE_0001
+- child: DOMAIN_TYPE_0003
+  parent: DOMAIN_TYPE_0001
+- child: DOMAIN_TYPE_0004
+  parent: DOMAIN_TYPE_0001
+- child: DOMAIN_TYPE_0005
+  parent: DOMAIN_TYPE_0002
+- child: DOMAIN_TYPE_0006
+  parent: DOMAIN_TYPE_0002
+- child: DOMAIN_TYPE_0007
+  parent: DOMAIN_TYPE_0003
+- child: DOMAIN_TYPE_0008
+  parent: DOMAIN_TYPE_0003
+- child: DOMAIN_TYPE_0009
+  parent: DOMAIN_TYPE_0004
+- child: DOMAIN_TYPE_0010
+  parent: DOMAIN_TYPE_0004
+- child: DOMAIN_TYPE_0011
+  parent: DOMAIN_TYPE_0005
+- child: DOMAIN_TYPE_0012
+  parent: DOMAIN_TYPE_0006
+- child: DOMAIN_TYPE_0013
+  parent: DOMAIN_TYPE_0006
+- child: DOMAIN_TYPE_0014
+  parent: DOMAIN_TYPE_0006
+- child: DOMAIN_TYPE_0015
+  parent: DOMAIN_TYPE_0006
+- child: DOMAIN_TYPE_0016
+  parent: DOMAIN_TYPE_0006
+- child: DOMAIN_TYPE_0017
+  parent: DOMAIN_TYPE_0007
+- child: DOMAIN_TYPE_0018
+  parent: DOMAIN_TYPE_0008
+- child: DOMAIN_TYPE_0019
+  parent: DOMAIN_TYPE_0008
+- child: DOMAIN_TYPE_0020
+  parent: DOMAIN_TYPE_0008
+- child: DOMAIN_TYPE_0021
+  parent: DOMAIN_TYPE_0008
+- child: DOMAIN_TYPE_0022
+  parent: DOMAIN_TYPE_0008
+- child: DOMAIN_TYPE_0023
+  parent: DOMAIN_TYPE_0009
+- child: DOMAIN_TYPE_0024
+  parent: DOMAIN_TYPE_0009
+- child: DOMAIN_TYPE_0025
+  parent: DOMAIN_TYPE_0009
+- child: DOMAIN_TYPE_0026
+  parent: DOMAIN_TYPE_0009
+- child: DOMAIN_TYPE_0027
+  parent: DOMAIN_TYPE_0010
+- child: DOMAIN_TYPE_0028
+  parent: DOMAIN_TYPE_0011
+- child: DOMAIN_TYPE_0029
+  parent: DOMAIN_TYPE_0012
+- child: DOMAIN_TYPE_0030
+  parent: DOMAIN_TYPE_0013
+- child: DOMAIN_TYPE_0031
+  parent: DOMAIN_TYPE_0013
+- child: DOMAIN_TYPE_0032
+  parent: DOMAIN_TYPE_0014
+- child: DOMAIN_TYPE_0033
+  parent: DOMAIN_TYPE_0014
+- child: DOMAIN_TYPE_0034
+  parent: DOMAIN_TYPE_0015
+- child: DOMAIN_TYPE_0035
+  parent: DOMAIN_TYPE_0015
+- child: DOMAIN_TYPE_0036
+  parent: DOMAIN_TYPE_0015
+- child: DOMAIN_TYPE_0037
+  parent: DOMAIN_TYPE_0015
+- child: DOMAIN_TYPE_0038
+  parent: DOMAIN_TYPE_0015
+- child: DOMAIN_TYPE_0039
+  parent: DOMAIN_TYPE_0016
+- child: DOMAIN_TYPE_0040
+  parent: DOMAIN_TYPE_0016
+- child: DOMAIN_TYPE_0041
+  parent: DOMAIN_TYPE_0016
+- child: DOMAIN_TYPE_0042
+  parent: DOMAIN_TYPE_0016
+- child: DOMAIN_TYPE_0043
+  parent: DOMAIN_TYPE_0016
+- child: DOMAIN_TYPE_0044
+  parent: DOMAIN_TYPE_0017
+- child: DOMAIN_TYPE_0045
+  parent: DOMAIN_TYPE_0018
+- child: DOMAIN_TYPE_0046
+  parent: DOMAIN_TYPE_0018
+- child: DOMAIN_TYPE_0047
+  parent: DOMAIN_TYPE_0018
+- child: DOMAIN_TYPE_0048
+  parent: DOMAIN_TYPE_0018
+- child: DOMAIN_TYPE_0049
+  parent: DOMAIN_TYPE_0018
+- child: DOMAIN_TYPE_0050
+  parent: DOMAIN_TYPE_0019
+- child: DOMAIN_TYPE_0051
+  parent: DOMAIN_TYPE_0019
+- child: DOMAIN_TYPE_0052
+  parent: DOMAIN_TYPE_0020
+- child: DOMAIN_TYPE_0053
+  parent: DOMAIN_TYPE_0020
+- child: DOMAIN_TYPE_0054
+  parent: DOMAIN_TYPE_0020
+- child: DOMAIN_TYPE_0055
+  parent: DOMAIN_TYPE_0020
+- child: DOMAIN_TYPE_0056
+  parent: DOMAIN_TYPE_0020
+- child: DOMAIN_TYPE_0057
+  parent: DOMAIN_TYPE_0021
+- child: DOMAIN_TYPE_0058
+  parent: DOMAIN_TYPE_0021
+- child: DOMAIN_TYPE_0059
+  parent: DOMAIN_TYPE_0021
+- child: DOMAIN_TYPE_0060
+  parent: DOMAIN_TYPE_0021
+- child: DOMAIN_TYPE_0061
+  parent: DOMAIN_TYPE_0022
+- child: DOMAIN_TYPE_0062
+  parent: DOMAIN_TYPE_0022
+- child: DOMAIN_TYPE_0063
+  parent: DOMAIN_TYPE_0023
+- child: DOMAIN_TYPE_0064
+  parent: DOMAIN_TYPE_0023
+- child: DOMAIN_TYPE_0065
+  parent: DOMAIN_TYPE_0023
+- child: DOMAIN_TYPE_0066
+  parent: DOMAIN_TYPE_0023
+- child: DOMAIN_TYPE_0067
+  parent: DOMAIN_TYPE_0024
+- child: DOMAIN_TYPE_0068
+  parent: DOMAIN_TYPE_0024
+- child: DOMAIN_TYPE_0069
+  parent: DOMAIN_TYPE_0024
+- child: DOMAIN_TYPE_0070
+  parent: DOMAIN_TYPE_0024
+- child: DOMAIN_TYPE_0071
+  parent: DOMAIN_TYPE_0024
+- child: DOMAIN_TYPE_0072
+  parent: DOMAIN_TYPE_0025
+- child: DOMAIN_TYPE_0073
+  parent: DOMAIN_TYPE_0025
+- child: DOMAIN_TYPE_0074
+  parent: DOMAIN_TYPE_0025
+- child: DOMAIN_TYPE_0075
+  parent: DOMAIN_TYPE_0026
+- child: DOMAIN_TYPE_0076
+  parent: DOMAIN_TYPE_0027
+- child: DOMAIN_TYPE_0077
+  parent: DOMAIN_TYPE_0027
+- child: DOMAIN_TYPE_0078
+  parent: DOMAIN_TYPE_0028
+- child: DOMAIN_TYPE_0079
+  parent: DOMAIN_TYPE_0028
+- child: DOMAIN_TYPE_0080
+  parent: DOMAIN_TYPE_0028
+- child: DOMAIN_TYPE_0081
+  parent: DOMAIN_TYPE_0028
+- child: DOMAIN_TYPE_0082
+  parent: DOMAIN_TYPE_0029
+- child: DOMAIN_TYPE_0083
+  parent: DOMAIN_TYPE_0029
+- child: DOMAIN_TYPE_0084
+  parent: DOMAIN_TYPE_0029
+- child: DOMAIN_TYPE_0085
+  parent: DOMAIN_TYPE_0030
+- child: DOMAIN_TYPE_0086
+  parent: DOMAIN_TYPE_0030
+- child: DOMAIN_TYPE_0087
+  parent: DOMAIN_TYPE_0030
+- child: DOMAIN_TYPE_0088
+  parent: DOMAIN_TYPE_0031
+- child: DOMAIN_TYPE_0089
+  parent: DOMAIN_TYPE_0031
+- child: DOMAIN_TYPE_0090
+  parent: DOMAIN_TYPE_0032
+- child: DOMAIN_TYPE_0091
+  parent: DOMAIN_TYPE_0032
+- child: DOMAIN_TYPE_0092
+  parent: DOMAIN_TYPE_0033
+- child: DOMAIN_TYPE_0093
+  parent: DOMAIN_TYPE_0033
+- child: DOMAIN_TYPE_0094
+  parent: DOMAIN_TYPE_0033
+- child: DOMAIN_TYPE_0095
+  parent: DOMAIN_TYPE_0034
+- child: DOMAIN_TYPE_0096
+  parent: DOMAIN_TYPE_0035
+- child: DOMAIN_TYPE_0097
+  parent: DOMAIN_TYPE_0036
+- child: DOMAIN_TYPE_0098
+  parent: DOMAIN_TYPE_0036
+- child: DOMAIN_TYPE_0099
+  parent: DOMAIN_TYPE_0036
+- child: DOMAIN_TYPE_0100
+  parent: DOMAIN_TYPE_0036
+- child: DOMAIN_TYPE_0101
+  parent: DOMAIN_TYPE_0037
+- child: DOMAIN_TYPE_0102
+  parent: DOMAIN_TYPE_0038
+- child: DOMAIN_TYPE_0103
+  parent: DOMAIN_TYPE_0038
+- child: DOMAIN_TYPE_0104
+  parent: DOMAIN_TYPE_0038
+- child: DOMAIN_TYPE_0105
+  parent: DOMAIN_TYPE_0039
+- child: DOMAIN_TYPE_0106
+  parent: DOMAIN_TYPE_0039
+- child: DOMAIN_TYPE_0107
+  parent: DOMAIN_TYPE_0039
+- child: DOMAIN_TYPE_0108
+  parent: DOMAIN_TYPE_0040
+- child: DOMAIN_TYPE_0109
+  parent: DOMAIN_TYPE_0040
+- child: DOMAIN_TYPE_0110
+  parent: DOMAIN_TYPE_0040
+- child: DOMAIN_TYPE_0111
+  parent: DOMAIN_TYPE_0040
+- child: DOMAIN_TYPE_0112
+  parent: DOMAIN_TYPE_0040
+- child: DOMAIN_TYPE_0113
+  parent: DOMAIN_TYPE_0041
+- child: DOMAIN_TYPE_0114
+  parent: DOMAIN_TYPE_0041
+- child: DOMAIN_TYPE_0115
+  parent: DOMAIN_TYPE_0041
+- child: DOMAIN_TYPE_0116
+  parent: DOMAIN_TYPE_0042
+- child: DOMAIN_TYPE_0117
+  parent: DOMAIN_TYPE_0043
+- child: DOMAIN_TYPE_0118
+  parent: DOMAIN_TYPE_0043
+- child: DOMAIN_TYPE_0119
+  parent: DOMAIN_TYPE_0043
+- child: DOMAIN_TYPE_0120
+  parent: DOMAIN_TYPE_0043
+- child: DOMAIN_TYPE_0121
+  parent: DOMAIN_TYPE_0044
+- child: DOMAIN_TYPE_0122
+  parent: DOMAIN_TYPE_0044
+- child: DOMAIN_TYPE_0123
+  parent: DOMAIN_TYPE_0044
+- child: DOMAIN_TYPE_0124
+  parent: DOMAIN_TYPE_0044
+- child: DOMAIN_TYPE_0125
+  parent: DOMAIN_TYPE_0044
+- child: DOMAIN_TYPE_0126
+  parent: DOMAIN_TYPE_0045
+- child: DOMAIN_TYPE_0127
+  parent: DOMAIN_TYPE_0046
+- child: DOMAIN_TYPE_0128
+  parent: DOMAIN_TYPE_0046
+- child: DOMAIN_TYPE_0129
+  parent: DOMAIN_TYPE_0046
+- child: DOMAIN_TYPE_0130
+  parent: DOMAIN_TYPE_0046
+- child: DOMAIN_TYPE_0131
+  parent: DOMAIN_TYPE_0047
+- child: DOMAIN_TYPE_0132
+  parent: DOMAIN_TYPE_0048
+- child: DOMAIN_TYPE_0133
+  parent: DOMAIN_TYPE_0048
+- child: DOMAIN_TYPE_0134
+  parent: DOMAIN_TYPE_0048
+- child: DOMAIN_TYPE_0135
+  parent: DOMAIN_TYPE_0048
+- child: DOMAIN_TYPE_0136
+  parent: DOMAIN_TYPE_0048
+- child: DOMAIN_TYPE_0137
+  parent: DOMAIN_TYPE_0049
+- child: DOMAIN_TYPE_0138
+  parent: DOMAIN_TYPE_0049
+- child: DOMAIN_TYPE_0139
+  parent: DOMAIN_TYPE_0049
+- child: DOMAIN_TYPE_0140
+  parent: DOMAIN_TYPE_0050
+- child: DOMAIN_TYPE_0141
+  parent: DOMAIN_TYPE_0050
+- child: DOMAIN_TYPE_0142
+  parent: DOMAIN_TYPE_0050
+- child: DOMAIN_TYPE_0143
+  parent: DOMAIN_TYPE_0050
+- child: DOMAIN_TYPE_0144
+  parent: DOMAIN_TYPE_0050
+- child: DOMAIN_TYPE_0145
+  parent: DOMAIN_TYPE_0051
+- child: DOMAIN_TYPE_0146
+  parent: DOMAIN_TYPE_0051
+- child: DOMAIN_TYPE_0147
+  parent: DOMAIN_TYPE_0051
+- child: DOMAIN_TYPE_0148
+  parent: DOMAIN_TYPE_0052
+- child: DOMAIN_TYPE_0149
+  parent: DOMAIN_TYPE_0052
+- child: DOMAIN_TYPE_0150
+  parent: DOMAIN_TYPE_0052
+- child: DOMAIN_TYPE_0151
+  parent: DOMAIN_TYPE_0052
+- child: DOMAIN_TYPE_0152
+  parent: DOMAIN_TYPE_0052
+- child: DOMAIN_TYPE_0153
+  parent: DOMAIN_TYPE_0053
+- child: DOMAIN_TYPE_0154
+  parent: DOMAIN_TYPE_0053
+- child: DOMAIN_TYPE_0155
+  parent: DOMAIN_TYPE_0054
+- child: DOMAIN_TYPE_0156
+  parent: DOMAIN_TYPE_0055
+- child: DOMAIN_TYPE_0157
+  parent: DOMAIN_TYPE_0056
+- child: DOMAIN_TYPE_0158
+  parent: DOMAIN_TYPE_0056
+- child: DOMAIN_TYPE_0159
+  parent: DOMAIN_TYPE_0057
+- child: DOMAIN_TYPE_0160
+  parent: DOMAIN_TYPE_0057
+- child: DOMAIN_TYPE_0161
+  parent: DOMAIN_TYPE_0057
+- child: DOMAIN_TYPE_0162
+  parent: DOMAIN_TYPE_0058
+- child: DOMAIN_TYPE_0163
+  parent: DOMAIN_TYPE_0059
+- child: DOMAIN_TYPE_0164
+  parent: DOMAIN_TYPE_0059
+- child: DOMAIN_TYPE_0165
+  parent: DOMAIN_TYPE_0060
+- child: DOMAIN_TYPE_0166
+  parent: DOMAIN_TYPE_0061
+- child: DOMAIN_TYPE_0167
+  parent: DOMAIN_TYPE_0061
+- child: DOMAIN_TYPE_0168
+  parent: DOMAIN_TYPE_0061
+- child: DOMAIN_TYPE_0169
+  parent: DOMAIN_TYPE_0061
+- child: DOMAIN_TYPE_0170
+  parent: DOMAIN_TYPE_0062
+- child: DOMAIN_TYPE_0171
+  parent: DOMAIN_TYPE_0062
+- child: DOMAIN_TYPE_0172
+  parent: DOMAIN_TYPE_0062
+- child: DOMAIN_TYPE_0173
+  parent: DOMAIN_TYPE_0063
+- child: DOMAIN_TYPE_0174
+  parent: DOMAIN_TYPE_0063
+- child: DOMAIN_TYPE_0175
+  parent: DOMAIN_TYPE_0063
+- child: DOMAIN_TYPE_0176
+  parent: DOMAIN_TYPE_0063
+- child: DOMAIN_TYPE_0177
+  parent: DOMAIN_TYPE_0064
+- child: DOMAIN_TYPE_0178
+  parent: DOMAIN_TYPE_0064
+- child: DOMAIN_TYPE_0179
+  parent: DOMAIN_TYPE_0064
+- child: DOMAIN_TYPE_0180
+  parent: DOMAIN_TYPE_0065
+- child: DOMAIN_TYPE_0181
+  parent: DOMAIN_TYPE_0065
+- child: DOMAIN_TYPE_0182
+  parent: DOMAIN_TYPE_0066
+- child: DOMAIN_TYPE_0183
+  parent: DOMAIN_TYPE_0066
+- child: DOMAIN_TYPE_0184
+  parent: DOMAIN_TYPE_0066
+- child: DOMAIN_TYPE_0185
+  parent: DOMAIN_TYPE_0067
+- child: DOMAIN_TYPE_0186
+  parent: DOMAIN_TYPE_0067
+- child: DOMAIN_TYPE_0187
+  parent: DOMAIN_TYPE_0067
+- child: DOMAIN_TYPE_0188
+  parent: DOMAIN_TYPE_0068
+- child: DOMAIN_TYPE_0189
+  parent: DOMAIN_TYPE_0068
+- child: DOMAIN_TYPE_0190
+  parent: DOMAIN_TYPE_0069
+- child: DOMAIN_TYPE_0191
+  parent: DOMAIN_TYPE_0069
+- child: DOMAIN_TYPE_0192
+  parent: DOMAIN_TYPE_0069
+- child: DOMAIN_TYPE_0193
+  parent: DOMAIN_TYPE_0070
+- child: DOMAIN_TYPE_0194
+  parent: DOMAIN_TYPE_0071
+- child: DOMAIN_TYPE_0195
+  parent: DOMAIN_TYPE_0071
+- child: DOMAIN_TYPE_0196
+  parent: DOMAIN_TYPE_0071
+- child: DOMAIN_TYPE_0197
+  parent: DOMAIN_TYPE_0071
+- child: DOMAIN_TYPE_0198
+  parent: DOMAIN_TYPE_0071
+- child: DOMAIN_TYPE_0199
+  parent: DOMAIN_TYPE_0072
+- child: DOMAIN_TYPE_0200
+  parent: DOMAIN_TYPE_0072
+- child: DOMAIN_TYPE_0201
+  parent: DOMAIN_TYPE_0073
+- child: DOMAIN_TYPE_0202
+  parent: DOMAIN_TYPE_0073
+- child: DOMAIN_TYPE_0203
+  parent: DOMAIN_TYPE_0073
+- child: DOMAIN_TYPE_0204
+  parent: DOMAIN_TYPE_0073
+- child: DOMAIN_TYPE_0205
+  parent: DOMAIN_TYPE_0073
+- child: DOMAIN_TYPE_0206
+  parent: DOMAIN_TYPE_0074
+- child: DOMAIN_TYPE_0207
+  parent: DOMAIN_TYPE_0074
+- child: DOMAIN_TYPE_0208
+  parent: DOMAIN_TYPE_0075
+- child: DOMAIN_TYPE_0209
+  parent: DOMAIN_TYPE_0075
+- child: DOMAIN_TYPE_0210
+  parent: DOMAIN_TYPE_0076
+- child: DOMAIN_TYPE_0211
+  parent: DOMAIN_TYPE_0076
+- child: DOMAIN_TYPE_0212
+  parent: DOMAIN_TYPE_0076
+- child: DOMAIN_TYPE_0213
+  parent: DOMAIN_TYPE_0076
+- child: DOMAIN_TYPE_0214
+  parent: DOMAIN_TYPE_0077
+- child: DOMAIN_TYPE_0215
+  parent: DOMAIN_TYPE_0077
+- child: DOMAIN_TYPE_0216
+  parent: DOMAIN_TYPE_0077
+- child: DOMAIN_TYPE_0217
+  parent: DOMAIN_TYPE_0077
+- child: DOMAIN_TYPE_0218
+  parent: DOMAIN_TYPE_0078
+- child: DOMAIN_TYPE_0219
+  parent: DOMAIN_TYPE_0078
+- child: DOMAIN_TYPE_0220
+  parent: DOMAIN_TYPE_0078
+- child: DOMAIN_TYPE_0221
+  parent: DOMAIN_TYPE_0079
+- child: DOMAIN_TYPE_0222
+  parent: DOMAIN_TYPE_0079
+- child: DOMAIN_TYPE_0223
+  parent: DOMAIN_TYPE_0079
+- child: DOMAIN_TYPE_0224
+  parent: DOMAIN_TYPE_0079
+- child: DOMAIN_TYPE_0225
+  parent: DOMAIN_TYPE_0079
+- child: DOMAIN_TYPE_0226
+  parent: DOMAIN_TYPE_0080
+- child: DOMAIN_TYPE_0227
+  parent: DOMAIN_TYPE_0080
+- child: DOMAIN_TYPE_0228
+  parent: DOMAIN_TYPE_0081
+- child: DOMAIN_TYPE_0229
+  parent: DOMAIN_TYPE_0081
+- child: DOMAIN_TYPE_0230
+  parent: DOMAIN_TYPE_0081
+- child: DOMAIN_TYPE_0231
+  parent: DOMAIN_TYPE_0082
+- child: DOMAIN_TYPE_0232
+  parent: DOMAIN_TYPE_0083
+- child: DOMAIN_TYPE_0233
+  parent: DOMAIN_TYPE_0083
+- child: DOMAIN_TYPE_0234
+  parent: DOMAIN_TYPE_0084
+- child: DOMAIN_TYPE_0235
+  parent: DOMAIN_TYPE_0085
+- child: DOMAIN_TYPE_0236
+  parent: DOMAIN_TYPE_0085
+- child: DOMAIN_TYPE_0237
+  parent: DOMAIN_TYPE_0085
+- child: DOMAIN_TYPE_0238
+  parent: DOMAIN_TYPE_0086
+- child: DOMAIN_TYPE_0239
+  parent: DOMAIN_TYPE_0086
+- child: DOMAIN_TYPE_0240
+  parent: DOMAIN_TYPE_0086
+- child: DOMAIN_TYPE_0241
+  parent: DOMAIN_TYPE_0086
+- child: DOMAIN_TYPE_0242
+  parent: DOMAIN_TYPE_0087
+- child: DOMAIN_TYPE_0243
+  parent: DOMAIN_TYPE_0087
+- child: DOMAIN_TYPE_0244
+  parent: DOMAIN_TYPE_0087
+- child: DOMAIN_TYPE_0245
+  parent: DOMAIN_TYPE_0088
+- child: DOMAIN_TYPE_0246
+  parent: DOMAIN_TYPE_0089
+- child: DOMAIN_TYPE_0247
+  parent: DOMAIN_TYPE_0089
+- child: DOMAIN_TYPE_0248
+  parent: DOMAIN_TYPE_0090
+- child: DOMAIN_TYPE_0249
+  parent: DOMAIN_TYPE_0090
+- child: DOMAIN_TYPE_0250
+  parent: DOMAIN_TYPE_0090
+- child: DOMAIN_TYPE_0251
+  parent: DOMAIN_TYPE_0090
+- child: DOMAIN_TYPE_0252
+  parent: DOMAIN_TYPE_0090
+- child: DOMAIN_TYPE_0253
+  parent: DOMAIN_TYPE_0091
+- child: DOMAIN_TYPE_0254
+  parent: DOMAIN_TYPE_0091
+- child: DOMAIN_TYPE_0255
+  parent: DOMAIN_TYPE_0091
+- child: DOMAIN_TYPE_0256
+  parent: DOMAIN_TYPE_0092
+- child: DOMAIN_TYPE_0257
+  parent: DOMAIN_TYPE_0092
+- child: DOMAIN_TYPE_0258
+  parent: DOMAIN_TYPE_0093
+- child: DOMAIN_TYPE_0259
+  parent: DOMAIN_TYPE_0093
+- child: DOMAIN_TYPE_0260
+  parent: DOMAIN_TYPE_0093
+- child: DOMAIN_TYPE_0261
+  parent: DOMAIN_TYPE_0093
+- child: DOMAIN_TYPE_0262
+  parent: DOMAIN_TYPE_0094
+- child: DOMAIN_TYPE_0263
+  parent: DOMAIN_TYPE_0094
+- child: DOMAIN_TYPE_0264
+  parent: DOMAIN_TYPE_0094
+- child: DOMAIN_TYPE_0265
+  parent: DOMAIN_TYPE_0094
+- child: DOMAIN_TYPE_0266
+  parent: DOMAIN_TYPE_0095
+- child: DOMAIN_TYPE_0267
+  parent: DOMAIN_TYPE_0095
+- child: DOMAIN_TYPE_0268
+  parent: DOMAIN_TYPE_0095
+- child: DOMAIN_TYPE_0269
+  parent: DOMAIN_TYPE_0095
+- child: DOMAIN_TYPE_0270
+  parent: DOMAIN_TYPE_0096
+- child: DOMAIN_TYPE_0271
+  parent: DOMAIN_TYPE_0096
+- child: DOMAIN_TYPE_0272
+  parent: DOMAIN_TYPE_0097
+- child: DOMAIN_TYPE_0273
+  parent: DOMAIN_TYPE_0097
+- child: DOMAIN_TYPE_0274
+  parent: DOMAIN_TYPE_0097
+- child: DOMAIN_TYPE_0275
+  parent: DOMAIN_TYPE_0098
+- child: DOMAIN_TYPE_0276
+  parent: DOMAIN_TYPE_0098
+- child: DOMAIN_TYPE_0277
+  parent: DOMAIN_TYPE_0099
+- child: DOMAIN_TYPE_0278
+  parent: DOMAIN_TYPE_0099
+- child: DOMAIN_TYPE_0279
+  parent: DOMAIN_TYPE_0100
+- child: DOMAIN_TYPE_0280
+  parent: DOMAIN_TYPE_0100
+- child: DOMAIN_TYPE_0281
+  parent: DOMAIN_TYPE_0100
+- child: DOMAIN_TYPE_0282
+  parent: DOMAIN_TYPE_0100
+- child: DOMAIN_TYPE_0283
+  parent: DOMAIN_TYPE_0100
+- child: DOMAIN_TYPE_0284
+  parent: DOMAIN_TYPE_0101
+- child: DOMAIN_TYPE_0285
+  parent: DOMAIN_TYPE_0101
+- child: DOMAIN_TYPE_0286
+  parent: DOMAIN_TYPE_0101
+- child: DOMAIN_TYPE_0287
+  parent: DOMAIN_TYPE_0101
+- child: DOMAIN_TYPE_0288
+  parent: DOMAIN_TYPE_0101
+- child: DOMAIN_TYPE_0289
+  parent: DOMAIN_TYPE_0102
+- child: DOMAIN_TYPE_0290
+  parent: DOMAIN_TYPE_0102
+- child: DOMAIN_TYPE_0291
+  parent: DOMAIN_TYPE_0102
+- child: DOMAIN_TYPE_0292
+  parent: DOMAIN_TYPE_0103
+- child: DOMAIN_TYPE_0293
+  parent: DOMAIN_TYPE_0103
+- child: DOMAIN_TYPE_0294
+  parent: DOMAIN_TYPE_0103
+- child: DOMAIN_TYPE_0295
+  parent: DOMAIN_TYPE_0103
+- child: DOMAIN_TYPE_0296
+  parent: DOMAIN_TYPE_0103
+- child: DOMAIN_TYPE_0297
+  parent: DOMAIN_TYPE_0104
+- child: DOMAIN_TYPE_0298
+  parent: DOMAIN_TYPE_0104
+- child: DOMAIN_TYPE_0299
+  parent: DOMAIN_TYPE_0104
+- child: DOMAIN_TYPE_0300
+  parent: DOMAIN_TYPE_0104
+- child: DOMAIN_TYPE_0301
+  parent: DOMAIN_TYPE_0105
+- child: DOMAIN_TYPE_0302
+  parent: DOMAIN_TYPE_0105
+- child: DOMAIN_TYPE_0303
+  parent: DOMAIN_TYPE_0105
+- child: DOMAIN_TYPE_0304
+  parent: DOMAIN_TYPE_0105
+- child: DOMAIN_TYPE_0305
+  parent: DOMAIN_TYPE_0105
+- child: DOMAIN_TYPE_0306
+  parent: DOMAIN_TYPE_0106
+- child: DOMAIN_TYPE_0307
+  parent: DOMAIN_TYPE_0106
+- child: DOMAIN_TYPE_0308
+  parent: DOMAIN_TYPE_0106
+- child: DOMAIN_TYPE_0309
+  parent: DOMAIN_TYPE_0106
+- child: DOMAIN_TYPE_0310
+  parent: DOMAIN_TYPE_0107
+- child: DOMAIN_TYPE_0311
+  parent: DOMAIN_TYPE_0107
+- child: DOMAIN_TYPE_0312
+  parent: DOMAIN_TYPE_0107
+- child: DOMAIN_TYPE_0313
+  parent: DOMAIN_TYPE_0108
+- child: DOMAIN_TYPE_0314
+  parent: DOMAIN_TYPE_0108
+- child: DOMAIN_TYPE_0315
+  parent: DOMAIN_TYPE_0109
+- child: DOMAIN_TYPE_0316
+  parent: DOMAIN_TYPE_0109
+- child: DOMAIN_TYPE_0317
+  parent: DOMAIN_TYPE_0110
+- child: DOMAIN_TYPE_0318
+  parent: DOMAIN_TYPE_0110
+- child: DOMAIN_TYPE_0319
+  parent: DOMAIN_TYPE_0110
+- child: DOMAIN_TYPE_0320
+  parent: DOMAIN_TYPE_0110
+- child: DOMAIN_TYPE_0321
+  parent: DOMAIN_TYPE_0110
+- child: DOMAIN_TYPE_0322
+  parent: DOMAIN_TYPE_0111
+- child: DOMAIN_TYPE_0323
+  parent: DOMAIN_TYPE_0111
+- child: DOMAIN_TYPE_0324
+  parent: DOMAIN_TYPE_0111
+- child: DOMAIN_TYPE_0325
+  parent: DOMAIN_TYPE_0111
+- child: DOMAIN_TYPE_0326
+  parent: DOMAIN_TYPE_0112
+- child: DOMAIN_TYPE_0327
+  parent: DOMAIN_TYPE_0113
+- child: DOMAIN_TYPE_0328
+  parent: DOMAIN_TYPE_0114
+- child: DOMAIN_TYPE_0329
+  parent: DOMAIN_TYPE_0115
+- child: DOMAIN_TYPE_0330
+  parent: DOMAIN_TYPE_0115
+- child: DOMAIN_TYPE_0331
+  parent: DOMAIN_TYPE_0116
+- child: DOMAIN_TYPE_0332
+  parent: DOMAIN_TYPE_0116
+- child: DOMAIN_TYPE_0333
+  parent: DOMAIN_TYPE_0117
+- child: DOMAIN_TYPE_0334
+  parent: DOMAIN_TYPE_0117
+- child: DOMAIN_TYPE_0335
+  parent: DOMAIN_TYPE_0117
+- child: DOMAIN_TYPE_0336
+  parent: DOMAIN_TYPE_0117
+- child: DOMAIN_TYPE_0337
+  parent: DOMAIN_TYPE_0118
+- child: DOMAIN_TYPE_0338
+  parent: DOMAIN_TYPE_0118
+- child: DOMAIN_TYPE_0339
+  parent: DOMAIN_TYPE_0118
+- child: DOMAIN_TYPE_0340
+  parent: DOMAIN_TYPE_0118
+- child: DOMAIN_TYPE_0341
+  parent: DOMAIN_TYPE_0118
+- child: DOMAIN_TYPE_0342
+  parent: DOMAIN_TYPE_0119
+- child: DOMAIN_TYPE_0343
+  parent: DOMAIN_TYPE_0120
+- child: DOMAIN_TYPE_0344
+  parent: DOMAIN_TYPE_0120
+- child: DOMAIN_TYPE_0345
+  parent: DOMAIN_TYPE_0120
+- child: DOMAIN_TYPE_0346
+  parent: DOMAIN_TYPE_0120
+- child: DOMAIN_TYPE_0347
+  parent: DOMAIN_TYPE_0121
+- child: DOMAIN_TYPE_0348
+  parent: DOMAIN_TYPE_0121
+- child: DOMAIN_TYPE_0349
+  parent: DOMAIN_TYPE_0121
+- child: DOMAIN_TYPE_0350
+  parent: DOMAIN_TYPE_0121
+- child: DOMAIN_TYPE_0351
+  parent: DOMAIN_TYPE_0122
+- child: DOMAIN_TYPE_0352
+  parent: DOMAIN_TYPE_0122
+- child: DOMAIN_TYPE_0353
+  parent: DOMAIN_TYPE_0122
+- child: DOMAIN_TYPE_0354
+  parent: DOMAIN_TYPE_0122
+- child: DOMAIN_TYPE_0355
+  parent: DOMAIN_TYPE_0122
+- child: DOMAIN_TYPE_0356
+  parent: DOMAIN_TYPE_0123
+- child: DOMAIN_TYPE_0357
+  parent: DOMAIN_TYPE_0123
+- child: DOMAIN_TYPE_0358
+  parent: DOMAIN_TYPE_0123
+- child: DOMAIN_TYPE_0359
+  parent: DOMAIN_TYPE_0123
+- child: DOMAIN_TYPE_0360
+  parent: DOMAIN_TYPE_0124
+- child: DOMAIN_TYPE_0361
+  parent: DOMAIN_TYPE_0124
+- child: DOMAIN_TYPE_0362
+  parent: DOMAIN_TYPE_0124
+- child: DOMAIN_TYPE_0363
+  parent: DOMAIN_TYPE_0124
+- child: DOMAIN_TYPE_0364
+  parent: DOMAIN_TYPE_0124
+- child: DOMAIN_TYPE_0365
+  parent: DOMAIN_TYPE_0125
+- child: DOMAIN_TYPE_0366
+  parent: DOMAIN_TYPE_0125
+- child: DOMAIN_TYPE_0367
+  parent: DOMAIN_TYPE_0125
+- child: DOMAIN_TYPE_0368
+  parent: DOMAIN_TYPE_0126
+- child: DOMAIN_TYPE_0369
+  parent: DOMAIN_TYPE_0126
+- child: DOMAIN_TYPE_0370
+  parent: DOMAIN_TYPE_0126
+- child: DOMAIN_TYPE_0371
+  parent: DOMAIN_TYPE_0126
+- child: DOMAIN_TYPE_0372
+  parent: DOMAIN_TYPE_0126
+- child: DOMAIN_TYPE_0373
+  parent: DOMAIN_TYPE_0127
+- child: DOMAIN_TYPE_0374
+  parent: DOMAIN_TYPE_0128
+- child: DOMAIN_TYPE_0375
+  parent: DOMAIN_TYPE_0129
+- child: DOMAIN_TYPE_0376
+  parent: DOMAIN_TYPE_0129
+- child: DOMAIN_TYPE_0377
+  parent: DOMAIN_TYPE_0129
+- child: DOMAIN_TYPE_0378
+  parent: DOMAIN_TYPE_0129
+- child: DOMAIN_TYPE_0379
+  parent: DOMAIN_TYPE_0129
+- child: DOMAIN_TYPE_0380
+  parent: DOMAIN_TYPE_0130
+- child: DOMAIN_TYPE_0381
+  parent: DOMAIN_TYPE_0130
+- child: DOMAIN_TYPE_0382
+  parent: DOMAIN_TYPE_0130
+- child: DOMAIN_TYPE_0383
+  parent: DOMAIN_TYPE_0131
+- child: DOMAIN_TYPE_0384
+  parent: DOMAIN_TYPE_0131
+- child: DOMAIN_TYPE_0385
+  parent: DOMAIN_TYPE_0131
+- child: DOMAIN_TYPE_0386
+  parent: DOMAIN_TYPE_0132
+- child: DOMAIN_TYPE_0387
+  parent: DOMAIN_TYPE_0133
+- child: DOMAIN_TYPE_0388
+  parent: DOMAIN_TYPE_0133
+- child: DOMAIN_TYPE_0389
+  parent: DOMAIN_TYPE_0133
+- child: DOMAIN_TYPE_0390
+  parent: DOMAIN_TYPE_0134
+- child: DOMAIN_TYPE_0391
+  parent: DOMAIN_TYPE_0134
+- child: DOMAIN_TYPE_0392
+  parent: DOMAIN_TYPE_0134
+- child: DOMAIN_TYPE_0393
+  parent: DOMAIN_TYPE_0134
+- child: DOMAIN_TYPE_0394
+  parent: DOMAIN_TYPE_0135
+- child: DOMAIN_TYPE_0395
+  parent: DOMAIN_TYPE_0135
+- child: DOMAIN_TYPE_0396
+  parent: DOMAIN_TYPE_0136
+- child: DOMAIN_TYPE_0397
+  parent: DOMAIN_TYPE_0136
+- child: DOMAIN_TYPE_0398
+  parent: DOMAIN_TYPE_0136
+- child: DOMAIN_TYPE_0399
+  parent: DOMAIN_TYPE_0136
+- child: DOMAIN_TYPE_0400
+  parent: DOMAIN_TYPE_0137
+- child: DOMAIN_TYPE_0401
+  parent: DOMAIN_TYPE_0138
+- child: DOMAIN_TYPE_0402
+  parent: DOMAIN_TYPE_0138
+- child: DOMAIN_TYPE_0403
+  parent: DOMAIN_TYPE_0138
+- child: DOMAIN_TYPE_0404
+  parent: DOMAIN_TYPE_0139
+- child: DOMAIN_TYPE_0405
+  parent: DOMAIN_TYPE_0139
+- child: DOMAIN_TYPE_0406
+  parent: DOMAIN_TYPE_0139
+- child: DOMAIN_TYPE_0407
+  parent: DOMAIN_TYPE_0139
+- child: DOMAIN_TYPE_0408
+  parent: DOMAIN_TYPE_0139
+- child: DOMAIN_TYPE_0409
+  parent: DOMAIN_TYPE_0140
+- child: DOMAIN_TYPE_0410
+  parent: DOMAIN_TYPE_0140
+- child: DOMAIN_TYPE_0411
+  parent: DOMAIN_TYPE_0141
+- child: DOMAIN_TYPE_0412
+  parent: DOMAIN_TYPE_0141
+- child: DOMAIN_TYPE_0413
+  parent: DOMAIN_TYPE_0141
+- child: DOMAIN_TYPE_0414
+  parent: DOMAIN_TYPE_0141
+- child: DOMAIN_TYPE_0415
+  parent: DOMAIN_TYPE_0141
+- child: DOMAIN_TYPE_0416
+  parent: DOMAIN_TYPE_0142
+- child: DOMAIN_TYPE_0417
+  parent: DOMAIN_TYPE_0143
+- child: DOMAIN_TYPE_0418
+  parent: DOMAIN_TYPE_0143
+- child: DOMAIN_TYPE_0419
+  parent: DOMAIN_TYPE_0143
+- child: DOMAIN_TYPE_0420
+  parent: DOMAIN_TYPE_0144
+- child: DOMAIN_TYPE_0421
+  parent: DOMAIN_TYPE_0144
+- child: DOMAIN_TYPE_0422
+  parent: DOMAIN_TYPE_0144
+- child: DOMAIN_TYPE_0423
+  parent: DOMAIN_TYPE_0144
+- child: DOMAIN_TYPE_0424
+  parent: DOMAIN_TYPE_0144
+- child: DOMAIN_TYPE_0425
+  parent: DOMAIN_TYPE_0145
+- child: DOMAIN_TYPE_0426
+  parent: DOMAIN_TYPE_0145
+- child: DOMAIN_TYPE_0427
+  parent: DOMAIN_TYPE_0145
+- child: DOMAIN_TYPE_0428
+  parent: DOMAIN_TYPE_0145
+- child: DOMAIN_TYPE_0429
+  parent: DOMAIN_TYPE_0145
+- child: DOMAIN_TYPE_0430
+  parent: DOMAIN_TYPE_0146
+- child: DOMAIN_TYPE_0431
+  parent: DOMAIN_TYPE_0146
+- child: DOMAIN_TYPE_0432
+  parent: DOMAIN_TYPE_0147
+- child: DOMAIN_TYPE_0433
+  parent: DOMAIN_TYPE_0147
+- child: DOMAIN_TYPE_0434
+  parent: DOMAIN_TYPE_0148
+- child: DOMAIN_TYPE_0435
+  parent: DOMAIN_TYPE_0148
+- child: DOMAIN_TYPE_0436
+  parent: DOMAIN_TYPE_0148
+- child: DOMAIN_TYPE_0437
+  parent: DOMAIN_TYPE_0149
+- child: DOMAIN_TYPE_0438
+  parent: DOMAIN_TYPE_0149
+- child: DOMAIN_TYPE_0439
+  parent: DOMAIN_TYPE_0150
+- child: DOMAIN_TYPE_0440
+  parent: DOMAIN_TYPE_0150
+- child: DOMAIN_TYPE_0441
+  parent: DOMAIN_TYPE_0150
+- child: DOMAIN_TYPE_0442
+  parent: DOMAIN_TYPE_0150
+- child: DOMAIN_TYPE_0443
+  parent: DOMAIN_TYPE_0150
+- child: DOMAIN_TYPE_0444
+  parent: DOMAIN_TYPE_0151
+- child: DOMAIN_TYPE_0445
+  parent: DOMAIN_TYPE_0151
+- child: DOMAIN_TYPE_0446
+  parent: DOMAIN_TYPE_0151
+- child: DOMAIN_TYPE_0447
+  parent: DOMAIN_TYPE_0151
+- child: DOMAIN_TYPE_0448
+  parent: DOMAIN_TYPE_0151
+- child: DOMAIN_TYPE_0449
+  parent: DOMAIN_TYPE_0152
+- child: DOMAIN_TYPE_0450
+  parent: DOMAIN_TYPE_0153
+- child: DOMAIN_TYPE_0451
+  parent: DOMAIN_TYPE_0153
+- child: DOMAIN_TYPE_0452
+  parent: DOMAIN_TYPE_0153
+- child: DOMAIN_TYPE_0453
+  parent: DOMAIN_TYPE_0153
+- child: DOMAIN_TYPE_0454
+  parent: DOMAIN_TYPE_0153
+- child: DOMAIN_TYPE_0455
+  parent: DOMAIN_TYPE_0154
+- child: DOMAIN_TYPE_0456
+  parent: DOMAIN_TYPE_0154
+- child: DOMAIN_TYPE_0457
+  parent: DOMAIN_TYPE_0154
+- child: DOMAIN_TYPE_0458
+  parent: DOMAIN_TYPE_0155
+- child: DOMAIN_TYPE_0459
+  parent: DOMAIN_TYPE_0155
+- child: DOMAIN_TYPE_0460
+  parent: DOMAIN_TYPE_0155
+- child: DOMAIN_TYPE_0461
+  parent: DOMAIN_TYPE_0155
+- child: DOMAIN_TYPE_0462
+  parent: DOMAIN_TYPE_0156
+- child: DOMAIN_TYPE_0463
+  parent: DOMAIN_TYPE_0157
+- child: DOMAIN_TYPE_0464
+  parent: DOMAIN_TYPE_0158
+- child: DOMAIN_TYPE_0465
+  parent: DOMAIN_TYPE_0158
+- child: DOMAIN_TYPE_0466
+  parent: DOMAIN_TYPE_0158
+- child: DOMAIN_TYPE_0467
+  parent: DOMAIN_TYPE_0159
+- child: DOMAIN_TYPE_0468
+  parent: DOMAIN_TYPE_0159
+- child: DOMAIN_TYPE_0469
+  parent: DOMAIN_TYPE_0159
+- child: DOMAIN_TYPE_0470
+  parent: DOMAIN_TYPE_0160
+- child: DOMAIN_TYPE_0471
+  parent: DOMAIN_TYPE_0160
+- child: DOMAIN_TYPE_0472
+  parent: DOMAIN_TYPE_0161
+- child: DOMAIN_TYPE_0473
+  parent: DOMAIN_TYPE_0162
+- child: DOMAIN_TYPE_0474
+  parent: DOMAIN_TYPE_0162
+- child: DOMAIN_TYPE_0475
+  parent: DOMAIN_TYPE_0163
+- child: DOMAIN_TYPE_0476
+  parent: DOMAIN_TYPE_0163
+- child: DOMAIN_TYPE_0477
+  parent: DOMAIN_TYPE_0163
+- child: DOMAIN_TYPE_0478
+  parent: DOMAIN_TYPE_0163
+- child: DOMAIN_TYPE_0479
+  parent: DOMAIN_TYPE_0163
+- child: DOMAIN_TYPE_0480
+  parent: DOMAIN_TYPE_0164
+- child: DOMAIN_TYPE_0481
+  parent: DOMAIN_TYPE_0165
+- child: DOMAIN_TYPE_0482
+  parent: DOMAIN_TYPE_0166
+- child: DOMAIN_TYPE_0483
+  parent: DOMAIN_TYPE_0166
+- child: DOMAIN_TYPE_0484
+  parent: DOMAIN_TYPE_0166
+- child: DOMAIN_TYPE_0485
+  parent: DOMAIN_TYPE_0166
+- child: DOMAIN_TYPE_0486
+  parent: DOMAIN_TYPE_0167
+- child: DOMAIN_TYPE_0487
+  parent: DOMAIN_TYPE_0168
+- child: DOMAIN_TYPE_0488
+  parent: DOMAIN_TYPE_0168
+- child: DOMAIN_TYPE_0489
+  parent: DOMAIN_TYPE_0168
+- child: DOMAIN_TYPE_0490
+  parent: DOMAIN_TYPE_0168
+- child: DOMAIN_TYPE_0491
+  parent: DOMAIN_TYPE_0168
+- child: DOMAIN_TYPE_0492
+  parent: DOMAIN_TYPE_0169
+- child: DOMAIN_TYPE_0493
+  parent: DOMAIN_TYPE_0169
+- child: DOMAIN_TYPE_0494
+  parent: DOMAIN_TYPE_0170
+- child: DOMAIN_TYPE_0495
+  parent: DOMAIN_TYPE_0170
+- child: DOMAIN_TYPE_0496
+  parent: DOMAIN_TYPE_0171
+- child: DOMAIN_TYPE_0497
+  parent: DOMAIN_TYPE_0171
+- child: DOMAIN_TYPE_0498
+  parent: DOMAIN_TYPE_0171
+- child: DOMAIN_TYPE_0499
+  parent: DOMAIN_TYPE_0171
+relation_rules:
+  RELATES_TO:
+    domain:
+    - DOMAIN_TYPE_0011
+    - DOMAIN_TYPE_0378
+    - DOMAIN_TYPE_0139
+    target:
+    - DOMAIN_TYPE_0124
+  DEPENDS_ON:
+    domain:
+    - DOMAIN_TYPE_0376
+    target:
+    - DOMAIN_TYPE_0051
+  PART_OF:
+    domain:
+    - DOMAIN_TYPE_0455
+    - DOMAIN_TYPE_0278
+    - DOMAIN_TYPE_0043
+    target:
+    - DOMAIN_TYPE_0301
+    - DOMAIN_TYPE_0215
+    - DOMAIN_TYPE_0015
+  CONTAINS:
+    domain:
+    - DOMAIN_TYPE_0110
+    target:
+    - DOMAIN_TYPE_0118
+  PRECEDES:
+    domain:
+    - DOMAIN_TYPE_0012
+    - DOMAIN_TYPE_0286
+    - DOMAIN_TYPE_0100
+    target:
+    - DOMAIN_TYPE_0365
+    - DOMAIN_TYPE_0331
+    - DOMAIN_TYPE_0358
+  FOLLOWS:
+    domain:
+    - DOMAIN_TYPE_0111
+    - DOMAIN_TYPE_0228
+    - DOMAIN_TYPE_0300
+    target:
+    - DOMAIN_TYPE_0141
+    - DOMAIN_TYPE_0413
+  DERIVED_FROM:
+    domain:
+    - DOMAIN_TYPE_0356
+    target:
+    - DOMAIN_TYPE_0215
+  ASSOCIATED_WITH:
+    domain:
+    - DOMAIN_TYPE_0078
+    - DOMAIN_TYPE_0109
+    target:
+    - DOMAIN_TYPE_0489
+    - DOMAIN_TYPE_0389
+  GOVERNS:
+    domain:
+    - DOMAIN_TYPE_0046
+    - DOMAIN_TYPE_0193
+    target:
+    - DOMAIN_TYPE_0048
+  SUPERSEDES:
+    domain:
+    - DOMAIN_TYPE_0308
+    - DOMAIN_TYPE_0134
+    target:
+    - DOMAIN_TYPE_0412
+    - DOMAIN_TYPE_0021
+  REFERENCES:
+    domain:
+    - DOMAIN_TYPE_0273
+    - DOMAIN_TYPE_0062
+    - DOMAIN_TYPE_0497
+    target:
+    - DOMAIN_TYPE_0471
+    - DOMAIN_TYPE_0192
+  VALIDATES:
+    domain:
+    - DOMAIN_TYPE_0149
+    target:
+    - DOMAIN_TYPE_0423
+    - DOMAIN_TYPE_0320
+    - DOMAIN_TYPE_0315
+  CONFLICTS_WITH:
+    domain:
+    - DOMAIN_TYPE_0097
+    - DOMAIN_TYPE_0359
+    target:
+    - DOMAIN_TYPE_0034
+    - DOMAIN_TYPE_0022
+    - DOMAIN_TYPE_0337
+  SUPPORTS:
+    domain:
+    - DOMAIN_TYPE_0039
+    target:
+    - DOMAIN_TYPE_0436
+    - DOMAIN_TYPE_0118
+  REQUIRES:
+    domain:
+    - DOMAIN_TYPE_0141
+    target:
+    - DOMAIN_TYPE_0231
+    - DOMAIN_TYPE_0324
+  CLASSIFIES:
+    domain:
+    - DOMAIN_TYPE_0188
+    - DOMAIN_TYPE_0180
+    target:
+    - DOMAIN_TYPE_0106
+  GENERATES:
+    domain:
+    - DOMAIN_TYPE_0358
+    - DOMAIN_TYPE_0478
+    - DOMAIN_TYPE_0348
+    target:
+    - DOMAIN_TYPE_0330
+    - DOMAIN_TYPE_0035
+  MODIFIES:
+    domain:
+    - DOMAIN_TYPE_0086
+    - DOMAIN_TYPE_0272
+    - DOMAIN_TYPE_0372
+    target:
+    - DOMAIN_TYPE_0124
+    - DOMAIN_TYPE_0082
+    - DOMAIN_TYPE_0235
+  EXTENDS:
+    domain:
+    - DOMAIN_TYPE_0472
+    - DOMAIN_TYPE_0326
+    target:
+    - DOMAIN_TYPE_0351
+    - DOMAIN_TYPE_0284
+  IMPLEMENTS:
+    domain:
+    - DOMAIN_TYPE_0165
+    target:
+    - DOMAIN_TYPE_0430
+    - DOMAIN_TYPE_0392
+    - DOMAIN_TYPE_0396
+  RELATES_TO_1:
+    domain:
+    - DOMAIN_TYPE_0419
+    target:
+    - DOMAIN_TYPE_0015
+  DEPENDS_ON_1:
+    domain:
+    - DOMAIN_TYPE_0136
+    - DOMAIN_TYPE_0032
+    target:
+    - DOMAIN_TYPE_0107
+    - DOMAIN_TYPE_0466
+  PART_OF_1:
+    domain:
+    - DOMAIN_TYPE_0160
+    - DOMAIN_TYPE_0107
+    - DOMAIN_TYPE_0334
+    target:
+    - DOMAIN_TYPE_0254
+    - DOMAIN_TYPE_0201
+    - DOMAIN_TYPE_0451
+  CONTAINS_1:
+    domain:
+    - DOMAIN_TYPE_0072
+    - DOMAIN_TYPE_0134
+    - DOMAIN_TYPE_0070
+    target:
+    - DOMAIN_TYPE_0125
+    - DOMAIN_TYPE_0380
+  PRECEDES_1:
+    domain:
+    - DOMAIN_TYPE_0133
+    - DOMAIN_TYPE_0381
+    - DOMAIN_TYPE_0298
+    target:
+    - DOMAIN_TYPE_0218
+    - DOMAIN_TYPE_0458
+    - DOMAIN_TYPE_0297
+  FOLLOWS_1:
+    domain:
+    - DOMAIN_TYPE_0111
+    - DOMAIN_TYPE_0069
+    target:
+    - DOMAIN_TYPE_0259
+    - DOMAIN_TYPE_0251
+  DERIVED_FROM_1:
+    domain:
+    - DOMAIN_TYPE_0439
+    target:
+    - DOMAIN_TYPE_0055
+  ASSOCIATED_WITH_1:
+    domain:
+    - DOMAIN_TYPE_0080
+    target:
+    - DOMAIN_TYPE_0404
+    - DOMAIN_TYPE_0347
+    - DOMAIN_TYPE_0215
+  GOVERNS_1:
+    domain:
+    - DOMAIN_TYPE_0196
+    - DOMAIN_TYPE_0194
+    - DOMAIN_TYPE_0304
+    target:
+    - DOMAIN_TYPE_0238
+  SUPERSEDES_1:
+    domain:
+    - DOMAIN_TYPE_0496
+    - DOMAIN_TYPE_0282
+    - DOMAIN_TYPE_0439
+    target:
+    - DOMAIN_TYPE_0481
+    - DOMAIN_TYPE_0004
+  REFERENCES_1:
+    domain:
+    - DOMAIN_TYPE_0057
+    - DOMAIN_TYPE_0348
+    - DOMAIN_TYPE_0452
+    target:
+    - DOMAIN_TYPE_0273
+    - DOMAIN_TYPE_0383
+    - DOMAIN_TYPE_0135
+  VALIDATES_1:
+    domain:
+    - DOMAIN_TYPE_0056
+    - DOMAIN_TYPE_0149
+    - DOMAIN_TYPE_0221
+    target:
+    - DOMAIN_TYPE_0079
+    - DOMAIN_TYPE_0231
+  CONFLICTS_WITH_1:
+    domain:
+    - DOMAIN_TYPE_0447
+    target:
+    - DOMAIN_TYPE_0367
+    - DOMAIN_TYPE_0133
+    - DOMAIN_TYPE_0496
+  SUPPORTS_1:
+    domain:
+    - DOMAIN_TYPE_0258
+    - DOMAIN_TYPE_0466
+    - DOMAIN_TYPE_0053
+    target:
+    - DOMAIN_TYPE_0444
+  REQUIRES_1:
+    domain:
+    - DOMAIN_TYPE_0429
+    - DOMAIN_TYPE_0326
+    - DOMAIN_TYPE_0258
+    target:
+    - DOMAIN_TYPE_0310
+    - DOMAIN_TYPE_0100
+  CLASSIFIES_1:
+    domain:
+    - DOMAIN_TYPE_0389
+    target:
+    - DOMAIN_TYPE_0081
+    - DOMAIN_TYPE_0275
+  GENERATES_1:
+    domain:
+    - DOMAIN_TYPE_0305
+    - DOMAIN_TYPE_0164
+    - DOMAIN_TYPE_0249
+    target:
+    - DOMAIN_TYPE_0008
+  MODIFIES_1:
+    domain:
+    - DOMAIN_TYPE_0448
+    target:
+    - DOMAIN_TYPE_0424
+    - DOMAIN_TYPE_0412
+  EXTENDS_1:
+    domain:
+    - DOMAIN_TYPE_0028
+    - DOMAIN_TYPE_0122
+    target:
+    - DOMAIN_TYPE_0448
+  IMPLEMENTS_1:
+    domain:
+    - DOMAIN_TYPE_0042
+    - DOMAIN_TYPE_0373
+    - DOMAIN_TYPE_0247
+    target:
+    - DOMAIN_TYPE_0416
+  RELATES_TO_2:
+    domain:
+    - DOMAIN_TYPE_0391
+    target:
+    - DOMAIN_TYPE_0063
+    - DOMAIN_TYPE_0064
+    - DOMAIN_TYPE_0336
+  DEPENDS_ON_2:
+    domain:
+    - DOMAIN_TYPE_0083
+    - DOMAIN_TYPE_0134
+    target:
+    - DOMAIN_TYPE_0269
+    - DOMAIN_TYPE_0445
+    - DOMAIN_TYPE_0309
+  PART_OF_2:
+    domain:
+    - DOMAIN_TYPE_0474
+    - DOMAIN_TYPE_0275
+    target:
+    - DOMAIN_TYPE_0385
+  CONTAINS_2:
+    domain:
+    - DOMAIN_TYPE_0101
+    - DOMAIN_TYPE_0364
+    - DOMAIN_TYPE_0158
+    target:
+    - DOMAIN_TYPE_0203
+    - DOMAIN_TYPE_0342
+    - DOMAIN_TYPE_0331
+  PRECEDES_2:
+    domain:
+    - DOMAIN_TYPE_0459
+    - DOMAIN_TYPE_0263
+    target:
+    - DOMAIN_TYPE_0230
+    - DOMAIN_TYPE_0060
+  FOLLOWS_2:
+    domain:
+    - DOMAIN_TYPE_0031
+    target:
+    - DOMAIN_TYPE_0172
+  DERIVED_FROM_2:
+    domain:
+    - DOMAIN_TYPE_0282
+    target:
+    - DOMAIN_TYPE_0116
+    - DOMAIN_TYPE_0300
+    - DOMAIN_TYPE_0111
+  ASSOCIATED_WITH_2:
+    domain:
+    - DOMAIN_TYPE_0361
+    target:
+    - DOMAIN_TYPE_0322
+  GOVERNS_2:
+    domain:
+    - DOMAIN_TYPE_0033
+    target:
+    - DOMAIN_TYPE_0462
+  SUPERSEDES_2:
+    domain:
+    - DOMAIN_TYPE_0035
+    target:
+    - DOMAIN_TYPE_0262
+    - DOMAIN_TYPE_0120
+inference_rules:
+- name: synthetic_relates_to_2_rule
+  rule_type: transitivity
+  relation: RELATES_TO_2
+  max_depth: 3
+  confidence_decay: 0.9
+- name: synthetic_associated_with_rule
+  rule_type: inverse
+  relation: ASSOCIATED_WITH
+  max_depth: 3
+  confidence_decay: 0.9
+  inverse_relation: GENERATES
+- name: synthetic_depends_on_rule
+  rule_type: composition
+  relation: DEPENDS_ON
+  max_depth: 3
+  confidence_decay: 0.9
+  via_relation: CLASSIFIES
+  inferred_relation: DEPENDS_ON
+- name: synthetic_associated_with_2_rule
+  rule_type: transitivity
+  relation: ASSOCIATED_WITH_2
+  max_depth: 3
+  confidence_decay: 0.9
+- name: synthetic_modifies_rule
+  rule_type: inverse
+  relation: MODIFIES
+  max_depth: 3
+  confidence_decay: 0.9
+  inverse_relation: GOVERNS

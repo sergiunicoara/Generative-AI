@@ -37,7 +37,8 @@ class ElasticsearchEngine(BaseEngine):
 
     def _ensure_index(self):
         r = self.session.get(f"{self._base_url}/{self.index_name}", timeout=self._connect_timeout_s)
-        if r.status_code == 200: return
+        if r.status_code == 200:
+            self.session.delete(f"{self._base_url}/{self.index_name}", timeout=self._connect_timeout_s)
         mapping = {
             "mappings": {
                 "properties": {

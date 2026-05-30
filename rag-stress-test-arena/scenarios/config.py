@@ -17,4 +17,4 @@ class ScenarioConfig:
         return quick if self.is_quick else full
 
 
-cfg = ScenarioConfig(mode="full")
+cfg = ScenarioConfig(mode=os.environ.get("RAG_STRESS_TEST_MODE", "full"))

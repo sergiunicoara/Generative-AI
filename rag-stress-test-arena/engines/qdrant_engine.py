@@ -28,14 +28,14 @@ class QdrantEngine(BaseEngine):
     def _ensure_collection(self):
         try:
             collections = self.client.get_collections().collections
-            exists = any(c.name == self.index_name for c in collections)
-            if not exists:
-                self.client.create_collection(
-                    collection_name=self.index_name,
-                    vectors_config=models.VectorParams(size=768, distance=models.Distance.COSINE),
-                )
+            if any(c.name == self.index_name for c in collections):
+                self.client.delete_collection(collection_name=self.index_name)
+            self.client.create_collection(
+                collection_name=self.index_name,
+                vectors_config=models.VectorParams(size=768, distance=models.Distance.COSINE),
+            )
         except Exception as e:
-            print(f"Error checking/creating Qdrant collection: {e}")
+            print(f"Error resetting Qdrant collection: {e}")
 
     def index(self, vectors, metadata):
         # Chunking to stay under the 32MB limit
@@ -96,6 +96,7 @@ class QdrantEngine(BaseEngine):
                 collection_name=self.index_name,
                 query_vector=query,
                 limit=k,
+                with_payload=True,
             )
             points = results
         elif hasattr(client, "query_points"):
@@ -112,7 +113,14 @@ class QdrantEngine(BaseEngine):
                 "Please upgrade qdrant-client."
             )
 
-        return [EngineResult(id=str(p.id), score=float(p.score), metadata=(p.payload or {})) for p in points]
+        return [
+            EngineResult(
+                id=str((p.payload or {}).get("id", p.id)),
+                score=float(p.score),
+                metadata=(p.payload or {}),
+            )
+            for p in points
+        ]
 
     def flush(self):
         pass

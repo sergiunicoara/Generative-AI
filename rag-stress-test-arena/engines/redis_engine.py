@@ -41,14 +41,15 @@ class RedisEngine(BaseEngine):
 
     def _ensure_index(self):
         try:
-            self.client.ft(self.index_name).info()
-        except:
-            schema = (
-                VectorField("vector", "HNSW", {"TYPE": "FLOAT32", "DIM": 768, "DISTANCE_METRIC": "COSINE"}), 
-                TagField("id"),
-                TextField("metadata")
-            )
-            self.client.ft(self.index_name).create_index(schema, definition=IndexDefinition(prefix=["doc:"], index_type=IndexType.HASH))
+            self.client.ft(self.index_name).dropindex(delete_documents=True)
+        except Exception:
+            pass
+        schema = (
+            VectorField("vector", "HNSW", {"TYPE": "FLOAT32", "DIM": 768, "DISTANCE_METRIC": "COSINE"}),
+            TagField("id"),
+            TextField("metadata"),
+        )
+        self.client.ft(self.index_name).create_index(schema, definition=IndexDefinition(prefix=["doc:"], index_type=IndexType.HASH))
 
     def index(self, vectors, metadata):
         pipe = self.client.pipeline(transaction=False)

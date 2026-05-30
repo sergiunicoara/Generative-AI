@@ -37,7 +37,8 @@ class PgVectorEngine(BaseEngine):
         with self._get_connection() as conn:
             with conn.cursor() as cur:
                 cur.execute("CREATE EXTENSION IF NOT EXISTS vector")
-                cur.execute(f"CREATE TABLE IF NOT EXISTS {self.table_name} (id TEXT PRIMARY KEY, vector vector(768), metadata JSONB)")
+                cur.execute(f"DROP TABLE IF EXISTS {self.table_name}")
+                cur.execute(f"CREATE TABLE {self.table_name} (id TEXT PRIMARY KEY, vector vector(768), metadata JSONB)")
                 conn.commit()
 
     def index(self, vectors, metadata):

@@ -654,35 +654,49 @@ Evaluation is sampled at **20%** of queries automatically. View results:
 
 ---
 
-## Admin Dashboard
+## Dashboards
 
-The built-in Dash admin panel is available at **`/admin`** after starting the API server.
-It is mounted directly on FastAPI — no separate process is needed.
+Two operator dashboards share one **branded design system** (deep-navy / teal, Inter
+typography, status-coloured KPI tiles, radial gauges, branded Plotly charts) — built to
+look credible on a projector in front of a technical audience.
 
-### Five tabs
+### Admin / Observability — `/admin`
+
+Mounted directly on FastAPI (no separate process). Always serve it via the API — the
+standalone Flask server 404s on Dash static assets.
 
 | Tab | What it shows |
 |-----|---------------|
-| 📊 **Graph Health** | Entity/edge counts, alias coverage, contradiction rate, orphan rate, community coherence. Line chart of contradiction rate over time. Recent threshold-breach alerts. |
-| ⚡ **Conflicts** | DataTable of all open Conflict nodes. Select a row and choose a resolution type to call `POST /corrections/resolve-conflict` directly. |
-| 🏘️ **Communities** | Staleness badge (entity change fraction since last rebuild). "Rebuild Affected Communities" button. Version history table with rebuild milestone flags. |
-| 🔒 **GDPR & PII** | Audit log of all `forget_entity` / `forget_document` operations. "Forget Entity" form that calls `POST /kg/gdpr/forget-entity`. |
-| 📐 **Calibration** | Brier score trend line. Latest isotonic calibration curve (predicted vs actual confidence). |
-
-### Auth
-
-Set `GRAPHRAG_ADMIN_TOKEN` in your environment to require a password before accessing `/admin`.
-When the variable is empty the dashboard is open (dev mode).
+| **Graph Health** | KPI tiles + **4 radial gauges** (entity resolution, relation confidence, community coherence, orphan rate) + branded contradiction-rate trend + recent alerts. |
+| **Conflicts** | Themed table of open Conflict nodes. Select a row + resolution type to call `POST /corrections/resolve-conflict`. |
+| **Communities** | Change-fraction + changed-entities tiles, "Rebuild Affected Communities" action, version-history table. |
+| **GDPR & PII** | Erasure audit log + "Forget Entity · GDPR Article 17" form (`POST /kg/gdpr/forget-entity`). |
+| **Calibration** | Brier-score rating tile + trend + isotonic calibration curve. |
 
 ```bash
-export GRAPHRAG_ADMIN_TOKEN="your-secret-token"
-uvicorn api.main:app            # → http://localhost:8000/admin
+export GRAPHRAG_ADMIN_TOKEN="your-secret-token"   # empty = open (dev only)
+uvicorn api.main:app                              # → http://localhost:8000/admin/
 ```
 
-Standalone mode (dev, without FastAPI):
+### Business Matrix — `/dashboard/`
+
+Query-level KPIs from the local SQLite store: status-coloured tiles (queries, avg/p95
+latency, faithfulness, context recall) + branded metric trend with alert threshold.
 
 ```bash
-make dashboard                  # → http://localhost:8050
+python graphrag/business_matrix/dashboard_server.py   # → http://localhost:8050/dashboard/
+```
+
+### Demo mode (no backend)
+
+To show either dashboard **fully populated** for a walkthrough or screenshots without a
+running Neo4j / ingestion pipeline, set `GRAPHRAG_DASHBOARD_DEMO=1`. Each admin tab then
+falls back to representative sample data (`graphrag/dashboard/demo_data.py`) **only if** the
+live API is unreachable. Unset in production — real data or a real error panel is always
+shown otherwise.
+
+```bash
+GRAPHRAG_DASHBOARD_DEMO=1 uvicorn api.main:app --port 8001   # → http://localhost:8001/admin/
 ```
 
 ---
@@ -693,6 +707,7 @@ make dashboard                  # → http://localhost:8050
 |---------|-----|-------------|
 | API + Swagger | http://localhost:8000/docs | Bearer token via /auth/dev-token |
 | Admin Dashboard | http://localhost:8000/admin | `GRAPHRAG_ADMIN_TOKEN` (empty = open) |
+| Business Matrix Dashboard | http://localhost:8050/dashboard/ | — |
 | Prometheus metrics | http://localhost:8000/metrics | — |
 | Neo4j Browser | http://localhost:7474 | neo4j / graphrag_dev |
 | RabbitMQ UI | http://localhost:15672 | graphrag / graphrag_dev |

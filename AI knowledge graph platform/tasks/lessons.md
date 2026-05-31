@@ -1600,3 +1600,117 @@ which is not an agent, the attribute doesn't exist.
 > latter calls a method. For provenance fields like `model_version`, always use
 > an explicit source: `get_settings().groq_model` or a constructor parameter —
 > never a method reference from an unrelated base class.
+
+---
+
+## A65 — "The X" in a request may refer to one of several X; enumerate before acting
+
+**What happened:**
+The user asked to make "the metrix dashboard" breathtaking. The project has **two**
+dashboards: the admin/observability dashboard (`graphrag/dashboard/`) and the business
+KPI dashboard (`graphrag/business_matrix/dashboard_server.py`). The first redesign pass
+only touched the admin one — the business KPI dashboard (literally "the metrics dashboard",
+showing latency/faithfulness/cost) was nearly missed and is the one the phrasing most
+likely meant.
+
+**Root cause:**
+Assumed the singular "the dashboard" mapped to the first dashboard found, without checking
+how many components of that kind exist in the repo.
+
+**Rule:**
+> When a request names a component with the definite article ("the dashboard", "the demo",
+> "the client", "the worker"), glob for how many match before editing. If more than one
+> exists, either handle all of them or confirm which is meant. The user's mental model is
+> often the one you haven't opened yet.
+
+---
+
+## A66 — Demo/empty states must be neutral, never alarming
+
+**What happened:**
+The redesigned KPI dashboard rendered status-coloured tiles. With no data in the time
+window (the sample event was older than the 7-day default), every tile showed a red
+`0.000` against its "target ≥ 0.70" hint — making a freshly-launched dashboard look
+broken/failing in a cold demo.
+
+**Root cause:**
+The colour logic was written for the populated case only; the zero/empty case fell through
+to the "below threshold → red" branch.
+
+**Rule:**
+> Distinguish "bad value" from "no value". An empty/zero-row state must render neutral
+> (grey, em-dash, "awaiting data") — never the failure colour. Add an explicit
+> `if not total_rows:` branch that returns the neutral layout before any threshold
+> colouring runs. A demo that opens on red zeros reads as a broken product.
+
+---
+
+## A67 — Demo data belongs behind an env flag, never hardcoded into render paths
+
+**What happened:**
+To populate dashboard tabs without a live backend, the first pass dropped mock payloads
+directly into each tab's `render()` as an unconditional fallback on API error. That would
+mask real API failures in production — a 500 from the backend would silently show fake
+green metrics.
+
+**Root cause:**
+Conflated "show sample data for a screenshot" with "be resilient to API errors". They are
+opposite requirements: the demo wants fake data on error; production wants the error shown.
+
+**Rule:**
+> Gate demo/sample data behind an explicit flag (`GRAPHRAG_DASHBOARD_DEMO`). The fallback
+> fires **only** when the flag is set AND the live source is unreachable. Unset (production)
+> always shows real data or a real error panel. Keep the payloads in a dedicated
+> `demo_data.py` module, not inline in render functions, so the production code path stays
+> clean and the sample values are auditable in one place.
+
+---
+
+## A68 — A Dash app mounted under FastAPI must be served via the API, not standalone
+
+**What happened:**
+Running `python graphrag/dashboard/app.py` standalone served the HTML but every
+`_dash-component-suites/*.js` request returned the index HTML (`SyntaxError: Unexpected
+token '<'`), so the page hung on "Loading...". The app is built with
+`requests_pathname_prefix="/admin/"` and is designed to be mounted under the API via
+`a2wsgi`. Also, `app.config.requests_pathname_prefix = "/"` in the `__main__` block raised
+`AttributeError` — the prefix is read-only after construction in Dash 2.x. Separately, the
+mount in `api/main.py` is wrapped in a try/except that **silently** skips mounting if
+`a2wsgi` is missing → `/admin` 404s with no obvious cause.
+
+**Root cause:**
+The Dash asset routes are tied to the pathname prefix; serving from a bare Flask dev server
+at `/` breaks asset resolution. And a silent `except ImportError` hid the missing dependency.
+
+**Rule:**
+> Serve a mounted Dash app through its host (the API: `uvicorn api.main:app` → `/admin/`),
+> never the standalone Flask server. Do not reassign `requests_pathname_prefix` after
+> construction. Ensure mount dependencies (`a2wsgi`) are in `requirements.txt`, and when a
+> mount is wrapped in try/except, log the exception at WARNING with the dep hint (this code
+> did — `grep` the startup log for `admin_dashboard_unavailable` when `/admin` 404s).
+
+---
+
+## A69 — Tooling: Dash pages never reach document_idle; processes from other sessions can't be killed
+
+**What happened (two process/tooling traps in one session):**
+1. The browser screenshot tool kept timing out on `document_idle` for Dash pages — the
+   `dcc.Interval` / dash-renderer keeps a connection live so the document is never "idle".
+   The `zoom` (region-capture) action uses a different code path that bypasses the idle
+   gate and succeeded every time.
+2. Killing a stale server failed repeatedly: `py -3.11` isn't on PATH inside the bash tool
+   (only PowerShell); the direct `python.exe` was a different install missing `a2wsgi`;
+   PowerShell `... > $null` is an "ambiguous redirect" in bash; and a process launched by a
+   *previous* session could not be killed (`taskkill` → access denied).
+
+**Root cause:**
+Cross-shell/interpreter assumptions, and OS process ownership across session boundaries.
+
+**Rule:**
+> - For screenshots of Dash/long-poll SPAs, use the `zoom` region action, not the full-page
+>   screenshot that waits for `document_idle`.
+> - Don't assume `py -3.11` works in every shell; resolve the interpreter explicitly and
+>   verify deps (`python -c "import a2wsgi"`) before launching.
+> - If a process can't be killed (different session owner, access denied), don't fight it —
+>   launch a fresh instance on a different port and point the browser there.
+> - Use `2>$null`/`$null` redirects only in PowerShell; in bash use `>/dev/null 2>&1`.

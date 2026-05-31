@@ -223,7 +223,7 @@ AI knowledge graph platform/
 │   ├── core/
 │   │   ├── config.py                # Settings (pydantic-settings, .env + YAML); production validators
 │   │   ├── llm_client.py            # Central LLM router: Groq for generation, Gemini for embeddings
-│   │   ├── llm_utils.py             # safe_response_text() — guards all Gemini response.text accesses
+│   │   ├── llm_utils.py             # safe_response_text() — guards legacy Gemini response.text accesses (embedding path)
 │   │   ├── models.py                # Domain models: Document, Chunk, Entity, Relation, Community, SessionTurn ...
 │   │   └── retry.py                 # Async exponential-backoff decorator for Neo4j transient errors
 │   ├── graph/

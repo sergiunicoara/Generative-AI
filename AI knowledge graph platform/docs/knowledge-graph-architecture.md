@@ -224,11 +224,17 @@ interface used across all pipeline stages.
 - `graphrag/retrieval/global_search.py` — map-reduce community summarisation
 - `graphrag/retrieval/agentic_retriever.py` — IRCoT sub-queries
 - `graphrag/graph/community_summarizer.py` — LLM community summaries
+- `graphrag/evaluation/ragas_evaluator.py` — RAGAS judge LLM (Groq-first; falls back to Gemini if `langchain-groq` absent)
 
 ### What uses Gemini (embeddings only)
 
 - `graphrag/ingestion/embedder.py` — chunk embedding batches
 - `graphrag/retrieval/local_search.py` — query embedding for vector ANN
+
+> **RAGAS evaluator note:** The judge LLM for RAGAS metrics is resolved in priority
+> order: Groq (`langchain-groq`) → Gemini (`langchain-google-genai`) → None.
+> Using Groq keeps the evaluation consistent with the generation pipeline and
+> avoids re-introducing Gemini quota risk. Install with `pip install langchain-groq`.
 
 ### Cross-process result store
 

@@ -319,3 +319,37 @@ but single-tenant, formula-inconsistent, silently-degrading prototype, the syste
 - 18 architecture design lessons documented
 - ~30 distinct bugs/gaps found and fixed across the two sessions
 - 0 of them crashed; all corrupted data or degraded quality silently
+
+---
+
+## Phase 13 — JD Compliance Audit & Fixes
+
+Full audit against the "Senior Knowledge Graph & Ontology Lead" JD. Found and fixed
+all gaps introduced by the Groq migration and missing leadership/ops artifacts.
+
+### Bug fixes (code)
+- [x] `graphrag/agents/query_agent.py` — `_model()` returned `gemini_query_model`; corrected to `groq_model`
+- [x] `graphrag/agents/ingestion_agent.py` — same fix for `gemini_ingest_model`
+- [x] `graphrag/agents/evaluation_agent.py` — same fix; added clarifying comment
+- [x] `graphrag/agents/base_agent.py` — abstract `_model()` docstring said "Gemini model ID"; corrected to provider-agnostic
+- [x] `graphrag/retrieval/agentic_retriever.py` — `model_version=self._model` raised `AttributeError` at runtime (`AgenticRetriever` has no `_model`); replaced both sites with `get_settings().groq_model`
+- [x] `graphrag/evaluation/ragas_evaluator.py` — hardwired to `ChatGoogleGenerativeAI(gemini_ingest_model)`, re-introducing Gemini quota risk; rewritten to try `langchain_groq.ChatGroq` first, fallback to Gemini, then None
+- [x] `requirements.txt` — add `langchain-groq>=0.1.0`
+- [x] `tests/unit/test_data_path_fixes.py` — `TestExtractorNoneResponse` mocked old Gemini path (`run_in_executor` + `response.text`); rewrote both tests to patch `get_llm` (Groq path); now verifies real empty-response guard logic
+- [x] Editable install re-run (`pip install -e .`) to fix stale `GraphRag` path in tracebacks
+
+### Leadership artifacts (new files)
+- [x] `CONTRIBUTING.md` — ADR process, 14-item PR checklist, Python/Cypher/LLM coding standards, feature extension guide
+- [x] `docs/runbook.md` — startup order, 9 health checks, 8 failure patterns + root causes, monitoring, backup/restore, schema migration, secrets rotation, on-call decision tree
+- [x] `docs/roadmap.md` — current state matrix, 9 scale limits, near/medium/long-term roadmap, pending ADRs, scaling decision reference
+- [x] `README.md` — added links to runbook, roadmap, CONTRIBUTING
+
+### Documentation updates (this phase)
+- [x] `docs/knowledge-graph-architecture.md` — add RAGAS evaluator to "What uses Groq" list; add RAGAS judge note with priority-order explanation
+- [x] `README.md` — `llm_utils.py` description corrected from "Gemini response.text" to "(embedding path)" scope
+- [x] `tasks/lessons.md` — A63 (LLM swap without re-running tests); A64 (attribute ref vs method call: `self._model` bug)
+- [x] `tasks/todo.md` — this entry
+
+### Verified
+- Unit suite: **304 passed, 0 failed**
+- `scripts/demo_regulatory.py` runs all 6 steps on Windows without live services

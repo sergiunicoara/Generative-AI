@@ -48,12 +48,14 @@ async def main():
     consumer = QueryConsumer()
     task = asyncio.create_task(consumer.start())
 
-    loop = asyncio.get_running_loop()
-    for sig in (signal.SIGTERM, signal.SIGINT):
-        loop.add_signal_handler(
-            sig,
-            lambda s=sig.name: (log.info("worker.signal_received", signal=s), task.cancel()),
-        )
+    import sys
+    if sys.platform != "win32":
+        loop = asyncio.get_running_loop()
+        for sig in (signal.SIGTERM, signal.SIGINT):
+            loop.add_signal_handler(
+                sig,
+                lambda s=sig.name: (log.info("worker.signal_received", signal=s), task.cancel()),
+            )
 
     try:
         await task

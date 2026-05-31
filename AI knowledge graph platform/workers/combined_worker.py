@@ -53,16 +53,18 @@ async def main():
     ingest_task = asyncio.create_task(ingest_consumer.start(), name="ingestion")
     query_task = asyncio.create_task(query_consumer.start(), name="query")
 
-    loop = asyncio.get_running_loop()
-    for sig in (signal.SIGTERM, signal.SIGINT):
-        loop.add_signal_handler(
-            sig,
-            lambda s=sig.name: (
-                log.info("combined_worker.signal_received", signal=s),
-                ingest_task.cancel(),
-                query_task.cancel(),
-            ),
-        )
+    import sys
+    if sys.platform != "win32":
+        loop = asyncio.get_running_loop()
+        for sig in (signal.SIGTERM, signal.SIGINT):
+            loop.add_signal_handler(
+                sig,
+                lambda s=sig.name: (
+                    log.info("combined_worker.signal_received", signal=s),
+                    ingest_task.cancel(),
+                    query_task.cancel(),
+                ),
+            )
 
     try:
         await asyncio.gather(ingest_task, query_task)

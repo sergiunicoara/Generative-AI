@@ -52,12 +52,15 @@ async def main():
     consumer = IngestionConsumer()
     task = asyncio.create_task(consumer.start())
 
-    loop = asyncio.get_running_loop()
-    for sig in (signal.SIGTERM, signal.SIGINT):
-        loop.add_signal_handler(
-            sig,
-            lambda s=sig.name: (log.info("worker.signal_received", signal=s), task.cancel()),
-        )
+    # add_signal_handler is not supported on Windows; skip on non-Unix
+    import sys
+    if sys.platform != "win32":
+        loop = asyncio.get_running_loop()
+        for sig in (signal.SIGTERM, signal.SIGINT):
+            loop.add_signal_handler(
+                sig,
+                lambda s=sig.name: (log.info("worker.signal_received", signal=s), task.cancel()),
+            )
 
     try:
         await task

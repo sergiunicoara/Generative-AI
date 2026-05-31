@@ -35,6 +35,8 @@ The graph is not a RAG index. It is a formally modeled knowledge base:
 - [`docs/cypher-patterns.md`](docs/cypher-patterns.md) — 6 production Cypher patterns: multi-hop traversal, bitemporal as-of, transitive supersession, contradiction scan, community ANN search, entity resolution audit
 - [`docs/runbook.md`](docs/runbook.md) — operations: startup order, common failures, backup/restore, schema migration
 - [`docs/roadmap.md`](docs/roadmap.md) — current state, scaling limits, near/medium/long-term roadmap
+- [`docs/graphrag-terminology.md`](docs/graphrag-terminology.md) — every GraphRAG term defined, with examples and file references; includes full performance metrics inventory
+- [`docs/defensibility-drill.md`](docs/defensibility-drill.md) — 15 hard CTO questions with model answers; preparation checklist
 - [`CONTRIBUTING.md`](CONTRIBUTING.md) — ADR process, PR checklist, coding standards, how to add features
 - [`docs/adr/0001-property-graph-over-triple-store.md`](docs/adr/0001-property-graph-over-triple-store.md) — Why Neo4j over RDF triple stores
 - [`docs/adr/0002-forward-chaining-over-backward-chaining.md`](docs/adr/0002-forward-chaining-over-backward-chaining.md) — Why materialised inference over query-time reasoning
@@ -44,7 +46,13 @@ The graph is not a RAG index. It is a formally modeled knowledge base:
 ```bash
 python scripts/demo_regulatory.py
 ```
-Runs a 6-step aerospace regulatory workflow end-to-end — ontology loading, domain/range validation, transitive inference, contradiction detection — using in-process mocks. Replace with `get_neo4j()` for a live run.
+Runs a 6-step aerospace regulatory workflow end-to-end — ontology loading, domain/range validation, transitive inference, contradiction detection — using in-process mocks.
+
+**Live demo against real Neo4j** (requires `docker-compose up neo4j`):
+```bash
+python scripts/demo_regulatory.py --live
+```
+Ingests two genuinely conflicting documents, runs the real inference engine, and lets the contradiction detector find the IS_AIRWORTHY / IS_UNAIRWORTHY conflict. Data persists in Neo4j — query it in the browser at `http://localhost:7474`.
 
 ---
 

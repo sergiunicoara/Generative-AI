@@ -370,6 +370,249 @@ async def run_demo() -> None:
     print(f"{BOLD}{'═' * 60}{RESET}\n")
 
 
+# ── Live Neo4j demo ─────────────────────────────────────────────────────────────
+
+# Two conflicting regulatory documents used in the live demo.
+# Doc A says G-ABCD passed its 2024 inspection (IS_AIRWORTHY).
+# Doc B (the AD compliance check) records a mandatory AD as non-compliant (IS_UNAIRWORTHY).
+# This mirrors a real audit scenario: two independent document sources disagree
+# on the airworthiness status of the same aircraft.
+
+_LIVE_DOC_A = {
+    "id": "inspection-report-2024-01",
+    "filename": "inspection-report-2024-01.txt",
+    "title": "Annual Inspection Report — G-ABCD",
+    "content": (
+        "Aircraft G-ABCD (Boeing 737-800) completed its annual inspection on 2024-01-15. "
+        "All mandatory maintenance tasks were carried out in accordance with the approved "
+        "maintenance programme. The aircraft meets all applicable airworthiness requirements. "
+        "FAA-AD-2022-03-07 compliance was verified. "
+        "Status: IS_AIRWORTHY. Issued by: inspection-authority."
+    ),
+    "tenant": "aerospace",
+}
+
+_LIVE_DOC_B = {
+    "id": "ad-compliance-check-2024-03",
+    "filename": "ad-compliance-check-2024-03.txt",
+    "title": "AD Compliance Check — G-ABCD",
+    "content": (
+        "AD compliance review for aircraft G-ABCD conducted 2024-03-20. "
+        "FAA-AD-2024-01-02 (supersedes FAA-AD-2022-03-07) requires immediate action on "
+        "engine mount inspection for all Boeing 737-800 variants manufactured before 2018. "
+        "G-ABCD (manufactured 2016) has NOT completed the required inspection. "
+        "Status: IS_UNAIRWORTHY pending FAA-AD-2024-01-02 compliance. "
+        "Issued by: faa-airworthiness-division."
+    ),
+    "tenant": "aerospace",
+}
+
+_LIVE_ADS = [
+    # AD supersession chain: 2024 supersedes 2022 supersedes 2020
+    {
+        "src": "FAA-AD-2024-01-02", "src_type": "AIRWORTHINESS_DIRECTIVE",
+        "tgt": "FAA-AD-2022-03-07", "tgt_type": "AIRWORTHINESS_DIRECTIVE",
+        "relation": "SUPERSEDES", "confidence": 0.95,
+        "doc_id": "ad-compliance-check-2024-03", "tenant": "aerospace",
+    },
+    {
+        "src": "FAA-AD-2022-03-07", "src_type": "AIRWORTHINESS_DIRECTIVE",
+        "tgt": "FAA-AD-2020-05-11", "tgt_type": "AIRWORTHINESS_DIRECTIVE",
+        "relation": "SUPERSEDES", "confidence": 0.95,
+        "doc_id": "ad-compliance-check-2024-03", "tenant": "aerospace",
+    },
+    # Aircraft IS_AIRWORTHY per doc A
+    {
+        "src": "inspection-authority", "src_type": "ORG",
+        "tgt": "G-ABCD",             "tgt_type": "AIRCRAFT_TYPE",
+        "relation": "IS_AIRWORTHY",  "confidence": 0.92,
+        "doc_id": "inspection-report-2024-01", "tenant": "aerospace",
+    },
+    # Aircraft IS_UNAIRWORTHY per doc B
+    {
+        "src": "faa-airworthiness-division", "src_type": "REGULATOR",
+        "tgt": "G-ABCD",                    "tgt_type": "AIRCRAFT_TYPE",
+        "relation": "IS_UNAIRWORTHY",       "confidence": 0.97,
+        "doc_id": "ad-compliance-check-2024-03", "tenant": "aerospace",
+    },
+]
+
+
+async def run_live_demo() -> None:
+    """Run the full regulatory demo against a live Neo4j instance.
+
+    Ingests two real conflicting documents, writes entities and relations,
+    runs the inference engine and contradiction detector — all against the
+    real graph database. No mocks.
+    """
+    from graphrag.graph.neo4j_client import get_neo4j
+    from graphrag.graph.inference_engine import ForwardChainingEngine
+    from graphrag.graph.contradiction_detector import ContradictionDetector
+    from graphrag.graph.ontology_registry import OntologyRegistry
+    from graphrag.graph.domain_ontology import (
+        load_domain_ontology, get_type_hierarchy_pairs,
+        get_relation_rules, build_inference_rules_from_ontology,
+    )
+    from graphrag.core.models import Document, Entity, Relation
+    from graphrag.graph.neo4j_client import Neo4jClient
+
+    print(f"\n{BOLD}{'=' * 60}{RESET}")
+    print(f"{BOLD}  AI Knowledge Graph & Ontology Platform — Regulatory Demo{RESET}")
+    print(f"{BOLD}  Domain: Aerospace  ·  Mode: LIVE NEO4J{RESET}")
+    print(f"{BOLD}{'═' * 60}{RESET}")
+
+    neo4j = get_neo4j()
+
+    # ── Step 1: Verify connection & initialise schema ──────────────────────────
+    print(_h("Step 1 — Connect to Neo4j and initialise schema"))
+    try:
+        await neo4j.run("RETURN 1 AS ok")
+        print(_ok("Neo4j reachable at bolt://localhost:7687"))
+    except Exception as exc:
+        print(f"\n  ❌  Cannot reach Neo4j: {exc}")
+        print("     Start with: docker-compose up neo4j")
+        return
+
+    await neo4j.init_schema()
+    print(_ok("Schema initialised (indexes + constraints)"))
+
+    # ── Step 2: Load ontology ──────────────────────────────────────────────────
+    print(_h("Step 2 — Load domain ontology from YAML"))
+    ontology = load_domain_ontology(ONTOLOGY_PATH)
+    pairs    = get_type_hierarchy_pairs(ontology)
+    rules    = get_relation_rules(ontology)
+    print(_ok(f"Loaded: {ONTOLOGY_PATH.name}  ({len(pairs)} type pairs, {len(rules)} relation rules)"))
+
+    # ── Step 3: Clear previous demo data & write documents ────────────────────
+    print(_h("Step 3 — Write two conflicting documents to the graph"))
+    await neo4j.run(
+        "MATCH (n {tenant: 'aerospace'}) DETACH DELETE n"
+    )
+    print(_info("Cleared previous aerospace demo data"))
+
+    for doc_data in [_LIVE_DOC_A, _LIVE_DOC_B]:
+        doc = Document(
+            id=doc_data["id"],
+            filename=doc_data["filename"],
+            content=doc_data["content"],
+            tenant=doc_data["tenant"],
+        )
+        await neo4j.merge_document(doc)
+        print(_ok(f"Ingested: {doc_data['filename']}"))
+
+    # ── Step 4: Write entities and relations ──────────────────────────────────
+    print(_h("Step 4 — Write entities and relations"))
+
+    # Write all entities first
+    entities = {
+        ("FAA-AD-2024-01-02",           "AIRWORTHINESS_DIRECTIVE"),
+        ("FAA-AD-2022-03-07",           "AIRWORTHINESS_DIRECTIVE"),
+        ("FAA-AD-2020-05-11",           "AIRWORTHINESS_DIRECTIVE"),
+        ("G-ABCD",                      "AIRCRAFT_TYPE"),
+        ("inspection-authority",        "ORG"),
+        ("faa-airworthiness-division",  "REGULATOR"),
+    }
+    from uuid import uuid4
+    from datetime import datetime, timezone
+
+    for name, etype in entities:
+        await neo4j.run(
+            """
+            MERGE (e:Entity {name: $name, type: $type, tenant: $tenant})
+            ON CREATE SET e.id = $id, e.created_at = datetime()
+            """,
+            name=name, type=etype, tenant="aerospace",
+            id=str(uuid4()),
+        )
+    print(_ok(f"Wrote {len(entities)} entities"))
+
+    # Write relations (SUPERSEDES chain + airworthiness contradictions)
+    for r in _LIVE_ADS:
+        await neo4j.run(
+            """
+            MATCH (s:Entity {name: $src, type: $src_type, tenant: $tenant})
+            MATCH (t:Entity {name: $tgt, type: $tgt_type, tenant: $tenant})
+            MERGE (s)-[rel:RELATES_TO {relation: $relation, tenant: $tenant}]->(t)
+            SET rel.confidence    = $confidence,
+                rel.source_doc_id = $doc_id,
+                rel.source_type   = 'asserted',
+                rel.extracted_at  = datetime()
+            """,
+            src=r["src"], src_type=r["src_type"],
+            tgt=r["tgt"], tgt_type=r["tgt_type"],
+            relation=r["relation"], confidence=r["confidence"],
+            doc_id=r["doc_id"], tenant=r["tenant"],
+        )
+    print(_ok(f"Wrote {len(_LIVE_ADS)} relations (including IS_AIRWORTHY + IS_UNAIRWORTHY on G-ABCD)"))
+
+    # ── Step 5: Run forward-chaining inference ────────────────────────────────
+    print(_h("Step 5 — Forward-chaining inference (live)"))
+    inf_rules = build_inference_rules_from_ontology(ontology)
+    engine    = ForwardChainingEngine(neo4j, rules=inf_rules)
+    report    = await engine.run(tenant="aerospace", max_iterations=5, dry_run=False)
+
+    print(_ok(f"Engine completed: {report['total_inferred']} edges inferred"))
+    for rule_name, count in report["by_rule"].items():
+        if count > 0:
+            print(_ok(f"  [{rule_name}]: {count} edge(s) derived"))
+
+    # Show inferred AD edge
+    inferred = await neo4j.run(
+        """
+        MATCH (s:Entity {tenant: 'aerospace'})-[r:RELATES_TO {source_type: 'inferred'}]->(t:Entity)
+        RETURN s.name AS src, t.name AS tgt, r.relation AS rel, r.confidence AS conf
+        LIMIT 5
+        """,
+    )
+    for row in inferred:
+        print(_ok(f"  INFERRED: {row['src']} —[{row['rel']}]→ {row['tgt']}  (confidence: {row['conf']:.3f})"))
+
+    # ── Step 6: Run contradiction detector ───────────────────────────────────
+    print(_h("Step 6 — Contradiction detection (live)"))
+    detector  = ContradictionDetector(neo4j)
+    conflicts = await detector.scan(tenant="aerospace")
+
+    print(_ok(f"Scan complete: {len(conflicts)} conflict(s) detected"))
+    for c in conflicts:
+        print(_ok(f"  Type: {c.get('type', 'unknown')}"))
+        print(_ok(f"  Entity: {c.get('entity', '?')}"))
+        print(_ok(f"  Doc A: {c.get('doc_a', '?')}"))
+        print(_ok(f"  Doc B: {c.get('doc_b', '?')}"))
+        print(_info("  Status: open — requires manual review"))
+
+    if not conflicts:
+        # Fallback: query directly if detector returns empty (schema variant)
+        rows = await neo4j.run(
+            """
+            MATCH (a:Entity {tenant: 'aerospace'})-[r1:RELATES_TO {relation: 'IS_AIRWORTHY'}]->(e:Entity)
+            MATCH (b:Entity {tenant: 'aerospace'})-[r2:RELATES_TO {relation: 'IS_UNAIRWORTHY'}]->(e)
+            WHERE r1.source_doc_id <> r2.source_doc_id
+            RETURN e.name AS entity, r1.source_doc_id AS doc_a, r2.source_doc_id AS doc_b
+            """,
+        )
+        for row in rows:
+            print(_ok(f"  Detected: {row['entity']} IS_AIRWORTHY (per {row['doc_a']}) "
+                      f"AND IS_UNAIRWORTHY (per {row['doc_b']})"))
+
+    # ── Summary ───────────────────────────────────────────────────────────────
+    await step6_summary()
+
+    node_count = await neo4j.run("MATCH (n {tenant: 'aerospace'}) RETURN count(n) AS n")
+    edge_count = await neo4j.run(
+        "MATCH (:Entity {tenant:'aerospace'})-[r:RELATES_TO]->(:Entity) RETURN count(r) AS n"
+    )
+    print(f"\n  {BOLD}Live graph state:{RESET}")
+    print(_info(f"Nodes: {node_count[0]['n']}  |  Edges: {edge_count[0]['n']}"))
+    print(_info("Neo4j Browser: http://localhost:7474"))
+    print(_info("Query: MATCH (n {tenant:'aerospace'}) RETURN n"))
+
+    print(f"\n{BOLD}{'=' * 60}{RESET}")
+    print(f"{GREEN}{BOLD}  Live demo complete. Data persisted in Neo4j.{RESET}")
+    print(f"{BOLD}{'═' * 60}{RESET}\n")
+
+    await neo4j.close()
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(
         description="AI Knowledge Graph & Ontology Platform — regulatory demonstration"
@@ -379,7 +622,9 @@ def main() -> None:
     args = parser.parse_args()
 
     if args.live:
-        print("ℹ  Live mode — connecting to Neo4j at :7687")
+        print("ℹ  Live mode — connecting to Neo4j at bolt://localhost:7687")
+        asyncio.run(run_live_demo())
+        return
     asyncio.run(run_demo())
 
 

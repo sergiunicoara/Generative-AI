@@ -27,14 +27,29 @@ from __future__ import annotations
 import argparse
 import asyncio
 import json
+import sys
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock
+
+# Make `import graphrag` work when run as `python scripts/demo_regulatory.py`
+# from a clean checkout (no editable install): scripts/ is on sys.path, the
+# repo root is not — so add it explicitly before importing the package.
+REPO_ROOT = Path(__file__).resolve().parents[1]
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
+
+# The banner uses box-drawing characters (═ ─). On Windows the default console
+# encoding is cp1252, which cannot encode them and raises UnicodeEncodeError.
+# Reconfigure stdout to UTF-8 where supported (Python 3.7+).
+try:
+    sys.stdout.reconfigure(encoding="utf-8")  # type: ignore[attr-defined]
+except (AttributeError, ValueError):
+    pass
 
 import structlog
 
 log = structlog.get_logger(__name__)
 
-REPO_ROOT    = Path(__file__).resolve().parents[1]
 ONTOLOGY_PATH = REPO_ROOT / "config" / "ontologies" / "aerospace_regulatory.yml"
 
 # ANSI colours for terminal output

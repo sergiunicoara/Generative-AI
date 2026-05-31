@@ -28,8 +28,9 @@ class TestConfidenceClamping:
         from graphrag.core.models import Chunk
         return Chunk(document_id="doc1", text="A uses B.", chunk_index=0)
 
-    def _response(self, confidence):
-        payload = {
+    def _payload(self, confidence):
+        """Return the raw JSON string Groq's generate() would produce."""
+        return json.dumps({
             "entities": [
                 {"name": "A", "type": "PRODUCT", "description": ""},
                 {"name": "B", "type": "PRODUCT", "description": ""},
@@ -37,10 +38,14 @@ class TestConfidenceClamping:
             "relations": [
                 {"source": "A", "target": "B", "relation": "USES", "confidence": confidence}
             ],
-        }
-        mock = MagicMock()
-        mock.text = json.dumps(payload)
-        return mock
+        })
+
+    @staticmethod
+    def _llm_stub(payload: str):
+        """A get_llm() replacement whose generate() returns `payload`."""
+        stub = MagicMock()
+        stub.generate = AsyncMock(return_value=payload)
+        return stub
 
     def _build_extractor(self, response):
         """Patch the API call so extract() returns our synthetic response."""
@@ -62,10 +67,9 @@ class TestConfidenceClamping:
         extractor._entity_types = ["PRODUCT"]
 
         chunk = self._make_chunk()
-        response = self._response(confidence=1.5)
+        stub = self._llm_stub(self._payload(confidence=1.5))
 
-        with patch("asyncio.get_running_loop") as mock_loop:
-            mock_loop.return_value.run_in_executor = AsyncMock(return_value=response)
+        with patch("graphrag.ingestion.extractor.get_llm", return_value=stub):
             _, relations = await extractor.extract(chunk)
 
         assert len(relations) == 1
@@ -80,10 +84,9 @@ class TestConfidenceClamping:
         extractor._entity_types = ["PRODUCT"]
 
         chunk = self._make_chunk()
-        response = self._response(confidence=-0.3)
+        stub = self._llm_stub(self._payload(confidence=-0.3))
 
-        with patch("asyncio.get_running_loop") as mock_loop:
-            mock_loop.return_value.run_in_executor = AsyncMock(return_value=response)
+        with patch("graphrag.ingestion.extractor.get_llm", return_value=stub):
             _, relations = await extractor.extract(chunk)
 
         assert len(relations) == 1
@@ -98,10 +101,9 @@ class TestConfidenceClamping:
         extractor._entity_types = ["PRODUCT"]
 
         chunk = self._make_chunk()
-        response = self._response(confidence=0.85)
+        stub = self._llm_stub(self._payload(confidence=0.85))
 
-        with patch("asyncio.get_running_loop") as mock_loop:
-            mock_loop.return_value.run_in_executor = AsyncMock(return_value=response)
+        with patch("graphrag.ingestion.extractor.get_llm", return_value=stub):
             _, relations = await extractor.extract(chunk)
 
         assert len(relations) == 1

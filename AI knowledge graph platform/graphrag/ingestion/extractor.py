@@ -1,4 +1,10 @@
-"""Entity + relation extraction from text chunks using Gemini with structured output."""
+"""Entity + relation extraction from text chunks using Groq (llama-3.3-70b) with JSON output.
+
+Text generation is routed through ``graphrag.core.llm_client.get_llm`` (Groq);
+embeddings stay on Gemini.  The LLM is asked for strict JSON (``json_mode=True``)
+and the parsed relations have their confidence clamped to ``[0, 1]`` so the
+Bayesian merge formula downstream cannot be corrupted by out-of-range values.
+"""
 
 from __future__ import annotations
 

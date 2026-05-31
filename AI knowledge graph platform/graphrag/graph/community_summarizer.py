@@ -1,15 +1,12 @@
-"""Generate and embed Gemini summaries for each community."""
+"""Generate and embed community summaries via Groq (LLM) + Gemini (embeddings)."""
 
 from __future__ import annotations
 
 import asyncio
 
-from google import genai
-from google.genai import types as genai_types
 import structlog
 
-from graphrag.core.config import get_settings
-from graphrag.core.llm_utils import safe_response_text
+from graphrag.core.llm_client import get_llm, get_embedder
 from graphrag.core.models import Community
 from graphrag.graph.neo4j_client import get_neo4j
 
@@ -18,10 +15,6 @@ log = structlog.get_logger(__name__)
 
 class CommunitySummarizer:
     def __init__(self):
-        cfg = get_settings()
-        self._client = genai.Client(api_key=cfg.google_api_key)
-        self._model_name = cfg.gemini_ingest_model
-        self._embed_model = cfg.gemini_embed_model
         self._neo4j = get_neo4j()
 
     async def summarize_all(self, communities: list[Community]) -> list[Community]:
@@ -50,29 +43,11 @@ class CommunitySummarizer:
             f"Entities:\n{entity_text}\n\nSummary:"
         )
 
-        loop = asyncio.get_running_loop()
-        response = await loop.run_in_executor(
-            None,
-            lambda: self._client.models.generate_content(
-                model=self._model_name,
-                contents=prompt,
-            ),
-        )
-        community.summary = safe_response_text(
-            response,
-            default=f"[blocked] Community {community.id} summary unavailable.",
-        )
+        community.summary = await get_llm().generate(prompt) or f"[fallback] Community {community.id}"
 
         # Embed the summary
-        embed_response = await loop.run_in_executor(
-            None,
-            lambda: self._client.models.embed_content(
-                model=self._embed_model,
-                contents=community.summary,
-                config=genai_types.EmbedContentConfig(task_type="retrieval_document"),
-            ),
-        )
-        community.embedding = embed_response.embeddings[0].values
+        embeddings = await get_embedder().embed([community.summary])
+        community.embedding = embeddings[0]
 
         log.info(
             "community_summarizer.done",

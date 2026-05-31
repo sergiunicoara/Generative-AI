@@ -6,11 +6,10 @@ import asyncio
 import json
 import re
 
-from google import genai
-from google.genai import types as genai_types
 import structlog
 
 from graphrag.core.config import get_settings
+from graphrag.core.llm_client import get_llm
 from graphrag.core.models import Chunk, Entity, Relation
 
 log = structlog.get_logger(__name__)
@@ -46,12 +45,7 @@ Text:
 class Extractor:
     def __init__(self):
         cfg = get_settings()
-        self._client = genai.Client(api_key=cfg.google_api_key)
-        self._model_name = cfg.gemini_ingest_model
-        self._gen_config = genai_types.GenerateContentConfig(
-            response_mime_type="application/json",
-            temperature=0.0,
-        )
+        self._model_name = cfg.groq_model
         self._entity_types = cfg.ingestion.get(
             "entity_types", ["PERSON", "ORG", "PRODUCT", "CONCEPT", "LOCATION", "EVENT"]
         )
@@ -62,20 +56,10 @@ class Extractor:
             text=chunk.text,
         )
 
-        loop = asyncio.get_running_loop()
-        response = await loop.run_in_executor(
-            None,
-            lambda: self._client.models.generate_content(
-                model=self._model_name,
-                contents=prompt,
-                config=self._gen_config,
-            ),
-        )
+        raw = await get_llm().generate(prompt, json_mode=True)
 
         try:
-            raw = response.text
             if not raw:
-                # Gemini blocked the response (safety filter) or returned no candidates
                 log.warning("extractor.empty_response", chunk_id=chunk.id)
                 return [], []
             data = json.loads(raw)

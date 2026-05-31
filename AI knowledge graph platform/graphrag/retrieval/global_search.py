@@ -4,11 +4,10 @@ from __future__ import annotations
 
 import asyncio
 
-from google import genai
 import structlog
 
 from graphrag.core.config import get_settings
-from graphrag.core.llm_utils import safe_response_text
+from graphrag.core.llm_client import get_llm
 from graphrag.graph.neo4j_client import get_neo4j
 from graphrag.ingestion.embedder import Embedder
 
@@ -37,8 +36,6 @@ Final comprehensive answer:"""
 class GlobalSearch:
     def __init__(self):
         cfg = get_settings()
-        self._client = genai.Client(api_key=cfg.google_api_key)
-        self._model_name = cfg.gemini_query_model
         self._cfg = cfg.retrieval
         self._neo4j = get_neo4j()
         self._embedder = Embedder()
@@ -80,25 +77,15 @@ class GlobalSearch:
             )
 
         # Map: extract relevant info from each community summary
-        loop = asyncio.get_running_loop()
+        llm = get_llm()
         map_tasks = [
-            loop.run_in_executor(
-                None,
-                lambda c=c: self._client.models.generate_content(
-                    model=self._model_name,
-                    contents=_MAP_PROMPT.format(
-                        question=question,
-                        summary=c["summary"],
-                    ),
-                ),
-            )
+            llm.generate(_MAP_PROMPT.format(question=question, summary=c["summary"]))
             for c in communities
         ]
-        map_responses = await asyncio.gather(*map_tasks)
+        map_texts = await asyncio.gather(*map_tasks)
 
         partial_answers = []
-        for community, response in zip(communities, map_responses):
-            text = safe_response_text(response)
+        for community, text in zip(communities, map_texts):
             if text and "not relevant" not in text.lower():
                 partial_answers.append(f"[Level {community['level']}] {text}")
 
@@ -106,15 +93,11 @@ class GlobalSearch:
             return {"communities": communities, "synthesized_answer": ""}
 
         # Reduce: synthesize all partial answers
-        reduce_response = await loop.run_in_executor(
-            None,
-            lambda: self._client.models.generate_content(
-                model=self._model_name,
-                contents=_REDUCE_PROMPT.format(
-                    question=question,
-                    partial_answers="\n\n".join(partial_answers),
-                ),
-            ),
+        synthesized = await llm.generate(
+            _REDUCE_PROMPT.format(
+                question=question,
+                partial_answers="\n\n".join(partial_answers),
+            )
         )
 
         log.info(
@@ -124,5 +107,5 @@ class GlobalSearch:
         )
         return {
             "communities": communities,
-            "synthesized_answer": safe_response_text(reduce_response),
+            "synthesized_answer": synthesized or "",
         }

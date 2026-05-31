@@ -5,10 +5,10 @@ from __future__ import annotations
 import asyncio
 import time
 
-from google import genai
 import structlog
 
 from graphrag.core.config import get_settings
+from graphrag.core.llm_client import get_llm
 from graphrag.core.models import QueryResult
 from graphrag.retrieval.local_search import LocalSearch
 from graphrag.retrieval.global_search import GlobalSearch
@@ -35,13 +35,12 @@ Answer:"""
 class HybridRetriever:
     def __init__(self):
         cfg = get_settings()
-        self._client = genai.Client(api_key=cfg.google_api_key)
-        self._model_name = cfg.gemini_query_model
+        self._model_name = cfg.groq_model
         self._cfg = cfg.retrieval
         self._local = LocalSearch()
         self._global = GlobalSearch()
         self._context_builder = ContextBuilder()
-        self._model_version = cfg.gemini_query_model
+        self._model_version = cfg.groq_model
         self._agentic = AgenticRetriever(
             max_steps=self._cfg.get("agentic_max_steps", 4)
         )
@@ -80,20 +79,9 @@ class HybridRetriever:
             top_k=self._cfg.get("rerank_top_k", 5),
         )
 
-        loop = asyncio.get_running_loop()
-        response = await loop.run_in_executor(
-            None,
-            lambda: self._client.models.generate_content(
-                model=self._model_name,
-                contents=_ANSWER_PROMPT.format(context=context, question=question),
-            ),
-        )
-        # safe_response_text returns the low-confidence sentinel when Gemini
-        # blocks the response — this naturally triggers the agentic fallback.
-        answer = safe_response_text(
-            response,
-            default="Insufficient context to answer this question.",
-        )
+        answer = await get_llm().generate(
+            _ANSWER_PROMPT.format(context=context, question=question),
+        ) or "Insufficient context to answer this question."
         latency_ms = (time.monotonic() - t0) * 1000
 
         # ── Record session turn with the real answer ───────────────────────────

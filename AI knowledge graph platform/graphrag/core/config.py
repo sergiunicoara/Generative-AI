@@ -20,11 +20,15 @@ def _load_yaml() -> dict:
 
 
 class Settings(BaseSettings):
-    # ── Google AI ───────────────────────────────────────────────────────────────
+    # ── Google AI (embeddings only) ──────────────────────────────────────────────
     google_api_key: str = ""
     gemini_ingest_model: str = "gemini-2.0-flash"
-    gemini_query_model: str = "gemini-2.0-pro-exp"
-    gemini_embed_model: str = "text-embedding-004"
+    gemini_query_model: str = "gemini-2.0-flash"
+    gemini_embed_model: str = "gemini-embedding-001"
+
+    # ── Groq (text generation) ───────────────────────────────────────────────────
+    groq_api_key: str = ""
+    groq_model: str = "llama-3.3-70b-versatile"
 
     # ── Neo4j ───────────────────────────────────────────────────────────────────
     neo4j_uri: str = "bolt://localhost:7687"

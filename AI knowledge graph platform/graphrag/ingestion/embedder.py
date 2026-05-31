@@ -1,15 +1,13 @@
-"""Batch embeddings via Gemini text-embedding-004."""
+"""Batch embeddings via Gemini (kept for 3072-d vector compatibility)."""
 
 from __future__ import annotations
 
-import asyncio
 from itertools import islice
 
-from google import genai
-from google.genai import types as genai_types
 import structlog
 
 from graphrag.core.config import get_settings
+from graphrag.core.llm_client import get_embedder
 from graphrag.core.models import Chunk
 
 log = structlog.get_logger(__name__)
@@ -24,36 +22,22 @@ def _batched(iterable, n):
 class Embedder:
     def __init__(self):
         cfg = get_settings()
-        self._client = genai.Client(api_key=cfg.google_api_key)
-        self._model = cfg.gemini_embed_model
         self._batch_size = cfg.ingestion.get("embedding_batch_size", 100)
 
     async def embed_chunks(self, chunks: list[Chunk]) -> list[Chunk]:
-        loop = asyncio.get_running_loop()
         all_texts = [c.text for c in chunks]
+        embedder = get_embedder()
 
         embeddings: list[list[float]] = []
         for batch_texts in _batched(all_texts, self._batch_size):
-            result = await loop.run_in_executor(
-                None,
-                lambda t=batch_texts: self._client.models.embed_content(
-                    model=self._model,
-                    contents=t,
-                    config=genai_types.EmbedContentConfig(task_type="retrieval_document"),
-                ),
-            )
-            embeddings.extend([e.values for e in result.embeddings])
+            batch_embeddings = await embedder.embed(batch_texts)
+            embeddings.extend(batch_embeddings)
             log.info("embedder.batch_done", count=len(batch_texts))
 
-        # Guard: if the API returned fewer embeddings than chunks (partial failure,
-        # truncation, or batch-size mismatch), zip() would silently assign wrong
-        # embeddings to trailing chunks — corrupting every subsequent retrieval.
-        # Fail loudly instead so the caller can retry or surface the error.
         if len(embeddings) != len(chunks):
             raise ValueError(
                 f"Embedder count mismatch: expected {len(chunks)} embeddings "
-                f"but received {len(embeddings)}. "
-                "A partial API response would silently corrupt chunk-to-embedding mapping."
+                f"but received {len(embeddings)}."
             )
 
         for chunk, emb in zip(chunks, embeddings):
@@ -62,13 +46,5 @@ class Embedder:
         return chunks
 
     async def embed_text(self, text: str, task_type: str = "retrieval_query") -> list[float]:
-        loop = asyncio.get_running_loop()
-        result = await loop.run_in_executor(
-            None,
-            lambda: self._client.models.embed_content(
-                model=self._model,
-                contents=text,
-                config=genai_types.EmbedContentConfig(task_type=task_type),
-            ),
-        )
-        return result.embeddings[0].values
+        embeddings = await get_embedder().embed([text])
+        return embeddings[0]

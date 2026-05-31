@@ -16,10 +16,9 @@ import time
 from typing import Optional
 
 import structlog
-from google import genai
 
 from graphrag.core.config import get_settings
-from graphrag.core.llm_utils import safe_response_text
+from graphrag.core.llm_client import get_llm
 from graphrag.core.models import QueryResult
 from graphrag.retrieval.local_search import LocalSearch
 from graphrag.retrieval.context_builder import ContextBuilder
@@ -83,24 +82,12 @@ class AgenticRetriever:
     """
 
     def __init__(self, max_steps: int = 4):
-        cfg = get_settings()
-        self._client = genai.Client(api_key=cfg.google_api_key)
-        self._model = cfg.gemini_query_model
         self._local = LocalSearch()
         self._ctx_builder = ContextBuilder()
         self._max_steps = max_steps
 
     async def _llm_async(self, prompt: str) -> str:
-        """Run generate_content in a thread executor and return safe text."""
-        loop = asyncio.get_running_loop()
-        resp = await loop.run_in_executor(
-            None,
-            lambda: self._client.models.generate_content(
-                model=self._model,
-                contents=prompt,
-            ),
-        )
-        return safe_response_text(resp)
+        return await get_llm().generate(prompt)
 
     async def retrieve_and_answer(
         self,

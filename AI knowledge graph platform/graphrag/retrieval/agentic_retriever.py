@@ -160,7 +160,7 @@ class AgenticRetriever:
                     citations=list(dict.fromkeys(all_citations)),
                     latency_ms=latency_ms,
                     retrieval_mode="agentic",
-                    model_version=self._model,
+                    model_version=get_settings().groq_model,
                 )
 
             elif reasoning.upper().startswith("SEARCH:"):

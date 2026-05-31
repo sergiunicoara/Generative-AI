@@ -38,7 +38,13 @@ class BaseGraphRAGAgent(ABC):
 
     @abstractmethod
     def _model(self) -> str:
-        """Return the Gemini model ID to use."""
+        """Return the model identifier for the ADK agent scaffold.
+
+        This string is passed to the Google ADK ``Agent(model=...)`` constructor.
+        For Groq-backed pipelines, return ``cfg.groq_model``; it is used for
+        ADK wiring and provenance stamping, not for direct API calls (those go
+        through ``graphrag.core.llm_client.get_llm()``).
+        """
 
     @abstractmethod
     def _tools(self) -> list:

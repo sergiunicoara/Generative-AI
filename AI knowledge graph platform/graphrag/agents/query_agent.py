@@ -18,7 +18,7 @@ class QueryAgent(BaseGraphRAGAgent):
         super().__init__("query_agent")
 
     def _model(self) -> str:
-        return get_settings().gemini_query_model
+        return get_settings().groq_model
 
     def _instruction(self) -> str:
         return (

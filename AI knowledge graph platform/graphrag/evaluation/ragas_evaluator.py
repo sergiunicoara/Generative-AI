@@ -1,4 +1,12 @@
-"""RAGAS evaluation wrapper — faithfulness, answer_relevancy, context_precision, context_recall."""
+"""RAGAS evaluation wrapper — faithfulness, answer_relevancy, context_precision, context_recall.
+
+The RAGAS judge LLM is resolved in priority order:
+  1. Groq (``langchain-groq``) — consistent with the generation pipeline, free-tier quota
+  2. Google Generative AI (``langchain-google-genai``) — fallback if langchain-groq absent
+  3. None — RAGAS will use its internal default LLM (may fail without API keys)
+
+Install Groq support: ``pip install langchain-groq``
+"""
 
 from __future__ import annotations
 
@@ -21,20 +29,43 @@ class RagasEvaluator:
             "ragas_metrics",
             ["faithfulness", "answer_relevancy", "context_precision", "context_recall"],
         )
-        self._llm = self._build_llm(cfg.gemini_ingest_model)
+        self._llm = self._build_llm()
 
-    def _build_llm(self, model_name: str):
+    def _build_llm(self):
+        """Build the LLM judge for RAGAS. Tries Groq first, falls back to Gemini."""
+        cfg = get_settings()
+
+        # 1st choice: Groq — consistent with generation pipeline, avoids Gemini quota
+        try:
+            from langchain_groq import ChatGroq
+            llm = ChatGroq(
+                model=cfg.groq_model,
+                api_key=cfg.groq_api_key,
+                temperature=0.0,
+            )
+            log.info("ragas_evaluator.llm_groq", model=cfg.groq_model)
+            return llm
+        except ImportError:
+            log.debug("ragas_evaluator.langchain_groq_missing — trying Gemini fallback")
+        except Exception as exc:
+            log.warning("ragas_evaluator.groq_init_failed", error=str(exc))
+
+        # 2nd choice: Gemini via langchain-google-genai
         try:
             from langchain_google_genai import ChatGoogleGenerativeAI
-            from graphrag.core.config import get_settings
-            cfg = get_settings()
-            return ChatGoogleGenerativeAI(
-                model=model_name,
+            llm = ChatGoogleGenerativeAI(
+                model=cfg.gemini_ingest_model,
                 google_api_key=cfg.google_api_key,
             )
+            log.info("ragas_evaluator.llm_gemini", model=cfg.gemini_ingest_model)
+            return llm
         except ImportError:
-            log.warning("ragas_evaluator.langchain_genai_missing")
-            return None
+            log.warning(
+                "ragas_evaluator.no_langchain_llm",
+                note="install langchain-groq or langchain-google-genai for RAGAS evaluation",
+            )
+
+        return None
 
     def _build_metrics(self):
         from ragas.metrics import (

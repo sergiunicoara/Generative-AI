@@ -20,7 +20,7 @@ class EvaluationAgent(BaseGraphRAGAgent):
         super().__init__("evaluation_agent")
 
     def _model(self) -> str:
-        return get_settings().gemini_ingest_model  # flash is fine for eval
+        return get_settings().groq_model  # Groq: provenance stamping for ADK scaffold
 
     def _instruction(self) -> str:
         return (

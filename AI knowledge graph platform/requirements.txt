@@ -5,6 +5,7 @@ google-genai>=1.0.0
 
 # ── Groq (text generation — replaces Gemini generate_content) ─────────────────
 groq>=0.9.0
+langchain-groq>=0.1.0          # RAGAS judge LLM (Groq-consistent); falls back to Gemini if absent
 
 # ── Graph processing ───────────────────────────────────────────────────────────
 neo4j>=5.20.0

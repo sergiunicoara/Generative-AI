@@ -29,10 +29,13 @@ The graph is not a RAG index. It is a formally modeled knowledge base:
 | **Domain ontologies** | Config-driven domain overlays (see `config/ontologies/aerospace_regulatory.yml`) — extend type hierarchy and relation schema without code changes; `generate_synthetic_ontology.py` benchmarks at 500 types, 170k relations/sec |
 
 **Further reading:**
+- [`docs/knowledge-graph-architecture.md`](docs/knowledge-graph-architecture.md) — architectural decisions, data model, LLM routing, cross-process result store
 - [`docs/ontology-model.md`](docs/ontology-model.md) — formal type hierarchy, relation schema, inference rules, design decisions
 - [`docs/entity-resolution.md`](docs/entity-resolution.md) — 4-stage resolution pipeline with examples
-- [`docs/knowledge-graph-architecture.md`](docs/knowledge-graph-architecture.md) — architectural decisions and data model
 - [`docs/cypher-patterns.md`](docs/cypher-patterns.md) — 6 production Cypher patterns: multi-hop traversal, bitemporal as-of, transitive supersession, contradiction scan, community ANN search, entity resolution audit
+- [`docs/runbook.md`](docs/runbook.md) — operations: startup order, common failures, backup/restore, schema migration
+- [`docs/roadmap.md`](docs/roadmap.md) — current state, scaling limits, near/medium/long-term roadmap
+- [`CONTRIBUTING.md`](CONTRIBUTING.md) — ADR process, PR checklist, coding standards, how to add features
 - [`docs/adr/0001-property-graph-over-triple-store.md`](docs/adr/0001-property-graph-over-triple-store.md) — Why Neo4j over RDF triple stores
 - [`docs/adr/0002-forward-chaining-over-backward-chaining.md`](docs/adr/0002-forward-chaining-over-backward-chaining.md) — Why materialised inference over query-time reasoning
 - [`docs/adr/0003-bayesian-confidence-accumulation.md`](docs/adr/0003-bayesian-confidence-accumulation.md) — Why `1−(1−c₁)(1−c₂)` over last-write-wins

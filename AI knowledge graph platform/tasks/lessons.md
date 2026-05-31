@@ -1554,3 +1554,49 @@ pattern is "query → *conditional* create per row".  Zero rows = zero creates.
 > Zero-row queries produce zero subsequent CREATE calls.  Every phantom slot shifts
 > all subsequent slots by one, causing cascade KeyError failures on the next test run.
 
+
+---
+
+## A63 — LLM swap without re-running tests leaves regressions
+
+**What happened:**
+The Gemini→Groq migration changed the call path in `extractor.py` from
+`loop.run_in_executor → response.text` to `get_llm().generate() → str`.
+Three confidence-clamping tests and two empty-response tests mocked the old
+path. They were not re-run after the swap — the tests were silently broken
+(the clamping tests failed; the empty-response tests passed accidentally via
+`parse_error` for the wrong reason).
+
+**Root cause:**
+The migration was done and manually verified end-to-end, but the unit suite
+was not run. The `run_in_executor` + `response.text` mock signature is tightly
+coupled to the provider; swapping providers invalidates it silently.
+
+**Rule:**
+> After any LLM provider migration, always run the full unit suite immediately.
+> Tests that mock `run_in_executor`, `generate_content`, or `response.text` are
+> provider-coupled — grep for them before and after the swap and update every one.
+> Commit the test fixes in the same PR as the migration, never separately.
+
+---
+
+## A64 — Attribute reference vs. method call: `self._model` vs. `self._model()`
+
+**What happened:**
+`agentic_retriever.py` stamped `model_version=self._model` on `QueryResult`.
+`AgenticRetriever` has no `_model` attribute (it's an abstract method on
+`BaseGraphRAGAgent`, which `AgenticRetriever` does not inherit from). The
+expression evaluated to `AttributeError` at runtime when the agentic path fired.
+This was not caught by tests because no test exercised the agentic code path
+with a live `QueryResult` construction.
+
+**Root cause:**
+Copy-paste from an agent class where `_model` is a method. In the retriever,
+which is not an agent, the attribute doesn't exist.
+
+**Rule:**
+> When copying a field assignment, verify the RHS is defined on the target class.
+> `self._x` and `self._x()` are different: the former reads an attribute; the
+> latter calls a method. For provenance fields like `model_version`, always use
+> an explicit source: `get_settings().groq_model` or a constructor parameter —
+> never a method reference from an unrelated base class.

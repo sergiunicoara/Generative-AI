@@ -24,7 +24,7 @@ class IngestionAgent(BaseGraphRAGAgent):
         super().__init__("ingestion_agent")
 
     def _model(self) -> str:
-        return get_settings().gemini_ingest_model
+        return get_settings().groq_model
 
     def _instruction(self) -> str:
         return (

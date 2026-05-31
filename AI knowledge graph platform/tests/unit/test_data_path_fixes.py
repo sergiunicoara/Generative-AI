@@ -111,43 +111,39 @@ class TestConfidenceClamping:
 
 
 class TestExtractorNoneResponse:
-    """Extractor must handle None or empty response text without crashing."""
+    """Extractor must handle None or empty Groq generate() output without crashing."""
 
     def _make_chunk(self):
         from graphrag.core.models import Chunk
         return Chunk(document_id="doc1", text="Some text.", chunk_index=0)
 
-    async def test_none_response_text_returns_empty(self):
+    @staticmethod
+    def _llm_stub(raw: str):
+        stub = MagicMock()
+        stub.generate = AsyncMock(return_value=raw)
+        return stub
+
+    async def test_none_response_returns_empty(self):
+        """Groq returning None (API error / blocked) → empty result, no crash."""
         from graphrag.ingestion.extractor import Extractor
         extractor = Extractor.__new__(Extractor)
-        extractor._client = MagicMock()
         extractor._model_name = "m"
-        extractor._gen_config = MagicMock()
         extractor._entity_types = ["PRODUCT"]
 
-        mock_response = MagicMock()
-        mock_response.text = None   # Gemini blocked response
-
-        with patch("asyncio.get_running_loop") as mock_loop:
-            mock_loop.return_value.run_in_executor = AsyncMock(return_value=mock_response)
+        with patch("graphrag.ingestion.extractor.get_llm", return_value=self._llm_stub(None)):
             entities, relations = await extractor.extract(self._make_chunk())
 
         assert entities == []
         assert relations == []
 
     async def test_empty_string_response_returns_empty(self):
+        """Groq returning empty string → empty result, no crash."""
         from graphrag.ingestion.extractor import Extractor
         extractor = Extractor.__new__(Extractor)
-        extractor._client = MagicMock()
         extractor._model_name = "m"
-        extractor._gen_config = MagicMock()
         extractor._entity_types = ["PRODUCT"]
 
-        mock_response = MagicMock()
-        mock_response.text = ""
-
-        with patch("asyncio.get_running_loop") as mock_loop:
-            mock_loop.return_value.run_in_executor = AsyncMock(return_value=mock_response)
+        with patch("graphrag.ingestion.extractor.get_llm", return_value=self._llm_stub("")):
             entities, relations = await extractor.extract(self._make_chunk())
 
         assert entities == []

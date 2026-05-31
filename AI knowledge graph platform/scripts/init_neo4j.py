@@ -19,14 +19,18 @@ async def main():
 
     async with driver.session() as session:
         for stmt in statements:
-            stmt = stmt.strip()
-            # Skip SQL-style comment lines
-            if stmt and not stmt.startswith("--"):
-                try:
-                    await session.run(stmt)
-                    print(f"OK: {stmt[:60]}...")
-                except Exception as e:
-                    print(f"WARN: {e}")
+            # Strip comment lines (a fragment may start with a comment
+            # followed by the actual DDL statement on the next line)
+            lines = [l for l in stmt.splitlines() if not l.strip().startswith("--")]
+            stmt = "\n".join(lines).strip()
+            if not stmt:
+                continue
+            try:
+                result = await session.run(stmt)
+                await result.consume()  # DDL is lazy — must consume to execute
+                print(f"OK: {stmt[:60]}...")
+            except Exception as e:
+                print(f"WARN: {e}")
 
     await driver.close()
     print("Neo4j schema initialized.")

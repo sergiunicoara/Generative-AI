@@ -57,7 +57,7 @@ class CycleDetector:
     async def _check_apoc(self) -> bool:
         try:
             rows = await self._neo4j.run(
-                "RETURN apoc.version() AS v"
+                "CALL apoc.help('findCycles') YIELD name RETURN name LIMIT 1"
             )
             return bool(rows)
         except Exception:

@@ -151,7 +151,7 @@ class IngestionValidator:
             MATCH (e:Entity)-[r:RELATES_TO]-()
             WITH e.name AS entity, count(r) AS degree
             WITH collect({entity: entity, degree: degree}) AS all_nodes,
-                 avg(toFloat(count(r)))                    AS mean_degree
+                 avg(toFloat(degree))                      AS mean_degree
             UNWIND all_nodes AS node
             WITH node, mean_degree
             WHERE node.degree > mean_degree * $multiplier

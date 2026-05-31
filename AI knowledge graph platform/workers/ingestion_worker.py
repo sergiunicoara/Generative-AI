@@ -40,7 +40,7 @@ async def _ensure_schema():
         stmt = stmt.strip()
         if stmt and not stmt.startswith("--"):
             try:
-                await client.run(stmt)
+                await client.run(stmt)  # get_neo4j().run() already consumes
             except Exception as e:
                 log.warning("ingestion_worker.schema_warn", error=str(e)[:120])
     log.info("ingestion_worker.schema_ready")

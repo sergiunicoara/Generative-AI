@@ -482,7 +482,7 @@ class Neo4jClient:
                    e.name       AS entity_name,
                    e.type       AS entity_type,
                    e.embedding  AS embedding,
-                   size((e)-[:RELATES_TO]-()) AS degree
+                   COUNT { (e)-[:RELATES_TO]-() } AS degree
             """,
             chunk_ids=chunk_ids,
         )

@@ -1,11 +1,14 @@
-"""Tab 1: Graph Health — KPI cards, contradiction trend, recent alerts."""
+"""Tab 1: Graph Health — KPI cards, health gauges, contradiction trend, alerts."""
 
 from __future__ import annotations
 
 import plotly.graph_objects as go
-from dash import dash_table, dcc, html
+from dash import dcc, html
 
-from graphrag.dashboard.utils import H2, _get, err, http_error, kpi_card
+from graphrag.dashboard.utils import (
+    BAD, GOOD, NAV, TEAL, TEAL2, WARN, _get, card_panel, err, gauge,
+    http_error, kpi_card, section_title, style_fig, themed_table,
+)
 
 
 def render(tenant: str) -> html.Div:
@@ -18,55 +21,82 @@ def render(tenant: str) -> html.Div:
     snaps  = data.get("snapshots", []) if isinstance(data, dict) else []
     latest = snaps[0] if snaps else {}
 
-    def _pct(v):  return f"{round(float(v or 0) * 100, 1)} %"
-    def _rate(v): return f"{round(float(v or 0), 4)}"
+    def _f(key):  return float(latest.get(key) or 0)
+    def _pct(v):  return f"{round(float(v or 0) * 100, 1)}%"
 
+    orphan = _f("orphan_rate")
+
+    # ── KPI strip ───────────────────────────────────────────────────────────
     kpis = html.Div([
-        kpi_card("Entities",           str(latest.get("entity_count", "—"))),
-        kpi_card("Edges",              str(latest.get("edge_count", "—"))),
-        kpi_card("Alias coverage",     _pct(latest.get("alias_coverage"))),
-        kpi_card("High-conf rate",     _pct(latest.get("high_conf_rate"))),
-        kpi_card("Contradiction /1k",  _rate(latest.get("contradiction_rate"))),
-        kpi_card("Orphan rate",        _pct(latest.get("orphan_rate")),
-                 color="#c00" if float(latest.get("orphan_rate") or 0) > 0.10 else "#1a1a2e"),
-        kpi_card("Community coherence", _pct(latest.get("community_coherence"))),
-    ], style={"display": "flex", "flexWrap": "wrap"})
+        kpi_card("Entities",   f'{int(_f("entity_count")):,}', accent=TEAL),
+        kpi_card("Edges",      f'{int(_f("edge_count")):,}',   accent=TEAL2),
+        kpi_card("Alias coverage",    _pct(latest.get("alias_coverage")),
+                 accent=GOOD, hint="resolved → canonical"),
+        kpi_card("High-conf rate",    _pct(latest.get("high_conf_rate")),
+                 accent=GOOD, hint="edges ≥ 0.75"),
+        kpi_card("Contradiction /1k", f'{_f("contradiction_rate"):.3f}',
+                 color=BAD if _f("contradiction_rate") > 5 else NAV, accent=WARN),
+        kpi_card("Orphan rate",       _pct(orphan),
+                 color=BAD if orphan > 0.10 else NAV,
+                 accent=BAD if orphan > 0.10 else GOOD),
+    ], style={"display": "flex", "flexWrap": "wrap", "gap": "2px"})
 
+    # ── Health gauges ───────────────────────────────────────────────────────
+    gauges = html.Div([
+        html.Div(dcc.Graph(figure=gauge(_f("alias_coverage"), "Entity Resolution",
+                                        good_high=True), config={"displayModeBar": False}),
+                 style={"flex": "1", "minWidth": "220px"}),
+        html.Div(dcc.Graph(figure=gauge(_f("high_conf_rate"), "Relation Confidence",
+                                        good_high=True), config={"displayModeBar": False}),
+                 style={"flex": "1", "minWidth": "220px"}),
+        html.Div(dcc.Graph(figure=gauge(_f("community_coherence"), "Community Coherence",
+                                        good_high=True), config={"displayModeBar": False}),
+                 style={"flex": "1", "minWidth": "220px"}),
+        html.Div(dcc.Graph(figure=gauge(orphan, "Orphan Rate", good_high=False),
+                                config={"displayModeBar": False}),
+                 style={"flex": "1", "minWidth": "220px"}),
+    ], style={"display": "flex", "flexWrap": "wrap", "gap": "8px"})
+
+    # ── Contradiction trend ─────────────────────────────────────────────────
     fig = go.Figure()
     if snaps:
         xs = [s.get("recorded_at", "") for s in reversed(snaps)]
         ys = [float(s.get("contradiction_rate") or 0) for s in reversed(snaps)]
-        fig.add_trace(go.Scatter(x=xs, y=ys, mode="lines+markers",
-                                 name="Contradiction rate"))
-        fig.update_layout(
-            title="Contradiction Rate Trend",
-            xaxis_title="Recorded at",
-            yaxis_title="Conflicts / 1k edges",
-            margin={"t": 40, "b": 40},
-            height=280,
-        )
+        fig.add_trace(go.Scatter(
+            x=xs, y=ys, mode="lines+markers", name="Contradiction rate",
+            line={"color": TEAL, "width": 3, "shape": "spline"},
+            marker={"size": 7, "color": NAV, "line": {"color": "white", "width": 1.5}},
+            fill="tozeroy", fillcolor="rgba(0,150,180,0.10)",
+        ))
+        style_fig(fig, "Contradiction Rate Trend", height=300)
+        fig.update_layout(xaxis_title="Recorded at", yaxis_title="Conflicts / 1k edges")
 
+    # ── Alerts ──────────────────────────────────────────────────────────────
     alerts = (alerts_data or {}).get("alerts", []) if isinstance(alerts_data, dict) else []
-    alert_table = dash_table.DataTable(
-        data=alerts,
-        columns=[{"name": c, "id": c} for c in
-                 ["metric", "value", "threshold", "direction", "tenant", "fired_at"]],
-        style_table={"overflowX": "auto"},
-        style_cell={"textAlign": "left", "padding": "6px"},
-        style_header={"fontWeight": "bold"},
-        style_data_conditional=[{
-            "if": {"filter_query": '{direction} = "above"'},
-            "backgroundColor": "#fff3cd",
-        }],
-        page_size=10,
-    ) if alerts else html.P("No recent alerts.", style={"color": "#888"})
+    if alerts:
+        alert_block = themed_table(
+            data=alerts,
+            columns=[{"name": c.replace("_", " ").title(), "id": c} for c in
+                     ["metric", "value", "threshold", "direction", "tenant", "fired_at"]],
+            page_size=10,
+            style_data_conditional=[{
+                "if": {"filter_query": '{direction} = "above"'},
+                "backgroundColor": "#FCF3E0",
+            }],
+        )
+    else:
+        alert_block = html.Div("✓ No active alerts — all metrics within thresholds.",
+                               style={"color": GOOD, "fontWeight": "600",
+                                      "padding": "12px 4px", "fontSize": "13.5px"})
 
     return html.Div([
-        html.H2("Graph Health", style=H2),
+        section_title("Graph Health",
+                      "Live structural & quality metrics for the knowledge graph"),
         kpis,
-        dcc.Graph(figure=fig) if snaps else err(
-            "No snapshots found. Run /kg/graph-snapshots/create."
-        ),
-        html.H3("Recent Alerts", style=H2),
-        alert_table,
+        card_panel(gauges) if snaps else err(
+            "No snapshots found. Run /kg/graph-snapshots/create."),
+        card_panel(dcc.Graph(figure=fig, config={"displayModeBar": False})) if snaps else None,
+        html.Div("Recent Alerts", style={"fontSize": "15px", "fontWeight": "700",
+                                          "color": NAV, "margin": "22px 0 10px"}),
+        alert_block,
     ])

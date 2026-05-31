@@ -2,9 +2,12 @@
 
 from __future__ import annotations
 
-from dash import Input, Output, State, callback, dash_table, dcc, html
+from dash import Input, Output, State, callback, dcc, html
 
-from graphrag.dashboard.utils import H2, _get, _post, err, http_error
+from graphrag.dashboard.utils import (
+    BAD, FONT, GOOD, NAV, TEAL, _get, _post, card_panel, err, http_error,
+    section_title, themed_table,
+)
 
 
 def render(tenant: str) -> html.Div:
@@ -15,25 +18,27 @@ def render(tenant: str) -> html.Div:
 
     if not conflicts:
         return html.Div([
-            html.H2("Open Conflicts", style=H2),
-            html.P("✅ No open conflicts.", style={"color": "#2a9d4f"}),
+            section_title("Open Conflicts", "Contradictory facts awaiting resolution"),
+            html.Div("✓ No open conflicts — the graph is internally consistent.",
+                     style={"color": GOOD, "fontWeight": "600", "fontSize": "14px",
+                            "padding": "14px 16px", "background": "#E8F6EC",
+                            "borderRadius": "10px"}),
         ])
 
     cols = ["conflict_id", "type", "src", "tgt", "relation", "tenant"]
-    table = dash_table.DataTable(
-        id="conflicts-table",
+    table = themed_table(
         data=[{k: str(c.get(k, "")) for k in cols} for c in conflicts],
-        columns=[{"name": c, "id": c} for c in cols],
+        columns=[{"name": c.replace("_", " ").title(), "id": c} for c in cols],
+        id="conflicts-table",
         row_selectable="single",
         selected_rows=[],
-        style_table={"overflowX": "auto"},
-        style_cell={"textAlign": "left", "padding": "6px"},
-        style_header={"fontWeight": "bold"},
         page_size=20,
     )
 
-    resolve_panel = html.Div([
-        html.H3("Resolve selected conflict", style={"marginTop": "20px"}),
+    resolve_panel = card_panel(html.Div([
+        html.Div("Resolve selected conflict",
+                 style={"fontSize": "15px", "fontWeight": "700", "color": NAV,
+                        "marginBottom": "12px"}),
         html.Div([
             dcc.Dropdown(
                 id="resolve-resolution",
@@ -43,21 +48,26 @@ def render(tenant: str) -> html.Div:
                     {"label": "False positive",        "value": "false_positive"},
                 ],
                 placeholder="Resolution type...",
-                style={"width": "300px"},
+                style={"width": "300px", "fontFamily": FONT},
             ),
             dcc.Input(id="resolve-winner-doc", type="text",
                       placeholder="Winner doc ID (optional)",
-                      style={"marginLeft": "12px", "padding": "6px", "width": "240px"}),
+                      style={"marginLeft": "12px", "padding": "8px 12px", "width": "240px",
+                             "borderRadius": "8px", "border": "1px solid #DCE5F3",
+                             "fontFamily": FONT}),
             html.Button("Resolve", id="resolve-btn",
-                        style={"marginLeft": "12px", "padding": "6px 16px",
-                               "backgroundColor": "#1a1a2e", "color": "white",
-                               "border": "none", "borderRadius": "4px", "cursor": "pointer"}),
+                        style={"marginLeft": "12px", "padding": "9px 22px",
+                               "background": f"linear-gradient(135deg,{TEAL},{NAV})",
+                               "color": "white", "border": "none", "borderRadius": "8px",
+                               "cursor": "pointer", "fontWeight": "700", "fontFamily": FONT}),
         ], style={"display": "flex", "alignItems": "center"}),
-        html.Div(id="resolve-result", style={"marginTop": "10px", "color": "#2a9d4f"}),
-    ])
+        html.Div(id="resolve-result", style={"marginTop": "12px", "color": GOOD,
+                                              "fontWeight": "600"}),
+    ]))
 
     return html.Div([
-        html.H2(f"Open Conflicts ({len(conflicts)})", style=H2),
+        section_title(f"Open Conflicts ({len(conflicts)})",
+                      "Contradictory facts detected across source documents"),
         table,
         resolve_panel,
     ])

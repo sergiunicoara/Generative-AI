@@ -249,6 +249,51 @@ All 12 findings from the second code audit implemented.
 
 ---
 
+---
+
+## Phase 12 — LLM Swap, Infrastructure Fixes & Local Smoke Test
+
+Groq replaces Gemini for all text generation. Six critical bugs fixed. System verified end-to-end locally.
+
+### LLM Routing
+- [x] Create `graphrag/core/llm_client.py` — `GroqLLM` (async Groq SDK via executor) + `GeminiEmbedder` + singletons `get_llm()` / `get_embedder()`
+- [x] Update `graphrag/core/config.py` — add `groq_api_key`, `groq_model` fields
+- [x] Update `graphrag/ingestion/extractor.py` — use `get_llm().generate()` instead of Gemini `generate_content`
+- [x] Update `graphrag/ingestion/embedder.py` — delegate to `get_embedder().embed()`
+- [x] Update `graphrag/retrieval/hybrid_retriever.py`, `global_search.py`, `agentic_retriever.py`, `graphrag/graph/community_summarizer.py` — use `get_llm().generate()` throughout
+- [x] Add `groq>=0.9.0` and `redis[asyncio]>=5.0.0` to `requirements.txt`
+- [x] Update `.env` — add `GROQ_API_KEY`, `GROQ_MODEL`; keep `GOOGLE_API_KEY`, `GEMINI_EMBED_MODEL`
+
+### Neo4j Bug Fixes
+- [x] `graphrag/graph/neo4j_client.py` line 485 — replace deprecated `size((e)-[:RELATES_TO]-())` with `COUNT { (e)-[:RELATES_TO]-() }` (Neo4j 5.x)
+- [x] `graphrag/graph/ingestion_validator.py` — fix nested aggregate `avg(toFloat(count(r)))` → `avg(toFloat(degree))`
+- [x] `graphrag/graph/cycle_detector.py` — fix APOC availability check to use `CALL apoc.help('findCycles')`
+- [x] `scripts/init_neo4j.py` — fix lazy DDL: add `await result.consume()` after every schema statement
+- [x] `scripts/init_neo4j.py` — fix comment stripping: strip `-- comment` lines per-fragment before executing
+
+### Windows Compatibility
+- [x] `workers/ingestion_worker.py`, `query_worker.py`, `evaluation_worker.py`, `combined_worker.py` — guard `loop.add_signal_handler` with `if sys.platform != "win32":`
+
+### Workers & Infrastructure
+- [x] `workers/combined_worker.py` — created; runs ingestion + query consumers on one machine
+- [x] `config/settings.yml` — `session_store_strict: false` (redis package may be absent in dev)
+
+### Documentation
+- [x] Update `README.md` — Stack table (Groq LLM), `.env` section, Project Structure, Verified System Check Results, Common Issues, Quick Start
+- [x] Update `docs/knowledge-graph-architecture.md` — add Section 9: LLM routing + cross-process result store
+- [x] Update `tasks/lessons.md` — add A57–A62 (Neo4j DDL lazy execution, `size()` deprecation, comment stripping, Windows signals, cross-process results, strict mode + missing packages)
+- [x] Update `tasks/todo.md` — this entry
+
+### Verified end-to-end
+- Ingestion: `ingestion_agent.done chunks=1 entities=5 relations=4` ✅
+- Hybrid search: `bm25=10 fused=10 vector=10` ✅
+- Reranker: `top_score=9.30` ✅
+- GNN: `gnn_scorer.skip reason=no_entity_embeddings` (expected — no community embeddings yet)
+- Answer synthesis: Groq Llama generates cited answer ✅
+- Redis result store: cross-process result sharing confirmed ✅
+
+---
+
 ## Review
 
 ### What was built

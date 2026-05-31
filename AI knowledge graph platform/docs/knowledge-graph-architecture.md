@@ -188,7 +188,74 @@ and SPARQL endpoints without requiring a full migration to a triple store.
 
 ---
 
-## 9. Scalability Considerations
+## 9. LLM Routing — Groq for Generation, Gemini for Embeddings
+
+All LLM calls are centralised through `graphrag/core/llm_client.py`. This module
+routes text generation to Groq and embeddings to Gemini, with a clean singleton
+interface used across all pipeline stages.
+
+```
+                ┌─────────────────────────────┐
+                │       llm_client.py          │
+                │                              │
+                │  get_llm()    → GroqLLM      │
+                │  get_embedder() → GeminiEmbedder │
+                └───────────┬─────────┬────────┘
+                            │         │
+               ┌────────────▼─┐   ┌───▼────────────────┐
+               │ Groq API     │   │ Gemini API          │
+               │ llama-3.3-   │   │ gemini-embedding-   │
+               │ 70b-versatile│   │ 001 (3072d vectors) │
+               └──────────────┘   └────────────────────┘
+```
+
+### Why this split?
+
+| Concern | Groq | Gemini |
+|---|---|---|
+| Text generation | llama-3.3-70b-versatile, free tier, 1500+ RPD | quota-limited, rate-throttled for free keys |
+| Embedding | — | `gemini-embedding-001` (3072d), high-dimensional, cosine-compatible |
+| Cost | Free tier sufficient for dev/testing | Free tier for embeddings only |
+
+### What uses Groq
+
+- `graphrag/ingestion/extractor.py` — entity + relation extraction from chunks
+- `graphrag/retrieval/local_search.py` — answer synthesis from retrieved context
+- `graphrag/retrieval/global_search.py` — map-reduce community summarisation
+- `graphrag/retrieval/agentic_retriever.py` — IRCoT sub-queries
+- `graphrag/graph/community_summarizer.py` — LLM community summaries
+
+### What uses Gemini (embeddings only)
+
+- `graphrag/ingestion/embedder.py` — chunk embedding batches
+- `graphrag/retrieval/local_search.py` — query embedding for vector ANN
+
+### Cross-process result store
+
+Query results are written by the worker and read by the API. These are separate
+OS processes, so in-process dicts do not work. Both processes connect to Redis
+independently through `graphrag/retrieval/result_store.py`:
+
+```
+Query Worker                         API Process
+─────────────                        ───────────
+QueryAgent.run(query_id)
+ → answer computed
+ → ResultStore.set(query_id, result)
+     ↓ Redis SETEX (1h TTL)
+                                     GET /query/{query_id}
+                                      → ResultStore.get(query_id)
+                                          ↑ Redis GET
+                                      → 200 {status: "completed", answer: ...}
+```
+
+**Without Redis**, the worker writes to its own in-process memory and the API
+always returns `{"status": "queued"}`. Set `REDIS_URL` in `.env` and ensure
+Redis is running before starting workers.
+
+---
+
+## 10. Scalability Considerations
 
 | Concern | Current design | Scale path |
 |---|---|---|
@@ -201,7 +268,7 @@ and SPARQL endpoints without requiring a full migration to a triple store.
 
 ---
 
-## 10. Key Files
+## 11. Key Files
 
 ```
 graphrag/graph/

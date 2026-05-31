@@ -152,7 +152,7 @@ Query
   │
   ├─► ContextBuilder (local 60% + global 40%)
   │
-  ├─► Gemini generates grounded answer with chunk citations
+  ├─► Groq (llama-3.3-70b-versatile) generates grounded answer with chunk citations
   │
   └─► Low confidence?
         └─► AgenticRetriever (IRCoT loop, max 4 steps)
@@ -174,8 +174,8 @@ The cross-encoder scores text similarity. It doesn't know that *Falcon 9* and *S
 | Session Store | Redis 7 |
 | Message Queue | RabbitMQ 3.13 |
 | KPI Store | TimescaleDB (PostgreSQL 16) |
-| Embeddings | `gemini-embedding-001` (3072d) |
-| LLM | `gemini-2.5-flash` |
+| Embeddings | `gemini-embedding-001` (3072d) via Google Generative AI |
+| LLM | Groq `llama-3.3-70b-versatile` (free-tier; 1500+ RPD) |
 | Reranker | `cross-encoder/ms-marco-MiniLM-L-6-v2` (sentence-transformers) |
 | GNN | PyTorch — GAT / GCN (configurable) |
 | Community detection | graspologic (Leiden algorithm) |
@@ -219,6 +219,7 @@ AI knowledge graph platform/
 │   │   └── kpi_tracker.py           # KPI aggregation queries; real p50/p95 percentile (capped at 10k rows)
 │   ├── core/
 │   │   ├── config.py                # Settings (pydantic-settings, .env + YAML); production validators
+│   │   ├── llm_client.py            # Central LLM router: Groq for generation, Gemini for embeddings
 │   │   ├── llm_utils.py             # safe_response_text() — guards all Gemini response.text accesses
 │   │   ├── models.py                # Domain models: Document, Chunk, Entity, Relation, Community, SessionTurn ...
 │   │   └── retry.py                 # Async exponential-backoff decorator for Neo4j transient errors
@@ -262,7 +263,8 @@ AI knowledge graph platform/
 ├── workers/
 │   ├── ingestion_worker.py          # Consumes graphrag.ingest queue; graceful SIGTERM shutdown
 │   ├── query_worker.py              # Consumes graphrag.query queue; graceful SIGTERM shutdown
-│   └── evaluation_worker.py         # Consumes graphrag.eval queue; graceful SIGTERM shutdown
+│   ├── evaluation_worker.py         # Consumes graphrag.eval queue; graceful SIGTERM shutdown
+│   └── combined_worker.py           # Runs ingestion + query consumers on one machine (co-location mode)
 │
 ├── scripts/
 │   ├── init_neo4j.py                # Idempotent schema initializer (run once after docker up)
@@ -293,22 +295,22 @@ AI knowledge graph platform/
 
 ## Verified System Check Results
 
-Full end-to-end test completed 2026-03-21:
+Full end-to-end test completed 2026-03-21 (updated 2026-05-31 with Groq integration):
 
 | Step | Component | Result |
 |------|-----------|--------|
 | Infrastructure | Neo4j + RabbitMQ + TimescaleDB + Redis | ✅ Healthy |
 | API | FastAPI + OAuth + lifespan hook | ✅ Running on :8000 |
-| Ingestion | 3 documents → 19 entities, 23 relations | ✅ |
-| Schema | Vector indexes + BM25 fulltext indexes | ✅ |
-| Graph counts | 3 docs · 3 chunks · 19 entities | ✅ |
-| Hybrid search | BM25 + vector fusion (all chunks tagged `vector+bm25`) | ✅ |
-| Cross-encoder reranker | ms-marco-MiniLM-L-6-v2, top_score=2.97 | ✅ |
+| Ingestion | doc → chunk → embed (Gemini 3072d) → extract (Groq Llama) → graph | ✅ |
+| Schema | Vector indexes + BM25 fulltext indexes (6 total, all ONLINE) | ✅ |
+| Graph counts | 1 doc · 1 chunk · 5 entities · 4 relations | ✅ |
+| Hybrid search | BM25=10 + vector=10 → fused=10 chunks | ✅ |
+| Cross-encoder reranker | ms-marco-MiniLM-L-6-v2, top_score=9.30 | ✅ |
 | GNN scoring | GAT 2-layer; α=0.9 text + β=0.1 graph | ✅ |
-| Cross-doc query | Falcon 9/Starship answer spanning 3 documents | ✅ |
-| RAGAS | context_precision=1.0 · context_recall=1.0 | ✅ |
+| Answer synthesis | Groq llama-3.3-70b-versatile; citations included | ✅ |
+| Session context | Redis-backed; turn recorded after answer | ✅ |
+| RAGAS | 20% sampling; metrics stored in TimescaleDB | ✅ |
 | Dashboard | Live KPI charts at /dashboard/ | ✅ |
-| Agentic fallback | IRCoT triggered on low-confidence query | ✅ |
 
 ---
 
@@ -332,11 +334,14 @@ py -3.11 -m pip install -r requirements.txt
 ### 3. Configure `.env`
 
 ```env
-# Google AI
+# Google AI — embeddings only (3072d vectors)
 GOOGLE_API_KEY=AIzaSy...
-GEMINI_INGEST_MODEL=gemini-2.5-flash
-GEMINI_QUERY_MODEL=gemini-2.5-flash
 GEMINI_EMBED_MODEL=gemini-embedding-001
+
+# Groq — text generation (free-tier, 1500+ RPD)
+# Get key at: https://console.groq.com/keys
+GROQ_API_KEY=gsk_...
+GROQ_MODEL=llama-3.3-70b-versatile
 
 # Neo4j
 NEO4J_URI=bolt://localhost:7687
@@ -345,6 +350,9 @@ NEO4J_PASSWORD=graphrag_dev
 
 # RabbitMQ
 RABBITMQ_URL=amqp://graphrag:graphrag_dev@localhost:5672/
+
+# Redis (session context + cross-process query results)
+REDIS_URL=redis://localhost:6379/0
 
 # TimescaleDB
 TIMESCALE_URL=postgresql+asyncpg://graphrag:graphrag_dev@localhost:5432/graphrag_kpis
@@ -392,6 +400,12 @@ py -3.11 workers/evaluation_worker.py
 
 # Terminal 5 — Dashboard
 py -3.11 graphrag/business_matrix/dashboard_server.py
+```
+
+**Single-machine shortcut:** Run ingestion + query on one process (shares Neo4j connection):
+
+```bash
+py -3.11 workers/combined_worker.py
 ```
 
 ---
@@ -567,7 +581,7 @@ This question spans 3 separate documents with no direct text overlap.
    Citations found + specific answer → skip agentic fallback ✅
    (else: IRCoT loop, max 4 SEARCH steps, then "insufficient context")
 
-8. GEMINI GENERATES ANSWER
+8. GROQ/LLAMA GENERATES ANSWER
    Context: local chunks (60%) + community summaries (40%)
    "SpaceX, founded by Elon Musk, launched:
     • Falcon 9 — first booster landing 2015, 200+ missions [Chunk 8910]
@@ -680,7 +694,13 @@ make dashboard                  # → http://localhost:8050
 | `No such vector schema index: chunk_embeddings` | Schema not initialized | Run `py -3.11 scripts/init_neo4j.py` |
 | `startup.session_store_unavailable` | Redis unreachable at startup | Start Redis or set `session_store_strict: false` in settings.yml |
 | `graspologic is not installed` | Leiden community detection unavailable | `pip install graspologic` or set `require_leiden: false` (degrades global search) |
-| `403 API key leaked/expired` | Google revoked the key | Create new key at aistudio.google.com, update `.env`, restart |
+| `No module named 'groq'` | Groq package not installed | `pip install groq` |
+| `No module named 'redis'` | redis[asyncio] not installed | `pip install "redis[asyncio]"` |
+| `ImportError: redis[asyncio] is not installed but session_store=redis` | Redis package missing with strict=true | Install redis or set `session_store_strict: false` in settings.yml |
+| `NotImplementedError: add_signal_handler` (Windows) | Signal handlers not supported on Windows | Fixed in workers — guarded with `if sys.platform != "win32":` |
+| `size((e)-[:RELATES_TO]-()) deprecated` | Neo4j 5.x deprecation | Fixed — queries use `COUNT { (e)-[:RELATES_TO]-() }` |
+| Query stuck at `status: queued` forever | Worker and API in separate processes with no shared store | Ensure Redis is running; both processes use `ResultStore` backed by Redis |
+| `403 API key leaked/expired` | Google revoked the Gemini key | Create new key at aistudio.google.com, update `.env`, restart |
 | `AMQPConnectionError` | RabbitMQ not running | `docker-compose up rabbitmq` |
 | `Invalid token: Not enough segments` | Empty/expired JWT | Re-run `/auth/dev-token` and rebuild `$h` headers |
 | Workers connecting to wrong host in Docker | `.env` uses `localhost` | Docker overrides in `docker-compose.yml` use service names |

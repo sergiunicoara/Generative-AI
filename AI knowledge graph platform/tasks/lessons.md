@@ -1380,6 +1380,155 @@ implementation.  The gap list was never reconciled against what was actually com
 
 ---
 
+## A57 — Neo4j 5.x deprecated `size()` for relationship counting
+
+**What happened:**
+`neo4j_client.py` used `size((e)-[:RELATES_TO]-()) AS degree` to count entity
+relationships. Neo4j 5.x deprecated this pattern and the query failed with a
+`SyntaxError: The `size()` function with a pattern expression is deprecated`.
+
+**Root cause:**
+The query was written against Neo4j 4.x syntax. The deprecation was introduced
+in Neo4j 5.0 and the code was never updated.
+
+**Rule:**
+> Never use `size(pattern-expression)` to count relationships in Neo4j 5.x.
+> Use the subquery form instead:
+> ```cypher
+> -- Deprecated (Neo4j 4.x):
+> size((e)-[:RELATES_TO]-()) AS degree
+>
+> -- Correct (Neo4j 5.x+):
+> COUNT { (e)-[:RELATES_TO]-() } AS degree
+> ```
+> When upgrading Neo4j, grep for `size((` in all `.py` and `.cypher` files.
+
+---
+
+## A58 — Neo4j async driver lazy execution: DDL requires explicit consume()
+
+**What happened:**
+`scripts/init_neo4j.py` called `await session.run(stmt)` for DDL statements
+(CREATE INDEX, CREATE CONSTRAINT). The statements appeared to succeed but the
+indexes were never created. `SHOW INDEXES` returned an empty list.
+
+**Root cause:**
+`session.run()` with the Neo4j async driver returns a lazy `Result` cursor.
+For DML queries (SELECT/MATCH), the rows are consumed by the `async for` loop.
+For DDL statements where you don't iterate results, nothing is consumed — the
+server never executes the statement.
+
+**Rule:**
+> After any DDL statement with the Neo4j async driver, explicitly consume the
+> result:
+> ```python
+> result = await session.run("CREATE INDEX ...")
+> await result.consume()   # forces server execution
+> ```
+> Without `consume()`, DDL is silently a no-op. This applies to every
+> `CREATE INDEX`, `CREATE CONSTRAINT`, `DROP INDEX`, and schema-only query.
+
+---
+
+## A59 — Comment lines must be stripped per-fragment, not per-file in schema.cypher
+
+**What happened:**
+`schema.cypher` was split on `;` to get individual statements. Some fragments
+started with a `-- comment` line before the `CREATE` statement. The code checked
+`stmt.startswith("--")` and skipped those fragments entirely — so several
+indexes were never created despite the script reporting success.
+
+**Root cause:**
+The guard was designed to skip comment-only lines but was applied to the full
+fragment. A fragment like `"-- create vector index\nCREATE VECTOR INDEX ..."` starts
+with `--` so the entire `CREATE` was skipped.
+
+**Rule:**
+> When parsing SQL/Cypher files split on `;`, strip comment lines from each
+> fragment before checking if it is a real statement:
+> ```python
+> for stmt in raw.split(";"):
+>     lines = [l for l in stmt.splitlines() if not l.strip().startswith("--")]
+>     stmt = "\n".join(lines).strip()
+>     if not stmt:
+>         continue
+>     await session.run(stmt)
+> ```
+> Never apply the comment check to the whole fragment string — it will silently
+> discard statements that follow comments.
+
+---
+
+## A60 — Windows does not support asyncio.add_signal_handler
+
+**What happened:**
+All four worker entry points called `loop.add_signal_handler(signal.SIGTERM, ...)`.
+On Windows this raises `NotImplementedError` because Windows does not have POSIX
+signals. Workers crashed at startup on every Windows dev machine.
+
+**Root cause:**
+Signal handling code was written for Linux/macOS (the deployment target) without
+a Windows guard. The error only manifested when running locally on Windows.
+
+**Rule:**
+> Guard `asyncio.add_signal_handler` with a platform check:
+> ```python
+> import sys
+> if sys.platform != "win32":
+>     loop = asyncio.get_running_loop()
+>     for sig in (signal.SIGTERM, signal.SIGINT):
+>         loop.add_signal_handler(sig, handler)
+> ```
+> On Windows, the process will still terminate on Ctrl-C (KeyboardInterrupt)
+> but won't have graceful cancellation via signal. This is acceptable for
+> local development; production runs on Linux where signals work correctly.
+
+---
+
+## A61 — Cross-process result sharing requires Redis; in-process dict is silently broken
+
+**What happened:**
+The query worker computed an answer and stored it by importing a dict from the
+API module. The API polled the same dict and always returned `{"status": "queued"}`.
+After switching to Redis-backed `ResultStore`, both processes saw the same state.
+
+**Root cause:**
+In-process mutable state (`_results: dict`) is invisible across OS process
+boundaries. The import resolved to the worker's own address space, not the API's.
+No error was raised — the worker "successfully" wrote to its own copy.
+
+**Rule:**
+> Any state that must cross a process boundary (worker → API, replica A → replica B)
+> must live in an external store. Redis `SETEX/GET` with TTL is the standard pattern.
+> The smell: a worker importing from an API module to "write back" a result.
+> See also: L44 (the original lesson on this pattern). The symptom is always the
+> same — `status: queued` forever despite the worker completing successfully.
+
+---
+
+## A62 — Missing package + strict mode = silent startup failure
+
+**What happened:**
+`redis[asyncio]` was not in `requirements.txt`. `settings.yml` had
+`session_store_strict: true`. At startup the session store raised `ImportError`
+and the query worker crashed before consuming any messages. The ingestion worker
+continued (it doesn't use the session store directly) so ingests appeared to work
+but all queries stayed at `status: queued`.
+
+**Root cause:**
+The strict mode guard correctly detected the missing package, but `redis[asyncio]`
+was omitted from `requirements.txt` so a fresh `pip install -r requirements.txt`
+left the package absent.
+
+**Rule:**
+> Every package that is required (even conditionally) by a feature that ships as
+> on-by-default must be in `requirements.txt`. Strict modes and optional features
+> are not excuses for leaving packages out of the lock file.
+> Check: after any `session_store` or similar feature change, run
+> `pip install -r requirements.txt` in a clean venv and verify the worker starts.
+
+---
+
 ## A43 — AsyncMock side_effect lists must exactly match actual call counts
 
 **What happened:**

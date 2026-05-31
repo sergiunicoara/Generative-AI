@@ -38,6 +38,7 @@ The graph is not a RAG index. It is a formally modeled knowledge base:
 - [`docs/graphrag-terminology.md`](docs/graphrag-terminology.md) — every GraphRAG term defined, with examples and file references
 - [`docs/performance-metrics-inventory.md`](docs/performance-metrics-inventory.md) — all 16 metrics (KPI events, graph health, calibration, retrieval stages); storage, access, interpretation, pitch guidance
 - [`docs/defensibility-drill.md`](docs/defensibility-drill.md) — 15 hard CTO questions with model answers; preparation checklist
+- [`docs/presentation-playbook.md`](docs/presentation-playbook.md) — full run-of-show: setup commands, slide-by-slide script, live-demo + dashboard choreography, Q&A map, timing variants, failure fallbacks
 - [`CONTRIBUTING.md`](CONTRIBUTING.md) — ADR process, PR checklist, coding standards, how to add features
 - [`docs/adr/0001-property-graph-over-triple-store.md`](docs/adr/0001-property-graph-over-triple-store.md) — Why Neo4j over RDF triple stores
 - [`docs/adr/0002-forward-chaining-over-backward-chaining.md`](docs/adr/0002-forward-chaining-over-backward-chaining.md) — Why materialised inference over query-time reasoning

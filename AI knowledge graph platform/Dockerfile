@@ -6,6 +6,9 @@ ARG SERVICE=api
 
 FROM python:3.11-slim AS builder
 
+# Re-declare ARG inside the stage so Docker exposes it here
+ARG SERVICE=api
+
 WORKDIR /build
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -39,7 +42,7 @@ ENV PYTHONUNBUFFERED=1
 ENV PYTHONPATH=/app
 
 # Health check via the /health/ready readiness probe
-HEALTHCHECK --interval=30s --timeout=10s --start-period=15s --retries=3 \
+HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=5 \
     CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:${PORT:-8000}/health')" || exit 1
 
 CMD ["sh", "-c", "uvicorn api.main:app --host 0.0.0.0 --port ${PORT:-8000}"]

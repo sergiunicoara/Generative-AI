@@ -1,4 +1,4 @@
-app = "graphrag-dashboard"
+app = "graphrag-dashboard-sn"
 primary_region = "ams"
 
 [build]

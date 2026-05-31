@@ -1,4 +1,4 @@
-app = "graphrag-evaluation"
+app = "graphrag-evaluation-sn"
 primary_region = "ams"
 
 [build]

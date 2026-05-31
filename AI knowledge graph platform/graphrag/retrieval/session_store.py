@@ -268,7 +268,9 @@ def get_session_store() -> SessionStore:
         cfg    = get_settings()
         ret    = cfg.retrieval
         mode   = ret.get("session_store", "memory")
-        url    = ret.get("redis_url", "") if mode == "redis" else ""
+        # REDIS_URL env var overrides the YAML value (e.g. for cloud deployments)
+        import os
+        url    = (os.environ.get("REDIS_URL") or ret.get("redis_url", "")) if mode == "redis" else ""
         ttl    = int(ret.get("session_ttl_seconds", SESSION_TTL_SECONDS))
         max_t  = int(ret.get("session_max_turns", SESSION_MAX_TURNS))
         strict = bool(ret.get("session_store_strict", False))

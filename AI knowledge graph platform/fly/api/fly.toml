@@ -1,4 +1,4 @@
-app = "graphrag-api"
+app = "graphrag-api-sn"
 primary_region = "ams"
 
 [build]
@@ -21,13 +21,14 @@ primary_region = "ams"
   [[http_service.checks]]
     path = "/health"
     interval = "30s"
-    timeout = "10s"
+    timeout = "30s"
+    grace_period = "60s"
 
 [[mounts]]
   source = "kpi_data"
   destination = "/data"
 
 [vm]
-  memory = "256mb"
+  memory = "512mb"
   cpu_kind = "shared"
   cpus = 1

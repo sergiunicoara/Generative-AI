@@ -153,6 +153,7 @@ class IngestionValidator:
             WITH collect({entity: entity, degree: degree}) AS all_nodes,
                  avg(toFloat(count(r)))                    AS mean_degree
             UNWIND all_nodes AS node
+            WITH node, mean_degree
             WHERE node.degree > mean_degree * $multiplier
             RETURN node.entity AS entity, node.degree AS degree, mean_degree
             LIMIT 20

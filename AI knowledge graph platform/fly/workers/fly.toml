@@ -1,4 +1,4 @@
-app = "graphrag-workers"
+app = "graphrag-workers-sn"
 primary_region = "ams"
 
 [build]
@@ -18,11 +18,10 @@ primary_region = "ams"
   destination = "/data"
 
 [vm]
-  memory = "512mb"
+  memory = "1gb"
   cpu_kind = "shared"
   cpus = 1
 
-# Evaluation worker runs in its own app (fly/evaluation/) with a leaner image
+# Combined worker runs ingestion + query on the same machine for Neo4j co-location
 [processes]
-  ingestion = "python workers/ingestion_worker.py"
-  query = "python workers/query_worker.py"
+  app = "python workers/combined_worker.py"

@@ -1,5 +1,3 @@
-from graphrag.agents.ingestion_agent import IngestionAgent
-from graphrag.agents.query_agent import QueryAgent
-from graphrag.agents.evaluation_agent import EvaluationAgent
-
+# Lazy package — consumers import directly from submodules.
+# EvaluationAgent eagerly imports ragas+datasets; removed to keep workers image lean.
 __all__ = ["IngestionAgent", "QueryAgent", "EvaluationAgent"]

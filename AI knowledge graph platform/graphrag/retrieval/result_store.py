@@ -140,7 +140,8 @@ def get_result_store() -> ResultStore:
     try:
         from graphrag.core.config import get_settings
         cfg = get_settings()
-        redis_url = cfg.retrieval.get("redis_url", "")
+        import os
+        redis_url = os.environ.get("REDIS_URL") or cfg.retrieval.get("redis_url", "")
         ttl       = int(cfg.retrieval.get("query_result_ttl_seconds", _RESULT_TTL))
     except Exception:  # noqa: BLE001
         redis_url = ""

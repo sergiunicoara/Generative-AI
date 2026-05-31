@@ -145,11 +145,47 @@ GET http://localhost:8000/metrics
 
 Instrumented via `prometheus-fastapi-instrumentator`. Covers HTTP request counts, latency histograms, and error rates per endpoint.
 
-### Dashboard
+### Dashboards
 
-**KPI timeseries**: http://localhost:8000/admin (or :8050 standalone)
+Two operator dashboards share one branded design system (navy/teal, Inter,
+status-coloured KPI tiles, gauges, branded charts):
 
-Tabs: Graph Health | Conflicts | Communities | GDPR | Calibration
+**Admin / Observability** — mounted on the API at `/admin` (do not run the
+standalone `python graphrag/dashboard/app.py`; Dash static assets 404 under a
+bare Flask server — always serve it via the API):
+
+```
+uvicorn api.main:app --host 0.0.0.0 --port 8000
+→ http://localhost:8000/admin/
+```
+
+Tabs: Graph Health (gauges + contradiction trend) | Conflicts | Communities |
+GDPR | Calibration. Live data requires Neo4j + the ingestion pipeline.
+
+**Business Matrix** — query-level KPIs from the local SQLite store:
+
+```
+python graphrag/business_matrix/dashboard_server.py
+→ http://localhost:8050/dashboard/
+```
+
+#### Demo mode (no backend)
+
+To show either dashboard fully populated for a walkthrough or screenshots
+**without** a running Neo4j / ingestion pipeline, set `GRAPHRAG_DASHBOARD_DEMO=1`.
+When set, each admin tab falls back to representative sample data (mirroring the
+healthy thresholds in `performance-metrics-inventory.md`) **only if** the live
+API is unreachable. Unset in production — real data or a real error panel is
+always shown otherwise.
+
+```bash
+# Windows (PowerShell)
+$env:GRAPHRAG_DASHBOARD_DEMO = "1"
+uvicorn api.main:app --port 8001
+# → http://localhost:8001/admin/  — all tabs populated
+```
+
+Sample payloads live in `graphrag/dashboard/demo_data.py`.
 
 ---
 

@@ -5,8 +5,9 @@ from __future__ import annotations
 import plotly.graph_objects as go
 from dash import dcc, html
 
+from graphrag.dashboard import demo_data
 from graphrag.dashboard.utils import (
-    BAD, GOOD, NAV, TEAL, TEAL2, WARN, _get, card_panel, err, gauge,
+    BAD, DEMO_MODE, GOOD, NAV, TEAL, TEAL2, WARN, _get, card_panel, err, gauge,
     http_error, kpi_card, section_title, style_fig, themed_table,
 )
 
@@ -15,8 +16,10 @@ def render(tenant: str) -> html.Div:
     data        = _get("/kg/graph-snapshots/list", {"tenant": tenant})
     alerts_data = _get("/kg/health/alerts", {"limit": 10})
 
-    if e := http_error(data):
-        return err(f"Graph snapshots unavailable — {e}")
+    if http_error(data):
+        if not DEMO_MODE:
+            return err(f"Graph snapshots unavailable — {http_error(data)}")
+        data, alerts_data = demo_data.HEALTH_SNAPSHOTS, demo_data.HEALTH_ALERTS
 
     snaps  = data.get("snapshots", []) if isinstance(data, dict) else []
     latest = snaps[0] if snaps else {}

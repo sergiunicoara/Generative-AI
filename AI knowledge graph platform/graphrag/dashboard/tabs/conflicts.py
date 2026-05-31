@@ -4,8 +4,9 @@ from __future__ import annotations
 
 from dash import Input, Output, State, callback, dcc, html
 
+from graphrag.dashboard import demo_data
 from graphrag.dashboard.utils import (
-    BAD, FONT, GOOD, NAV, TEAL, _get, _post, card_panel, err, http_error,
+    DEMO_MODE, FONT, GOOD, NAV, TEAL, _get, _post, card_panel, err, http_error,
     section_title, themed_table,
 )
 
@@ -13,7 +14,9 @@ from graphrag.dashboard.utils import (
 def render(tenant: str) -> html.Div:
     data = _get("/corrections/list-conflicts", {"tenant": tenant, "limit": 100})
     if e := http_error(data):
-        return err(f"Conflicts unavailable — {e}")
+        if not DEMO_MODE:
+            return err(f"Conflicts unavailable — {e}")
+        data = demo_data.CONFLICTS
     conflicts = data if isinstance(data, list) else (data or {}).get("conflicts", [])
 
     if not conflicts:

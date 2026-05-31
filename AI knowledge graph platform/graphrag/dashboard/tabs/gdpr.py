@@ -4,8 +4,9 @@ from __future__ import annotations
 
 from dash import Input, Output, State, callback, dcc, html
 
+from graphrag.dashboard import demo_data
 from graphrag.dashboard.utils import (
-    BAD, FONT, MUTED, NAV, _get, _post, card_panel, err, http_error,
+    BAD, DEMO_MODE, FONT, MUTED, NAV, _get, _post, card_panel, err, http_error,
     section_title, themed_table,
 )
 
@@ -13,7 +14,9 @@ from graphrag.dashboard.utils import (
 def render(tenant: str) -> html.Div:
     audit_data = _get("/kg/gdpr/audit-log", {"tenant": tenant, "limit": 50})
     if e := http_error(audit_data):
-        return err(f"GDPR audit log unavailable — {e}")
+        if not DEMO_MODE:
+            return err(f"GDPR audit log unavailable — {e}")
+        audit_data = demo_data.GDPR_AUDIT
     audit = audit_data if isinstance(audit_data, list) else (audit_data or {}).get("log", [])
 
     audit_table = themed_table(

@@ -264,5 +264,5 @@ def render_tab(tab: str, _n: int, tenant: str):
 # ── Standalone entry point ─────────────────────────────────────────────────────
 
 if __name__ == "__main__":
-    app.config.requests_pathname_prefix = "/"
+    # requests_pathname_prefix is set at construction and read-only; keep /admin/
     app.run(debug=True, port=8050)

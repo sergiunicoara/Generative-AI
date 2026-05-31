@@ -4,8 +4,9 @@ from __future__ import annotations
 
 from dash import Input, Output, State, callback, html
 
+from graphrag.dashboard import demo_data
 from graphrag.dashboard.utils import (
-    BAD, FONT, GOOD, NAV, TEAL, _get, _post, err, http_error,
+    BAD, DEMO_MODE, FONT, GOOD, NAV, TEAL, _get, _post, err, http_error,
     kpi_card, section_title, themed_table,
 )
 
@@ -15,7 +16,9 @@ def render(tenant: str) -> html.Div:
     history_data = _get("/community-history", {"tenant": tenant, "limit": 20})
 
     if e := http_error(stale_data):
-        return err(f"Community data unavailable — {e}")
+        if not DEMO_MODE:
+            return err(f"Community data unavailable — {e}")
+        stale_data, history_data = demo_data.COMMUNITY_SUMMARY, demo_data.COMMUNITY_HISTORY
 
     summary      = stale_data or {}
     score        = summary.get("change_fraction", None)

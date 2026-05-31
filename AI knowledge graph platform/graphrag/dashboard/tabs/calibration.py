@@ -5,16 +5,21 @@ from __future__ import annotations
 import plotly.graph_objects as go
 from dash import dcc, html
 
+from graphrag.dashboard import demo_data
 from graphrag.dashboard.utils import (
-    BAD, GOOD, MUTED, NAV, TEAL, _get, card_panel, err, http_error,
+    BAD, DEMO_MODE, GOOD, MUTED, NAV, TEAL, _get, card_panel, err, http_error,
     kpi_card, section_title, style_fig,
 )
 
 
 def render(tenant: str) -> html.Div:
     cal_data = _get("/kg/calibration/snapshots", {"tenant": tenant, "limit": 20})
-    if e := http_error(cal_data):
-        return err(f"Calibration data unavailable — {e}")
+
+    if http_error(cal_data):
+        if not DEMO_MODE:
+            return err(f"Calibration data unavailable — {http_error(cal_data)}")
+        cal_data = demo_data.CALIBRATION_SNAPSHOTS
+
     snaps = cal_data if isinstance(cal_data, list) else (cal_data or {}).get("snapshots", [])
 
     latest_snap = snaps[0] if snaps else {}

@@ -26,6 +26,11 @@ API_BASE  = os.getenv("GRAPHRAG_API_URL",   "http://localhost:8000")
 API_TOKEN = os.getenv("GRAPHRAG_API_TOKEN", "")
 _HEADERS  = {"Authorization": f"Bearer {API_TOKEN}"} if API_TOKEN else {}
 
+# Demo mode: when set, tabs fall back to representative sample data if the live
+# API is unreachable — purely for screenshots / walkthroughs without a backend.
+# Unset in production, so real data or real error panels are shown.
+DEMO_MODE = os.getenv("GRAPHRAG_DASHBOARD_DEMO", "").lower() not in ("", "0", "false", "no")
+
 # ══════════════════════════════════════════════════════════════════════════════
 # Brand design tokens  (mirror graphrag_pitch.js palette)
 # ══════════════════════════════════════════════════════════════════════════════

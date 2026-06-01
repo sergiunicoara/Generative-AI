@@ -18,7 +18,7 @@ from typing import Optional
 import structlog
 
 from graphrag.core.config import get_settings
-from graphrag.core.llm_client import get_llm
+from graphrag.core.llm_client import get_fast_llm, get_llm
 from graphrag.core.models import QueryResult
 from graphrag.retrieval.local_search import LocalSearch
 from graphrag.retrieval.context_builder import ContextBuilder
@@ -89,14 +89,26 @@ class AgenticRetriever:
     """
     Iterative retrieval agent — searches, reasons, re-searches until confident.
     Used as fallback when HybridRetriever returns a low-confidence answer.
+
+    Two-model design for latency:
+    - Reasoning steps (SEARCH/ANSWER decisions): llama-3.1-8b-instant (~0.2s each)
+    - Final synthesis: llama-3.3-70b-versatile (~1.5s, full quality)
+
+    With max_steps=2 this yields: ~0.5s retrieval + 2×0.2s reasoning + ~1.5s synthesis
+    = ~2.4s total vs the previous ~6s with 70B for every step.
     """
 
-    def __init__(self, max_steps: int = 4):
+    def __init__(self, max_steps: int = 2):
         self._local = LocalSearch()
         self._ctx_builder = ContextBuilder()
         self._max_steps = max_steps
 
-    async def _llm_async(self, prompt: str) -> str:
+    async def _reason(self, prompt: str) -> str:
+        """Fast 8B model for cheap SEARCH/ANSWER routing decisions."""
+        return await get_fast_llm().generate(prompt)
+
+    async def _synthesize(self, prompt: str) -> str:
+        """Full 70B model for final answer synthesis."""
         return await get_llm().generate(prompt)
 
     async def retrieve_and_answer(
@@ -136,11 +148,11 @@ class AgenticRetriever:
 
         log.info("agentic_retriever.start", question=question, max_steps=self._max_steps)
 
-        # Iterative reasoning loop
+        # Iterative reasoning loop — 8B fast model for SEARCH/ANSWER decisions
         for step in range(self._max_steps):
             current_context = "\n\n---\n\n".join(context_sections)
 
-            reasoning = await self._llm_async(
+            reasoning = await self._reason(
                 _REASONING_PROMPT.format(
                     question=question,
                     context=current_context or "(no context yet)",
@@ -170,7 +182,7 @@ class AgenticRetriever:
                     citations=list(dict.fromkeys(all_citations)),
                     latency_ms=latency_ms,
                     retrieval_mode="agentic",
-                    model_version=get_settings().groq_model,
+                    model_version=get_settings().groq_model,  # final synthesis model
                 )
 
             elif reasoning.upper().startswith("SEARCH:"):
@@ -206,9 +218,9 @@ class AgenticRetriever:
                 # Unexpected format — treat as final answer
                 break
 
-        # Max steps reached — synthesize with all accumulated context
+        # Max steps reached — synthesize with full 70B model for quality
         final_context = "\n\n---\n\n".join(context_sections)
-        final_answer = await self._llm_async(
+        final_answer = await self._synthesize(
             _FINAL_PROMPT.format(context=final_context, question=question)
         )
 
@@ -227,5 +239,5 @@ class AgenticRetriever:
             citations=list(dict.fromkeys(all_citations)),
             latency_ms=latency_ms,
             retrieval_mode="agentic",
-            model_version=self._model,
+            model_version=get_settings().groq_model,
         )

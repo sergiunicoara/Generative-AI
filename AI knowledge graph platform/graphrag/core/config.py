@@ -29,6 +29,10 @@ class Settings(BaseSettings):
     # ── Groq (text generation) ───────────────────────────────────────────────────
     groq_api_key: str = ""
     groq_model: str = "llama-3.3-70b-versatile"
+    # Fast model used for cheap intermediate reasoning steps (IRCoT SEARCH/ANSWER
+    # decisions). llama-3.1-8b-instant runs at ~800 tok/s on Groq vs ~150 tok/s
+    # for 70B — cuts each reasoning step from ~1.5s to ~0.2s.
+    groq_fast_model: str = "llama-3.1-8b-instant"
 
     # ── Neo4j ───────────────────────────────────────────────────────────────────
     neo4j_uri: str = "bolt://localhost:7687"

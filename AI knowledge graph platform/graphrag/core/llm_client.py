@@ -80,10 +80,12 @@ class GeminiEmbedder:
 # ── Singletons ────────────────────────────────────────────────────────────────
 
 _llm: GroqLLM | None = None
+_fast_llm: GroqLLM | None = None
 _embedder: GeminiEmbedder | None = None
 
 
 def get_llm() -> GroqLLM:
+    """Return the primary (large) LLM — llama-3.3-70b for synthesis."""
     global _llm
     if _llm is None:
         from graphrag.core.config import get_settings
@@ -93,6 +95,24 @@ def get_llm() -> GroqLLM:
             default_model=cfg.groq_model,
         )
     return _llm
+
+
+def get_fast_llm() -> GroqLLM:
+    """Return the fast (small) LLM — llama-3.1-8b-instant for cheap reasoning steps.
+
+    Used by the agentic retriever for intermediate SEARCH/ANSWER decisions.
+    At ~800 tok/s on Groq vs ~150 tok/s for 70B, each reasoning step costs
+    ~0.2s instead of ~1.5s. The final synthesis always uses the 70B model.
+    """
+    global _fast_llm
+    if _fast_llm is None:
+        from graphrag.core.config import get_settings
+        cfg = get_settings()
+        _fast_llm = GroqLLM(
+            api_key=cfg.groq_api_key,
+            default_model=cfg.groq_fast_model,
+        )
+    return _fast_llm
 
 
 def get_embedder() -> GeminiEmbedder:

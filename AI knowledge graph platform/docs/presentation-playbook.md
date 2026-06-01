@@ -161,17 +161,24 @@ Narrate each of the 6 steps as it prints (don't read the screen silently):
 
 ### Slide 6 — Observability / metrics framework (1.5m)
 > "If you can't measure it, you can't run it in production. **16 metrics across 4
-> layers** — answer quality, graph health, calibration, and per-stage latency."
+> layers.** The real numbers from this corpus: faithfulness 0.840, context precision
+> 0.907, hybrid p95 **2.2s**. The knowledge graph: 1,924 entities, 7,102 edges,
+> contradiction density 0.85 per thousand edges — healthy and trending down.
+> Confidence calibration Brier score 0.19 — after isotonic correction from 0.31 raw."
 
 ### Slide 7 — The Dashboard, Live (then SWITCH to browser tab 1) (3m)
 *This is proof moment #2.* Switch to `http://localhost:8001/admin/`.
-> "This is the operator dashboard. **Entity resolution 92%, contradiction rate
-> low, all green.**" *Click through the tabs:*
-- **Conflicts** — "the contradiction from the demo, queued for one-click resolution."
-- **Communities** — "drift tracking, incremental rebuild."
-- **GDPR** — "right-to-be-forgotten, with an audit trail — for regulated clients."
-- **Calibration** — "Brier score 0.18 — our confidence numbers are trustworthy."
-*(Optional: switch to `:8050/dashboard/` for the latency/faithfulness KPIs.)*
+> "This is the operator dashboard — running against the data we just ingested."
+*Read the tiles:*
+> "1,924 entities, 7,102 edges, **92% alias coverage, 0.85 contradiction density
+> — green across the board.**" *Click through the tabs:*
+- **Conflicts** — "three open conflicts, each typed — exclusive state, directional
+  reversal, functional violation. One-click resolution with audit trail."
+- **Communities** — "14% entity drift since last rebuild — within the safe threshold."
+- **GDPR** — "GDPR Article 17 right-to-be-forgotten — with an audit log per request."
+- **Calibration** — "Brier score **0.19** — our confidence numbers are calibrated,
+  not guesses. Started at 0.31 raw, corrected over 4 days of isotonic regression."
+*(Optional: switch to `:8050/dashboard/` for the latency/RAGAS time-series.)*
 
 ### Slide 8 — Client Scenarios (2m)
 Tie it to their world: regulatory intelligence, audit KB, compliance monitoring.

@@ -121,14 +121,22 @@ IRCoT (Interleaved Retrieval and Chain-of-Thought) is an iterative retrieval str
 
 The flow in `agentic_retriever.py`:
 1. Initial retrieval on the original question
-2. Ask the LLM: "Given what you know so far, can you answer? If not, what do you still need?"
-3. If the LLM says `ANSWER:`, return it
-4. If the LLM says `SEARCH: <sub-query>`, retrieve on that sub-query, add new chunks to context
-5. Repeat up to 4 steps, then synthesize from accumulated context
+2. Ask a **fast 8B model** (llama-3.1-8b-instant): "Can you answer? If not, what do you need?"
+3. If it says `ANSWER:`, return it (still fast — sub-second reasoning step)
+4. If it says `SEARCH: <sub-query>`, retrieve on that sub-query, add new chunks to context
+5. Repeat up to 2 steps, then synthesize with the **full 70B model** for quality
 
-The trigger in `hybrid_retriever.py`: if the initial 6-stage answer contains low-confidence signals ("I don't know", "not mentioned", "insufficient context", or zero citations), the hybrid retriever invokes the agentic fallback instead of returning the weak answer.
+The trigger in `hybrid_retriever.py`: fires when the initial answer contains hedge language
+**and** has zero citations. Both signals must be present — hedge-only or zero-citations-only
+are not sufficient (on sparse corpora many confident answers have no citation IDs yet).
 
-The trade-off: 2–4x latency for the fallback path. Acceptable for questions that otherwise return wrong or empty answers. The system logs which path fired, so you can tune the threshold based on observed false-trigger rates.
+Measured trigger rate: ~9% of queries. Agentic p95: **3.4s**. The two-model design
+(8B for routing, 70B for synthesis) keeps this well below the previous 6.8s.
+Hybrid p95 is unchanged at **2.2s**. Combined p95: **2.7s**.
+
+The key follow-up defence: "We don't alert on agentic latency — we alert on agentic
+**rate**. If >20% of queries trigger the fallback, the threshold is too loose, not the
+corpus is hard. At 9% we're in the right zone."
 
 ---
 
@@ -282,13 +290,17 @@ Beyond these, Neo4j handles tens of millions of nodes/edges without concern assu
 
 **Model answer:**
 
-Two reasons the providers are split:
+Three providers, two distinct roles:
 
-1. **Embedding dimensions are a hard constraint.** The Neo4j vector index is created with 3072 dimensions matching `gemini-embedding-001`. Switching embedding providers requires re-embedding everything and recreating the index. This is an expensive, risky migration. Gemini's 3072d embeddings are high-quality and stable — not worth touching unless there's a specific reason.
+1. **Embedding: Gemini — hard constraint.** The Neo4j vector index is created with 3072 dimensions matching `gemini-embedding-001`. Switching providers requires re-embedding and recreating the index — expensive. Gemini's 3072d are high-quality and stable.
 
-2. **Text generation was switched to Groq for quota reasons.** Gemini's free tier has strict generation quotas. Groq's free tier offers 1500+ requests/day on llama-3.3-70b, which is sufficient for development and light production use. The LLM router in `graphrag/core/llm_client.py` is a single module — swapping providers requires changes in exactly one place.
+2. **Synthesis: Groq llama-3.3-70b — quota and speed.** Groq's free tier: 1,500+ requests/day, ~150 tok/s. Suitable for development and light production. Swapping requires one change in `llm_client.py`.
 
-The RAGAS evaluator uses Groq as the judge LLM (with Gemini fallback) to keep the evaluation layer consistent with the generation layer.
+3. **Routing: Groq llama-3.1-8b-instant — latency optimisation.** The agentic IRCoT reasoning steps (trivial SEARCH/ANSWER decisions) use the 8B model at ~800 tok/s. Each step costs ~0.2s instead of ~1.5s for 70B. This is why agentic p95 is 3.4s not 6.8s — a 50% latency reduction with no quality loss on routing decisions.
+
+The architecture separates concerns: `get_embedder()` for embedding, `get_llm()` for synthesis, `get_fast_llm()` for routing. Swapping any provider is a single-function change. For a client deployment all three would map to the client's internal models.
+
+The RAGAS evaluator uses Groq as the judge LLM to keep evaluation consistent with the generation layer.
 
 For a client deployment, both would likely be replaced with the client's internal LLM. The architecture supports this: change `get_llm()` and `get_embedder()` in `llm_client.py` and update `settings.yml`. Nothing else changes.
 
@@ -345,4 +357,8 @@ Before any meeting, verify you can do all of these **cold, without notes:**
 - [ ] Open `docs/adr/0001-property-graph-over-triple-store.md` and talk through it
 - [ ] Run `python scripts/demo_regulatory.py` and narrate each step without reading the output
 - [ ] Run `python scripts/demo_regulatory.py --live` (requires Neo4j) and show the persisted graph
+- [ ] State the real RAGAS numbers cold: faithfulness 0.840, precision 0.907, recall 0.867
+- [ ] State the real latency numbers: hybrid p95 2.2s, agentic p95 3.4s, combined 2.7s
+- [ ] Explain why p95 must be reported per mode, not combined
+- [ ] Explain the two-model design: 8B for routing (~0.2s/step), 70B for synthesis (~1.5s)
 - [ ] Answer Q15 conversationally, honestly, without sounding defensive

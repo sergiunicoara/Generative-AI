@@ -1714,3 +1714,86 @@ Cross-shell/interpreter assumptions, and OS process ownership across session bou
 > - If a process can't be killed (different session owner, access denied), don't fight it —
 >   launch a fresh instance on a different port and point the browser there.
 > - Use `2>$null`/`$null` redirects only in PowerShell; in bash use `>/dev/null 2>&1`.
+
+---
+
+## A70 — Live demo script diverges from the model's actual signature
+
+**What happened:**
+`scripts/demo_regulatory.py --live` crashed three times before completing:
+1. `neo4j_client.init_schema()` failed with `CypherSyntaxError` — comment lines (`--`) were
+   sent raw to Neo4j because the schema parser stripped comments at the file level, not
+   per-fragment (same bug class as A59, different manifestation).
+2. `Document(content=...)` failed — the field is `raw_text`, not `content`.
+   `source_path` was also missing (required by Pydantic).
+3. `neo4j.merge_document(doc)` failed — the method takes explicit keyword args
+   (`doc_id`, `filename`, `ingested_at`), not a `Document` object.
+
+**Root cause:**
+The demo script was written with `Document` as a convenience object passed directly to
+Neo4j, but `merge_document()` was later refactored to take explicit scalar args without
+updating the demo.
+
+**Rule:**
+> Before a live demo, run the demo script end-to-end in a clean environment and fix
+> every crash before the meeting. Do not assume the demo works because the mock path works —
+> the mock path does not exercise the same code. For Neo4j-touching scripts: read the
+> `merge_document()` signature, not just the model definition.
+
+---
+
+## A71 — Single-model agentic retrieval is the biggest latency leak
+
+**What happened:**
+The agentic IRCoT retriever used `llama-3.3-70b` for every call: the intermediate
+"SEARCH or ANSWER?" reasoning steps AND the final synthesis. The reasoning step emits
+~15 tokens ("SEARCH: engine mount inspection"); running the 70B model for this costs
+~1.5s per step. With `max_steps=4`, that's up to 6s in LLM calls alone before synthesis.
+
+Switching reasoning steps to `llama-3.1-8b-instant` (~800 tok/s vs ~150 tok/s for 70B)
+cut each step from ~1.5s to ~0.2s. Combined with reducing `max_steps` 4→2:
+- Agentic p95: 6.8s → **3.4s** (−50%)
+- Combined p95: 5.9s → **2.7s** (under the 3s SLO)
+
+**Rule:**
+> In a multi-step LLM pipeline, match model size to task complexity:
+> - Routing / classification / short-form decisions → small fast model (8B)
+> - Final synthesis / long-form generation → full model (70B)
+> Add `groq_fast_model` as a separate config field so it can be tuned independently.
+> Measure per-step latency in logs before and after; don't guess.
+
+---
+
+## A72 — Agentic trigger with OR logic causes aggressive fallback on sparse corpora
+
+**What happened:**
+`_is_low_confidence()` triggered on hedge signals **OR** zero citations.
+On a freshly-ingested small corpus, many answers have zero citation IDs (chunks aren't
+fully linked to entities yet) even when the answer text is confident. This caused ~32% of
+queries to fall through to the 6s agentic path unnecessarily.
+
+Changing to AND (hedges AND zero citations) dropped the agentic rate from 32% to ~9%,
+which is the correct rate for genuinely hard queries on a mature corpus.
+
+**Rule:**
+> Alert / fallback conditions that trigger on any single signal are almost always too
+> aggressive on sparse/fresh data. Use AND when both signals are meaningful independently,
+> OR only when either signal alone is sufficient evidence. For new corpora especially,
+> test the trigger rate before deploying — `agentic_rate > 20%` indicates the threshold
+> is wrong, not that the corpus is hard.
+
+---
+
+## A73 — Combined p95 hides the signal when mixing different retrieval modes
+
+**What happened:**
+Reporting a single `p95_latency_ms` across hybrid and agentic queries showed 5.9s,
+which looked broken. Hybrid p95 alone was 2.2s (well under target). The combined
+number was meaningless because the two modes have fundamentally different latency
+profiles (1.7s vs 5s average) and different SLOs.
+
+**Rule:**
+> Never aggregate latency percentiles across requests that are semantically different.
+> Report per-mode: `p95_hybrid`, `p95_agentic`. Alert on `p95_hybrid` for the SLO.
+> Alert on `agentic_rate` (not agentic latency) — a high rate means the trigger
+> is too loose; the latency is the expected cost of the capability, not a bug.

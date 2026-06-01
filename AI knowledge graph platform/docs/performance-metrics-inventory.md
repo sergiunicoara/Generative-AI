@@ -375,7 +375,9 @@ The system emits alerts when metrics fall outside healthy ranges:
 
 | Metric | Alert threshold | Severity | Action |
 |---|---|---|---|
-| `p95_latency_ms` | > 3000 | ⚠️ Warning | Review retrieval stages; agentic path (IRCoT) routinely 4–8s — exclude from p95 or alert separately |
+| `p95_latency_ms` (hybrid) | > 3000 | ⚠️ Warning | Alert on **hybrid-only** p95. Hybrid p95 target: < 2.5s. |
+| `p95_latency_ms` (agentic) | > 10000 | ⚠️ Warning | Agentic/IRCoT runs 3–4 LLM rounds by design; 4–8s is expected and correct. Alert only on outliers. |
+| `agentic_rate` | > 20% | ⚠️ Warning | If >20% of queries trigger agentic fallback, the hybrid confidence threshold is too loose — tighten `_is_low_confidence` trigger. |
 | `faithfulness` | < 0.70 (3-sample window) | ⚠️ Warning | Check recent document ingestions; may have extraction errors. Target is **≥ 0.85**; 0.70 is the alert floor, not the goal. |
 | `contradiction_rate` | > 3.0 /1k edges | ⚠️ Warning | Moderate contradiction density — review recent ingestion batch |
 | `contradiction_rate` | > 5.0 /1k edges | 🔴 Critical | High contradiction density — indicates schema drift or malformed source docs |

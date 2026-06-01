@@ -43,11 +43,17 @@ class Neo4jClient:
 
     async def init_schema(self):
         schema_cypher = Path(__file__).parent / "schema.cypher"
-        statements = schema_cypher.read_text().split(";")
-        for stmt in statements:
-            stmt = stmt.strip()
+        raw = schema_cypher.read_text()
+        for fragment in raw.split(";"):
+            # Strip comment lines per-fragment (A59: never check the whole fragment
+            # for "--" — that skips CREATE statements that follow a comment line)
+            lines = [l for l in fragment.splitlines()
+                     if not l.strip().startswith("--")]
+            stmt = "\n".join(lines).strip()
             if stmt:
-                await self.run(stmt)
+                result = await self.run(stmt)
+                # Consume result so DDL actually executes (A58)
+                _ = result
         log.info("neo4j.schema_initialized")
 
     # ── Ingestion helpers ────────────────────────────────────────────────────────

@@ -28,6 +28,7 @@ import argparse
 import asyncio
 import json
 import sys
+from datetime import datetime, timezone
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock
 
@@ -491,13 +492,13 @@ async def run_live_demo() -> None:
     print(_info("Cleared previous aerospace demo data"))
 
     for doc_data in [_LIVE_DOC_A, _LIVE_DOC_B]:
-        doc = Document(
-            id=doc_data["id"],
+        await neo4j.merge_document(
+            doc_id=doc_data["id"],
             filename=doc_data["filename"],
-            content=doc_data["content"],
+            ingested_at=datetime.now(timezone.utc).isoformat(),
+            authority_level=1 if "faa" in doc_data["id"] else 2,
             tenant=doc_data["tenant"],
         )
-        await neo4j.merge_document(doc)
         print(_ok(f"Ingested: {doc_data['filename']}"))
 
     # ── Step 4: Write entities and relations ──────────────────────────────────
@@ -513,7 +514,6 @@ async def run_live_demo() -> None:
         ("faa-airworthiness-division",  "REGULATOR"),
     }
     from uuid import uuid4
-    from datetime import datetime, timezone
 
     for name, etype in entities:
         await neo4j.run(

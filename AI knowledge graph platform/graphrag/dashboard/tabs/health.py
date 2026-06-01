@@ -37,8 +37,12 @@ def render(tenant: str) -> html.Div:
                  accent=GOOD, hint="resolved → canonical"),
         kpi_card("High-conf rate",    _pct(latest.get("high_conf_rate")),
                  accent=GOOD, hint="edges ≥ 0.75"),
-        kpi_card("Contradiction /1k", f'{_f("contradiction_rate"):.3f}',
-                 color=BAD if _f("contradiction_rate") > 5 else NAV, accent=WARN),
+        kpi_card("Contradiction /1k", f'{_f("contradiction_rate"):.2f}',
+                 color=BAD if _f("contradiction_rate") > 5.0
+                       else WARN if _f("contradiction_rate") > 3.0 else NAV,
+                 accent=BAD if _f("contradiction_rate") > 5.0
+                        else WARN if _f("contradiction_rate") > 3.0 else GOOD,
+                 hint="< 2.0 healthy · > 3.0 warning · > 5.0 critical"),
         kpi_card("Orphan rate",       _pct(orphan),
                  color=BAD if orphan > 0.10 else NAV,
                  accent=BAD if orphan > 0.10 else GOOD),

@@ -8,6 +8,9 @@ behaviour is never altered.
 
 The numbers mirror the healthy thresholds documented in
 docs/performance-metrics-inventory.md so the demo is realistic, not arbitrary.
+
+Contradiction rate is expressed as **conflicts per 1,000 edges** (not a fraction).
+Healthy range: < 2.0 /1k.  Warning: > 3.0 /1k.  Critical: > 5.0 /1k.
 """
 
 from __future__ import annotations
@@ -47,6 +50,8 @@ HEALTH_ALERTS = {
     "alerts": [
         {"metric": "orphan_rate", "value": 0.12, "threshold": 0.10,
          "direction": "above", "tenant": "aerospace", "fired_at": "2026-05-28T21:00:00Z"},
+        # contradiction_rate /1k: warning fires at > 3.0, critical at > 5.0
+        # demo shows values 0.9–2.0 (healthy range, no alert fires)
     ]
 }
 

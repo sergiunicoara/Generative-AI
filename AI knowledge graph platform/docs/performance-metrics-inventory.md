@@ -136,7 +136,7 @@ LIMIT 10
 |---|---|---|---|---|
 | `entity_resolution_quality` | Float | 0.0–1.0 | What fraction of extracted entities were successfully merged into canonical forms? | > 0.85 |
 | `relation_precision` | Float | 0.0–1.0 | What fraction of extracted relations are semantically valid? (inverse of false positives) | > 0.80 |
-| `contradiction_rate` | Float | 0.0–1.0 | What fraction of entities have contradictory facts? (lower is better) | < 0.05 |
+| `contradiction_rate` | Float | 0.0–∞ | **Conflicts per 1,000 edges** (not a fraction). Lower is better. A rate of 1.0 means one contradiction per thousand edges. | < 2.0 /1k |
 | `orphan_growth_rate` | Float | 0.0–∞ | What fraction of new entities have zero incoming or outgoing edges? | < 0.20 |
 | `merge_split_error_proxy` | Float | 0.0–1.0 | False positive + false negative rate of entity resolution (estimated) | < 0.15 |
 | `community_coherence` | Float | 0.0–1.0 | Do communities detected by Leiden algorithm capture meaningful clusters? (internal edge density / external edge density) | > 0.50 |
@@ -163,12 +163,13 @@ all_relations = total relation count
 precision ≈ relations_above_threshold / all_relations
 ```
 
-**Contradiction Rate:**
+**Contradiction Rate (conflicts per 1,000 edges):**
 ```python
-# Fraction of entities with at least one conflict
-entities_with_conflicts = count of entities that appear in (:Conflict) nodes
-all_entities = total entity count
-rate = entities_with_conflicts / all_entities
+# Conflicts per 1,000 edges — a density measure, not a fraction
+conflict_count = count of (:Conflict) nodes in the tenant
+total_edges = count of (:Entity)-[:RELATES_TO]->(:Entity) in the tenant
+rate_per_1k = (conflict_count / total_edges) * 1000
+# Healthy: < 2.0 /1k  |  Warning: > 3.0 /1k  |  Critical: > 5.0 /1k
 ```
 
 **Orphan Growth Rate:**
@@ -211,14 +212,16 @@ RETURN {
 
 ```
 Snapshot at 2026-03-20 22:00:00 UTC:
-  Entity Resolution Quality: 0.92 ✓ (excellent)
+  Entity Resolution Quality: 0.92 ✓ (excellent — curated domain)
   Relation Precision: 0.81 ✓ (healthy)
-  Contradiction Rate: 0.02 ✓ (very low)
+  Contradiction Rate: 1.2 /1k edges ✓ (healthy — well below 2.0 /1k threshold)
   Orphan Growth Rate: 0.08 ✓ (acceptable)
   Community Coherence: 0.62 ✓ (good)
 ```
 
-This indicates a clean, well-formed graph. A healthy corpus should have entity_resolution_quality > 0.85 and contradiction_rate < 0.05.
+This indicates a clean, well-formed graph. A healthy corpus should have
+entity_resolution_quality > 0.85 (on curated domain data; expect 0.70–0.85
+on noisy enterprise data) and contradiction_rate < 2.0 /1k edges.
 
 ---
 
@@ -362,7 +365,7 @@ Computed from raw metrics for visibility:
 |---|---|---|
 | P95 latency | 95th percentile of all latencies in window | On-demand (per dashboard refresh) |
 | Answer quality score | (faithfulness + answer_relevancy) / 2 | Computed at summary time |
-| Graph health score | (entity_resolution_quality + (1 - contradiction_rate)) / 2 | Per snapshot |
+| Graph health score | (entity_resolution_quality + clamp(1 − contradiction_rate_per1k / 5, 0, 1)) / 2 | Per snapshot |
 
 ---
 
@@ -372,11 +375,12 @@ The system emits alerts when metrics fall outside healthy ranges:
 
 | Metric | Alert threshold | Severity | Action |
 |---|---|---|---|
-| `p95_latency_ms` | > 3000 | ⚠️ Warning | Review retrieval stages; may need caching |
-| `faithfulness` | < 0.65 (3-sample window) | ⚠️ Warning | Check recent document ingestions; may have extraction errors |
-| `contradiction_rate` | > 0.10 | 🔴 Critical | Manual review of conflicts; may indicate schema drift |
+| `p95_latency_ms` | > 3000 | ⚠️ Warning | Review retrieval stages; agentic path (IRCoT) routinely 4–8s — exclude from p95 or alert separately |
+| `faithfulness` | < 0.70 (3-sample window) | ⚠️ Warning | Check recent document ingestions; may have extraction errors. Target is **≥ 0.85**; 0.70 is the alert floor, not the goal. |
+| `contradiction_rate` | > 3.0 /1k edges | ⚠️ Warning | Moderate contradiction density — review recent ingestion batch |
+| `contradiction_rate` | > 5.0 /1k edges | 🔴 Critical | High contradiction density — indicates schema drift or malformed source docs |
 | `orphan_growth_rate` | > 0.30 | ⚠️ Warning | Entities not connecting to rest of graph; review extraction |
-| `brier_score` | > 0.35 | ⚠️ Warning | Confidence calibration degraded; retrain or recalibrate |
+| `brier_score` | > 0.35 | ⚠️ Warning | Confidence calibration degraded; retrain or recalibrate. Note: 0.18 is achievable **after isotonic regression correction**; raw LLM confidence before correction typically scores 0.20–0.35. |
 
 ---
 
@@ -386,9 +390,9 @@ The system emits alerts when metrics fall outside healthy ranges:
 
 1. **Start with KPI data**: "We have 156 queries recorded in the last week. Average latency is 1234ms with p95 at 2100ms. Faithfulness averages 0.78 — that's 78% of answers grounded in retrieved context."
 
-2. **Show graph health**: "The knowledge graph has entity resolution quality of 0.92 (excellent merging of entity variants), contradiction rate of 0.02 (very few conflicting facts), and community coherence of 0.62 (meaningful entity clusters detected)."
+2. **Show graph health**: "The knowledge graph has entity resolution quality of 0.92 on this curated domain — 0.70–0.85 is typical for noisier enterprise corpora. Contradiction rate is 1.2 per thousand edges — well below our 2.0 /1k health threshold. Community coherence is 0.62, which means Leiden found real semantic clusters."
 
-3. **Demonstrate confidence**: "Our confidence calibration has a Brier score of 0.18 — in the 'good' range. When we say a relation has 0.8 confidence, we're typically correct."
+3. **Demonstrate confidence**: "Our confidence calibration has a Brier score of 0.18 — in the 'good' range, after isotonic regression correction. That means when the system says a relation has 0.8 confidence, it's actually right roughly 80% of the time. Raw LLM confidence before correction typically scores 0.20–0.35."
 
 4. **Explain the breakdown**: "Of our total latency, 45ms is retrieval, 210ms is reranking, 156ms is graph scoring, and 1348ms is LLM synthesis. The bottleneck is the LLM, not the graph."
 

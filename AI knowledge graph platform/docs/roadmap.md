@@ -13,7 +13,7 @@ for production hardening and capability expansion.
 |---|---|---|
 | Graph ingestion (doc → chunk → entity → relation) | ✅ Production | Groq extraction, Gemini 3072d embeddings |
 | 6-stage hybrid retrieval (vector + BM25 + reranker + GNN + multi-hop + LLM) | ✅ Production | |
-| Agentic IRCoT fallback | ✅ Production | 4-step max, Groq |
+| Agentic IRCoT fallback (two-model) | ✅ Production | 2-step max; 8B routing + 70B synthesis |
 | Forward-chaining inference (transitivity, symmetry, inverse, composition) | ✅ Production | Post-ingestion fixpoint |
 | OWL-RL reasoning over RDF export | ✅ Production | owlrl + rdflib |
 | SPARQL bridge (in-process over Turtle export) | ✅ Production | SPARQL 1.1 SELECT |
@@ -46,16 +46,16 @@ for production hardening and capability expansion.
 
 ### P0 — Production hardening
 
-- [ ] **Parallel ingestion workers** — multiple `ingestion_worker.py` instances consuming from the same queue (RabbitMQ `prefetch_count=1` already set; just run N copies)
-- [ ] **Worker health endpoint** — expose a minimal HTTP `GET /ready` from each worker so Kubernetes/Fly.io knows when to route traffic
+- [ ] **Parallel ingestion workers** — multiple `ingestion_worker.py` instances consuming from the same queue (RabbitMQ `prefetch_count=1` already set; just run N copies — not yet containerised as a multi-replica service)
+- [ ] **Worker health endpoint** — expose a minimal HTTP `GET /ready` from each worker so Kubernetes/Fly.io knows when to route traffic (not yet implemented)
 - [ ] **Query result TTL** — make `query_result_ttl_seconds` configurable via env var (currently YAML only; ops needs fast override without deploy)
 - [ ] **Structured error responses** — DLQ messages should carry the original exception class, not just the message string, for automated triage
 
 ### P1 — Developer experience
 
-- [ ] **`make smoke-test`** — wrap the full ingest → query → poll cycle in a Makefile target using a pre-baked test document; one command to prove the stack is healthy
-- [ ] **Local Docker Compose profile** — a `compose.dev.yaml` that starts API + workers together so contributors don't need four terminal windows
-- [ ] **Seed data script** — `scripts/seed_demo_data.py` that ingests 5–10 curated documents and builds communities, giving new contributors a populated graph within minutes
+- [ ] **`make smoke-test`** — Makefile exists but has no smoke-test target; wrap the full ingest → query → poll cycle using a pre-baked test document
+- [ ] **Local Docker Compose profile** — `compose.dev.yaml` does not yet exist; contributors need four terminal windows to run the stack
+- [ ] **Seed data script** — `scripts/seed_demo_data.py` does not yet exist; `scripts/demo_regulatory.py --live` seeds a small demo corpus but is not a general-purpose seed tool
 
 ---
 
@@ -63,20 +63,21 @@ for production hardening and capability expansion.
 
 ### Retrieval quality
 
-- [ ] **GNN pre-training** — `scripts/calibrate_gnn.py` exists; wire into a scheduled job that re-trains after each large ingestion batch
+- [ ] **GNN pre-training** — `scripts/calibrate_gnn.py` ✅ exists (7.4 KB); needs wiring into a scheduled job that re-trains after each large ingestion batch
 - [ ] **Re-ranking feedback loop** — store which citations users follow (click/expand signal from dashboard) and use as implicit relevance signal for future fine-tuning
-- [ ] **Query result caching** — `graphrag/retrieval/query_cache.py` exists (Redis-backed, provenance-aware invalidation); wire into `QueryConsumer` as pre-check before dispatching to workers
+- [ ] **Query result caching** — `graphrag/retrieval/query_cache.py` ✅ exists (10 KB, Redis-backed, provenance-aware invalidation); **not yet wired** into `QueryConsumer` — still dispatches every query to a worker
 - [ ] **Cross-encoder fine-tuning** — fine-tune `ms-marco-MiniLM-L-6-v2` on domain-specific query/chunk pairs gathered from RAGAS evals
 
 ### Graph quality
 
-- [ ] **Incremental community detection** — `IncrementalCommunityDetector` exists; replace the full rebuild path with it for large tenants (> 50k entities)
-- [ ] **Wikidata linking** — `entity_linker.py` exists but runs ad-hoc; wire into the ingestion pipeline as an optional post-write step
-- [ ] **Property schema enforcement** — `property_schema.py` exists; expose violations via `GET /kg/health/property-violations` and the admin dashboard
+- [ ] **Incremental community detection** — `graphrag/graph/incremental_community.py` ✅ exists (`IncrementalCommunityDetector`, 16.9 KB); `community_manager.py` does **not** yet call it — still does full rebuild for all tenants
+- [ ] **Wikidata linking** — `graphrag/graph/entity_linker.py` ✅ exists (13.2 KB) but runs ad-hoc; **not yet wired** into the ingestion pipeline
+- [ ] **Property schema enforcement** — `graphrag/graph/property_schema.py` ✅ exists (11.7 KB); `GET /kg/health/property-violations` endpoint and admin dashboard tile **not yet wired**
 
 ### Operational
 
-- [ ] **TimescaleDB KPI store** — switch from SQLite (`kpi_store.py`) to TimescaleDB for production (docker-compose already defines the service; just flip the `TIMESCALE_URL` env var)
+- [ ] **TimescaleDB KPI store** — KPI store lives at `graphrag/business_matrix/kpi_store.py` (SQLite); docker-compose does **not** currently define a TimescaleDB service — needs adding before the flip is possible
+- [ ] **Multi-modal entities** — `graphrag/graph/multimodal.py` ✅ exists (12.4 KB) for storage; extraction pipeline (OCR + visual embeddings) **not yet built**
 - [ ] **Multi-worker alias registry** — persist alias tables to Redis so multiple ingestion workers share deduplication state without Neo4j round-trips
 
 ---

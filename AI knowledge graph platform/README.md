@@ -685,16 +685,19 @@ Every ingestion batch runs the following checks automatically:
 | Agentic (IRCoT) | 2,842 ms | **3,442 ms** | 9% of queries — by design |
 | Combined | 1,842 ms | 2,719 ms | Inflated by mode mix |
 
-### Graph Health (1,924 entities · 7,102 edges · 150-doc corpus)
+### Graph Health (10-doc aerospace seed corpus · pipeline targets ~2k entities at scale)
 
-| Metric | Value | Threshold |
-|--------|-------|-----------|
-| Alias coverage (entity resolution) | **92%** | > 85% ✓ |
-| High-confidence rate | **83%** | > 80% ✓ |
-| Contradiction density | **0.85 /1k edges** | < 2.0 ✓ |
-| Orphan rate | **8%** | < 20% ✓ |
-| Community coherence | **0.69** | > 0.50 ✓ |
-| Brier score (post-isotonic) | **0.19** | < 0.25 ✓ |
+Seed corpus: 10 aerospace regulatory documents (FAA/EASA ADs, manufacturer records).
+Run `py -3.11 scripts/seed_demo_data.py --commit` to populate.
+
+| Metric | Seed | Production target | Threshold |
+|--------|------|-------------------|-----------|
+| Entities | **20** | ~2,000+ | — |
+| Relations | **12** | ~7,000+ | — |
+| Alias coverage | pipeline wired | > 90% | > 85% |
+| Contradiction density | detection verified | < 0.85 /1k edges | < 2.0 |
+| Community coherence | pipeline wired | > 0.65 | > 0.50 |
+| Brier score (calibration pipeline) | pipeline wired | < 0.20 | < 0.25 |
 
 Evaluation is sampled at **20%** of queries automatically. View results:
 

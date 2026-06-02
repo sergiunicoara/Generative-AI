@@ -396,17 +396,18 @@ The system emits alerts when metrics fall outside healthy ranges:
    Faithfulness is 0.840 — 84% of answers fully grounded in retrieved context. Context
    precision is 0.907, meaning almost everything we retrieve is relevant."
 
-2. **Show graph health**: "The knowledge graph holds 1,924 entities and 7,102 edges from
-   a 150-document aerospace regulatory corpus. Entity resolution quality is 92% — on a
-   curated domain; expect 70–85% on noisier enterprise data. Contradiction rate is 0.85
-   per thousand edges — well under the 2.0 /1k health threshold and trending down from
-   1.91 at initial ingestion. Community coherence is 0.69, indicating Leiden found tight
-   semantic clusters."
+2. **Show graph health**: "The knowledge graph is seeded from 10 aerospace regulatory
+   documents — FAA/EASA airworthiness directives, manufacturer records, fleet data.
+   The full pipeline is wired: entity extraction, alias resolution, contradiction detection,
+   community detection, calibration. On a production-scale corpus these health metrics
+   (entity count, contradiction density, alias coverage) scale automatically — the
+   architecture is designed for ~2k entities and ~7k edges at that scale."
 
-3. **Demonstrate confidence**: "Brier score is 0.19 after isotonic regression correction —
-   in the 'good' band. Raw llama-3.3-70b confidence before correction was 0.31, which is
-   typical for LLMs on technical corpora. The correction ran over 4 days of inference on
-   the aerospace corpus and improved calibration by 39%."
+3. **Demonstrate calibration**: "The calibration pipeline uses isotonic regression to
+   correct raw LLM confidence scores. Raw llama-3.3-70b confidence on technical corpora
+   typically scores around Brier 0.31 — the isotonic correction targets Brier < 0.20.
+   The pipeline is implemented and wired; the trajectory you see in the dashboard
+   represents the expected correction curve."
 
 4. **Explain the latency breakdown**: "Hybrid retrieval: ~0.5s for graph search, ~0.2s for
    BM25, ~0.2s for reranking, ~0.1s for GNN scoring, ~1.4s for 70B synthesis = ~2.4s avg.

@@ -96,8 +96,10 @@ That separates "I built this" from "I generated this."
 5. **Know the real numbers cold:**
    - Faithfulness: 0.840 | Context precision: 0.907 | Recall: 0.867
    - Hybrid p95: 2.2s | Agentic p95: 3.4s | Combined: 2.7s
-   - 1,924 entities · 7,102 edges · 0.85/1k contradiction density · 92% alias coverage
-   - Brier score: 0.19 (after isotonic correction from 0.31 raw)
+   - Faithfulness: 0.840 | Precision: 0.907 | Recall: 0.867 (104 real query runs, 23 RAGAS-sampled)
+   - Hybrid p95: 2.2s | Agentic p95: 3.4s | Agentic trigger rate: ~10%
+   - Seed graph: 20 entities, 12 relations (10-doc aerospace corpus); pipeline targets ~2k entities at scale
+   - Calibration pipeline wired: isotonic regression targets Brier < 0.20 on production corpus
 
 ---
 
@@ -195,11 +197,11 @@ Run: `MATCH (n {tenant:'aerospace'}) RETURN n`
 ### Slide 6 — Metrics / Observability *(1.5 minutes)*
 
 **Say:**
-> "If you can't measure it, you can't run it in production. These are the real numbers from running against a 150-document aerospace regulatory corpus.
+> "If you can't measure it, you can't run it in production. These numbers come from 104 real query runs against the pipeline.
 >
-> Faithfulness is 0.840 — 84% of answers fully grounded in retrieved context. Context precision is 0.907 — almost everything we retrieve is relevant. Hybrid p95 latency is 2.2 seconds. The agentic path — which fires on 9% of queries for hard multi-hop questions — runs at 3.4 seconds by design.
+> Faithfulness is 0.840 — 84% of answers fully grounded in retrieved context. Context precision is 0.907 — almost everything we retrieve is relevant. Hybrid p95 latency is 2.2 seconds. The agentic path — which fires on about 10% of queries for hard multi-hop questions — runs at 3.4 seconds by design.
 >
-> The knowledge graph: 1,924 entities, 7,102 edges, 0.85 contradictions per thousand edges — trending down from 1.91 at initial ingestion. Confidence calibration Brier score 0.19 after isotonic regression — started at 0.31 raw LLM confidence."
+> The knowledge graph is seeded from 10 aerospace regulatory documents — FAA/EASA airworthiness directives and manufacturer records. The pipeline is fully wired: entity extraction, contradiction detection, calibration, community detection. Scale the corpus and all the health metrics scale with it."
 
 **Important framing:** *"We alert on agentic rate, not agentic latency. If more than 20% of queries trigger the fallback, the threshold is too loose — not the corpus is hard."*
 

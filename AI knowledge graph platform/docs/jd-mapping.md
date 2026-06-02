@@ -165,7 +165,7 @@ to a specific file, endpoint, demo step, or test — with a one-line business va
 | Claim | Proof |
 |---|---|
 | "Not a tutorial project" | 304 tests, CI, Docker build, structured DLQ, 6 ADRs |
-| "Observable" | 16 metrics, Brier 0.19, RAGAS sampled 20%, admin + KPI dashboards |
+| "Observable" | 16 metrics, RAGAS 0.840/0.907/0.867 from 104 real runs, calibration pipeline wired, admin + KPI dashboards |
 | "Deployable" | `docker compose -f compose.dev.yaml up`; worker `/ready` health probes |
 | "Scalable design" | Redis alias registry, incremental community detection, RabbitMQ parallel workers |
 | "Regulated-client ready" | GDPR, multi-tenant isolation, audit trail, contradiction detection |
@@ -199,12 +199,12 @@ to a specific file, endpoint, demo step, or test — with a one-line business va
 | Hybrid p95 | 2.2s |
 | Agentic p95 | 3.4s (8B routing + 70B synthesis) |
 | Agentic trigger rate | ~9% of queries |
-| Entities (aerospace corpus) | 1,924 |
-| Edges | 7,102 |
-| Contradiction density | 0.85 /1k edges |
-| Alias coverage | 92% |
-| Brier score (post-isotonic) | 0.19 (raw: 0.31) |
-| Passing tests | 304 |
+| Entities (seed corpus) | 20 (10-doc aerospace seed; pipeline targets ~2k at scale) |
+| Relations (seed corpus) | 12 (pipeline targets ~7k at scale) |
+| Contradiction detection | wired & verified end-to-end |
+| Alias coverage | pipeline wired; target > 90% at scale |
+| Calibration (Brier) | pipeline wired; target < 0.20 on production corpus |
+| Passing tests | 353 |
 | KG modules | 39 |
 | ADRs | 6 |
 | LOC | 22,650 |

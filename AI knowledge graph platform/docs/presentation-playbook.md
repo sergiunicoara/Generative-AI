@@ -166,23 +166,22 @@ Narrate each of the 6 steps as it prints (don't read the screen silently):
 
 ### Slide 6 — Observability / metrics framework (1.5m)
 > "If you can't measure it, you can't run it in production. **16 metrics across 4
-> layers.** The real numbers from this corpus: faithfulness 0.840, context precision
-> 0.907, hybrid p95 **2.2s**. The knowledge graph: 1,924 entities, 7,102 edges,
-> contradiction density 0.85 per thousand edges — healthy and trending down.
-> Confidence calibration Brier score 0.19 — after isotonic correction from 0.31 raw."
+> layers.** The real numbers from 104 query runs: faithfulness 0.840, context precision
+> 0.907, hybrid p95 **2.2s**. The seed graph (10 aerospace regulatory documents):
+> 20 entities, 12 relations, contradiction detection verified end-to-end.
+> The calibration pipeline corrects LLM confidence from raw to isotonic-adjusted —
+> Brier score is the target metric once the corpus scales."
 
 ### Slide 7 — The Dashboard, Live (then SWITCH to browser tab 1) (3m)
 *This is proof moment #2.* Switch to `http://localhost:8001/admin/`.
-> "This is the operator dashboard — running against the data we just ingested."
-*Read the tiles:*
-> "1,924 entities, 7,102 edges, **92% alias coverage, 0.85 contradiction density
-> — green across the board.**" *Click through the tabs:*
+> "This is the operator dashboard — running against the seed data we just ingested."
+*Click through the tabs:*
 - **Conflicts** — "three open conflicts, each typed — exclusive state, directional
   reversal, functional violation. One-click resolution with audit trail."
 - **Communities** — "14% entity drift since last rebuild — within the safe threshold."
 - **GDPR** — "GDPR Article 17 right-to-be-forgotten — with an audit log per request."
-- **Calibration** — "Brier score **0.19** — our confidence numbers are calibrated,
-  not guesses. Started at 0.31 raw, corrected over 4 days of isotonic regression."
+- **Calibration** — "The calibration pipeline is wired — isotonic regression corrects
+  raw LLM confidence. On a production corpus this targets Brier < 0.20."
 *(Optional: switch to `:8050/dashboard/` for the latency/RAGAS time-series.)*
 
 ### Slide 8 — Client Scenarios (2m)

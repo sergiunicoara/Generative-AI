@@ -157,11 +157,11 @@ A gap means you know the limit and can explain the next step.
 | Hybrid p95 | 2.2s | `GET /kpis/summary` |
 | Agentic p95 | 3.4s | same |
 | Agentic trigger rate | ~9% | same |
-| Entities (aerospace) | 1,924 | Neo4j Browser or `/kg/health/alerts` |
-| Edges | 7,102 | same |
-| Contradiction density | 0.85 /1k edges | Admin dashboard → Health tab |
-| Alias coverage | 92% | same |
-| Brier score (post-isotonic) | 0.19 (raw: 0.31) | Admin dashboard → Calibration tab |
+| Entities (seed corpus) | 20 (10-doc aerospace seed; pipeline targets ~2k at scale) | Neo4j Browser or `/kg/health/alerts` |
+| Relations (seed corpus) | 12 (pipeline targets ~7k at scale) | same |
+| Contradiction detection | wired & verified end-to-end | Admin dashboard → Conflicts tab |
+| Alias coverage | pipeline wired; target > 90% at scale | same |
+| Brier score (calibration pipeline) | target < 0.20 on production corpus | Admin dashboard → Calibration tab |
 | Passing tests | 325 | `py -3.11 -m pytest tests/unit -q` |
 | KG modules | 39 | `ls graphrag/graph/*.py \| wc -l` |
 | ADRs | 6 | `ls docs/adr/*.md` |

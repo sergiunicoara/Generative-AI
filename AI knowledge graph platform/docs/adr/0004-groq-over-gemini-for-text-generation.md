@@ -13,7 +13,7 @@ The platform requires two distinct LLM capabilities:
 1. **Text generation** — extraction, synthesis, reasoning steps, RAGAS evaluation judge
 2. **Embeddings** — 3072d vector representations for ANN search and entity resolution
 
-Initially both were served by Google Gemini (`gemini-2.0-flash` for generation, `gemini-embedding-001` for embeddings). Under load, Gemini's free-tier rate limits (15 RPM / 1M TPM on Flash) became the ingestion bottleneck — a single 150-document corpus would exhaust daily quota before completing.
+Initially both were served by Google Gemini (`gemini-2.0-flash` for generation, `gemini-embedding-001` for embeddings). Under load, Gemini's free-tier rate limits (15 RPM / 1M TPM on Flash) became the ingestion bottleneck — a moderate corpus would exhaust daily quota before completing.
 
 ---
 

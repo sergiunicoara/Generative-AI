@@ -46,6 +46,8 @@ The graph is not a RAG index. It is a formally modeled knowledge base:
 - [`docs/adr/0004-groq-over-gemini-for-text-generation.md`](docs/adr/0004-groq-over-gemini-for-text-generation.md) — Why Groq for generation + Gemini for embeddings; two-model design rationale
 - [`docs/adr/0005-redis-as-cross-process-result-store.md`](docs/adr/0005-redis-as-cross-process-result-store.md) — Why Redis over PostgreSQL and RabbitMQ reply-to for result persistence
 - [`docs/adr/0006-dual-llm-architecture.md`](docs/adr/0006-dual-llm-architecture.md) — Why 8B routing + 70B synthesis cuts agentic p95 from 6.8 s to 3.4 s
+- [`docs/pwc-jd-mapping.md`](docs/pwc-jd-mapping.md) — Every JD requirement mapped to file + endpoint + demo step + honest gap
+- [`evals/golden_set.json`](evals/golden_set.json) — 40-question golden eval set; run with `scripts/run_golden_eval.py`
 
 **Live demo (no services required):**
 ```bash
@@ -130,6 +132,7 @@ Ingests two genuinely conflicting documents, runs the real inference engine, and
 | **Tenant isolation** | All entities, edges, conflicts, communities, and health snapshots are scoped by `(name, type, tenant)` |
 | **Graph integrity guards** | Self-loop removal, cycle detection, quarantine, ingestion validation, dirty-flag propagation after every write |
 | **Manual correction API** | `/corrections` endpoints: entity split, quarantine/release, edge reject/override, conflict resolution |
+| **Agent tool safety** | `ToolPolicy` gate: allowlist, per-tool risk levels (low/medium/high/restricted), scope enforcement, arg validation, cross-tenant guard, dry-run mode, timeout, structured audit log; 49 guardrail tests |
 | **Query result cache** | Redis-backed, provenance-aware cache in `QueryConsumer`; cache hit skips all 6 retrieval stages; invalidates only queries that cited affected entities; TTL configurable via `QUERY_RESULT_TTL_SECONDS` |
 | **Redis alias registry** | `AliasRegistry.load()` pushes alias table to Redis hash (`graphrag:aliases:{tenant}`, 24h TTL); parallel workers warm from Redis without full Neo4j scan; `load_alias_registry()` is Redis-first |
 | **Wikidata entity linking** | Optional post-ingestion step (`WIKIDATA_LINKING=1`); grounds high-confidence entities to canonical QIDs; rate-limited to 20 entities/document |

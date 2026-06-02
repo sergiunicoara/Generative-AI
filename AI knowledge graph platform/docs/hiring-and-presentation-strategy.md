@@ -10,7 +10,7 @@
 |---|---|---|
 | **Neo4j + Cypher in production** | 39 KG modules, 572-line `neo4j_client.py`; vector ANN, BM25 fulltext, `UNWIND`×22, `EXISTS {}`×12, APOC-with-fallback, bitemporal `as_of` queries | ✅ Strong |
 | **Ontology / taxonomy modeling** | Versioned `OntologyRegistry` w/ domain/range rules + migration map; `type_taxonomy.py` (`SUBCLASS_OF`, LCA for merges); config-driven domain overlays (aerospace YAML) | ✅ Strong |
-| **Python engineering** | 22,650 LOC, async throughout, 304 passing tests, CI, Docker multi-stage, `make smoke-test`, retry/backoff, structured logging | ✅ Strong |
+| **Python engineering** | 22,650 LOC, async throughout, 353 passing tests, CI, Docker multi-stage, `make smoke-test`, retry/backoff, structured logging | ✅ Strong |
 | **KG × LLM / RAG / vector** | 6-stage pipeline: vector→BM25+RRF→cross-encoder→multi-hop→GAT GNN→LLM; agentic IRCoT fallback (8B routing + 70B synthesis) | ✅ Exceptional |
 | **Formal semantics ↔ pragmatic** | OWL-RL reasoner (`owlrl`), SPARQL bridge, RDF/Turtle export — *plus* 6 ADRs documenting every major architectural decision | ✅ Strong |
 | **Lead technically while hands-on** | 6 ADRs, 73 documented lessons, phased `todo.md`, `CONTRIBUTING.md`, `runbook.md`, `roadmap.md` | ✅ Good |
@@ -67,7 +67,7 @@ The demo runs against mocked Neo4j. The "conflict detected" is a scripted replay
 
 ### What to say in the outreach message
 
-> "I saw PwC has been building GraphRAG capabilities in the region. I built a production-grade GraphRAG + knowledge graph platform from scratch over the past few months — it runs a regulatory compliance demo live, has 304 passing tests, and the codebase is public. I'm not asking for a job offer — just 15 minutes to show you what it can do. Would that be useful?"
+> "I saw PwC has been building GraphRAG capabilities in the region. I built a production-grade GraphRAG + knowledge graph platform from scratch over the past few months — it runs a regulatory compliance demo live, has 353 passing tests, and the codebase is public. I'm not asking for a job offer — just 15 minutes to show you what it can do. Would that be useful?"
 
 ### Pre-empting the AI-authorship question
 
@@ -104,7 +104,7 @@ That separates "I built this" from "I generated this."
 ### Slide 1 — Title *(30 seconds)*
 
 **Say:**
-> "Thanks for the time. I'm going to show you something concrete — a production-grade GraphRAG platform I built from scratch. Not a tutorial project, not a PoC — a platform with 39 knowledge graph modules, 304 passing tests, and a regulatory compliance demo that runs live against real Neo4j. I'll show you the code and run it. Let me start with why this matters."
+> "Thanks for the time. I'm going to show you something concrete — a production-grade GraphRAG platform I built from scratch. Not a tutorial project, not a PoC — a platform with 39 knowledge graph modules, 353 passing tests, and a regulatory compliance demo that runs live against real Neo4j. I'll show you the code and run it. Let me start with why this matters."
 
 **Don't linger.** Move immediately to slide 2.
 
@@ -149,7 +149,7 @@ That separates "I built this" from "I generated this."
 **Say:**
 > "I won't go through every row — you can read it. The point is: every requirement in the job description maps directly to a specific module in the codebase. This isn't conceptual alignment — I can open any of these files right now and show you the code.
 >
-> The one I'll call out: 'Design, implement, and validate MVP solutions' — 304 passing tests, GitHub Actions CI, Docker multi-stage build, a production runbook. That's the operational proof."
+> The one I'll call out: 'Design, implement, and validate MVP solutions' — 353 passing tests, GitHub Actions CI, Docker multi-stage build, a production runbook. That's the operational proof."
 
 ---
 
@@ -208,7 +208,7 @@ Run: `MATCH (n {tenant:'aerospace'}) RETURN n`
 ### Slide 7 — Technical Foundation *(1 minute)*
 
 **Say:**
-> "22,650 lines of production Python. 304 tests. 39 knowledge graph modules. Six architecture decision records — every major choice documented: property graph vs triple store, forward-chaining vs backward-chaining, Bayesian confidence, Groq vs Gemini, Redis result store, two-model agentic design.
+> "22,650 lines of production Python. 353 tests. 39 knowledge graph modules. Six architecture decision records — every major choice documented: property graph vs triple store, forward-chaining vs backward-chaining, Bayesian confidence, Groq vs Gemini, Redis result store, two-model agentic design.
 >
 > The two-model agentic design — 8B for routing, 70B for synthesis — cut agentic p95 from 6.8 seconds to 3.4 seconds. That's an engineering decision, not a configuration option."
 
@@ -254,6 +254,9 @@ Run: `MATCH (n {tenant:'aerospace'}) RETURN n`
 
 **"Why Neo4j over Pinecone or Weaviate?"**
 > "Vector search answers 'which chunks are similar to my query?' It can't answer 'which entities are connected to the entity in my query, and what do documents about those entities say?' Multi-hop reasoning, forward-chaining inference, contradiction detection — none of those exist in a flat vector index. ADR-0001 in the repo explains the full tradeoff."
+
+**"If the agent can execute tools, how do you control it?"**
+> "Every tool call passes through a `ToolPolicy` gate before execution. The policy enforces an allowlist — only registered tools can be called. Each tool declares required scopes, so `erase_entity` requires `write + admin + gdpr_officer` and is denied for any other caller. Arguments are validated against a schema: type, required fields, enum values, min/max. There's a cross-tenant guard — a caller scoped to `aerospace` can't reference `banking` in an argument. Dry-run mode lets untrusted sessions preview what would happen without executing anything. Every call — allowed, denied, or timed out — is written to an audit log. `docs/pwc-jd-mapping.md` shows exactly where each of these is in the code."
 
 **"Can this use PwC's internal LLM?"**
 > "Yes — the LLM is routed through a single module, `llm_client.py`. Three functions: `get_llm()` for synthesis, `get_fast_llm()` for routing, `get_embedder()` for embeddings. Swapping from Groq to any OpenAI-compatible API is a single-file change."
@@ -331,6 +334,15 @@ These are the topics a CTO will probe. Know them without notes.
 - Why Redis over PostgreSQL: query results are ephemeral (1h TTL); latency matters for the polling path (~0.5ms vs ~5ms)
 - Why Redis over RabbitMQ reply-to: polling model is simpler; push model requires long-lived consumer with correlation IDs
 - In code: `graphrag/retrieval/result_store.py` (also used by query cache)
+
+**10. Agent tool safety — how do you control the agent?**
+- Single gate: `ToolPolicy.call(tool_name, args, tenant)` — every invocation passes through
+- Four risk levels: low (read-only) / medium (graph internals) / high (write, e.g. `ingest_document`) / restricted (irreversible, e.g. `erase_entity` — needs `write+admin+gdpr_officer`)
+- Dry-run mode: `ToolPolicy(dry_run=True)` — every call returns `DeniedAction` without executing; useful for untrusted sessions
+- Cross-tenant guard: if caller holds `tenant:aerospace` scope and passes `tenant=banking`, the policy rejects before the tool fires
+- Audit trail: every call logged with outcome, reason, tenant, latency
+- In code: `graphrag/agents/tool_policy.py` — `ToolSpec`, `DeniedAction`, `AuditEntry`, `ToolPolicy.from_defaults()`
+- Tests: 49 guardrail tests across 8 classes — `tests/unit/test_tool_safety.py`
 
 ---
 
@@ -438,6 +450,11 @@ Open `config/ontologies/aerospace_regulatory.yml` in VS Code alongside the termi
 | Seed demo data | `scripts/seed_demo_data.py` | `--commit --tenant aerospace` |
 | Alias registry (Redis-backed) | `graphrag/graph/alias_registry.py` | `load_alias_registry()` |
 | Wikidata linking | `graphrag/graph/entity_linker.py` | `WIKIDATA_LINKING=1` |
+| Agent tool safety layer | `graphrag/agents/tool_policy.py` | `ToolPolicy.from_defaults()` |
+| Tool guardrail tests (49) | `tests/unit/test_tool_safety.py` | `pytest tests/unit/test_tool_safety.py` |
+| Golden eval set (40 Qs) | `evals/golden_set.json` | — |
+| Golden eval runner | `scripts/run_golden_eval.py` | `py -3.11 scripts/run_golden_eval.py` |
+| JD mapping (with Gap column) | `docs/pwc-jd-mapping.md` | — |
 
 ---
 
@@ -446,7 +463,9 @@ Open `config/ontologies/aerospace_regulatory.yml` in VS Code alongside the termi
 ### Technical fluency (the real bottleneck)
 - [ ] Whiteboard the Bayesian confidence formula from memory — derive it, explain why not averaging
 - [ ] Explain the 4-stage entity resolution pipeline: what fails at each stage, what the thresholds mean
-- [ ] Run `make smoke-test` — confirm it exits 0 before the meeting
+- [ ] Run `make smoke-test` — confirm it exits 0 before the meeting (353 tests)
+- [ ] Know `docs/pwc-jd-mapping.md` — open it when any JD question comes up
+- [ ] Know the answer to "how do you control the agent?" cold (ToolPolicy, 4 risk levels, audit log)
 - [ ] Explain ADR-0001 (property graph vs triple store) conversationally — what you considered and why you decided
 - [ ] Explain ADR-0004 (Groq vs Gemini) — quota, speed, two-model design, client swap path
 - [ ] Explain ADR-0005 (Redis result store) — why not PostgreSQL, why not RabbitMQ reply-to

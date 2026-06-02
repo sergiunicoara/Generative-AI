@@ -226,7 +226,7 @@ The mock is not a weakness — it's a test strategy. Every production test suite
 
 ---
 
-### Q10. You have 304 passing tests. What's actually being tested?
+### Q10. You have 353 passing tests. What's actually being tested?
 
 **What they're testing:** Whether you know the test coverage or just the number.
 
@@ -244,7 +244,7 @@ Unit tests cover the most failure-prone logic in isolation:
 
 Integration tests require live Docker services (Neo4j, RabbitMQ, Redis) and test the full ingest → query → result round-trip. They auto-skip if Docker is unavailable.
 
-The 304 number matters less than what it covers. The critical paths — confidence arithmetic, embedding alignment, cross-process result sharing — all have regression tests from real bugs that were found and fixed.
+The 353 number matters less than what it covers. The critical paths — confidence arithmetic, embedding alignment, cross-process result sharing, and agent tool safety — all have regression tests from real bugs that were found and fixed.
 
 ---
 
@@ -328,7 +328,41 @@ The platform doesn't silently drop errors — it logs them, flags them, and rout
 
 ---
 
-### Q15. You haven't worked commercially with this. Why should I believe you can deliver on a real project?
+### Q15 (new). If the agent can execute tools, how do you control it?
+
+**What they're testing:** Whether you've thought about agent safety, not just agent capability.
+
+**Model answer:**
+
+Every tool call passes through a `ToolPolicy` gate before execution. The policy enforces several independent safety properties simultaneously:
+
+**Allowlist.** Only tools in the registered set can be called. An unknown tool name returns `DeniedAction(reason="not_allowed")` — never an exception, always a structured response the caller can reason about.
+
+**Risk levels.** Each tool declares a risk level at registration time:
+- `low` — read-only, no side effects (`local_search`, `global_search`, `get_neighbors`)
+- `medium` — reads graph internals, explicit scope required (`search_graph`, `get_community`)
+- `high` — writes to the graph, needs `write+ingest` or `write+quarantine` (`ingest_document`, `quarantine_entity`)
+- `restricted` — irreversible; needs `write+admin+gdpr_officer` (`erase_entity` — GDPR Art.17)
+
+**Scope enforcement.** Each tool declares required scopes. A caller without the full set is denied. The denial carries which scopes were missing. `erase_entity` requires three scopes simultaneously — no single role can accidentally trigger a deletion.
+
+**Argument validation.** Arguments are checked against a schema before execution: type, required fields, enum allowed values, numeric bounds. A malformed argument produces `DeniedAction(reason="invalid_arg")` before the tool ever fires.
+
+**Cross-tenant guard.** If a caller holds `tenant:aerospace` scope and passes `tenant=banking` in an argument, the policy rejects it. Cross-tenant reads are impossible even if the caller holds sufficient scope for the tool itself.
+
+**Dry-run mode.** `ToolPolicy(dry_run=True)` — every tool returns a `DeniedAction` without executing. Useful for untrusted or guest sessions that can preview tool behaviour but not trigger it.
+
+**Timeout.** Every tool call is wrapped in `asyncio.wait_for`. A hung tool produces `DeniedAction(reason="timeout")`, not a hanging coroutine.
+
+**Audit trail.** Every call — allowed, denied, timed out — is appended to an in-memory log with tool name, args, tenant, outcome, reason, and latency. `audit_summary()` gives counts by outcome.
+
+The guardrail tests in `tests/unit/test_tool_safety.py` (49 tests, 8 classes) prove each property works independently and doesn't interfere with the others.
+
+In code: `graphrag/agents/tool_policy.py`.
+
+---
+
+### Q16. You haven't worked commercially with this. Why should I believe you can deliver on a real project?
 
 **What they're testing:** Honesty and self-awareness under pressure.
 
@@ -365,4 +399,7 @@ Before any meeting, verify you can do all of these **cold, without notes:**
 - [ ] State the real latency numbers: hybrid p95 2.2s, agentic p95 3.4s, combined 2.7s
 - [ ] Explain why p95 must be reported per mode, not combined
 - [ ] Explain the two-model design: 8B for routing (~0.2s/step), 70B for synthesis (~1.5s)
-- [ ] Answer Q15 conversationally, honestly, without sounding defensive
+- [ ] Answer Q15 (agent control) from memory: allowlist, risk levels, scopes, cross-tenant, dry-run, timeout, audit
+- [ ] Know the test count cold: 353 passing (49 are tool safety guardrail tests)
+- [ ] Open `docs/pwc-jd-mapping.md` — know the Gap column entries honestly
+- [ ] Answer Q16 conversationally, honestly, without sounding defensive

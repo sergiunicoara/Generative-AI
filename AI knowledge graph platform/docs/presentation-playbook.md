@@ -191,7 +191,7 @@ Tie it to their world: regulatory intelligence, audit KB, compliance monitoring.
 > insurance — swap the YAML ontology, nothing else changes.**"
 
 ### Slide 9 — Technical Foundation (1.5m)
-> "22,650 lines, 304 passing tests, 39 KG modules, 6 ADRs. **This is a product,
+> "22,650 lines, 353 passing tests (49 are agent safety guardrails), 39 KG modules, 6 ADRs. **This is a product,
 > not a prototype.**"
 
 ### Slide 10 — Close (1m)

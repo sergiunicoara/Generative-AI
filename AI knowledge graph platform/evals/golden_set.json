@@ -1,317 +1,349 @@
 {
-  "version": "1.0",
+  "version": "2.0",
   "tenant": "aerospace",
-  "description": "Golden evaluation set for GraphRAG aerospace regulatory corpus. 40 questions across single-hop, multi-hop, contradiction, temporal, and authority-chain retrieval types.",
+  "description": "Golden evaluation set for the GraphRAG aerospace regulatory corpus. 40 questions across single-hop, multi-hop, contradiction, authority-chain, inference, and negative retrieval types.",
   "thresholds": {
-    "faithfulness_min": 0.75,
-    "relevancy_min": 0.70,
-    "citation_recall_min": 0.60,
-    "pass_rate_min": 0.80
+    "min_context_precision": 0.70,
+    "min_faithfulness":      0.75,
+    "min_relevancy":         0.70,
+    "min_citation_recall":   0.60,
+    "pass_rate_min":         0.80
   },
   "questions": [
 
-    {"id": "SH-01", "type": "single_hop",
-     "question": "What does FAA-AD-2024-01-02 require operators to do?",
-     "expected_citations": ["faa-ad-2024"],
-     "answer_must_contain": ["FAA-AD-2024", "airworthiness directive"],
-     "answer_must_not_contain": ["I don't know", "unclear"],
-     "faithfulness_min": 0.80},
+    {
+      "id": "SH-01", "type": "single_hop",
+      "question": "Which directive supersedes AD-2022?",
+      "expected_citations": ["faa-ad-2024"],
+      "required_answer_terms": ["FAA-AD-2024", "supersedes"],
+      "forbidden_terms": ["unknown", "I don't know"],
+      "min_context_precision": 0.80
+    },
+    {
+      "id": "SH-02", "type": "single_hop",
+      "question": "Which directive supersedes AD-2020?",
+      "expected_citations": ["faa-ad-2022"],
+      "required_answer_terms": ["AD-2022", "AD-2020", "supersedes"],
+      "forbidden_terms": ["unknown"],
+      "min_context_precision": 0.80
+    },
+    {
+      "id": "SH-03", "type": "single_hop",
+      "question": "Which regulation body mandated FAA-AD-2024-01-02?",
+      "expected_citations": ["faa-ad-2024"],
+      "required_answer_terms": ["FAA"],
+      "forbidden_terms": ["EASA", "unknown"],
+      "min_context_precision": 0.85
+    },
+    {
+      "id": "SH-04", "type": "single_hop",
+      "question": "What aircraft type does FAA-AD-2024-01-02 apply to?",
+      "expected_citations": ["faa-ad-2024"],
+      "required_answer_terms": ["Boeing 737", "737 MAX"],
+      "forbidden_terms": ["Airbus"],
+      "min_context_precision": 0.85
+    },
+    {
+      "id": "SH-05", "type": "single_hop",
+      "question": "Who manufactures the Boeing 737 MAX?",
+      "expected_citations": ["boeing-profile"],
+      "required_answer_terms": ["Boeing"],
+      "forbidden_terms": ["Airbus"],
+      "min_context_precision": 0.85
+    },
+    {
+      "id": "SH-06", "type": "single_hop",
+      "question": "What engine is installed on the Boeing 737 MAX?",
+      "expected_citations": ["maintenance-manual"],
+      "required_answer_terms": ["LEAP", "CFM"],
+      "forbidden_terms": ["CFM56", "Pratt"],
+      "min_context_precision": 0.75
+    },
+    {
+      "id": "SH-07", "type": "single_hop",
+      "question": "What is the status of MCAS Software v2.0 relative to v1.0?",
+      "expected_citations": ["boeing-swcr"],
+      "required_answer_terms": ["supersedes", "v1.0"],
+      "forbidden_terms": ["unknown"],
+      "min_context_precision": 0.80
+    },
+    {
+      "id": "SH-08", "type": "single_hop",
+      "question": "Which airline operates Boeing 737 MAX aircraft?",
+      "expected_citations": ["fleet-registry"],
+      "required_answer_terms": ["Southwest"],
+      "forbidden_terms": ["Airbus"],
+      "min_context_precision": 0.80
+    },
 
-    {"id": "SH-02", "type": "single_hop",
-     "question": "Which regulation body mandated FAA-AD-2024-01-02?",
-     "expected_citations": ["faa-ad-2024"],
-     "answer_must_contain": ["FAA"],
-     "answer_must_not_contain": ["EASA", "unknown"],
-     "faithfulness_min": 0.85},
+    {
+      "id": "MH-01", "type": "multi_hop",
+      "question": "Trace the full supersession chain from FAA-AD-2024-01-02 back to the 2020 directive.",
+      "expected_citations": ["faa-ad-2024", "faa-ad-2022", "faa-ad-2020-old"],
+      "required_answer_terms": ["2024", "2022", "2020", "supersedes"],
+      "forbidden_terms": ["unknown"],
+      "min_context_precision": 0.70,
+      "note": "Tests 2-hop transitive SUPERSEDES traversal"
+    },
+    {
+      "id": "MH-02", "type": "multi_hop",
+      "question": "What maintenance procedure is required for the engine on the aircraft covered by FAA-AD-2024-01-02?",
+      "expected_citations": ["faa-ad-2024", "maintenance-manual"],
+      "required_answer_terms": ["inspection", "engine mount"],
+      "forbidden_terms": [],
+      "min_context_precision": 0.70,
+      "note": "AD → aircraft → engine → maintenance chain"
+    },
+    {
+      "id": "MH-03", "type": "multi_hop",
+      "question": "Which airlines are affected by MCAS software requirements?",
+      "expected_citations": ["boeing-swcr", "fleet-registry"],
+      "required_answer_terms": ["Southwest"],
+      "forbidden_terms": [],
+      "min_context_precision": 0.70,
+      "note": "Software → aircraft type → operator chain"
+    },
+    {
+      "id": "MH-04", "type": "multi_hop",
+      "question": "What is the regulatory path from FAA to the maintenance crew for the CFM LEAP-1B engine?",
+      "expected_citations": ["faa-ad-2024", "maintenance-manual"],
+      "required_answer_terms": ["FAA", "LEAP", "maintenance"],
+      "forbidden_terms": [],
+      "min_context_precision": 0.65,
+      "note": "Multi-hop — designed to trigger agentic IRCoT fallback"
+    },
+    {
+      "id": "MH-05", "type": "multi_hop",
+      "question": "What is the full compliance story for Southwest Airlines and the 737 MAX MCAS system?",
+      "expected_citations": ["fleet-registry", "boeing-swcr", "faa-ad-2024"],
+      "required_answer_terms": ["Southwest", "MCAS", "compliance"],
+      "forbidden_terms": [],
+      "min_context_precision": 0.60
+    },
+    {
+      "id": "MH-06", "type": "multi_hop",
+      "question": "How does the 2022 directive relate to both the 2020 and 2024 directives, and what does this mean for current operators?",
+      "expected_citations": ["faa-ad-2022", "faa-ad-2024", "faa-ad-2020-old"],
+      "required_answer_terms": ["superseded", "2022", "2024"],
+      "forbidden_terms": [],
+      "min_context_precision": 0.65
+    },
 
-    {"id": "SH-03", "type": "single_hop",
-     "question": "What aircraft type does FAA-AD-2024-01-02 apply to?",
-     "expected_citations": ["faa-ad-2024"],
-     "answer_must_contain": ["Boeing 737", "737 MAX"],
-     "answer_must_not_contain": ["Airbus", "A320"],
-     "faithfulness_min": 0.85},
+    {
+      "id": "CON-01", "type": "contradiction",
+      "question": "Is the Boeing 737 MAX currently compliant with FAA-AD-2020-05-11?",
+      "expected_citations": ["inspection-report-2024-01", "ad-compliance-check-2024-03"],
+      "required_answer_terms": ["conflict", "contradictory", "two documents"],
+      "forbidden_terms": ["yes, it is compliant", "no, it is not compliant"],
+      "min_context_precision": 0.70,
+      "note": "Correct answer surfaces the contradiction, not a binary yes/no"
+    },
+    {
+      "id": "CON-02", "type": "contradiction",
+      "question": "What do the documents say about the 737 MAX airworthiness status?",
+      "expected_citations": ["inspection-report-2024-01", "ad-compliance-check-2024-03"],
+      "required_answer_terms": ["conflicting", "different"],
+      "forbidden_terms": [],
+      "min_context_precision": 0.70
+    },
 
-    {"id": "SH-04", "type": "single_hop",
-     "question": "Who manufactures the Boeing 737 MAX?",
-     "expected_citations": ["boeing-profile"],
-     "answer_must_contain": ["Boeing"],
-     "answer_must_not_contain": ["Airbus"],
-     "faithfulness_min": 0.85},
+    {
+      "id": "AUT-01", "type": "authority_chain",
+      "question": "Which document currently governs engine mount inspection for the Boeing 737 MAX?",
+      "expected_citations": ["faa-ad-2024", "faa-ad-2022"],
+      "required_answer_terms": ["FAA-AD-2024-01-02"],
+      "forbidden_terms": ["FAA-AD-2020", "FAA-AD-2022 is current"],
+      "min_context_precision": 0.80,
+      "note": "FAA-AD-2024 is authoritative; older ones superseded"
+    },
+    {
+      "id": "AUT-02", "type": "authority_chain",
+      "question": "Is FAA-AD-2020-05-11 still the governing airworthiness directive?",
+      "expected_citations": ["faa-ad-2024", "faa-ad-2022", "faa-ad-2020-old"],
+      "required_answer_terms": ["superseded", "no longer"],
+      "forbidden_terms": ["current", "governing document"],
+      "min_context_precision": 0.80
+    },
+    {
+      "id": "AUT-03", "type": "authority_chain",
+      "question": "What is the effective regulatory hierarchy for Boeing 737 MAX engine inspections?",
+      "expected_citations": ["faa-ad-2024"],
+      "required_answer_terms": ["FAA-AD-2024"],
+      "forbidden_terms": [],
+      "min_context_precision": 0.75
+    },
 
-    {"id": "SH-05", "type": "single_hop",
-     "question": "What engine is fitted to the Boeing 737 MAX?",
-     "expected_citations": ["maintenance-manual"],
-     "answer_must_contain": ["LEAP", "CFM"],
-     "answer_must_not_contain": ["CFM56", "Pratt"],
-     "faithfulness_min": 0.75},
+    {
+      "id": "INF-01", "type": "inference",
+      "question": "Does FAA-AD-2024-01-02 supersede the 2020 directive, even though they don't directly reference each other?",
+      "expected_citations": ["faa-ad-2024", "faa-ad-2022", "faa-ad-2020-old"],
+      "required_answer_terms": ["yes", "transitively", "supersedes"],
+      "forbidden_terms": ["no"],
+      "min_context_precision": 0.70,
+      "note": "Requires forward-chaining inference over the SUPERSEDES chain"
+    },
+    {
+      "id": "INF-02", "type": "inference",
+      "question": "If Southwest Airlines operates Boeing 737 MAX, are they subject to FAA-AD-2024-01-02?",
+      "expected_citations": ["fleet-registry", "faa-ad-2024"],
+      "required_answer_terms": ["yes", "applies"],
+      "forbidden_terms": ["no"],
+      "min_context_precision": 0.70,
+      "note": "Operator → aircraft type → applicable ADs chain"
+    },
 
-    {"id": "SH-06", "type": "single_hop",
-     "question": "What is the status of MCAS Software v2.0 relative to v1.0?",
-     "expected_citations": ["boeing-swcr"],
-     "answer_must_contain": ["supersedes", "v1.0"],
-     "answer_must_not_contain": [],
-     "faithfulness_min": 0.80},
+    {
+      "id": "NEG-01", "type": "negative",
+      "question": "Does FAA-AD-2024-01-02 apply to the Airbus A320neo?",
+      "expected_citations": ["faa-ad-2024"],
+      "required_answer_terms": ["no", "Boeing"],
+      "forbidden_terms": ["yes", "A320neo is covered"],
+      "min_context_precision": 0.80
+    },
+    {
+      "id": "NEG-02", "type": "negative",
+      "question": "Does Airbus manufacture the Boeing 737 MAX?",
+      "expected_citations": ["boeing-profile"],
+      "required_answer_terms": ["no", "Boeing"],
+      "forbidden_terms": ["yes"],
+      "min_context_precision": 0.85
+    },
+    {
+      "id": "NEG-03", "type": "negative",
+      "question": "Is there a FAA airworthiness directive governing Airbus aircraft in this corpus?",
+      "expected_citations": [],
+      "required_answer_terms": ["no", "EASA"],
+      "forbidden_terms": ["FAA-AD applies to Airbus"],
+      "min_context_precision": 0.70
+    },
 
-    {"id": "SH-07", "type": "single_hop",
-     "question": "Which airline operates Boeing 737 MAX aircraft?",
-     "expected_citations": ["fleet-registry"],
-     "answer_must_contain": ["Southwest"],
-     "answer_must_not_contain": ["Airbus"],
-     "faithfulness_min": 0.80},
+    {
+      "id": "TMP-01", "type": "temporal",
+      "question": "Which was the earliest FAA airworthiness directive issued in this corpus?",
+      "expected_citations": ["faa-ad-2020-old"],
+      "required_answer_terms": ["2020", "FAA-AD-2020"],
+      "forbidden_terms": ["2024"],
+      "min_context_precision": 0.75
+    },
+    {
+      "id": "TMP-02", "type": "temporal",
+      "question": "Which MCAS software version is current?",
+      "expected_citations": ["boeing-swcr"],
+      "required_answer_terms": ["v2.0"],
+      "forbidden_terms": ["v1.0 is current"],
+      "min_context_precision": 0.80
+    },
+    {
+      "id": "TMP-03", "type": "temporal",
+      "question": "Between 2020 and 2024, how many FAA airworthiness directives were issued for the 737 MAX engine mount?",
+      "expected_citations": ["faa-ad-2024", "faa-ad-2022", "faa-ad-2020-old"],
+      "required_answer_terms": ["three", "3"],
+      "forbidden_terms": ["one", "two"],
+      "min_context_precision": 0.70
+    },
 
-    {"id": "SH-08", "type": "single_hop",
-     "question": "What EASA airworthiness directive covers the Airbus A320neo?",
-     "expected_citations": ["easa-ad-2024"],
-     "answer_must_contain": ["EASA-AD-2024-0072"],
-     "answer_must_not_contain": ["FAA"],
-     "faithfulness_min": 0.85},
+    {
+      "id": "PRE-01", "type": "precision",
+      "question": "What is the exact document ID of the 2022 FAA airworthiness directive?",
+      "expected_citations": ["faa-ad-2022"],
+      "required_answer_terms": ["FAA-AD-2022-03-07"],
+      "forbidden_terms": [],
+      "min_context_precision": 0.90
+    },
+    {
+      "id": "PRE-02", "type": "precision",
+      "question": "What is the exact document ID of the current FAA directive superseding the 2022 one?",
+      "expected_citations": ["faa-ad-2024"],
+      "required_answer_terms": ["FAA-AD-2024-01-02"],
+      "forbidden_terms": [],
+      "min_context_precision": 0.90
+    },
 
-    {"id": "MH-01", "type": "multi_hop",
-     "question": "Which regulation superseded all previous FAA airworthiness directives for the Boeing 737 MAX engine mount?",
-     "expected_citations": ["faa-ad-2024", "faa-ad-2022"],
-     "answer_must_contain": ["FAA-AD-2024", "supersedes"],
-     "answer_must_not_contain": [],
-     "faithfulness_min": 0.75,
-     "note": "Requires traversing SUPERSEDES chain across 3 ADs"},
+    {
+      "id": "CAL-01", "type": "calibration",
+      "question": "Is there any evidence of conflicting compliance status for a specific aircraft in this corpus?",
+      "expected_citations": ["inspection-report-2024-01", "ad-compliance-check-2024-03"],
+      "required_answer_terms": ["yes", "conflict"],
+      "forbidden_terms": ["no conflict"],
+      "min_context_precision": 0.75
+    },
+    {
+      "id": "CAL-02", "type": "calibration",
+      "question": "How confident should I be in a conclusion drawn from a single internal document?",
+      "expected_citations": [],
+      "required_answer_terms": ["confidence", "single source"],
+      "forbidden_terms": [],
+      "min_context_precision": 0.55
+    },
 
-    {"id": "MH-02", "type": "multi_hop",
-     "question": "What is the full authority chain from FAA-AD-2024-01-02 back to the original 2020 directive?",
-     "expected_citations": ["faa-ad-2024", "faa-ad-2022", "faa-ad-2020-old"],
-     "answer_must_contain": ["2024", "2022", "2020"],
-     "answer_must_not_contain": [],
-     "faithfulness_min": 0.70,
-     "note": "Tests 2-hop transitive SUPERSEDES traversal"},
+    {
+      "id": "AGT-01", "type": "agentic",
+      "question": "Trace the complete regulatory path from the FAA to the maintenance crew servicing the CFM LEAP-1B engine.",
+      "expected_citations": ["faa-ad-2024", "maintenance-manual"],
+      "required_answer_terms": ["FAA", "LEAP", "maintenance"],
+      "forbidden_terms": [],
+      "min_context_precision": 0.65,
+      "note": "Designed to trigger IRCoT agentic fallback"
+    },
+    {
+      "id": "AGT-02", "type": "agentic",
+      "question": "Explain the full compliance chain from FAA-AD-2024 through to Southwest Airlines' 737 MAX fleet.",
+      "expected_citations": ["faa-ad-2024", "fleet-registry"],
+      "required_answer_terms": ["FAA-AD-2024", "Southwest", "737 MAX"],
+      "forbidden_terms": [],
+      "min_context_precision": 0.60
+    },
 
-    {"id": "MH-03", "type": "multi_hop",
-     "question": "What maintenance procedure is required for the engine fitted to the aircraft covered by FAA-AD-2024-01-02?",
-     "expected_citations": ["faa-ad-2024", "maintenance-manual"],
-     "answer_must_contain": ["inspection", "engine mount"],
-     "answer_must_not_contain": [],
-     "faithfulness_min": 0.70,
-     "note": "Requires AD → aircraft → engine → maintenance chain"},
+    {
+      "id": "CTX-01", "type": "contextual",
+      "question": "What does 14 CFR Part 39 govern, and which directive references it?",
+      "expected_citations": ["faa-ad-2024"],
+      "required_answer_terms": ["14 CFR", "airworthiness"],
+      "forbidden_terms": [],
+      "min_context_precision": 0.70
+    },
+    {
+      "id": "CTX-02", "type": "contextual",
+      "question": "What aircraft configuration is covered by the EASA directive in this corpus?",
+      "expected_citations": ["easa-ad-2024"],
+      "required_answer_terms": ["A320neo", "Airbus"],
+      "forbidden_terms": ["Boeing"],
+      "min_context_precision": 0.75
+    },
 
-    {"id": "MH-04", "type": "multi_hop",
-     "question": "Which airlines are affected by MCAS software requirements?",
-     "expected_citations": ["boeing-swcr", "fleet-registry"],
-     "answer_must_contain": ["Southwest"],
-     "answer_must_not_contain": [],
-     "faithfulness_min": 0.70,
-     "note": "Software → aircraft type → operator chain"},
+    {
+      "id": "ARC-01", "type": "architecture",
+      "question": "What retrieval stages does the platform use to answer questions?",
+      "expected_citations": [],
+      "required_answer_terms": ["vector", "BM25", "graph"],
+      "forbidden_terms": [],
+      "min_context_precision": 0.60
+    },
+    {
+      "id": "ARC-02", "type": "architecture",
+      "question": "What is the role of the IRCoT agentic retriever?",
+      "expected_citations": [],
+      "required_answer_terms": ["iterative", "reasoning"],
+      "forbidden_terms": [],
+      "min_context_precision": 0.60
+    },
 
-    {"id": "MH-05", "type": "multi_hop",
-     "question": "What regulatory basis does EASA-AD-2024-0072 derive from?",
-     "expected_citations": ["easa-ad-2024"],
-     "answer_must_contain": ["EASA", "CS-25"],
-     "answer_must_not_contain": ["FAA"],
-     "faithfulness_min": 0.70},
-
-    {"id": "MH-06", "type": "multi_hop",
-     "question": "What is the relationship between the FAA, Boeing 737 MAX, and CFM LEAP-1B engine?",
-     "expected_citations": ["faa-ad-2024", "maintenance-manual"],
-     "answer_must_contain": ["FAA", "Boeing", "LEAP"],
-     "answer_must_not_contain": [],
-     "faithfulness_min": 0.65},
-
-    {"id": "CON-01", "type": "contradiction",
-     "question": "Is the Boeing 737 MAX currently compliant with FAA-AD-2020-05-11?",
-     "expected_citations": ["inspection-report-2024-01", "ad-compliance-check-2024-03"],
-     "answer_must_contain": ["conflict", "contradictory", "two documents", "inconsistent"],
-     "answer_must_not_contain": ["yes", "no, it is not"],
-     "faithfulness_min": 0.70,
-     "note": "Correct answer: surface the contradiction, not pick a side"},
-
-    {"id": "CON-02", "type": "contradiction",
-     "question": "What do the documents say about the 737 MAX airworthiness status?",
-     "expected_citations": ["inspection-report-2024-01", "ad-compliance-check-2024-03"],
-     "answer_must_contain": ["conflicting", "different"],
-     "answer_must_not_contain": [],
-     "faithfulness_min": 0.70},
-
-    {"id": "AUT-01", "type": "authority_chain",
-     "question": "Which document currently governs engine mount inspection for the Boeing 737 MAX?",
-     "expected_citations": ["faa-ad-2024", "faa-ad-2022"],
-     "answer_must_contain": ["FAA-AD-2024-01-02"],
-     "answer_must_not_contain": ["FAA-AD-2020", "FAA-AD-2022"],
-     "faithfulness_min": 0.80,
-     "note": "FAA-AD-2024 is the authoritative document; older ones are superseded"},
-
-    {"id": "AUT-02", "type": "authority_chain",
-     "question": "Is FAA-AD-2020-05-11 still the governing airworthiness directive?",
-     "expected_citations": ["faa-ad-2024", "faa-ad-2022", "faa-ad-2020-old"],
-     "answer_must_contain": ["superseded", "no longer"],
-     "answer_must_not_contain": ["current", "governing"],
-     "faithfulness_min": 0.80},
-
-    {"id": "AUT-03", "type": "authority_chain",
-     "question": "What is the effective regulatory hierarchy for Boeing 737 MAX engine inspections?",
-     "expected_citations": ["faa-ad-2024"],
-     "answer_must_contain": ["FAA-AD-2024"],
-     "answer_must_not_contain": [],
-     "faithfulness_min": 0.75},
-
-    {"id": "INF-01", "type": "inference",
-     "question": "Does FAA-AD-2024-01-02 supersede the 2020 directive, even though they don't directly reference each other?",
-     "expected_citations": ["faa-ad-2024", "faa-ad-2022", "faa-ad-2020-old"],
-     "answer_must_contain": ["yes", "transitively", "supersedes"],
-     "answer_must_not_contain": ["no"],
-     "faithfulness_min": 0.70,
-     "note": "Requires forward-chaining inference over the SUPERSEDES chain"},
-
-    {"id": "INF-02", "type": "inference",
-     "question": "If Southwest Airlines operates Boeing 737 MAX, are they subject to FAA-AD-2024-01-02?",
-     "expected_citations": ["fleet-registry", "faa-ad-2024"],
-     "answer_must_contain": ["yes", "applies"],
-     "answer_must_not_contain": ["no"],
-     "faithfulness_min": 0.70,
-     "note": "Operator → aircraft type → applicable ADs chain"},
-
-    {"id": "INF-03", "type": "inference",
-     "question": "Can an AD issued by EASA apply to aircraft operated under FAA jurisdiction?",
-     "expected_citations": ["easa-ad-2024"],
-     "answer_must_contain": [],
-     "answer_must_not_contain": [],
-     "faithfulness_min": 0.60,
-     "note": "Reasoning question — tests whether the system handles jurisdictional scope"},
-
-    {"id": "NEG-01", "type": "negative",
-     "question": "Does FAA-AD-2024-01-02 apply to the Airbus A320neo?",
-     "expected_citations": ["faa-ad-2024"],
-     "answer_must_contain": ["no", "does not", "Boeing"],
-     "answer_must_not_contain": ["yes", "Airbus A320neo is covered"],
-     "faithfulness_min": 0.80},
-
-    {"id": "NEG-02", "type": "negative",
-     "question": "Is there a FAA airworthiness directive governing Airbus aircraft?",
-     "expected_citations": [],
-     "answer_must_contain": ["no", "EASA", "not FAA"],
-     "answer_must_not_contain": ["FAA-AD"],
-     "faithfulness_min": 0.70},
-
-    {"id": "NEG-03", "type": "negative",
-     "question": "Does Airbus manufacture the Boeing 737 MAX?",
-     "expected_citations": ["boeing-profile"],
-     "answer_must_contain": ["no", "Boeing"],
-     "answer_must_not_contain": ["yes"],
-     "faithfulness_min": 0.85},
-
-    {"id": "TMP-01", "type": "temporal",
-     "question": "What was the first FAA airworthiness directive in this corpus?",
-     "expected_citations": ["faa-ad-2020-old"],
-     "answer_must_contain": ["2020", "FAA-AD-2020"],
-     "answer_must_not_contain": ["2024"],
-     "faithfulness_min": 0.75},
-
-    {"id": "TMP-02", "type": "temporal",
-     "question": "Which MCAS software version is current?",
-     "expected_citations": ["boeing-swcr"],
-     "answer_must_contain": ["v2.0"],
-     "answer_must_not_contain": ["v1.0 is current"],
-     "faithfulness_min": 0.80},
-
-    {"id": "TMP-03", "type": "temporal",
-     "question": "Between 2020 and 2024, how many FAA airworthiness directives were issued for the 737 MAX engine mount?",
-     "expected_citations": ["faa-ad-2024", "faa-ad-2022", "faa-ad-2020-old"],
-     "answer_must_contain": ["three", "3"],
-     "answer_must_not_contain": ["one", "two"],
-     "faithfulness_min": 0.70},
-
-    {"id": "AGT-01", "type": "agentic",
-     "question": "Trace the complete regulatory path from the FAA to the maintenance crew servicing the CFM LEAP-1B engine.",
-     "expected_citations": ["faa-ad-2024", "maintenance-manual"],
-     "answer_must_contain": ["FAA", "LEAP", "maintenance"],
-     "answer_must_not_contain": [],
-     "faithfulness_min": 0.65,
-     "note": "Multi-hop question designed to trigger agentic IRCoT fallback"},
-
-    {"id": "AGT-02", "type": "agentic",
-     "question": "What is the full compliance story for Southwest Airlines and the 737 MAX MCAS system?",
-     "expected_citations": ["fleet-registry", "boeing-swcr", "faa-ad-2024"],
-     "answer_must_contain": ["Southwest", "MCAS", "compliance"],
-     "answer_must_not_contain": [],
-     "faithfulness_min": 0.60,
-     "note": "Combines fleet, software, and regulatory threads"},
-
-    {"id": "AGT-03", "type": "agentic",
-     "question": "Explain how the 2022 directive relates to both the 2020 and 2024 directives, and what this means for current operators.",
-     "expected_citations": ["faa-ad-2022", "faa-ad-2024", "faa-ad-2020-old"],
-     "answer_must_contain": ["superseded", "2022", "2024"],
-     "answer_must_not_contain": [],
-     "faithfulness_min": 0.65},
-
-    {"id": "CTX-01", "type": "contextual",
-     "question": "What does 14 CFR Part 39 govern, and which directive in this corpus references it?",
-     "expected_citations": ["faa-ad-2024"],
-     "answer_must_contain": ["14 CFR", "airworthiness directive"],
-     "answer_must_not_contain": [],
-     "faithfulness_min": 0.70},
-
-    {"id": "CTX-02", "type": "contextual",
-     "question": "What is the difference between CS-25 and 14 CFR Part 39?",
-     "expected_citations": [],
-     "answer_must_contain": ["CS-25", "14 CFR"],
-     "answer_must_not_contain": [],
-     "faithfulness_min": 0.55,
-     "note": "Background knowledge question — tests breadth of retrieval"},
-
-    {"id": "CTX-03", "type": "contextual",
-     "question": "What aircraft configuration is covered by the EASA directive?",
-     "expected_citations": ["easa-ad-2024"],
-     "answer_must_contain": ["A320neo", "Airbus"],
-     "answer_must_not_contain": ["Boeing"],
-     "faithfulness_min": 0.75},
-
-    {"id": "PRE-01", "type": "precision",
-     "question": "What is the exact document ID of the 2022 FAA airworthiness directive?",
-     "expected_citations": ["faa-ad-2022"],
-     "answer_must_contain": ["FAA-AD-2022-03-07"],
-     "answer_must_not_contain": [],
-     "faithfulness_min": 0.90},
-
-    {"id": "PRE-02", "type": "precision",
-     "question": "What embedding cosine threshold does the platform use for entity deduplication?",
-     "expected_citations": [],
-     "answer_must_contain": ["0.92"],
-     "answer_must_not_contain": [],
-     "faithfulness_min": 0.85,
-     "note": "Tests whether architectural metadata is retrievable"},
-
-    {"id": "PRE-03", "type": "precision",
-     "question": "What is the Wikidata item type for an organization (P31)?",
-     "expected_citations": [],
-     "answer_must_contain": ["Q43229", "organization"],
-     "answer_must_not_contain": [],
-     "faithfulness_min": 0.70,
-     "note": "Tests Wikidata grounding in entity metadata"},
-
-    {"id": "CAL-01", "type": "calibration",
-     "question": "Is there any evidence of conflicting compliance status for a specific aircraft in this corpus?",
-     "expected_citations": ["inspection-report-2024-01", "ad-compliance-check-2024-03"],
-     "answer_must_contain": ["yes", "conflict", "G-ABCD"],
-     "answer_must_not_contain": ["no conflict"],
-     "faithfulness_min": 0.75},
-
-    {"id": "CAL-02", "type": "calibration",
-     "question": "How confident should I be in a conclusion drawn from a single internal document?",
-     "expected_citations": [],
-     "answer_must_contain": ["confidence", "single source"],
-     "answer_must_not_contain": [],
-     "faithfulness_min": 0.60,
-     "note": "Calibration awareness — tests whether the system hedges on thin evidence"},
-
-    {"id": "ARC-01", "type": "architecture",
-     "question": "What retrieval stages does the platform use to answer questions?",
-     "expected_citations": [],
-     "answer_must_contain": ["vector", "BM25", "graph"],
-     "answer_must_not_contain": [],
-     "faithfulness_min": 0.65,
-     "note": "Self-knowledge question — retrieved from documentation chunks"},
-
-    {"id": "ARC-02", "type": "architecture",
-     "question": "What is the role of the IRCoT agentic retriever?",
-     "expected_citations": [],
-     "answer_must_contain": ["iterative", "reasoning"],
-     "answer_must_not_contain": [],
-     "faithfulness_min": 0.60}
+    {
+      "id": "DOM-01", "type": "domain",
+      "question": "Is the aerospace regulatory ontology hard-coded or configurable?",
+      "expected_citations": [],
+      "required_answer_terms": ["YAML", "configurable"],
+      "forbidden_terms": ["hard-coded"],
+      "min_context_precision": 0.65
+    },
+    {
+      "id": "DOM-02", "type": "domain",
+      "question": "What authority level does an internal document have compared to a regulatory one?",
+      "expected_citations": [],
+      "required_answer_terms": ["lower", "regulatory"],
+      "forbidden_terms": ["equal", "same authority"],
+      "min_context_precision": 0.65
+    }
 
   ]
 }

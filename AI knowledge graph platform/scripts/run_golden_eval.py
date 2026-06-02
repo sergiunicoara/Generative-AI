@@ -72,15 +72,19 @@ def _check(question_spec: dict, result: dict) -> tuple[bool, list[str]]:
     answer   = (result.get("answer") or "").lower()
     citations = [str(c) for c in (result.get("citations") or [])]
 
-    # Required phrases
-    for phrase in question_spec.get("answer_must_contain", []):
+    # Required terms (supports both v2 and v1 field names)
+    required = (question_spec.get("required_answer_terms")
+                or question_spec.get("answer_must_contain", []))
+    for phrase in required:
         if phrase.lower() not in answer:
-            failures.append(f"answer missing required phrase: {phrase!r}")
+            failures.append(f"answer missing required term: {phrase!r}")
 
-    # Forbidden phrases
-    for phrase in question_spec.get("answer_must_not_contain", []):
+    # Forbidden terms (supports both v2 and v1 field names)
+    forbidden = (question_spec.get("forbidden_terms")
+                 or question_spec.get("answer_must_not_contain", []))
+    for phrase in forbidden:
         if phrase.lower() in answer:
-            failures.append(f"answer contains forbidden phrase: {phrase!r}")
+            failures.append(f"answer contains forbidden term: {phrase!r}")
 
     # Citation recall
     expected_cits = question_spec.get("expected_citations", [])
@@ -89,8 +93,8 @@ def _check(question_spec: dict, result: dict) -> tuple[bool, list[str]]:
         missing = [c for c in expected_cits if c.lower() not in cited_str]
         if missing:
             pct = len(missing) / len(expected_cits)
-            threshold = question_spec.get("citation_recall_min",
-                                          question_spec.get("thresholds", {}).get("citation_recall_min", 0.60))
+            threshold = question_spec.get("min_citation_recall",
+                                          question_spec.get("citation_recall_min", 0.60))
             if pct > (1 - threshold):
                 failures.append(f"insufficient citation recall — missing: {missing}")
 

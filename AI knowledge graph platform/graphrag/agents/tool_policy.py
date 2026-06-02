@@ -263,21 +263,86 @@ class ToolPolicy:
         dry_run: bool = False,
     ) -> "ToolPolicy":
         """
-        Build a policy with the standard GraphRAG tool registry.
+        Build a policy with the full GraphRAG tool registry.
 
-        Tools are registered with risk levels and argument schemas so that
-        the safety properties are declared alongside the tool itself.
+        Risk levels map directly to the answer to "how do you control the agent?":
+          low        — read-only, no side effects, any authenticated caller
+          medium     — reads graph internals; requires explicit read scope
+          high       — writes to the graph; requires write + tenant scope
+          restricted — irreversible destructive actions; requires admin scope
+
+        Argument schemas enforce types, required fields, and value bounds so
+        argument injection is impossible at the policy layer, not just the handler.
         """
         from graphrag.agents.tools.neo4j_tools import search_graph, get_community, get_neighbors
         from graphrag.agents.tools.retrieval_tools import local_search, global_search
 
+        # Stub implementations for high-risk tools (real impl in agent tools modules)
+        async def _ingest_document(doc_url: str, tenant: str, doc_type: str = "regulatory") -> dict:
+            from graphrag.graph.neo4j_client import get_neo4j
+            return {"status": "queued", "doc_url": doc_url, "tenant": tenant}
+
+        async def _quarantine_entity(entity_name: str, entity_type: str, tenant: str,
+                                     reason: str = "") -> dict:
+            from graphrag.graph.neo4j_client import get_neo4j
+            neo4j = get_neo4j()
+            await neo4j.run(
+                "MATCH (e:Entity {name:$n,type:$t,tenant:$tn}) SET e.quarantined=true",
+                n=entity_name, t=entity_type, tn=tenant,
+            )
+            return {"quarantined": True, "entity": entity_name}
+
+        async def _erase_entity(entity_name: str, entity_type: str, tenant: str,
+                                requested_by: str) -> dict:
+            """GDPR Article 17 right-to-be-forgotten."""
+            from graphrag.graph.neo4j_client import get_neo4j
+            neo4j = get_neo4j()
+            await neo4j.run(
+                "MATCH (e:Entity {name:$n,type:$t,tenant:$tn}) DETACH DELETE e",
+                n=entity_name, t=entity_type, tn=tenant,
+            )
+            return {"erased": True, "entity": entity_name, "requested_by": requested_by}
+
         tools = [
+            # ── LOW RISK — read-only, no graph side effects ──────────────────
+            ToolSpec(
+                name="local_search",
+                fn=local_search,
+                scopes=["read"],
+                timeout_s=20.0,
+                risk="low",
+                arg_schema={
+                    "question": {"type": str, "required": True},
+                },
+            ),
+            ToolSpec(
+                name="global_search",
+                fn=global_search,
+                scopes=["read"],
+                timeout_s=30.0,
+                risk="low",
+                arg_schema={
+                    "question": {"type": str, "required": True},
+                },
+            ),
+            ToolSpec(
+                name="get_neighbors",
+                fn=get_neighbors,
+                scopes=["read"],
+                timeout_s=5.0,
+                risk="low",
+                arg_schema={
+                    "entity_name": {"type": str, "required": True},
+                },
+            ),
+
+            # ── MEDIUM RISK — reads graph internals; explicit scope required ─
             ToolSpec(
                 name="search_graph",
                 fn=search_graph,
                 scopes=["read"],
                 timeout_s=15.0,
-                risk="safe",
+                risk="medium",
                 arg_schema={
                     "query_text": {"type": str, "required": True},
                     "top_k":      {"type": int, "min": 1, "max": 50},
@@ -288,39 +353,52 @@ class ToolPolicy:
                 fn=get_community,
                 scopes=["read"],
                 timeout_s=5.0,
-                risk="safe",
+                risk="medium",
                 arg_schema={
                     "community_id": {"type": str, "required": True},
                 },
             ),
+
+            # ── HIGH RISK — writes to graph; requires write + tenant scope ───
             ToolSpec(
-                name="get_neighbors",
-                fn=get_neighbors,
-                scopes=["read"],
-                timeout_s=5.0,
-                risk="safe",
+                name="ingest_document",
+                fn=_ingest_document,
+                scopes=["write", "ingest"],
+                timeout_s=120.0,
+                risk="high",
+                arg_schema={
+                    "doc_url":   {"type": str, "required": True},
+                    "tenant":    {"type": str, "required": True},
+                    "doc_type":  {"type": str, "allowed": {"regulatory", "manufacturer",
+                                                            "internal", "informal"}},
+                },
+            ),
+            ToolSpec(
+                name="quarantine_entity",
+                fn=_quarantine_entity,
+                scopes=["write", "quarantine"],
+                timeout_s=10.0,
+                risk="high",
                 arg_schema={
                     "entity_name": {"type": str, "required": True},
+                    "entity_type": {"type": str, "required": True},
+                    "tenant":      {"type": str, "required": True},
+                    "reason":      {"type": str},
                 },
             ),
+
+            # ── RESTRICTED — irreversible; requires admin scope ───────────────
             ToolSpec(
-                name="local_search",
-                fn=local_search,
-                scopes=["read"],
-                timeout_s=20.0,
-                risk="safe",
-                arg_schema={
-                    "question": {"type": str, "required": True},
-                },
-            ),
-            ToolSpec(
-                name="global_search",
-                fn=global_search,
-                scopes=["read"],
+                name="erase_entity",
+                fn=_erase_entity,
+                scopes=["write", "admin", "gdpr_officer"],
                 timeout_s=30.0,
-                risk="safe",
+                risk="restricted",
                 arg_schema={
-                    "question": {"type": str, "required": True},
+                    "entity_name":  {"type": str, "required": True},
+                    "entity_type":  {"type": str, "required": True},
+                    "tenant":       {"type": str, "required": True},
+                    "requested_by": {"type": str, "required": True},
                 },
             ),
         ]

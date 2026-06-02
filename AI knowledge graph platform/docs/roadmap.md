@@ -9,24 +9,29 @@ for production hardening and capability expansion.
 
 ### What works today
 
+Status wording in this section is a capability baseline, not a hiring claim that
+the system has already handled real customer traffic. In interviews, describe
+these as implemented, demo-ready, and production-oriented unless there is a
+deployed workload and monitoring data behind the claim.
+
 | Capability | Status | Notes |
 |---|---|---|
-| Graph ingestion (doc → chunk → entity → relation) | ✅ Production | Groq extraction, Gemini 3072d embeddings |
-| 6-stage hybrid retrieval (vector + BM25 + reranker + GNN + multi-hop + LLM) | ✅ Production | |
-| Agentic IRCoT fallback (two-model) | ✅ Production | 2-step max; 8B routing + 70B synthesis |
-| Forward-chaining inference (transitivity, symmetry, inverse, composition) | ✅ Production | Post-ingestion fixpoint |
-| OWL-RL reasoning over RDF export | ✅ Production | owlrl + rdflib |
-| SPARQL bridge (in-process over Turtle export) | ✅ Production | SPARQL 1.1 SELECT |
-| TransE link prediction | ✅ Production | entity embeddings as input |
-| Entity resolution (4-stage: exact/fuzzy/embedding/queue) | ✅ Production | Cosine threshold 0.92 |
-| Contradiction detection (5 types) | ✅ Production | |
-| Document authority hierarchy + SUPERSEDES chains | ✅ Production | |
-| Multi-tenant isolation | ✅ Production | `(name, type, tenant)` key |
-| Leiden community detection (multi-resolution) | ✅ Production | graspologic |
-| RAGAS evaluation (20% sampling) | ✅ Production | Groq judge (Gemini fallback) |
-| OAuth 2.0 (Google browser + M2M JWT) | ✅ Production | |
-| GDPR erasure | ✅ Production | cascade + audit log |
-| Domain ontologies (YAML-configurable) | ✅ Production | Aerospace regulatory demo |
+| Graph ingestion (doc → chunk → entity → relation) | ✅ Implemented / demo-ready | Groq extraction, Gemini 3072d embeddings |
+| 6-stage hybrid retrieval (vector + BM25 + reranker + GNN + multi-hop + LLM) | ✅ Implemented / demo-ready | |
+| Agentic IRCoT fallback (two-model) | ✅ Implemented / demo-ready | 2-step max; 8B routing + 70B synthesis |
+| Forward-chaining inference (transitivity, symmetry, inverse, composition) | ✅ Implemented / demo-ready | Post-ingestion fixpoint |
+| OWL-RL reasoning over RDF export | ✅ Implemented / demo-ready | owlrl + rdflib |
+| SPARQL bridge (in-process over Turtle export) | ✅ Implemented / demo-ready | SPARQL 1.1 SELECT |
+| TransE link prediction | ✅ Implemented / demo-ready | entity embeddings as input |
+| Entity resolution (4-stage: exact/fuzzy/embedding/queue) | ✅ Implemented / demo-ready | Cosine threshold 0.92 |
+| Contradiction detection (5 types) | ✅ Implemented / demo-ready | |
+| Document authority hierarchy + SUPERSEDES chains | ✅ Implemented / demo-ready | |
+| Multi-tenant isolation | ✅ Implemented / demo-ready | `(name, type, tenant)` key |
+| Leiden community detection (multi-resolution) | ✅ Implemented / demo-ready | graspologic |
+| RAGAS evaluation (20% sampling) | ✅ Implemented / demo-ready | Groq judge (Gemini fallback) |
+| OAuth 2.0 (Google browser + M2M JWT) | ✅ Implemented / demo-ready | |
+| GDPR erasure | ✅ Implemented / demo-ready | cascade + audit log |
+| Domain ontologies (YAML-configurable) | ✅ Implemented / demo-ready | Aerospace regulatory demo |
 | GitHub Actions CI | ✅ | pytest matrix + ruff lint |
 
 ### Known scale limits
@@ -39,6 +44,35 @@ for production hardening and capability expansion.
 | Result store TTL | 1 hour | Fine for interactive queries; increase for batch pipelines |
 | Groq free tier | 1500 RPD / 6000 RPM | Sufficient for dev; upgrade for high-volume ingestion |
 | Vector index | Neo4j native (cosine, 3072d) | Scales to ~10M chunks on adequately specced Neo4j |
+
+---
+
+## Open Implementation Candidates
+
+Completed items are intentionally excluded from this list. These are the
+remaining roadmap items most worth implementing for hiring signal, JD alignment,
+and technical credibility.
+
+| Priority | Candidate | Recommendation | Why it matters |
+|---|---|---|---|
+| 1 | **Agent tool safety layer** | Implement next | Directly matches agentic chatbot roles: allowlisted tools, scoped permissions, argument validation, timeouts, dry-run mode, denied-action behavior, and audit logs. |
+| 2 | **Golden GraphRAG evaluation set** | Implement next | Proves retrieval quality with regression tests instead of relying on a polished demo. Include expected citations, answer traits, and pass/fail thresholds. |
+| 3 | **JD mapping page** | Implement next | Converts the project into hiring evidence by mapping job requirements to files, endpoints, demo steps, and business value. |
+| 4 | **End-to-end demo video** | Implement next | Reduces recruiter and CTO review friction. Show ingest, inference, agentic query, citations, and dashboard metrics in 2-3 minutes. |
+| 5 | **Re-ranking feedback loop** | Worth implementing | Adds product maturity: citation clicks, thumbs up/down, or expand events can become implicit relevance data for future tuning. |
+| 6 | **GNN pre-training scheduled job** | Worth implementing | Makes the existing GNN work feel operational, not experimental. Trigger after large ingestion batches or on a maintenance schedule. |
+| 7 | **TimescaleDB KPI store** | Implement only if pitching observability hard | Useful for enterprise monitoring, but larger than it looks because compose/dev config and migration paths must be added. |
+| 8 | **Multi-modal extraction pipeline** | Defer unless targeting multi-modal roles | Storage exists, but OCR/visual embedding/audio ingestion expands scope away from the core GraphRAG hiring story. |
+| 9 | **Cross-encoder fine-tuning** | Defer | Hard to prove without real usage data and domain-labeled query/chunk pairs. |
+| 10 | **Kafka streaming ingestion** | Defer | Interesting scale path, but RabbitMQ already supports the current MVP story. Kafka would add operational complexity before it adds hiring value. |
+
+### Recommended Next Sprint
+
+- [x] **Tool execution policy** — `graphrag/agents/tool_policy.py`: allowlist, per-tool scopes, arg validation, timeout, dry-run mode, denied-action records, audit trail with summary.
+- [x] **Tool-call guardrail tests** — `tests/unit/test_tool_safety.py`: 21 tests across 7 classes (allowlist, scopes, arg validation, cross-tenant, destructive, dry-run, timeout). Suite: 325 passing.
+- [x] **Golden GraphRAG eval set** — `evals/golden_set.json`: 40 questions (single-hop, multi-hop, contradiction, authority-chain, inference, calibration); `scripts/run_golden_eval.py`: regression runner, pass/fail thresholds, per-type breakdown.
+- [x] **JD mapping artifact** — `docs/jd-mapping.md`: every JD bullet mapped to file + endpoint + demo step + business value; quick-reference numbers table; live demo sequence.
+- [ ] **Demo video checklist** - define the exact 2-3 minute walkthrough sequence and the data/query set it uses.
 
 ---
 
@@ -139,3 +173,4 @@ Add another `ingestion_worker.py` when:
 - KPI query `GET /kpis/timeseries` exceeds 100ms
 - Dashboard refresh causes noticeable lag under load
 - Raw KPI table exceeds ~5M rows
+

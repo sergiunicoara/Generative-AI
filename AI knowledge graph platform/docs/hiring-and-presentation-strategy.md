@@ -250,7 +250,7 @@ Run: `MATCH (n {tenant:'aerospace'}) RETURN n`
 > "I haven't had the opportunity — which is why I built this instead of waiting. Every company I've approached has pointed at experience requirements. So I built the production-grade platform, documented the architecture decisions, and wrote the tests. The work is real; the only thing missing is an invoice number."
 
 **"How does this scale to hundreds of thousands of documents?"**
-> "Three paths: parallel ingestion workers behind RabbitMQ — already designed for it, prefetch_count=1; read replicas for vector ANN queries; and the incremental community detector rebuilds only the affected subgraph instead of running Leiden on the full graph. The roadmap document in the repo lays out specific scale thresholds and decision points."
+> "Three paths: parallel ingestion workers — `compose.dev.yaml` starts one instance, add replicas freely since `prefetch_count=1` is already set. The alias registry is now Redis-backed so workers share entity deduplication state without each doing a full Neo4j scan on startup. And the incremental community detector is wired to the API dashboard — only communities containing changed entities get rebuilt, not the full Leiden run."
 
 **"Why Neo4j over Pinecone or Weaviate?"**
 > "Vector search answers 'which chunks are similar to my query?' It can't answer 'which entities are connected to the entity in my query, and what do documents about those entities say?' Multi-hop reasoning, forward-chaining inference, contradiction detection — none of those exist in a flat vector index. ADR-0001 in the repo explains the full tradeoff."
@@ -433,6 +433,11 @@ Open `config/ontologies/aerospace_regulatory.yml` in VS Code alongside the termi
 | Contradiction detector | `graphrag/graph/contradiction_detector.py` | — |
 | LLM router (swap here) | `graphrag/core/llm_client.py` | `get_llm()` / `get_fast_llm()` |
 | Architecture decisions (6 ADRs) | `docs/adr/0001-*.md` → `0006-*.md` | — |
+| Worker health server | `graphrag/workers/health_server.py` | `GET /ready`, `GET /live` |
+| Full dev stack | `compose.dev.yaml` | `docker compose -f compose.dev.yaml up` |
+| Seed demo data | `scripts/seed_demo_data.py` | `--commit --tenant aerospace` |
+| Alias registry (Redis-backed) | `graphrag/graph/alias_registry.py` | `load_alias_registry()` |
+| Wikidata linking | `graphrag/graph/entity_linker.py` | `WIKIDATA_LINKING=1` |
 
 ---
 
@@ -453,9 +458,12 @@ Open `config/ontologies/aerospace_regulatory.yml` in VS Code alongside the termi
 - [ ] State the real latency numbers: hybrid p95 2.2s, agentic p95 3.4s, why reported per mode
 
 ### Demo preparation
-- [ ] Run `py -3.11 scripts/demo_regulatory.py --live` end-to-end, confirm it completes all 6 steps
+- [ ] Run `docker compose -f compose.dev.yaml up neo4j` (or full stack) — confirm healthy
+- [ ] Run `py -3.11 scripts/seed_demo_data.py --commit` — populates graph with 20 entities + conflicts
+- [ ] Run `py -3.11 scripts/demo_regulatory.py --live` — confirm all 6 steps complete
 - [ ] Have Neo4j Browser open, confirm `MATCH (n {tenant:'aerospace'}) RETURN n` shows data
 - [ ] Practise narrating steps 1, 4, 5 out loud without reading the output
+- [ ] Know the one-liner for the full stack: `docker compose -f compose.dev.yaml up`
 
 ### Materials
 - [ ] Open `C:\Users\Sergiu\Desktop\GraphRAG_PwC_Pitch.pptx` and click through all slides

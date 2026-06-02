@@ -53,7 +53,7 @@ python scripts/demo_regulatory.py
 ```
 Runs a 6-step aerospace regulatory workflow end-to-end — ontology loading, domain/range validation, transitive inference, contradiction detection — using in-process mocks.
 
-**Live demo against real Neo4j** (requires `docker-compose up neo4j`):
+**Live demo against real Neo4j** (requires Neo4j — `docker compose -f compose.dev.yaml up neo4j`):
 ```bash
 python scripts/demo_regulatory.py --live
 ```
@@ -130,11 +130,15 @@ Ingests two genuinely conflicting documents, runs the real inference engine, and
 | **Tenant isolation** | All entities, edges, conflicts, communities, and health snapshots are scoped by `(name, type, tenant)` |
 | **Graph integrity guards** | Self-loop removal, cycle detection, quarantine, ingestion validation, dirty-flag propagation after every write |
 | **Manual correction API** | `/corrections` endpoints: entity split, quarantine/release, edge reject/override, conflict resolution |
-| **Query result cache** | Redis-backed, provenance-aware cache in `QueryConsumer`; cache hit skips all 6 retrieval stages; invalidates only queries that cited affected entities on new ingests |
+| **Query result cache** | Redis-backed, provenance-aware cache in `QueryConsumer`; cache hit skips all 6 retrieval stages; invalidates only queries that cited affected entities; TTL configurable via `QUERY_RESULT_TTL_SECONDS` |
+| **Redis alias registry** | `AliasRegistry.load()` pushes alias table to Redis hash (`graphrag:aliases:{tenant}`, 24h TTL); parallel workers warm from Redis without full Neo4j scan; `load_alias_registry()` is Redis-first |
+| **Wikidata entity linking** | Optional post-ingestion step (`WIKIDATA_LINKING=1`); grounds high-confidence entities to canonical QIDs; rate-limited to 20 entities/document |
 | **RAGAS evaluation** | Faithfulness, answer relevancy, context precision, context recall — auto-sampled at 20% |
 | **OAuth 2.0** | Google browser login + M2M client credentials grant (JWT Bearer) |
 | **Business Matrix** | Live Plotly Dash dashboard with KPI timeseries and alert thresholds |
-| **Async pipeline** | RabbitMQ decouples ingestion, query, and evaluation workers with DLQ + TTL |
+| **Worker health probes** | `GET /ready` + `GET /live` on each worker (`WORKER_HEALTH_PORT`); aiohttp server in `graphrag/workers/health_server.py`; compose.dev.yaml and Kubernetes readiness probes use `/ready` |
+| **Structured DLQ** | Failed messages carry `exception_type`, `error`, `retry_count`, `queue`, `message_id`, `payload_summary` — full JSON envelope for automated triage |
+| **Async pipeline** | RabbitMQ decouples ingestion, query, and evaluation workers with structured DLQ; `compose.dev.yaml` starts the full stack in one command |
 
 ---
 
@@ -389,7 +393,7 @@ ENV=development
 ### 4. Start infrastructure
 
 ```bash
-docker-compose up neo4j rabbitmq timescaledb redis
+docker compose -f compose.dev.yaml up   # full stack: Neo4j + RabbitMQ + Redis + API + workers + dashboards
 ```
 
 ### 5. Initialize Neo4j schema
@@ -402,27 +406,44 @@ Run once after Neo4j first starts. Creates vector indexes, fulltext indexes, con
 
 ### 6. Start workers and API
 
+**Option A — Docker (recommended, one command):**
+```bash
+docker compose -f compose.dev.yaml up
+```
+All services start in dependency order. Workers expose `GET /ready` health probes on ports 8081–8083.
+
+**Option B — Local Python (four terminals):**
 ```bash
 # Terminal 1 — API
 py -3.11 -m uvicorn api.main:app --host 0.0.0.0 --port 8000 --reload
 
-# Terminal 2 — Ingestion worker
+# Terminal 2 — Ingestion worker  (health probe: http://localhost:8081/ready)
 py -3.11 workers/ingestion_worker.py
 
-# Terminal 3 — Query worker
+# Terminal 3 — Query worker      (health probe: http://localhost:8082/ready)
 py -3.11 workers/query_worker.py
 
-# Terminal 4 — Evaluation worker
+# Terminal 4 — Evaluation worker (health probe: http://localhost:8083/ready)
 py -3.11 workers/evaluation_worker.py
 
 # Terminal 5 — Dashboard
 py -3.11 graphrag/business_matrix/dashboard_server.py
 ```
 
-**Single-machine shortcut:** Run ingestion + query on one process (shares Neo4j connection):
-
+**Single-machine shortcut:**
 ```bash
 py -3.11 workers/combined_worker.py
+```
+
+### 7. Seed demo data (optional)
+
+Populate the graph with a curated aerospace regulatory corpus — 20 entities, 12 relations,
+2 conflict pairs (triggers the contradiction demo), health and calibration snapshots:
+
+```bash
+py -3.11 scripts/seed_demo_data.py --commit --tenant aerospace
+# Or wipe and re-seed:
+py -3.11 scripts/seed_demo_data.py --wipe --commit --tenant aerospace
 ```
 
 ---
@@ -754,7 +775,7 @@ GRAPHRAG_DASHBOARD_DEMO=1 uvicorn api.main:app --port 8001   # → http://localh
 | `size((e)-[:RELATES_TO]-()) deprecated` | Neo4j 5.x deprecation | Fixed — queries use `COUNT { (e)-[:RELATES_TO]-() }` |
 | Query stuck at `status: queued` forever | Worker and API in separate processes with no shared store | Ensure Redis is running; both processes use `ResultStore` backed by Redis |
 | `403 API key leaked/expired` | Google revoked the Gemini key | Create new key at aistudio.google.com, update `.env`, restart |
-| `AMQPConnectionError` | RabbitMQ not running | `docker-compose up rabbitmq` |
+| `AMQPConnectionError` | RabbitMQ not running | `docker compose -f compose.dev.yaml up rabbitmq` |
 | `Invalid token: Not enough segments` | Empty/expired JWT | Re-run `/auth/dev-token` and rebuild `$h` headers |
 | Workers connecting to wrong host in Docker | `.env` uses `localhost` | Docker overrides in `docker-compose.yml` use service names |
 

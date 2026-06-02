@@ -218,7 +218,9 @@ Yes — `python scripts/demo_regulatory.py --live` runs the full demo against a 
 4. Runs the forward-chaining engine — the `SUPERSEDES [inferred]` edge is a real Neo4j write, not a replay
 5. Runs the contradiction detector — the IS_AIRWORTHY / IS_UNAIRWORTHY conflict is found by a real Cypher query
 
-The mock version exists so the demo runs in any environment without setup. The live flag requires a Neo4j instance on `bolt://localhost:7687`, which `docker-compose up neo4j` provides in about 30 seconds.
+The mock version exists so the demo runs in any environment without setup. The live flag requires Neo4j on `bolt://localhost:7687`. Two ways to get it:
+- `docker compose -f compose.dev.yaml up neo4j` — starts just Neo4j (~30s)
+- `docker compose -f compose.dev.yaml up` — starts the full stack (API + workers + dashboards)
 
 The mock is not a weakness — it's a test strategy. Every production test suite uses mocks; the question is whether the production path also works. It does. Open Neo4j Browser after running `--live` and query `MATCH (n {tenant:'aerospace'}) RETURN n` to see the persisted graph.
 
@@ -260,7 +262,7 @@ Three places isolation could fail:
 
 2. **Community detection** — Leiden runs per-tenant (`WHERE e.tenant = $tenant` before building the adjacency matrix). If this filter were missing, communities would be mixed across tenants.
 
-3. **Alias registry** — the in-memory alias registry is scoped to one `tenant` parameter per instance. Multiple workers sharing a registry would need to scope per-tenant. Currently each worker instantiates a fresh registry on startup, which is safe but not efficient at scale. Documented in `docs/roadmap.md` as a medium-term item.
+3. **Alias registry** — scoped per tenant. After `load()`, the alias table is pushed to a Redis hash (`graphrag:aliases:{tenant}`, 24h TTL). A second worker starting up calls `load_alias_registry()`, which tries Redis first — if another worker already pushed the table, it skips the full Neo4j MATCH entirely. Workers share deduplication state without race conditions on entity identity.
 
 ---
 
@@ -274,11 +276,11 @@ Three places isolation could fail:
 
 Three clear limits, in order of what breaks first:
 
-1. **Ingestion throughput: ~20 docs/minute on a single worker.** Bottleneck is the Groq API rate limit (1500 requests/day on free tier) and the entity resolution embedding comparison. Fix: parallel workers (RabbitMQ prefetch_count=1 supports this today — just run N workers) and a paid Groq tier.
+1. **Ingestion throughput: ~20 docs/minute on a single worker.** Bottleneck is the Groq API rate limit (1500 requests/day on free tier) and entity resolution embedding comparison. Fix: run N parallel workers (RabbitMQ `prefetch_count=1` already set; `compose.dev.yaml` starts one — add replicas) and a paid Groq tier.
 
-2. **Alias resolution at ~500k entities.** The in-memory alias dictionary fits in RAM up to this point. Beyond this, the `load()` method takes too long and the dict is too large. Fix: persist alias lookups to Redis so multiple workers share state without full reloads.
+2. **Alias resolution at ~500k entities.** The in-memory alias dictionary fits in RAM up to this point. Beyond this, `load()` takes too long. **Already mitigated:** alias tables are now pushed to Redis after load; subsequent workers warm from Redis without a full Neo4j scan. Hard RAM limit deferred to >500k entities.
 
-3. **Community rebuild at ~100k entities.** Full Leiden over the complete graph is expensive. The incremental community detector exists in the codebase (`IncrementalCommunityDetector`) but isn't wired into the production path yet. Fix: replace full rebuild with incremental for large tenants.
+3. **Community rebuild at ~100k entities.** Full Leiden over the complete graph is expensive. `IncrementalCommunityDetector` is wired to the API and dashboard — the rebuild button triggers incremental, not full Leiden. Full rebuild is still available for schema migrations.
 
 Beyond these, Neo4j handles tens of millions of nodes/edges without concern assuming appropriate hardware and indexes. The 6 indexes initialised by `init_neo4j.py` cover the hot query paths.
 

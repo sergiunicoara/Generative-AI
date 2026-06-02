@@ -72,9 +72,14 @@ browser with tabs pre-opened.
 **Terminal 1 — (only if doing the live demo) start Neo4j:**
 ```powershell
 cd "C:\Users\Sergiu\Desktop\Projects\Generative-AI\AI knowledge graph platform"
-docker-compose up -d neo4j
+# Quick: just Neo4j
+docker compose -f compose.dev.yaml up -d neo4j
+# OR full stack (API + workers + dashboards auto-start):
+# docker compose -f compose.dev.yaml up -d
 # wait ~30s, then verify:
 curl http://localhost:7474     # Neo4j Browser responds
+# Seed demo data (if graph is empty):
+py -3.11 scripts/seed_demo_data.py --commit
 ```
 
 **Terminal 2 — start the admin dashboard in demo mode:**
@@ -253,7 +258,9 @@ show it.** Switch to the terminal, grep the function, run the test.
 
 ```powershell
 # Stop the dashboards / API (Ctrl-C in each terminal), then:
-docker-compose down            # if you ran Neo4j
+docker compose -f compose.dev.yaml down        # stops all dev services
+# Add -v to also wipe volumes (fresh start next time):
+# docker compose -f compose.dev.yaml down -v
 ```
 
 The live demo writes to the `aerospace` tenant; it self-clears on the next

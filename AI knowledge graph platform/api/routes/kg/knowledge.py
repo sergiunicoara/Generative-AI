@@ -387,6 +387,44 @@ async def detect_property_conflicts(
     return await v.detect_property_conflicts(entity_type, tenant, limit)
 
 
+# ── Property violations health summary ────────────────────────────────────────
+
+@router.get(
+    "/health/property-violations",
+    dependencies=[Depends(require_scope("read"))],
+    summary="Summarise property cardinality violations across all monitored entity types",
+)
+async def property_violations_summary(
+    tenant: str = "default",
+    limit: int = 50,
+):
+    """
+    Scan all monitored entity types (PERSON, ORG, PRODUCT, LOCATION, EVENT) and
+    return a count of property violations per type, plus up to `limit` individual
+    issues.  Violations are advisory — they do not block ingestion — but they
+    signal extraction noise or conflicting source documents.
+    """
+    from graphrag.graph.property_schema import PropertySchemaValidator, PROPERTY_RULES
+    v = PropertySchemaValidator(get_neo4j())
+
+    all_issues: list[dict] = []
+    counts_by_type: dict[str, int] = {}
+
+    for entity_type in PROPERTY_RULES:
+        conflicts = await v.detect_property_conflicts(entity_type, tenant, limit=limit)
+        n = len(conflicts) if isinstance(conflicts, list) else 0
+        counts_by_type[entity_type] = n
+        if isinstance(conflicts, list):
+            all_issues.extend(conflicts)
+
+    return {
+        "tenant":            tenant,
+        "total_violations":  sum(counts_by_type.values()),
+        "violations_by_type": counts_by_type,
+        "sample_issues":     all_issues[:limit],
+    }
+
+
 # ── External Entity Linking (Wikidata) ────────────────────────────────────────
 
 class WikidataLinkRequest(BaseModel):

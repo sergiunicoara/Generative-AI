@@ -36,17 +36,50 @@ class IngestionConsumer:
 class QueryConsumer:
     async def start(self):
         from graphrag.agents.query_agent import QueryAgent
+        from graphrag.retrieval.query_cache import QueryCache
         agent = QueryAgent()
+        cache = QueryCache()
+        await cache.connect()
         mq = await get_rabbitmq()
         eval_sample_rate = get_settings().evaluation.get("eval_sample_rate", 0.2)
 
         async def handle(payload: dict):
             msg = QueryMessage(**payload)
+            tenant     = getattr(msg, "tenant",     "default")
+            session_id = getattr(msg, "session_id", "") or ""
+
+            # ── Cache pre-check (O(1) on hit; skips all 6 retrieval stages) ──
+            cached = await cache.get(msg.question, tenant=tenant, session_id=session_id)
+            if cached:
+                log.info("query_consumer.cache_hit", query_id=msg.query_id)
+                from graphrag.retrieval.result_store import get_result_store
+                await get_result_store().set(msg.query_id, {
+                    "status":     "completed",
+                    "query_id":   msg.query_id,
+                    "answer":     cached["answer"],
+                    "citations":  cached.get("citations", []),
+                    "latency_ms": 0,
+                    "cache_hit":  True,
+                })
+                return
+
             result = await agent.run(msg)
 
+            # ── Cache the result (provenance-aware: keyed by cited entity names) ──
+            await cache.set(
+                query=msg.question,
+                tenant=tenant,
+                result={
+                    "answer":    result.answer,
+                    "contexts":  result.contexts,
+                    "citations": result.citations,
+                },
+                entities_used=list(result.citations),
+                session_id=session_id,
+            )
+
             # Persist result via Redis-backed ResultStore so the API process
-            # (a separate container) can read it.  The old in-process dict
-            # import was silently broken in multi-container deployments.
+            # (a separate container) can read it.
             from graphrag.retrieval.result_store import get_result_store
             await get_result_store().set(msg.query_id, {
                 "status":     "completed",

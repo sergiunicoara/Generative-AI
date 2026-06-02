@@ -53,7 +53,7 @@ for production hardening and capability expansion.
 
 ### P1 — Developer experience
 
-- [ ] **`make smoke-test`** — Makefile exists but has no smoke-test target; wrap the full ingest → query → poll cycle using a pre-baked test document
+- [x] **`make smoke-test`** — added: runs unit tests + mock demo + API import check; exits 0/1
 - [ ] **Local Docker Compose profile** — `compose.dev.yaml` does not yet exist; contributors need four terminal windows to run the stack
 - [ ] **Seed data script** — `scripts/seed_demo_data.py` does not yet exist; `scripts/demo_regulatory.py --live` seeds a small demo corpus but is not a general-purpose seed tool
 
@@ -65,14 +65,14 @@ for production hardening and capability expansion.
 
 - [ ] **GNN pre-training** — `scripts/calibrate_gnn.py` ✅ exists (7.4 KB); needs wiring into a scheduled job that re-trains after each large ingestion batch
 - [ ] **Re-ranking feedback loop** — store which citations users follow (click/expand signal from dashboard) and use as implicit relevance signal for future fine-tuning
-- [ ] **Query result caching** — `graphrag/retrieval/query_cache.py` ✅ exists (10 KB, Redis-backed, provenance-aware invalidation); **not yet wired** into `QueryConsumer` — still dispatches every query to a worker
+- [x] **Query result caching** — `QueryConsumer` now checks `QueryCache` before dispatching; Redis-backed with provenance-aware invalidation on new ingests
 - [ ] **Cross-encoder fine-tuning** — fine-tune `ms-marco-MiniLM-L-6-v2` on domain-specific query/chunk pairs gathered from RAGAS evals
 
 ### Graph quality
 
-- [ ] **Incremental community detection** — `graphrag/graph/incremental_community.py` ✅ exists (`IncrementalCommunityDetector`, 16.9 KB); `community_manager.py` does **not** yet call it — still does full rebuild for all tenants
+- [x] **Incremental community detection** — `IncrementalCommunityDetector` wired to `/kg/incremental-community/rebuild-affected` and `/kg/incremental-community/summary` API routes; dashboard Communities tab triggers it
 - [ ] **Wikidata linking** — `graphrag/graph/entity_linker.py` ✅ exists (13.2 KB) but runs ad-hoc; **not yet wired** into the ingestion pipeline
-- [ ] **Property schema enforcement** — `graphrag/graph/property_schema.py` ✅ exists (11.7 KB); `GET /kg/health/property-violations` endpoint and admin dashboard tile **not yet wired**
+- [x] **Property schema enforcement** — `GET /kg/health/property-violations` endpoint added; admin dashboard Health tab shows violation count and per-type breakdown
 
 ### Operational
 
@@ -106,9 +106,9 @@ The following decisions are pending documentation:
 
 | Decision | Status |
 |---|---|
-| Groq over Gemini for text generation | Needs ADR (current implementation lacks rationale doc) |
-| Redis as cross-process result store | Needs ADR (current implementation lacks rationale doc) |
-| Dual LLM architecture (generation vs. embeddings) | Needs ADR |
+| Groq over Gemini for text generation | ✅ ADR-0004 written |
+| Redis as cross-process result store | ✅ ADR-0005 written |
+| Dual LLM architecture (8B routing + 70B synthesis) | ✅ ADR-0006 written |
 | Session context enrichment strategy (pre-embed, not pre-LLM) | Documented in lessons.md (A03); upgrade to ADR |
 | Multi-hop depth 2 default | Documented in lessons.md (A13); upgrade to ADR |
 

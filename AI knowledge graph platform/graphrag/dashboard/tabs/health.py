@@ -15,6 +15,7 @@ from graphrag.dashboard.utils import (
 def render(tenant: str) -> html.Div:
     data        = _get("/kg/graph-snapshots/list", {"tenant": tenant})
     alerts_data = _get("/kg/health/alerts", {"limit": 10})
+    prop_data   = _get("/kg/health/property-violations", {"tenant": tenant, "limit": 20})
 
     if http_error(data):
         if not DEMO_MODE:
@@ -96,6 +97,25 @@ def render(tenant: str) -> html.Div:
                                style={"color": GOOD, "fontWeight": "600",
                                       "padding": "12px 4px", "fontSize": "13.5px"})
 
+    # ── Property violations ──────────────────────────────────────────────────
+    prop_total = 0
+    prop_by_type: dict = {}
+    if not http_error(prop_data) and isinstance(prop_data, dict):
+        prop_total   = prop_data.get("total_violations", 0)
+        prop_by_type = prop_data.get("violations_by_type", {})
+
+    prop_tile = kpi_card(
+        "Property violations",
+        str(prop_total),
+        color=BAD if prop_total > 10 else WARN if prop_total > 0 else NAV,
+        accent=BAD if prop_total > 10 else WARN if prop_total > 0 else GOOD,
+        hint="single-value conflicts across PERSON/ORG/PRODUCT/LOCATION/EVENT",
+    )
+    prop_breakdown = html.Div(
+        "  ·  ".join(f"{t}: {n}" for t, n in prop_by_type.items() if n > 0) or "No violations",
+        style={"fontSize": "11px", "color": "#8A99B5", "padding": "4px 8px 8px"},
+    ) if prop_by_type else None
+
     return html.Div([
         section_title("Graph Health",
                       "Live structural & quality metrics for the knowledge graph"),
@@ -103,7 +123,11 @@ def render(tenant: str) -> html.Div:
         card_panel(gauges) if snaps else err(
             "No snapshots found. Run /kg/graph-snapshots/create."),
         card_panel(dcc.Graph(figure=fig, config={"displayModeBar": False})) if snaps else None,
-        html.Div("Recent Alerts", style={"fontSize": "15px", "fontWeight": "700",
-                                          "color": NAV, "margin": "22px 0 10px"}),
+        html.Div("Schema & Alerts", style={"fontSize": "15px", "fontWeight": "700",
+                                           "color": NAV, "margin": "22px 0 10px"}),
+        html.Div([prop_tile, *([] if not prop_breakdown else [])],
+                 style={"display": "flex", "flexWrap": "wrap", "gap": "2px",
+                        "marginBottom": "8px"}),
+        *([prop_breakdown] if prop_breakdown else []),
         alert_block,
     ])

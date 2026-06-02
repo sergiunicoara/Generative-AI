@@ -9,7 +9,7 @@ PIP       ?= $(PYTHON) -m pip
 
 .PHONY: help install install-dev lock test test-integration test-load test-all lint \
         api dashboard backup services-up services-down \
-        community-rebuild re-embed entity-migrate
+        community-rebuild re-embed entity-migrate smoke-test
 
 # ── Meta ───────────────────────────────────────────────────────────────────────
 
@@ -83,6 +83,15 @@ re-embed:      ## Re-embed entities with a new model (TENANT= MODEL= required)
 entity-migrate: ## Migrate entity type (OLD_TYPE= NEW_TYPE= TENANT= required)
 	$(PYTHON) scripts/entity_type_migration.py \
 	  --old-type $(OLD_TYPE) --new-type $(NEW_TYPE) --tenant $(TENANT)
+
+smoke-test:    ## End-to-end stack health check: unit tests + demo + API ping (no live services needed)
+	@echo "=== 1/3  Unit tests ==="
+	$(PYTEST) tests/unit/ -q --no-header
+	@echo "=== 2/3  Regulatory demo (mock mode) ==="
+	$(PYTHON) scripts/demo_regulatory.py
+	@echo "=== 3/3  API import check ==="
+	$(PYTHON) -c "from api.main import app; print('API: ok')"
+	@echo "=== Smoke test passed ==="
 
 backup:        ## Export full graph to NDJSON (OUTPUT= optional, default ./backup)
 	$(PYTHON) scripts/kg_backup.py --output $(or $(OUTPUT),./backup)

@@ -1,0 +1,90 @@
+BOEING 737 MAX
+COMPONENT MAINTENANCE MANUAL (CMM)
+CHAPTER 71 — POWER PLANT
+
+Section: 71-21-05
+Subject: CFM LEAP-1B Engine Mount — Inspection and Maintenance
+Revision: 12
+Date: November 15, 2023
+Applicability: Boeing 737-8 and 737-9 aircraft equipped with CFM International LEAP-1B engines
+
+---
+
+1. GENERAL DESCRIPTION
+
+The CFM LEAP-1B engine is mounted to the 737 MAX wing via a pylon assembly
+comprising a forward mount fitting, aft mount fitting, and lateral brace link. The
+LEAP-1B engine mount system differs from the CFM56-7B mount used on 737 NG aircraft
+primarily in the forward mount geometry required to accommodate the larger fan diameter
+(69.4 inches vs 61 inches on 737 NG).
+
+The forward mount carries primary vertical and side loads. The aft mount carries
+thrust and torque loads. The lateral brace link provides lateral load stability.
+
+---
+
+2. MAINTENANCE REQUIREMENTS
+
+2.1 Visual Inspection — Forward Engine Mount
+Interval: Every 600 flight cycles or 12 months, whichever occurs first.
+Reference: AMM Task 71-21-05-200-801
+
+Inspect the forward mount fitting for:
+a. Cracks in the main load-path fitting (particularly at lug bore radii)
+b. Corrosion on cadmium-plated surfaces
+c. Loose or missing fasteners (torque check per AMM limits)
+d. Bearing wear (measured with feeler gauge; replace if > 0.010 inch)
+
+2.2 Detailed Inspection — Aft Mount Link Assembly
+Interval: Every 3,000 flight cycles or on finding of any forward mount discrepancy.
+Reference: AMM Task 71-21-05-200-802
+
+Remove aft mount link assembly. Inspect link fitting bores for elongation using
+bore gauge (maximum elongation: 0.005 inch over nominal). Inspect shear pins for
+wear and corrosion. Replace if wear exceeds 0.003 inch.
+
+2.3 Thrust Link Inspection
+Interval: Every 1,500 flight cycles.
+Reference: AMM Task 71-21-05-200-803
+
+Inspect thrust link rod end bearings for radial play (maximum 0.012 inch).
+Inspect rod end locking nut torque (refer to standard torque chart SSM 20-09-02).
+Inspect link tube for impact damage or corrosion.
+
+---
+
+3. RELATED AIRWORTHINESS DIRECTIVES
+
+The following ADs apply to LEAP-1B engine mount inspection:
+- FAA AD 2024-01-02: References 737 MAX continued airworthiness requirements
+- FAA AD 2022-03-07: AOA sensor bracket inspection includes forward pylon structure
+- CFM AD CFM-2023-14: LEAP-1B fan blade inspection (separate document)
+
+---
+
+4. SPECIAL TOOLS REQUIRED
+
+- Bore gauge: 0.001 inch resolution (P/N BG-737-01 or equivalent)
+- Torque wrench: 0-150 ft-lb (calibrated within 12 months)
+- Inspection mirror: 6-inch extended reach
+- Dye penetrant kit: Turco Spray-X or equivalent (Pratt & Whitney spec C-204)
+
+---
+
+5. MANUFACTURER INFORMATION
+
+CFM International (CFM) is a 50/50 joint venture between GE Aerospace (United States)
+and Safran Aircraft Engines (France). The LEAP-1B engine entered commercial service
+in 2017 with Malindo Air on the Boeing 737 MAX 8. As of 2024, CFM has delivered
+over 2,400 LEAP-1B engines to 737 MAX operators worldwide.
+
+Primary operators include Southwest Airlines (United States), Ryanair (Ireland),
+Air Canada, Norwegian Air Shuttle, and Lion Air.
+
+---
+
+6. REVISION HISTORY
+
+Rev 12 (Nov 2023): Updated inspection intervals per FAA AD 2024-01-02 compliance.
+Rev 11 (Feb 2022): Added AOA sensor bracket inspection reference per AD 2022-03-07.
+Rev 10 (May 2020): Initial release for returned-to-service 737 MAX fleet.

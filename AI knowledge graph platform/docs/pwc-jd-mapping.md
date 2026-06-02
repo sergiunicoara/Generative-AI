@@ -157,7 +157,7 @@ A gap means you know the limit and can explain the next step.
 | Hybrid p95 | 2.2s | `GET /kpis/summary` |
 | Agentic p95 | 3.4s | same |
 | Agentic trigger rate | ~9% | same |
-| Entities (seed corpus) | 20 (10-doc aerospace seed; pipeline targets ~2k at scale) | Neo4j Browser or `/kg/health/alerts` |
+| Entities (seed corpus) | 20 (12-doc aerospace seed; pipeline targets ~2k at scale) | Neo4j Browser or `/kg/health/alerts` |
 | Relations (seed corpus) | 12 (pipeline targets ~7k at scale) | same |
 | Contradiction detection | wired & verified end-to-end | Admin dashboard → Conflicts tab |
 | Alias coverage | pipeline wired; target > 90% at scale | same |

@@ -1,0 +1,77 @@
+AD COMPLIANCE CHECK REPORT
+Operator: British Horizon Airways
+Aircraft Registration: G-ABCD
+Aircraft Type: Boeing 737-8 (737 MAX 8)
+MSN: 44567
+Report Reference: British Horizon AWY-AD-2024-0089
+Report Date: March 5, 2024
+Prepared by: British Horizon Airways Technical Records Department
+Reviewed by: UK Civil Aviation Authority (CAA), Airworthiness Department
+
+---
+
+PURPOSE
+
+This report documents the AD compliance status of aircraft G-ABCD as of March 5, 2024,
+following receipt of FAA AD 2024-01-02 (effective February 15, 2024) and assessment
+against the aircraft's current maintenance status.
+
+---
+
+CRITICAL FINDING — NON-COMPLIANCE IDENTIFIED
+
+FAA AD 2024-01-02 (MCAS Software v2.0 Installation)
+Compliance Deadline: May 15, 2024 (90 days from AD effective date)
+Current Software Version: MCAS v1.7.3
+Required Software Version: MCAS v2.0 or later
+Status: IS_NON_COMPLIANT_WITH (compliance deadline not yet reached)
+Action Required: Schedule MCAS v2.0 installation before May 15, 2024.
+Boeing Service Bulletin: 737-31-1944, Revision 2 (3.5 hours estimated)
+Scheduled Maintenance Slot: April 22-23, 2024 (next available D-check slot)
+
+NOTE: Non-compliance is anticipated (deadline not reached). Aircraft remains
+airworthy for operation under current MCAS v1.7.3 until compliance deadline.
+This report flags the upcoming compliance requirement for planning purposes.
+
+---
+
+COMPLIANT ADS
+
+FAA AD 2022-03-07 (MCAS Software v1.7.3 and AOA monitoring)
+Status: IS_COMPLIANT_WITH
+Last Verified: January 19, 2024 (C-Check inspection, SR Technics Zurich)
+AOA sensor replacement: completed January 2024 (Finding 003, ZRH-2024-0012)
+Next recurring inspection: 10,500 flight cycles
+
+FAA AD 2020-05-11 (Return to service requirements)
+Status: IS_COMPLIANT_WITH
+Compliance date: November 18, 2020
+All original compliance requirements met and maintained.
+
+EASA AD 2024-0072 (A320neo FMGC software — NOT APPLICABLE)
+Status: NOT_APPLICABLE
+Reason: G-ABCD is a Boeing 737-8; this EASA AD applies to Airbus A320neo family only.
+
+---
+
+UPCOMING AD COMPLIANCE SCHEDULE
+
+AD 2024-01-02 MCAS v2.0:
+Compliance deadline: May 15, 2024
+Planned completion: April 23, 2024
+Maintenance provider: BA Engineering, London Heathrow
+
+AOA sensor recurring inspection (per AD 2022-03-07):
+Due at: 10,500 flight cycles (current: 8,891 cycles, ~1,609 cycles remaining)
+Estimated due date: Q3 2025 (based on 80 cycle/month utilisation rate)
+
+---
+
+CERTIFICATION
+
+This compliance report has been prepared from British Horizon Airways Technical Records
+System (TRAX) and verified against Boeing and FAA AD databases.
+
+Prepared by: British Horizon Airways Technical Records
+CAMO Reference: UK.CAMO.0234
+Date: March 5, 2024

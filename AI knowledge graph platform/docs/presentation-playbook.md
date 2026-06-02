@@ -167,7 +167,7 @@ Narrate each of the 6 steps as it prints (don't read the screen silently):
 ### Slide 6 — Observability / metrics framework (1.5m)
 > "If you can't measure it, you can't run it in production. **16 metrics across 4
 > layers.** The real numbers from 104 query runs: faithfulness 0.840, context precision
-> 0.907, hybrid p95 **2.2s**. The seed graph (10 aerospace regulatory documents):
+> 0.907, hybrid p95 **2.2s**. The seed graph (12 aerospace regulatory documents):
 > 20 entities, 12 relations, contradiction detection verified end-to-end.
 > The calibration pipeline corrects LLM confidence from raw to isotonic-adjusted —
 > Brier score is the target metric once the corpus scales."

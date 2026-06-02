@@ -1,0 +1,74 @@
+SOUTHWEST AIRLINES
+FLEET REGISTRY — BOEING 737 MAX AIRCRAFT
+Registry Date: January 1, 2024
+Document Reference: SWA-OPS-2024-FR-001
+Prepared by: Southwest Airlines Fleet Management
+
+---
+
+OVERVIEW
+
+Southwest Airlines Co. is an American low-cost carrier headquartered in Dallas, Texas.
+Southwest operates exclusively Boeing 737 family aircraft and is the world's largest
+operator of the Boeing 737. As of January 2024, Southwest operates a fleet that
+includes Boeing 737-8 (737 MAX 8) and is transitioning from the 737-700 and 737-800.
+
+IATA Code: WN
+ICAO Code: SWA
+FAA Certificate: USSWA
+Primary Hub: Dallas Love Field (DAL)
+Hubs: Dallas Love Field, Chicago Midway, Baltimore/Washington, Denver, Las Vegas
+
+---
+
+BOEING 737 MAX 8 (737-8) FLEET
+
+Total 737 MAX 8 in service: 87 aircraft (as of January 1, 2024)
+On order: 349 additional 737-8 and 737-10 aircraft
+
+Selected Aircraft Registrations and Status:
+N8700L — MSN 43449 — Active — MCAS v1.7.3 installed
+N8701Q — MSN 43450 — Active — MCAS v1.7.3 installed
+N8702R — MSN 43451 — Active — MCAS v1.7.3 installed
+N8703B — MSN 43452 — Active — MCAS v1.7.3 installed
+N8704J — MSN 44102 — Active — MCAS v1.7.3 installed
+N8705K — MSN 44103 — Active — MCAS v1.7.3 installed
+[...87 aircraft total in MAX 8 fleet...]
+
+AD COMPLIANCE STATUS — FLEET WIDE
+FAA AD 2020-05-11: COMPLIANT — all 87 aircraft (pre-service compliance Nov 2020)
+FAA AD 2022-03-07: COMPLIANT — all 87 aircraft (completed April 2022)
+FAA AD 2024-01-02: COMPLIANCE DUE — deadline May 15, 2024
+  Software updates scheduled: February–May 2024 (phased, ~10 aircraft/month)
+  Current software: MCAS v1.7.3 on all 87 aircraft
+  Target software: MCAS v2.0 (Boeing SB 737-31-1944, Rev 2)
+
+---
+
+737 NG LEGACY FLEET (737-700 AND 737-800)
+
+737-700 aircraft: 467 in service
+737-800 aircraft: 207 in service
+Both types powered by CFM56-7B (not subject to MCAS ADs)
+Retirement schedule: 737-700 fleet retirement by 2031, 737-800 by 2032
+
+---
+
+FLEET ACQUISITION HISTORY
+
+Southwest received its first Boeing 737 MAX 8 on August 29, 2017 (N8700L).
+All 737 MAX 8 aircraft were grounded on March 13, 2019 per FAA Emergency Order.
+Southwest returned 737 MAX 8 to revenue service on March 11, 2021.
+
+Southwest Airlines operates Boeing 737 MAX 8 primarily on medium-haul routes
+(1.5 to 4 hours). The aircraft is configured in an all-economy 175-seat layout.
+
+---
+
+REGULATORY CONTACTS
+
+FAA Principal Operations Inspector (POI): Dallas FSDO
+FAA Certificate Management Office: Southwest Airlines CMO, Dallas
+Southwest CASS Program Manager: SWA Flight Operations Safety
+
+Document Classification: Internal — For regulatory and maintenance use only.

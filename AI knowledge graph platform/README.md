@@ -685,7 +685,7 @@ Every ingestion batch runs the following checks automatically:
 | Agentic (IRCoT) | 2,842 ms | **3,442 ms** | 9% of queries — by design |
 | Combined | 1,842 ms | 2,719 ms | Inflated by mode mix |
 
-### Graph Health (10-doc aerospace seed corpus · pipeline targets ~2k entities at scale)
+### Graph Health (12-doc aerospace seed corpus · pipeline targets ~2k entities at scale)
 
 Seed corpus: 10 aerospace regulatory documents (FAA/EASA ADs, manufacturer records).
 Run `py -3.11 scripts/seed_demo_data.py --commit` to populate.

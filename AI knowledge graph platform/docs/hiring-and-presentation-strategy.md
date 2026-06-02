@@ -98,7 +98,7 @@ That separates "I built this" from "I generated this."
    - Hybrid p95: 2.2s | Agentic p95: 3.4s | Combined: 2.7s
    - Faithfulness: 0.840 | Precision: 0.907 | Recall: 0.867 (104 real query runs, 23 RAGAS-sampled)
    - Hybrid p95: 2.2s | Agentic p95: 3.4s | Agentic trigger rate: ~10%
-   - Seed graph: 20 entities, 12 relations (10-doc aerospace corpus); pipeline targets ~2k entities at scale
+   - Seed graph: 20 entities, 12 relations (12-doc aerospace corpus); pipeline targets ~2k entities at scale
    - Calibration pipeline wired: isotonic regression targets Brier < 0.20 on production corpus
 
 ---
@@ -201,7 +201,7 @@ Run: `MATCH (n {tenant:'aerospace'}) RETURN n`
 >
 > Faithfulness is 0.840 — 84% of answers fully grounded in retrieved context. Context precision is 0.907 — almost everything we retrieve is relevant. Hybrid p95 latency is 2.2 seconds. The agentic path — which fires on about 10% of queries for hard multi-hop questions — runs at 3.4 seconds by design.
 >
-> The knowledge graph is seeded from 10 aerospace regulatory documents — FAA/EASA airworthiness directives and manufacturer records. The pipeline is fully wired: entity extraction, contradiction detection, calibration, community detection. Scale the corpus and all the health metrics scale with it."
+> The knowledge graph is seeded from 12 aerospace regulatory documents — FAA/EASA airworthiness directives and manufacturer records. The pipeline is fully wired: entity extraction, contradiction detection, calibration, community detection. Scale the corpus and all the health metrics scale with it."
 
 **Important framing:** *"We alert on agentic rate, not agentic latency. If more than 20% of queries trigger the fallback, the threshold is too loose — not the corpus is hard."*
 

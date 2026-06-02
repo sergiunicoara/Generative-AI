@@ -2,7 +2,7 @@
 
 > **RAGAS metrics** measured across **104 real query runs** (94 hybrid, 10 agentic) against
 > the live retrieval pipeline, with LLM-judged evaluation on a ~20% sample using
-> llama-3.3-70b as judge. Graph health metrics reflect a **10-document aerospace
+> llama-3.3-70b as judge. Graph health metrics reflect a **12-document aerospace
 > regulatory seed corpus** (FAA/EASA ADs, manufacturer records). All numbers are
 > reproducible from this repository.
 
@@ -52,7 +52,7 @@ Measured across all 104 query runs. p95 computed from real timing data in `resul
 
 ## 🕸️ Knowledge Graph — Seed Corpus
 
-Built from a **10-document aerospace regulatory seed corpus** (`scripts/seed_demo_data.py`) covering
+Built from a **12-document aerospace regulatory seed corpus** (`scripts/seed_demo_data.py`) covering
 FAA/EASA airworthiness directives, manufacturer records and fleet data. Graph health metrics
 below reflect representative target values for a production-scale corpus; the seed corpus
 demonstrates the full pipeline (ingestion → entity resolution → contradiction detection → community detection).

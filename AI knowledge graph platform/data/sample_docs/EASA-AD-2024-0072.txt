@@ -1,0 +1,68 @@
+EASA AIRWORTHINESS DIRECTIVE
+European Union Aviation Safety Agency
+
+AD No.: 2024-0072
+Issued: 15 March 2024
+Effective Date: 29 March 2024
+
+Design Approval Holder: AIRBUS SAS
+Type/Model Designation: A320-200N, A320-271N, A321-271N (A320neo family)
+
+TCDS Number: EASA.A.064
+Foreign AD: Not applicable
+Supersedure: EASA AD 2022-0201
+
+ATA 27 — Flight Controls — Fly-By-Wire System — Software Update
+
+APPLICABILITY:
+Airbus A320-200N series aeroplanes, all manufacturer serial numbers (MSN), equipped
+with Flight Management and Guidance Computer (FMGC) standard P/12C or earlier.
+Airbus A321-271N series aeroplanes, MSN 7500 through 10420 inclusive, equipped with
+FMGC standard P/12C or earlier.
+
+REASON:
+Airbus has released a new Flight Management and Guidance Computer (FMGC) software
+standard P/12D following identification of a potential incorrect vertical navigation
+(VNAV) path calculation under specific atmospheric conditions (ISA+20°C or above,
+cruise altitude above FL370, non-standard wind shear profile). The incorrect VNAV
+calculation could lead to an uncommanded altitude deviation of up to 200 feet during
+cruise phase. This condition, if not corrected, could reduce vertical separation from
+other traffic.
+
+This AD supersedes EASA AD 2022-0201 and requires installation of FMGC software
+standard P/12D or later, which corrects the vertical navigation algorithm and improves
+wind shear compensation.
+
+REQUIRED ACTIONS AND COMPLIANCE TIMES:
+(1) Software Update: Within 6 months after the effective date of this AD, install FMGC
+software standard P/12D or later in accordance with Airbus Service Bulletin A320-22-
+1272, dated January 22, 2024.
+
+(2) Operational Restriction (interim): Until the software update required by paragraph
+(1) is accomplished, prior to each flight at or above FL370 with ISA deviation greater
+than +18°C, flight crew must select MANAGED SPEED mode and monitor vertical
+profile deviations. If deviation exceeds 150 feet, apply OPEN DES or OPEN CLB as
+appropriate.
+
+(3) Training: Before operating modified aeroplanes, ensure all line pilots receive
+briefing on FMGC P/12D changes as described in Airbus Flight Operations Telex
+(FOT) SE-20.00046, dated February 2024.
+
+REF. PUBLICATIONS:
+- Airbus Service Bulletin A320-22-1272, original issue dated January 22, 2024.
+- Airbus Flight Operations Telex FOT SE-20.00046, dated February 2024.
+- EASA AD 2022-0201 (superseded by this AD).
+- EASA Safety Information Bulletin SIB 2023-21, dated November 2023.
+
+REMARKS:
+1. If requested and appropriately substantiated, EASA can approve Alternative Methods
+of Compliance for this AD.
+2. This AD was posted on February 5, 2024 as PAD 24-021 for consultation until
+March 1, 2024.
+3. Enquiries: ADs@easa.europa.eu
+
+ISSUED BY: European Union Aviation Safety Agency
+Certification Directorate, Safety Information Section
+Konrad-Adenauer-Ufer 3, 50668 Cologne, Germany
+
+AD Effective Date: 29 March 2024

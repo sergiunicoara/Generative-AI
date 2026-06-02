@@ -1,0 +1,91 @@
+BOEING COMMERCIAL AIRPLANES
+SOFTWARE CHANGE RECORD
+
+Document Number: D6-87700-100
+Title: MCAS Software Version 2.0 — Release Notes and Change Summary
+Aircraft Model: 737-8, 737-9 (737 MAX)
+ATA Chapter: 27 — Flight Controls
+Classification: MANDATORY — Released in conjunction with FAA AD 2024-01-02
+
+Prepared by: Boeing Flight Controls Software Engineering
+Approved by: Boeing DER (FAA Authorized)
+Document Date: January 8, 2024
+
+---
+
+1. OVERVIEW
+
+This document describes the changes incorporated in MCAS (Maneuvering Characteristics
+Augmentation System) Software Version 2.0 for Boeing 737-8 and 737-9 aircraft.
+MCAS Software v2.0 supersedes MCAS Software v1.7.3 (released March 2022) and all
+earlier versions.
+
+This software update is required for compliance with FAA AD 2024-01-02.
+
+---
+
+2. BACKGROUND
+
+MCAS was originally designed to provide handling characteristics similar to the
+737 NG series during manual flight at elevated angles of attack with flaps retracted.
+Following two fatal accidents (Lion Air Flight 610, October 2018; Ethiopian Airlines
+Flight 302, March 2019), the FAA issued Emergency Order of Airworthiness on
+March 13, 2019 grounding all 737-8 and 737-9 aircraft.
+
+MCAS Software v1.7.2 (released May 2020, required by FAA AD 2020-05-11) introduced:
+- Dual AOA sensor input requirement (vs. single sensor in original design)
+- Single activation limit per high-AOA event
+- Pilot override capability via electric stabilizer trim
+
+MCAS Software v1.7.3 (released March 2022, required by FAA AD 2022-03-07) introduced:
+- Enhanced AOA sensor disagreement monitoring
+- Improved activation threshold calibration
+- Extended BITE (Built-In Test Equipment) coverage
+
+---
+
+3. CHANGES IN VERSION 2.0
+
+3.1 AOA Sensor Fusion Enhancement
+Previous versions selected between two AOA sensors; Version 2.0 implements a
+Kalman-filter-based sensor fusion algorithm that continuously blends both AOA sensor
+readings weighted by confidence scores derived from sensor health monitoring.
+
+3.2 Adaptive Activation Threshold
+Version 2.0 introduces a dynamic MCAS activation threshold that adjusts based on:
+- Gross weight (from FMS data)
+- Center of gravity position
+- Flap configuration
+- Altitude and air density (from ADC)
+This replaces the fixed 15° AOA threshold used in v1.7.x.
+
+3.3 Enhanced Crew Alerting
+New aural and visual crew alerting when MCAS activation exceeds 3 commands within
+60 seconds. Alert: "MCAS LIMIT" on EICAS. Procedure: refer to QRH MCAS section.
+
+3.4 Data Recording
+All MCAS activations are now recorded to the Quick Access Recorder (QAR) with
+full AOA sensor data, activation duration, and commanded stabilizer movement.
+
+---
+
+4. SUPERSESSION
+
+MCAS Software v2.0 supersedes MCAS Software v1.7.3 and all prior versions.
+Do not operate 737-8 or 737-9 aircraft with MCAS Software v1.7.3 or earlier
+after the compliance date of FAA AD 2024-01-02.
+
+---
+
+5. CERTIFICATION STATUS
+
+FAA Type Certificate Supplemental: ST02757LA-S5
+Certification Basis: 14 CFR Part 25, Amendment 25-132
+DER Approval: Boeing DER #WA-12-SW-44, January 8, 2024
+
+---
+
+6. INSTALLATION REFERENCE
+
+Install in accordance with Boeing Service Bulletin 737-31-1944, Revision 2,
+dated January 8, 2024. Estimated installation time: 3.5 hours per aircraft.

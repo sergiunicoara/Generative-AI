@@ -396,7 +396,7 @@ The system emits alerts when metrics fall outside healthy ranges:
    Faithfulness is 0.840 — 84% of answers fully grounded in retrieved context. Context
    precision is 0.907, meaning almost everything we retrieve is relevant."
 
-2. **Show graph health**: "The knowledge graph is seeded from 10 aerospace regulatory
+2. **Show graph health**: "The knowledge graph is seeded from 12 aerospace regulatory
    documents — FAA/EASA airworthiness directives, manufacturer records, fleet data.
    The full pipeline is wired: entity extraction, alias resolution, contradiction detection,
    community detection, calibration. On a production-scale corpus these health metrics

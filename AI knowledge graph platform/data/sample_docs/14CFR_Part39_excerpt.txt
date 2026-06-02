@@ -1,0 +1,101 @@
+TITLE 14 — AERONAUTICS AND SPACE
+CHAPTER I — FEDERAL AVIATION ADMINISTRATION, DEPARTMENT OF TRANSPORTATION
+SUBCHAPTER C — AIRCRAFT
+PART 39 — AIRWORTHINESS DIRECTIVES
+
+Source: 45 FR 60185, Sept. 11, 1980, unless otherwise noted.
+
+---
+
+§ 39.1 Purpose of this regulation.
+
+The regulations in this part establish requirements for the correction of unsafe
+conditions in aircraft, aircraft engines, propellers, and appliances when those
+conditions exist or are likely to exist or develop in other products of the same design.
+
+---
+
+§ 39.3 Definition of airworthiness directives.
+
+FAA's airworthiness directives are legally enforceable rules that apply to the
+following products: aircraft, aircraft engines, propellers, and appliances.
+
+---
+
+§ 39.5 When does FAA issue airworthiness directives?
+
+FAA issues an airworthiness directive addressing a product when we find that:
+(a) An unsafe condition exists in the product; and
+(b) The condition is likely to exist or develop in other products of the same type design.
+
+---
+
+§ 39.7 What is the legal effect of failing to comply with an airworthiness directive?
+
+Anyone who operates a product that does not meet the requirements of an applicable
+airworthiness directive is in violation of this section.
+
+---
+
+§ 39.9 What if I operate an aircraft that does not meet the requirements of an
+airworthiness directive?
+
+If the unsafe condition described in the airworthiness directive exists in your aircraft,
+you violate § 39.7 of this part when you operate the aircraft, unless the airworthiness
+directive specifies otherwise or unless FAA has given you an exemption from that
+airworthiness directive's requirements.
+
+---
+
+§ 39.11 What actions do airworthiness directives require?
+
+Airworthiness directives specify inspections you must carry out, conditions and
+limitations you must comply with, and any actions you must take to resolve an unsafe
+condition.
+
+---
+
+§ 39.13 Are airworthiness directives part of the Code of Federal Regulations?
+
+Yes, airworthiness directives are part of the Code of Federal Regulations, but they
+are not codified in the annual edition of the CFR. You can get copies of airworthiness
+directives from FAA's Dynamic Regulatory System at rgl.faa.gov.
+
+---
+
+§ 39.15 Does an airworthiness directive apply if the product has been altered?
+
+The requirements of an applicable airworthiness directive still apply to a product that
+has been altered, unless the FAA has approved an alternative method of compliance
+(AMOC) for that product.
+
+---
+
+§ 39.17 What must I do if a change in a product affects my ability to accomplish
+the actions required by an airworthiness directive?
+
+If a change in a product makes it impossible for you to accomplish the actions required
+by an applicable airworthiness directive, you must contact the FAA for further
+instructions.
+
+---
+
+§ 39.19 May I address the unsafe condition in a way other than that specified in
+the airworthiness directive?
+
+Yes, as the holder of a type certificate, supplemental type certificate, or Parts
+Manufacturer Approval (PMA) for a product, you may request FAA to approve an
+AMOC. FAA will approve your AMOC if it provides an acceptable level of safety.
+
+---
+
+REGULATORY SIGNIFICANCE FOR BOEING 737 MAX AIRWORTHINESS DIRECTIVES
+
+Part 39 provides the legal framework for all Boeing 737 MAX ADs including:
+- FAA AD 2020-05-11 (initial return-to-service requirements)
+- FAA AD 2022-03-07 (enhanced AOA monitoring requirements)
+- FAA AD 2024-01-02 (MCAS Software v2.0 installation requirement)
+
+Operators of Boeing 737-8 and 737-9 aircraft are legally required to comply with
+all applicable ADs under 14 CFR Part 39. Non-compliance results in the aircraft
+being considered unairworthy for operation under FAA jurisdiction.

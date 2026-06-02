@@ -1,0 +1,74 @@
+COMPANY PROFILE
+Boeing Commercial Airplanes
+A Division of The Boeing Company
+
+Headquarters: 929 Long Bridge Drive, Arlington, Virginia 22202, USA
+Commercial Airplanes Division: Renton, Washington and Everett, Washington
+Website: www.boeing.com
+ICAO Manufacturer Code: BOE
+
+---
+
+OVERVIEW
+
+The Boeing Company is an American multinational aerospace and defense corporation.
+Boeing Commercial Airplanes (BCA), headquartered in Renton, Washington, is responsible
+for the design, manufacture, and support of commercial jet aircraft. Boeing is one of
+the two largest manufacturers of commercial aircraft in the world, along with Airbus SAS.
+
+---
+
+CURRENT COMMERCIAL AIRCRAFT PROGRAMS
+
+737 MAX Series (Next Generation successor)
+- 737-7 (100-138 passengers): Entry into service 2021
+- 737-8 (162-178 passengers): Entry into service 2017; grounded March 2019 — November 2020
+- 737-9 (178-193 passengers): Entry into service 2021
+- 737-10 (188-204 passengers): Certification pending as of 2024
+Engine: CFM International LEAP-1B (sole engine option)
+Key operators: Southwest Airlines, Ryanair, American Airlines, United Airlines, Air Canada
+
+737 NG Series (predecessor to 737 MAX)
+- 737-700, 737-800, 737-900ER
+Engine: CFM International CFM56-7B
+Status: Production ended; large fleet in service globally
+
+787 Dreamliner Series
+- 787-8, 787-9, 787-10
+Engine: GE Aviation GEnx or Rolls-Royce Trent 1000 (operator choice)
+Key features: 50% composite construction, reduced fuel burn vs. 767
+
+777X Series
+- 777-8, 777-9
+Engine: GE Aviation GE9X (sole engine option)
+Status: Certification ongoing as of 2024
+
+---
+
+REGULATORY RELATIONSHIPS
+
+Primary Certification Authority: Federal Aviation Administration (FAA), United States
+Bilateral Agreement Partners: EASA (European Union), TCCA (Canada), CAAC (China),
+ANAC (Brazil), CAAS (Singapore) and 60+ other national authorities.
+
+Boeing holds FAA Production Approval (PAH) and Design Approval Holder (DAH) status
+for all Boeing commercial aircraft under 14 CFR Parts 21, 25, and 39.
+
+---
+
+737 MAX REGULATORY HISTORY
+
+March 13, 2019: FAA Emergency Order of Airworthiness grounds all 737-8 and 737-9.
+May 2020: FAA AD 2020-05-11 establishes return-to-service requirements.
+November 18, 2020: FAA lifts grounding order; 737 MAX returns to US service.
+March 2022: FAA AD 2022-03-07 requires additional AOA monitoring enhancements.
+January 2024: FAA AD 2024-01-02 requires MCAS Software v2.0 installation.
+
+---
+
+MANUFACTURING
+
+Primary assembly: Boeing Factory, Renton, WA (737 family)
+Annual production rate (2024): Approximately 38 737 MAX aircraft per month
+(target: 50/month by end 2025, subject to FAA oversight)
+Major suppliers: Spirit AeroSystems (fuselage), Safran (landing gear), Parker Aerospace (hydraulics)

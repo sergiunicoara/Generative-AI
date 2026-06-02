@@ -1,0 +1,79 @@
+AIRCRAFT INSPECTION REPORT
+Operator: British Horizon Airways
+Aircraft Registration: G-ABCD
+Aircraft Type: Boeing 737-8 (737 MAX 8)
+Manufacturer Serial Number: 44567
+Line Number: 7234
+Engine Configuration: CFM LEAP-1B (Left: ESN 678234, Right: ESN 678235)
+
+Inspection Type: C-Check (4C Interval)
+Inspection Reference: British Horizon AWY-MX-2024-0012
+Base Maintenance Provider: SR Technics, Zurich, Switzerland
+Inspection Start Date: January 8, 2024
+Inspection Completion Date: January 19, 2024
+Flight Hours at Inspection: 14,234
+Flight Cycles at Inspection: 8,891
+
+---
+
+AIRWORTHINESS DIRECTIVE COMPLIANCE STATUS
+
+The following ADs were reviewed and verified for compliance during this inspection:
+
+1. FAA AD 2022-03-07 (MCAS Software v1.7.3 and AOA monitoring)
+   Status: IS_COMPLIANT_WITH
+   Compliance Date: April 3, 2022
+   Software Version Installed: MCAS v1.7.3
+   AOA Disagree Alert: ACTIVE — confirmed operational
+   Notes: Pilot training records on file; recurring inspection 2,000 cycle check
+   completed at 8,500 cycles. Next due at 10,500 cycles.
+
+2. FAA AD 2020-05-11 (Initial return-to-service requirements)
+   Status: IS_COMPLIANT_WITH
+   Original Compliance Date: November 18, 2020
+   Notes: Pre-service compliance on return from grounding. All requirements met.
+
+3. CFM AD CFM-2023-14 (LEAP-1B fan blade inspection)
+   Status: IS_COMPLIANT_WITH
+   Compliance Date: December 2, 2023
+   Both engines inspected; no discrepancies found.
+
+---
+
+MAINTENANCE FINDINGS
+
+Finding 001 (Minor):
+System: ATA 27 — Flight Controls
+Description: Right aileron trim tab rod end bearing showing wear of 0.009 inch
+(limit: 0.012 inch). Within limits but flagged for next check monitoring.
+Action: Documented. Monitor at next A-check (due 800 FH).
+Sign-off: SR Technics AME Ref: ZRH-2024-0012-F001
+
+Finding 002 (Minor):
+System: ATA 71 — Power Plant (Engine Mount)
+Description: Forward engine mount (left engine) — minor surface corrosion on
+cadmium plating. Corrosion depth within limits per CMM 71-21-05 Section 2.1.
+Action: Corrosion treated with Alodine 1200S, area primed and resealed.
+Sign-off: SR Technics AME Ref: ZRH-2024-0012-F002
+
+Finding 003 (RESOLVED):
+System: ATA 34 — Navigation
+Description: Left AOA sensor bracket showed minor crack indication (0.3 inch)
+at lug bore radius, identified during dye penetrant inspection per AD 2022-03-07.
+Action: Left AOA sensor and bracket assembly replaced with new unit P/N 777-
+1964-5. FAA Form 8130-3 on file. AD 2022-03-07 recurring inspection reset.
+Sign-off: SR Technics AME Ref: ZRH-2024-0012-F003
+FAA Approval Reference: UK CAA CRS-2024-0456
+
+---
+
+CERTIFICATE OF RELEASE TO SERVICE
+
+This aircraft has been maintained in accordance with the approved maintenance
+programme and is considered airworthy for return to service.
+
+Released by: SR Technics (UK CAA Approved Maintenance Organisation)
+AMO Reference: UK.145.01234
+Authorised Signatory: J. Mueller, LAME License UK.66.47892
+Date: January 19, 2024
+Aircraft Status: IS_AIRWORTHY

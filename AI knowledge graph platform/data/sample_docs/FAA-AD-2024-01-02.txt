@@ -1,0 +1,64 @@
+AIRWORTHINESS DIRECTIVE
+Federal Aviation Administration
+14 CFR Part 39
+
+Docket No.: FAA-2023-1842
+AD No.: 2024-01-02
+
+AGENCY: Federal Aviation Administration (FAA), DOT.
+ACTION: Final rule.
+
+SUMMARY: The FAA is adopting a new airworthiness directive (AD) for certain Boeing
+Model 737-8 and 737-9 airplanes. This AD supersedes AD 2022-03-07. This AD was
+prompted by updated safety analysis following the return to service of the Boeing 737
+MAX fleet and a review of continued operational safety data. This AD requires updated
+Maneuvering Characteristics Augmentation System (MCAS) software installation,
+revised flight crew operating manual (FCOM) procedures, and enhanced angle-of-attack
+(AOA) sensor monitoring.
+
+DATES: This AD is effective February 15, 2024.
+
+AFFECTED ADs: This AD supersedes AD 2022-03-07.
+
+APPLICABILITY: This AD applies to Boeing Model 737-8 and 737-9 airplanes, certificated
+in any category, as identified in Boeing Alert Requirements Bulletin (ARB) 737-31A1904
+RB, dated December 5, 2023.
+
+COMPLIANCE: Comply with this AD within the compliance times specified, unless already
+done.
+
+REQUIRED ACTIONS:
+(a) Software Update. Within 90 days after the effective date of this AD, install MCAS
+Software version 2.0 or later, in accordance with Boeing Service Bulletin 737-31-1944,
+Revision 2, dated January 8, 2024.
+
+(b) FCOM Revision. Before further flight after software installation, update the Flight
+Crew Operations Manual to include revised MCAS procedures as specified in Boeing
+Operations Manual Bulletin TBC-19-11, Revision 4.
+
+(c) AOA Sensor Inspection. Within 500 flight hours after the effective date of this AD,
+inspect the Angle of Attack sensor installation in accordance with Boeing AMM Task
+27-41-00-200-801.
+
+(d) Reporting. Within 30 days after accomplishing the actions required by paragraphs
+(a) through (c) of this AD, report compliance to the FAA using the Compliance
+Reporting Form available at https://av-info.faa.gov.
+
+AUTHORITY: 49 USC 106(g), 40113, 44701.
+
+REGULATORY AUTHORITY: This rulemaking is issued under the authority described in
+Subtitle VII, Part A, Subpart III, Section 44701 of Title 49 of the United States Code.
+
+REFERENCES:
+- AD 2022-03-07: Superseded by this AD.
+- AD 2020-05-11: Partially superseded by AD 2022-03-07, fully superseded by this AD.
+- Boeing Service Bulletin 737-31-1944, Revision 2, dated January 8, 2024.
+- Boeing Alert Requirements Bulletin 737-31A1904 RB, dated December 5, 2023.
+- MCAS Software Version 2.0 Release Notes, Boeing Document D6-87700-100.
+
+ISSUED BY: Federal Aviation Administration
+Transport Standards Branch, Policy and Innovation Division
+Aircraft Certification Service
+Washington, DC
+
+Effective Date: February 15, 2024

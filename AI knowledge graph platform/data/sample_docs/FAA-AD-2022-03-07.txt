@@ -1,0 +1,62 @@
+AIRWORTHINESS DIRECTIVE
+Federal Aviation Administration
+14 CFR Part 39
+
+Docket No.: FAA-2021-0855
+AD No.: 2022-03-07
+
+AGENCY: Federal Aviation Administration (FAA), DOT.
+ACTION: Final rule.
+
+SUMMARY: The FAA is adopting a new airworthiness directive (AD) for certain Boeing
+Model 737-8 and 737-9 airplanes. This AD supersedes AD 2020-05-11. This AD was
+prompted by additional mandatory requirements for continued airworthiness following
+the return to service of the Boeing 737 MAX after the grounding period. This AD
+requires enhanced MCAS software verification procedures, AOA disagree alert
+activation, and mandatory crew training completion records.
+
+DATES: This AD is effective March 25, 2022.
+
+AFFECTED ADs: This AD supersedes AD 2020-05-11.
+
+APPLICABILITY: This AD applies to Boeing Model 737-8 and 737-9 airplanes,
+certificated in any category, with Line Numbers 1 through 4972, as identified in Boeing
+Requirements Bulletin 737-31A1875 RB, dated October 12, 2021.
+
+COMPLIANCE: Comply with this AD within the compliance times specified, unless already
+done.
+
+REQUIRED ACTIONS:
+(a) MCAS Software Verification. Within 30 days after the effective date of this AD,
+verify MCAS software version 1.7.3 or later is installed using AMM Task 31-21-00-
+860-802. If software is not at required version, install updated software in accordance
+with Boeing Service Bulletin 737-31-1887, Revision 1, dated February 2, 2022.
+
+(b) AOA Disagree Alert. Before further flight, confirm activation of the AOA Disagree
+alert system in accordance with Boeing Flight Deck Modification Document
+737-31-1887-FDM, dated February 2, 2022. The AOA Disagree alert must annunciate
+on the primary flight display when AOA sensor values diverge by more than 5.5 degrees.
+
+(c) Flight Crew Training Records. Within 60 days after the effective date of this AD,
+submit proof of completion of Boeing 737 MAX Differences Training for all line
+qualified 737-8 and 737-9 pilots to the FAA Flight Standards District Office having
+jurisdiction over your principal operations center.
+
+(d) Repetitive Inspection. Every 2,000 flight cycles, perform AOA sensor bracket
+inspection IAW AMM Task 27-41-00-200-803 and report results to FAA.
+
+AUTHORITY: 49 USC 106(g), 40113, 44701.
+
+REFERENCES:
+- AD 2020-05-11: Superseded by this AD.
+- Boeing Service Bulletin 737-31-1887, Revision 1, dated February 2, 2022.
+- Boeing Alert Requirements Bulletin 737-31A1875 RB, dated October 12, 2021.
+- FAA Emergency Order of Airworthiness, November 18, 2020.
+- Joint Authorities Technical Review (JATR) Final Report, October 11, 2019.
+
+ISSUED BY: Federal Aviation Administration
+Transport Standards Branch
+Aircraft Certification Service
+Washington, DC
+
+Effective Date: March 25, 2022

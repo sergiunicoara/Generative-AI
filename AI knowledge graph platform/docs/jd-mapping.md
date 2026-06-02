@@ -199,7 +199,7 @@ to a specific file, endpoint, demo step, or test — with a one-line business va
 | Hybrid p95 | 2.2s |
 | Agentic p95 | 3.4s (8B routing + 70B synthesis) |
 | Agentic trigger rate | ~9% of queries |
-| Entities (seed corpus) | 20 (10-doc aerospace seed; pipeline targets ~2k at scale) |
+| Entities (seed corpus) | 20 (12-doc aerospace seed; pipeline targets ~2k at scale) |
 | Relations (seed corpus) | 12 (pipeline targets ~7k at scale) |
 | Contradiction detection | wired & verified end-to-end |
 | Alias coverage | pipeline wired; target > 90% at scale |

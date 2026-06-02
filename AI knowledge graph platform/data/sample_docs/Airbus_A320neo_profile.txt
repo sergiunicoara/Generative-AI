@@ -1,0 +1,88 @@
+AIRCRAFT TYPE PROFILE
+Airbus A320neo (New Engine Option) Family
+
+Manufacturer: Airbus SAS
+Headquarters: 2 Rond-Point Emile Dewoitine, 31707 Blagnac, France
+ICAO Manufacturer Code: AIB
+Type Certificate: EASA.A.064
+
+---
+
+OVERVIEW
+
+The Airbus A320neo (New Engine Option) family is a series of narrow-body commercial
+aircraft manufactured by Airbus. The "neo" designation refers to the new, more
+fuel-efficient engine options compared to the original A320ceo (Current Engine Option)
+family. The A320neo family entered commercial service in January 2016.
+
+---
+
+AIRCRAFT VARIANTS
+
+A319neo
+Capacity: 120-160 passengers (typical 2-class)
+Range: 3,750 nm
+Engine options: CFM International LEAP-1A, Pratt & Whitney PW1100G
+
+A320-200N (A320neo)
+Capacity: 150-194 passengers (typical 2-class)
+Range: 3,400 nm
+Engine options: CFM International LEAP-1A, Pratt & Whitney PW1100G
+Key structural changes: Sharklet wingtip devices, reinforced landing gear
+
+A321neo
+Capacity: 180-220 passengers
+Range: 4,000 nm (A321XLR variant: 5,400 nm)
+Engine options: CFM International LEAP-1A, Pratt & Whitney PW1100G
+
+---
+
+CERTIFICATION AND REGULATORY STATUS
+
+EASA Type Certificate: EASA.A.064 (A320 family, includes neo variants)
+FAA Type Certificate: A28NM (validated by FAA for US operations)
+TCCA: Approved
+CAAC: Approved
+
+The A320neo family is subject to continuous airworthiness oversight by EASA,
+with applicable ADs issued under EASA AD authority. Key ADs include:
+
+EASA AD 2024-0072 (effective March 29, 2024):
+Subject: FMGC software P/12D — vertical navigation correction
+Supersedes: EASA AD 2022-0201
+Applies to: A320-200N and A321-271N with FMGC P/12C or earlier
+Action: Install FMGC software standard P/12D within 6 months
+
+EASA AD 2022-0201 (superseded):
+Subject: FMGC software P/12C — previous vertical navigation update
+Superseded by EASA AD 2024-0072
+
+---
+
+KEY TECHNICAL FEATURES
+
+Fly-By-Wire: Full digital fly-by-wire flight control system (FBWC)
+Flight Management: Honeywell or Thales FMGC (operator choice)
+Avionics: Airbus LCD primary flight displays, integrated modular avionics (IMA)
+Cabin: Airspace cabin standard (wider overhead bins, LED lighting)
+
+---
+
+PRIMARY OPERATORS (A320neo family)
+
+IndiGo Airlines (India): Largest A320neo operator globally (500+ aircraft)
+Air France: Primary European narrow-body replacement
+Wizz Air: European LCC operator (all-A320neo family fleet)
+Lufthansa Group: Mixed A320ceo and A320neo fleet
+EasyJet: Transitioning from A320ceo to A320neo
+Frontier Airlines, Spirit Airlines: North American LCC operators
+Lion Air (Indonesia): Operates both A320neo and 737 MAX
+
+---
+
+MANUFACTURER INFORMATION
+
+Airbus SAS is a subsidiary of Airbus SE (formerly EADS). Airbus manufactures aircraft
+at facilities in Toulouse (France), Hamburg (Germany), Tianjin (China), and Mobile
+(Alabama, USA). Airbus holds a 50% market share in the global narrow-body aircraft
+segment, competing directly with the Boeing 737 family.

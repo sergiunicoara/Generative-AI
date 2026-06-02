@@ -1,0 +1,69 @@
+AIRWORTHINESS DIRECTIVE
+Federal Aviation Administration
+14 CFR Part 39
+
+Docket No.: FAA-2020-0481
+AD No.: 2020-05-11
+
+AGENCY: Federal Aviation Administration (FAA), DOT.
+ACTION: Final rule; request for comments.
+
+SUMMARY: The FAA is adopting a new airworthiness directive (AD) for all Boeing
+Model 737-8 and 737-9 airplanes. This AD was prompted by two fatal accidents involving
+Boeing 737-8 airplanes — Lion Air Flight 610 on October 29, 2018, and Ethiopian
+Airlines Flight 302 on March 10, 2019 — both of which involved erroneous activation
+of the Maneuvering Characteristics Augmentation System (MCAS) due to faulty Angle
+of Attack (AOA) sensor input. This AD requires installation of updated MCAS software
+(version 1.7.2), activation of the AOA Disagree alert, enhanced pilot training, and
+specific pre-flight checklist procedures.
+
+DATES: This AD is effective May 27, 2020. Comments must be received by July 10, 2020.
+
+APPLICABILITY: This AD applies to all Boeing Model 737-8 and 737-9 airplanes,
+certificated in any category, with any line number, that are returned to service
+following the FAA Emergency Order of Airworthiness dated March 13, 2019.
+
+COMPLIANCE: Comply with this AD before return to revenue service of any affected
+airplane.
+
+REQUIRED ACTIONS:
+(a) MCAS Software Update. Before return to service, install MCAS Software version
+1.7.2 in accordance with Boeing Service Bulletin 737-31-1710, dated March 5, 2020.
+The update modifies MCAS to: (1) use inputs from both AOA sensors rather than
+alternating; (2) limit MCAS activation to one stabilizer nose-down command per
+high-AOA event; (3) enable flight crew to override MCAS using electric stabilizer
+trim switches.
+
+(b) AOA Disagree Alert Activation. Before return to service, activate the AOA
+Disagree alert system per Boeing Flight Deck Document 737-MAX-FDD-0001, Revision 3.
+The alert must display on the primary flight display if left and right AOA sensor
+readings disagree by more than 5.5 degrees.
+
+(c) Pilot Training. Before operating any affected airplane, the certificate holder must
+ensure all crewmembers complete Boeing 737 MAX Differences Training as outlined in
+FAA Advisory Circular AC 120-53C. Training records must be retained for two years.
+
+(d) Checklist Update. Before return to service, update the Quick Reference Handbook
+(QRH) to include the Runaway Stabilizer checklist revision per Boeing Operations
+Manual Bulletin TBC-19-11, Revision 3.
+
+AUTHORITY: 49 USC 106(g), 40113, 44701; Emergency Order of Airworthiness
+dated March 13, 2019.
+
+REFERENCES:
+- Boeing Service Bulletin 737-31-1710, dated March 5, 2020.
+- FAA Emergency Order of Airworthiness, March 13, 2019 (grounds all 737-8 and 737-9).
+- NTSB Accident Report DCA19MA060 (Ethiopian Airlines Flight 302).
+- Indonesian KNKT Accident Report (Lion Air Flight 610).
+- Boeing 737 MAX Flight Crew Operations Manual, Revision 12.
+- 14 CFR Part 39 — Airworthiness Directives.
+
+APPLICABILITY NOTE: Southwest Airlines, American Airlines, and United Airlines are
+the primary US operators of Boeing 737 MAX aircraft. Compliance is mandatory for
+all Part 121 operators prior to revenue service resumption.
+
+ISSUED BY: Federal Aviation Administration
+Aircraft Certification Service, Transport Standards Branch
+Washington, DC
+
+Effective Date: May 27, 2020

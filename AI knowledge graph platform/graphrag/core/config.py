@@ -34,6 +34,12 @@ class Settings(BaseSettings):
     # for 70B — cuts each reasoning step from ~1.5s to ~0.2s.
     groq_fast_model: str = "llama-3.1-8b-instant"
 
+    # ── Optional features ───────────────────────────────────────────────────────
+    # Wikidata linking: ground high-confidence entities to canonical QIDs.
+    # Off by default to keep ingestion fast and avoid Wikidata rate limits.
+    # Enable with WIKIDATA_LINKING=1 or wikidata_linking_enabled: true in settings.yml.
+    wikidata_linking_enabled: bool = False
+
     # ── Neo4j ───────────────────────────────────────────────────────────────────
     neo4j_uri: str = "bolt://localhost:7687"
     neo4j_user: str = "neo4j"

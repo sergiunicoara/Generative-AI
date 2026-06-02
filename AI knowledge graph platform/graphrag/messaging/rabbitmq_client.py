@@ -132,17 +132,29 @@ class RabbitMQClient:
                         await handler(payload)
                         await message.ack()
                     except Exception as exc:  # broad: handler may raise anything; must not kill consumer loop
+                        exc_type  = type(exc).__name__
+                        exc_msg   = str(exc)[:300]
+                        # Summarise original payload for DLQ — truncate large fields
+                        try:
+                            raw_payload = json.loads(message.body)
+                            payload_summary = {
+                                k: (str(v)[:80] if isinstance(v, str) else v)
+                                for k, v in list(raw_payload.items())[:8]
+                            }
+                        except Exception:
+                            payload_summary = {"raw": message.body[:200].decode(errors="replace")}
+
                         log.error(
                             "rabbitmq.handler_error",
-                            error=str(exc),
+                            exception_type=exc_type,
+                            error=exc_msg,
                             retries=retries,
+                            queue=queue_name,
+                            message_id=str(message.message_id or ""),
+                            payload_summary=payload_summary,
                         )
+
                         if retries < MAX_RETRIES:
-                            # Exponential backoff before requeue so transient
-                            # failures (Neo4j overload, rate limits) don't
-                            # hammer the downstream at full speed.
-                            # prefetch_count=1 means this sleep only delays
-                            # this message, not the whole consumer.
                             backoff_s = min(2 ** retries, 30)  # 1s, 2s, 4s… cap 30s
                             log.info(
                                 "rabbitmq.retry_backoff",
@@ -152,12 +164,12 @@ class RabbitMQClient:
                             await asyncio.sleep(backoff_s)
 
                             new_headers = dict(message.headers or {})
-                            new_headers["x-retry-count"] = retries + 1
+                            new_headers["x-retry-count"]    = retries + 1
+                            new_headers["x-last-error"]     = exc_msg
+                            new_headers["x-exception-type"] = exc_type
                             retry_msg = Message(
                                 message.body,
                                 delivery_mode=message.delivery_mode,
-                                # Preserve original priority so high-priority
-                                # messages don't silently drop to 0 on retry.
                                 priority=message.priority or 0,
                                 headers=new_headers,
                             )
@@ -166,8 +178,29 @@ class RabbitMQClient:
                             )
                             await message.ack()
                         else:
-                            log.error("rabbitmq.dlq_sent", queue=dlq_name)
-                            await message.nack(requeue=False)
+                            # Build structured DLQ envelope so ops can triage without
+                            # parsing raw RabbitMQ headers.
+                            dlq_envelope = {
+                                "dlq_reason":       "max_retries_exceeded",
+                                "exception_type":   exc_type,
+                                "error":            exc_msg,
+                                "retry_count":      retries,
+                                "queue":            queue_name,
+                                "message_id":       str(message.message_id or ""),
+                                "payload_summary":  payload_summary,
+                            }
+                            log.error("rabbitmq.dlq_sent", queue=dlq_name, **dlq_envelope)
+                            dlq_msg = Message(
+                                json.dumps(dlq_envelope).encode(),
+                                delivery_mode=DeliveryMode.PERSISTENT,
+                                headers={
+                                    "x-original-queue":  queue_name,
+                                    "x-exception-type":  exc_type,
+                                    "x-retry-count":     retries,
+                                },
+                            )
+                            await dlq.default_exchange.publish(dlq_msg, routing_key=dlq_name)
+                            await message.ack()  # ack original so it leaves the main queue
 
 
 _client: RabbitMQClient | None = None

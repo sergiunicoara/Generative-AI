@@ -44,7 +44,12 @@ import structlog
 
 log = structlog.get_logger(__name__)
 
-_RESULT_TTL   = int(os.getenv("GRAPHRAG_RESULT_TTL", "3600"))   # 1 hour default
+# TTL is configurable at deploy time without redeploy.
+# Precedence: QUERY_RESULT_TTL_SECONDS → GRAPHRAG_RESULT_TTL → YAML retrieval.query_result_ttl_seconds → 3600
+_RESULT_TTL = int(
+    os.getenv("QUERY_RESULT_TTL_SECONDS")          # ops-friendly name (documented in compose.dev.yaml)
+    or os.getenv("GRAPHRAG_RESULT_TTL", "3600")    # legacy env var (kept for backwards compat)
+)
 _KEY_PREFIX   = "graphrag:result:"
 
 

@@ -1,0 +1,212 @@
+# compose.dev.yaml — one-command local dev stack
+#
+# Starts every service needed to run the full platform:
+#   Neo4j, RabbitMQ, Redis, API, ingestion worker, query worker,
+#   evaluation worker, admin dashboard, business KPI dashboard.
+#
+# Usage:
+#   docker compose -f compose.dev.yaml up
+#   docker compose -f compose.dev.yaml up api ingestion_worker   # subset
+#   docker compose -f compose.dev.yaml down -v                   # teardown + wipe volumes
+#
+# Credentials (dev only — do not use in production):
+#   Neo4j:    neo4j / graphrag_dev
+#   RabbitMQ: graphrag / graphrag_dev   (management UI: http://localhost:15672)
+#   Redis:    no auth
+#
+# Health checks on all infrastructure services ensure workers and API only
+# start once their dependencies are genuinely accepting connections.
+
+version: "3.9"
+
+x-worker-env: &worker-env      # shared env for all Python services
+  NEO4J_URI:                bolt://neo4j:7687
+  RABBITMQ_URL:             amqp://graphrag:graphrag_dev@rabbitmq:5672/
+  REDIS_URL:                redis://redis:6379/0
+  KPI_DB_PATH:              /data/kpis.db
+  QUERY_RESULT_TTL_SECONDS: "3600"   # override at deploy time; no redeploy needed
+
+x-worker-depends: &worker-depends
+  neo4j:
+    condition: service_healthy
+  rabbitmq:
+    condition: service_healthy
+  redis:
+    condition: service_healthy
+
+# ── Infrastructure ─────────────────────────────────────────────────────────────
+
+services:
+  neo4j:
+    image: neo4j:5.20-community
+    container_name: dev_neo4j
+    ports:
+      - "7474:7474"   # browser UI
+      - "7687:7687"   # Bolt
+    environment:
+      NEO4J_AUTH: neo4j/graphrag_dev
+      NEO4J_PLUGINS: '["apoc", "graph-data-science"]'
+      NEO4J_server_memory_heap_max__size: 2G
+      NEO4J_server_memory_pagecache_size: 1G
+    volumes:
+      - dev_neo4j_data:/data
+      - dev_neo4j_logs:/logs
+    healthcheck:
+      test: ["CMD", "cypher-shell", "-u", "neo4j", "-p", "graphrag_dev", "RETURN 1"]
+      interval: 10s
+      timeout: 8s
+      retries: 10
+
+  rabbitmq:
+    image: rabbitmq:3.13-management
+    container_name: dev_rabbitmq
+    ports:
+      - "5672:5672"
+      - "15672:15672"   # management UI
+    environment:
+      RABBITMQ_DEFAULT_USER: graphrag
+      RABBITMQ_DEFAULT_PASS: graphrag_dev
+    volumes:
+      - dev_rabbitmq_data:/var/lib/rabbitmq
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "ping"]
+      interval: 10s
+      timeout: 8s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    container_name: dev_redis
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+# ── Application services ───────────────────────────────────────────────────────
+
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: dev_api
+    command: uvicorn api.main:app --host 0.0.0.0 --port 8000 --reload
+    ports:
+      - "8000:8000"
+    env_file: .env
+    environment:
+      <<: *worker-env
+    depends_on:
+      <<: *worker-depends
+    volumes:
+      - .:/app
+      - dev_kpi_data:/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+
+  ingestion_worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: dev_ingestion_worker
+    command: python workers/ingestion_worker.py
+    ports:
+      - "8081:8081"   # GET /ready health probe
+    env_file: .env
+    environment:
+      <<: *worker-env
+      WORKER_HEALTH_PORT: "8081"
+    depends_on:
+      <<: *worker-depends
+    volumes:
+      - .:/app
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8081/ready"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+
+  query_worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: dev_query_worker
+    command: python workers/query_worker.py
+    ports:
+      - "8082:8082"   # GET /ready health probe
+    env_file: .env
+    environment:
+      <<: *worker-env
+      WORKER_HEALTH_PORT: "8082"
+    depends_on:
+      <<: *worker-depends
+    volumes:
+      - .:/app
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8082/ready"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+
+  evaluation_worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: dev_evaluation_worker
+    command: python workers/evaluation_worker.py
+    ports:
+      - "8083:8083"   # GET /ready health probe
+    env_file: .env
+    environment:
+      <<: *worker-env
+      WORKER_HEALTH_PORT: "8083"
+    depends_on:
+      <<: *worker-depends
+    volumes:
+      - .:/app
+
+  admin_dashboard:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: dev_admin_dashboard
+    command: uvicorn api.main:app --host 0.0.0.0 --port 8001 --reload
+    ports:
+      - "8001:8001"
+    env_file: .env
+    environment:
+      <<: *worker-env
+    depends_on:
+      api:
+        condition: service_healthy
+    volumes:
+      - .:/app
+      - dev_kpi_data:/data
+
+  dashboard:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: dev_dashboard
+    command: python graphrag/business_matrix/dashboard_server.py
+    ports:
+      - "8050:8050"
+    env_file: .env
+    environment:
+      <<: *worker-env
+    volumes:
+      - .:/app
+      - dev_kpi_data:/data
+
+volumes:
+  dev_neo4j_data:
+  dev_neo4j_logs:
+  dev_rabbitmq_data:
+  dev_kpi_data:

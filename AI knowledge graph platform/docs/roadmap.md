@@ -46,16 +46,16 @@ for production hardening and capability expansion.
 
 ### P0 — Production hardening
 
-- [ ] **Parallel ingestion workers** — multiple `ingestion_worker.py` instances consuming from the same queue (RabbitMQ `prefetch_count=1` already set; just run N copies — not yet containerised as a multi-replica service)
-- [ ] **Worker health endpoint** — expose a minimal HTTP `GET /ready` from each worker so Kubernetes/Fly.io knows when to route traffic (not yet implemented)
-- [ ] **Query result TTL** — make `query_result_ttl_seconds` configurable via env var (currently YAML only; ops needs fast override without deploy)
-- [ ] **Structured error responses** — DLQ messages should carry the original exception class, not just the message string, for automated triage
+- [ ] **Parallel ingestion workers** — multiple `ingestion_worker.py` instances; RabbitMQ `prefetch_count=1` set; `compose.dev.yaml` starts a single instance; scale by adding replicas
+- [x] **Worker health endpoint** — `GET /ready` and `GET /live` on configurable port (`WORKER_HEALTH_PORT`); `graphrag/workers/health_server.py` (aiohttp); wired to ingestion, query, evaluation workers; compose.dev.yaml health checks use it
+- [x] **Query result TTL** — `QUERY_RESULT_TTL_SECONDS` env var (alias: `GRAPHRAG_RESULT_TTL`); documented in compose.dev.yaml; no redeploy needed
+- [x] **Structured error responses** — DLQ messages now carry: `exception_type`, `error`, `retry_count`, `queue`, `message_id`, `payload_summary`; retry headers include `x-last-error` and `x-exception-type`
 
 ### P1 — Developer experience
 
-- [x] **`make smoke-test`** — added: runs unit tests + mock demo + API import check; exits 0/1
-- [ ] **Local Docker Compose profile** — `compose.dev.yaml` does not yet exist; contributors need four terminal windows to run the stack
-- [ ] **Seed data script** — `scripts/seed_demo_data.py` does not yet exist; `scripts/demo_regulatory.py --live` seeds a small demo corpus but is not a general-purpose seed tool
+- [x] **`make smoke-test`** — unit tests + mock demo + API import check; exits 0/1
+- [x] **Local Docker Compose profile** — `compose.dev.yaml`; one command starts Neo4j + RabbitMQ + Redis + API + 3 workers + 2 dashboards; health checks wired to worker `/ready` endpoints
+- [x] **Seed data script** — `scripts/seed_demo_data.py`; 20 entities, 12 relations, 2 conflict pairs, health + calibration snapshots; `--commit`, `--wipe`, `--tenant` flags; idempotent MERGE
 
 ---
 
@@ -71,14 +71,14 @@ for production hardening and capability expansion.
 ### Graph quality
 
 - [x] **Incremental community detection** — `IncrementalCommunityDetector` wired to `/kg/incremental-community/rebuild-affected` and `/kg/incremental-community/summary` API routes; dashboard Communities tab triggers it
-- [ ] **Wikidata linking** — `graphrag/graph/entity_linker.py` ✅ exists (13.2 KB) but runs ad-hoc; **not yet wired** into the ingestion pipeline
+- [x] **Wikidata linking** — wired into `IngestionAgent.run()` as optional post-write step; enabled via `WIKIDATA_LINKING=1` (default off); caps at 20 entities/doc to respect rate limits; `wikidata_links` count in job return dict
 - [x] **Property schema enforcement** — `GET /kg/health/property-violations` endpoint added; admin dashboard Health tab shows violation count and per-type breakdown
 
 ### Operational
 
 - [ ] **TimescaleDB KPI store** — KPI store lives at `graphrag/business_matrix/kpi_store.py` (SQLite); docker-compose does **not** currently define a TimescaleDB service — needs adding before the flip is possible
 - [ ] **Multi-modal entities** — `graphrag/graph/multimodal.py` ✅ exists (12.4 KB) for storage; extraction pipeline (OCR + visual embeddings) **not yet built**
-- [ ] **Multi-worker alias registry** — persist alias tables to Redis so multiple ingestion workers share deduplication state without Neo4j round-trips
+- [x] **Multi-worker alias registry** — `AliasRegistry.load()` pushes alias table to Redis hash (`graphrag:aliases:{tenant}`, 24h TTL); `load_alias_registry()` tries Redis warm-load first; workers share state without full Neo4j scan on startup
 
 ---
 

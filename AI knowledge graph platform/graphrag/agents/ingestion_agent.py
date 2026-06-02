@@ -89,12 +89,41 @@ class IngestionAgent(BaseGraphRAGAgent):
             tenant=doc.tenant,
         )
 
+        # Optional post-write step: ground high-confidence entities in Wikidata.
+        # Enabled via WIKIDATA_LINKING=1 env var (default off — avoids rate-limit
+        # issues on large ingestion batches and keeps the pipeline fast).
+        wikidata_links = 0
+        if get_settings().wikidata_linking_enabled:
+            try:
+                from graphrag.graph.entity_linker import WikidataEntityLinker
+                from graphrag.graph.neo4j_client import get_neo4j
+                linker = WikidataEntityLinker(get_neo4j())
+                # Only link entities with high confidence (≥0.85) to reduce API calls
+                high_conf = [e for e in all_entities if e.confidence >= 0.85]
+                for entity in high_conf[:20]:   # cap at 20 per document (rate limit)
+                    try:
+                        linked = await linker.link_entity(
+                            entity.name, entity.type, doc.tenant
+                        )
+                        if linked:
+                            wikidata_links += 1
+                    except Exception as link_exc:
+                        log.debug("ingestion_agent.wikidata_skip",
+                                  entity=entity.name, error=str(link_exc)[:80])
+                log.info("ingestion_agent.wikidata_linked",
+                         job_id=job_id, linked=wikidata_links, candidates=len(high_conf))
+            except ImportError:
+                log.debug("ingestion_agent.wikidata_import_error")
+            except Exception as exc:
+                log.warning("ingestion_agent.wikidata_error", error=str(exc)[:120])
+
         log.info(
             "ingestion_agent.done",
             job_id=job_id,
             chunks=len(chunks),
             entities=len(all_entities),
             relations=len(all_relations),
+            wikidata_links=wikidata_links,
             validation_issues=maintenance_report["validation"]["total_issues"],
             new_conflicts=maintenance_report["new_conflicts"],
         )
@@ -104,5 +133,6 @@ class IngestionAgent(BaseGraphRAGAgent):
             "chunks": len(chunks),
             "entities": len(all_entities),
             "relations": len(all_relations),
+            "wikidata_links": wikidata_links,
             "maintenance": maintenance_report,
         }

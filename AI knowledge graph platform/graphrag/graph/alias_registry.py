@@ -20,6 +20,8 @@ ingestion batch.
 
 from __future__ import annotations
 
+import json
+import os
 import re
 import structlog
 from functools import lru_cache
@@ -28,6 +30,10 @@ log = structlog.get_logger(__name__)
 
 _EMBEDDING_SIMILARITY_THRESHOLD = 0.92   # cosine similarity for dedup
 _FUZZY_SCORE_THRESHOLD = 85              # rapidfuzz ratio for soft match
+_REDIS_TTL = 86400                       # 24h — alias table refreshed each ingestion batch
+
+# Redis key pattern:  graphrag:aliases:{tenant}   → Hash { normalized_alias: "canonical|type" }
+_REDIS_KEY = "graphrag:aliases:{tenant}"
 
 
 def _normalize(text: str) -> str:
@@ -36,6 +42,18 @@ def _normalize(text: str) -> str:
     text = re.sub(r"[^a-z0-9\s]", " ", text)
     text = re.sub(r"\s+", " ", text).strip()
     return text
+
+
+async def _get_redis():
+    """Return an async Redis client or None if unavailable."""
+    try:
+        import redis.asyncio as aioredis
+        redis_url = os.getenv("REDIS_URL", "redis://localhost:6379/0")
+        client = aioredis.from_url(redis_url, decode_responses=True)
+        await client.ping()
+        return client
+    except Exception:
+        return None
 
 
 class AliasRegistry:
@@ -60,7 +78,7 @@ class AliasRegistry:
         self._loaded = False
 
     async def load(self) -> None:
-        """Refresh alias table from Neo4j scoped to this registry's tenant."""
+        """Refresh alias table from Neo4j and push to Redis for cross-worker sharing."""
         rows = await self._neo4j.run(
             """
             MATCH (e:Entity {tenant: $tenant})
@@ -82,14 +100,37 @@ class AliasRegistry:
         self._loaded = True
         log.info("alias_registry.loaded", tenant=self._tenant, entries=len(self._exact))
 
+        # Push to Redis so other workers share this alias table without each
+        # doing a full Neo4j round-trip on startup.
+        redis = await _get_redis()
+        if redis:
+            rkey = _REDIS_KEY.format(tenant=self._tenant)
+            try:
+                pipe = redis.pipeline()
+                pipe.delete(rkey)
+                if self._exact:
+                    # Store as hash: normalized_alias → "canonical_name|canonical_type"
+                    mapping = {k: f"{v[0]}|{v[1]}" for k, v in self._exact.items()}
+                    pipe.hset(rkey, mapping=mapping)
+                    pipe.expire(rkey, _REDIS_TTL)
+                await pipe.execute()
+                log.info("alias_registry.redis_pushed", tenant=self._tenant,
+                         entries=len(self._exact))
+            except Exception as exc:
+                log.warning("alias_registry.redis_push_failed", error=str(exc))
+            finally:
+                await redis.aclose()
+
     def resolve(self, raw_name: str) -> tuple[str, str] | None:
         """
         Resolve a raw name to (canonical_name, canonical_type).
+        Checks in-memory cache first (O(1)), then falls back to None.
+        Redis is used only during load() — resolve() stays sync and fast.
         Returns None if not found — caller should treat as new entity.
         """
         key = _normalize(raw_name)
 
-        # 1. Exact / normalized match
+        # 1. Exact / normalized match (in-memory — loaded from Redis or Neo4j)
         if key in self._exact:
             return self._exact[key]
 
@@ -201,3 +242,44 @@ def get_alias_registry(neo4j_client=None, tenant: str = "default") -> AliasRegis
             neo4j_client = get_neo4j()
         _registries[tenant] = AliasRegistry(neo4j_client, tenant=tenant)
     return _registries[tenant]
+
+
+async def load_alias_registry(neo4j_client=None, tenant: str = "default") -> AliasRegistry:
+    """
+    Load (or warm) the alias registry for a tenant.
+
+    Tries Redis first — if another worker already pushed the alias table,
+    this skips the Neo4j MATCH entirely.  Falls back to Neo4j on Redis miss
+    and then pushes the result to Redis for the next worker.
+    """
+    registry = get_alias_registry(neo4j_client=neo4j_client, tenant=tenant)
+    if registry._loaded:
+        return registry
+
+    # Try Redis warm-load — avoids full Neo4j scan on worker startup
+    redis = await _get_redis()
+    if redis:
+        rkey = _REDIS_KEY.format(tenant=tenant)
+        try:
+            mapping = await redis.hgetall(rkey)
+            if mapping:
+                registry._exact = {
+                    k: tuple(v.split("|", 1))   # type: ignore[assignment]
+                    for k, v in mapping.items()
+                }
+                registry._loaded = True
+                log.info("alias_registry.redis_warm_load", tenant=tenant,
+                         entries=len(registry._exact))
+                await redis.aclose()
+                return registry
+        except Exception as exc:
+            log.warning("alias_registry.redis_load_failed", error=str(exc))
+        finally:
+            try:
+                await redis.aclose()
+            except Exception:
+                pass
+
+    # Redis miss or unavailable — load from Neo4j (also pushes to Redis)
+    await registry.load()
+    return registry

@@ -7,12 +7,16 @@ message is requeued by RabbitMQ after the consumer disconnects.
 """
 
 import asyncio
+import os
 import signal
 import structlog
 
 from graphrag.messaging.consumers import IngestionConsumer
+from graphrag.workers.health_server import HealthServer
 
 log = structlog.get_logger(__name__)
+
+HEALTH_PORT = int(os.getenv("WORKER_HEALTH_PORT", "8081"))
 
 
 async def _ensure_schema():
@@ -40,7 +44,7 @@ async def _ensure_schema():
         stmt = stmt.strip()
         if stmt and not stmt.startswith("--"):
             try:
-                await client.run(stmt)  # get_neo4j().run() already consumes
+                await client.run(stmt)
             except Exception as e:
                 log.warning("ingestion_worker.schema_warn", error=str(e)[:120])
     log.info("ingestion_worker.schema_ready")
@@ -48,11 +52,15 @@ async def _ensure_schema():
 
 async def main():
     log.info("ingestion_worker.starting")
+    health = HealthServer(port=HEALTH_PORT, worker_name="ingestion_worker")
+    await health.start()
+
     await _ensure_schema()
     consumer = IngestionConsumer()
     task = asyncio.create_task(consumer.start())
 
-    # add_signal_handler is not supported on Windows; skip on non-Unix
+    health.set_ready()
+
     import sys
     if sys.platform != "win32":
         loop = asyncio.get_running_loop()
@@ -66,6 +74,8 @@ async def main():
         await task
     except asyncio.CancelledError:
         log.info("ingestion_worker.shutdown_graceful")
+    finally:
+        await health.stop()
 
 
 if __name__ == "__main__":

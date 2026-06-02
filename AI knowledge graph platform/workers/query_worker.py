@@ -1,12 +1,16 @@
 """Entry point: starts QueryConsumer with graceful SIGTERM shutdown."""
 
 import asyncio
+import os
 import signal
 import structlog
 
 from graphrag.messaging.consumers import QueryConsumer
+from graphrag.workers.health_server import HealthServer
 
 log = structlog.get_logger(__name__)
+
+HEALTH_PORT = int(os.getenv("WORKER_HEALTH_PORT", "8082"))
 
 
 async def _ensure_schema():
@@ -44,9 +48,14 @@ async def _ensure_schema():
 
 async def main():
     log.info("query_worker.starting")
+    health = HealthServer(port=HEALTH_PORT, worker_name="query_worker")
+    await health.start()
+
     await _ensure_schema()
     consumer = QueryConsumer()
     task = asyncio.create_task(consumer.start())
+
+    health.set_ready()
 
     import sys
     if sys.platform != "win32":
@@ -61,6 +70,8 @@ async def main():
         await task
     except asyncio.CancelledError:
         log.info("query_worker.shutdown_graceful")
+    finally:
+        await health.stop()
 
 
 if __name__ == "__main__":

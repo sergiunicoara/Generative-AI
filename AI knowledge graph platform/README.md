@@ -43,6 +43,9 @@ The graph is not a RAG index. It is a formally modeled knowledge base:
 - [`docs/adr/0001-property-graph-over-triple-store.md`](docs/adr/0001-property-graph-over-triple-store.md) — Why Neo4j over RDF triple stores
 - [`docs/adr/0002-forward-chaining-over-backward-chaining.md`](docs/adr/0002-forward-chaining-over-backward-chaining.md) — Why materialised inference over query-time reasoning
 - [`docs/adr/0003-bayesian-confidence-accumulation.md`](docs/adr/0003-bayesian-confidence-accumulation.md) — Why `1−(1−c₁)(1−c₂)` over last-write-wins
+- [`docs/adr/0004-groq-over-gemini-for-text-generation.md`](docs/adr/0004-groq-over-gemini-for-text-generation.md) — Why Groq for generation + Gemini for embeddings; two-model design rationale
+- [`docs/adr/0005-redis-as-cross-process-result-store.md`](docs/adr/0005-redis-as-cross-process-result-store.md) — Why Redis over PostgreSQL and RabbitMQ reply-to for result persistence
+- [`docs/adr/0006-dual-llm-architecture.md`](docs/adr/0006-dual-llm-architecture.md) — Why 8B routing + 70B synthesis cuts agentic p95 from 6.8 s to 3.4 s
 
 **Live demo (no services required):**
 ```bash
@@ -127,6 +130,7 @@ Ingests two genuinely conflicting documents, runs the real inference engine, and
 | **Tenant isolation** | All entities, edges, conflicts, communities, and health snapshots are scoped by `(name, type, tenant)` |
 | **Graph integrity guards** | Self-loop removal, cycle detection, quarantine, ingestion validation, dirty-flag propagation after every write |
 | **Manual correction API** | `/corrections` endpoints: entity split, quarantine/release, edge reject/override, conflict resolution |
+| **Query result cache** | Redis-backed, provenance-aware cache in `QueryConsumer`; cache hit skips all 6 retrieval stages; invalidates only queries that cited affected entities on new ingests |
 | **RAGAS evaluation** | Faithfulness, answer relevancy, context precision, context recall — auto-sampled at 20% |
 | **OAuth 2.0** | Google browser login + M2M client credentials grant (JWT Bearer) |
 | **Business Matrix** | Live Plotly Dash dashboard with KPI timeseries and alert thresholds |

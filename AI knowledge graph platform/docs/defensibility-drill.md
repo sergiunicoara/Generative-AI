@@ -334,7 +334,7 @@ The platform doesn't silently drop errors — it logs them, flags them, and rout
 
 That's a fair challenge. Here's what the project proves and what it doesn't.
 
-It proves: I can independently design a non-trivial architecture, make defensible trade-off decisions, implement them correctly (the tests catch real bugs), and document the reasoning. The ADRs exist because I genuinely thought through the alternatives, not because they make a good impression.
+It proves: I can independently design a non-trivial architecture, make defensible trade-off decisions, implement them correctly (the tests catch real bugs), and document the reasoning. Six ADRs covering the major decisions — the ADRs exist because I genuinely thought through the alternatives, not because they make a good impression.
 
 What it doesn't prove: I've navigated ambiguous requirements from a client, worked in a team where someone else's code broke mine, or operated something under SLA pressure at 2am. Those are real skills and I'm not pretending the project covers them.
 
@@ -354,7 +354,9 @@ Before any meeting, verify you can do all of these **cold, without notes:**
 - [ ] Name the 5 contradiction types and give an example of each
 - [ ] Explain the entity resolution 4-stage pipeline and the 0.92 threshold rationale
 - [ ] State the three scale limits in order and what breaks first at each
-- [ ] Open `docs/adr/0001-property-graph-over-triple-store.md` and talk through it
+- [ ] Open `docs/adr/0001-property-graph-over-triple-store.md` and talk through it cold
+- [ ] Be ready to explain ADR-0004 (Groq vs Gemini), ADR-0005 (Redis result store), ADR-0006 (8B/70B split)
+- [ ] Run `make smoke-test` — confirm green before the call
 - [ ] Run `python scripts/demo_regulatory.py` and narrate each step without reading the output
 - [ ] Run `python scripts/demo_regulatory.py --live` (requires Neo4j) and show the persisted graph
 - [ ] State the real RAGAS numbers cold: faithfulness 0.840, precision 0.907, recall 0.867

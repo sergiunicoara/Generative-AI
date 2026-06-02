@@ -10,10 +10,10 @@
 |---|---|---|
 | **Neo4j + Cypher in production** | 39 KG modules, 572-line `neo4j_client.py`; vector ANN, BM25 fulltext, `UNWIND`×22, `EXISTS {}`×12, APOC-with-fallback, bitemporal `as_of` queries | ✅ Strong |
 | **Ontology / taxonomy modeling** | Versioned `OntologyRegistry` w/ domain/range rules + migration map; `type_taxonomy.py` (`SUBCLASS_OF`, LCA for merges); config-driven domain overlays (aerospace YAML) | ✅ Strong |
-| **Python engineering** | 22,650 LOC, async throughout, 304 passing tests, CI, Docker multi-stage, retry/backoff, structured logging | ✅ Strong |
+| **Python engineering** | 22,650 LOC, async throughout, 304 passing tests, CI, Docker multi-stage, `make smoke-test`, retry/backoff, structured logging | ✅ Strong |
 | **KG × LLM / RAG / vector** | 6-stage pipeline: vector→BM25+RRF→cross-encoder→multi-hop→GAT GNN→LLM; agentic IRCoT fallback (8B routing + 70B synthesis) | ✅ Exceptional |
-| **Formal semantics ↔ pragmatic** | OWL-RL reasoner (`owlrl`), SPARQL bridge, RDF/Turtle export — *plus* 3 ADRs explicitly arguing property-graph over triple-store | ✅ Strong |
-| **Lead technically while hands-on** | 3 ADRs, 73 documented lessons, phased `todo.md`, `CONTRIBUTING.md`, `runbook.md`, `roadmap.md` | ✅ Good |
+| **Formal semantics ↔ pragmatic** | OWL-RL reasoner (`owlrl`), SPARQL bridge, RDF/Turtle export — *plus* 6 ADRs documenting every major architectural decision | ✅ Strong |
+| **Lead technically while hands-on** | 6 ADRs, 73 documented lessons, phased `todo.md`, `CONTRIBUTING.md`, `runbook.md`, `roadmap.md` | ✅ Good |
 | **RDF/OWL** (bonus) | `owl_reasoner.py`, `sparql_bridge.py`, rdflib | ✅ |
 | **Inference engines** (bonus) | Datalog forward-chaining: transitivity/symmetry/inverse/composition, fixpoint, confidence decay per hop | ✅ |
 | **Entity resolution** (bonus) | 4-stage (exact/normalized/fuzzy/embedding ≥0.92) + splitter + Wikidata linker | ✅ |
@@ -27,13 +27,13 @@
 
 ### Risk 1 — "How much of this did AI write?"
 
-In 2026, a CTO seeing 22,650 lines, 39 modules, OWL-RL reasoning, and a polished deck — from a candidate whose stated problem is *no commercial experience* — will immediately wonder if it's largely AI-generated. If they conclude it is, the project flips from asset to liability.
+In 2026, a CTO seeing 22,650 lines, 39 modules, 6 ADRs, OWL-RL reasoning, and a polished deck — from a candidate whose stated problem is *no commercial experience* — will immediately wonder if it's largely AI-generated. If they conclude it is, the project flips from asset to liability.
 
 **The project only works if you can defend every architectural decision from memory, fluently, under follow-up questioning.**
 
 If you can't explain *why* `1−(1−c₁)(1−c₂)` and not just averaging — out loud, unscripted — the deck actively hurts you. It sets a depth expectation the conversation then fails to meet.
 
-> **Rule:** The real preparation is not rehearsing the script. It is being able to whiteboard the inference engine and argue the trade-offs in ADR-0001/0002/0003 without notes.
+> **Rule:** The real preparation is not rehearsing the script. It is being able to whiteboard the inference engine and argue the trade-offs in any of the 6 ADRs without notes.
 
 ---
 
@@ -73,9 +73,12 @@ The demo runs against mocked Neo4j. The "conflict detected" is a scripted replay
 
 Be ready to narrate:
 - The dead-ends and rewrites — the things only the actual builder knows
-- Why you chose property graph over triple store (ADR-0001)
+- Why property graph over triple store (ADR-0001)
 - Why Bayesian confidence accumulation over last-write-wins (ADR-0002)
-- Why forward-chaining over backward-chaining for regulatory supersession (ADR-0003)
+- Why forward-chaining over backward-chaining (ADR-0003)
+- Why Groq for generation, Gemini for embeddings (ADR-0004)
+- Why Redis as cross-process result store (ADR-0005)
+- Why 8B routing + 70B synthesis in the agentic path (ADR-0006)
 - What broke first when you ran it against real Neo4j, and how you fixed it
 
 That separates "I built this" from "I generated this."
@@ -205,7 +208,7 @@ Run: `MATCH (n {tenant:'aerospace'}) RETURN n`
 ### Slide 7 — Technical Foundation *(1 minute)*
 
 **Say:**
-> "22,650 lines of production Python. 304 tests. 39 knowledge graph modules. Three architecture decision records documenting why I made specific design choices — property graph over triple store, forward-chaining over backward-chaining, Bayesian confidence accumulation over last-write-wins.
+> "22,650 lines of production Python. 304 tests. 39 knowledge graph modules. Six architecture decision records — every major choice documented: property graph vs triple store, forward-chaining vs backward-chaining, Bayesian confidence, Groq vs Gemini, Redis result store, two-model agentic design.
 >
 > The two-model agentic design — 8B for routing, 70B for synthesis — cut agentic p95 from 6.8 seconds to 3.4 seconds. That's an engineering decision, not a configuration option."
 
@@ -310,12 +313,24 @@ These are the topics a CTO will probe. Know them without notes.
 - `positive_negative_pair`: RELATES_TO and NEGATIVE_RELATES_TO coexist
 - In code: `graphrag/graph/contradiction_detector.py`
 
-**7. Two-model agentic design**
+**7. Two-model agentic design (ADR-0006)**
 - Why: intermediate SEARCH/ANSWER routing decisions are ~15 tokens; using 70B for this is wasteful
 - 8B (llama-3.1-8b-instant): ~800 tok/s on Groq → 0.2s per step
 - 70B (llama-3.3-70b-versatile): ~150 tok/s → 1.5s per step
 - With max_steps=2: 2 × 0.2s routing + 1.5s synthesis + retrieval = ~3.4s vs 6.8s
 - In code: `graphrag/retrieval/agentic_retriever.py` — `_reason()` and `_synthesize()`
+
+**8. Provider split: Groq for generation, Gemini for embeddings (ADR-0004)**
+- Embeddings: Gemini `gemini-embedding-001`, 3072d — hard constraint (changing requires full re-embed)
+- Generation: Groq `llama-3.3-70b` — quota (1,500 RPD free), speed (~150 tok/s)
+- Routing: Groq `llama-3.1-8b-instant` — ~800 tok/s, trivial structured output
+- Client swap: change `get_llm()` / `get_fast_llm()` / `get_embedder()` in `llm_client.py` — nothing else
+
+**9. Redis as cross-process result store (ADR-0005)**
+- Problem: API process and query worker run in separate containers; in-process dict silently broke all multi-container deploys
+- Why Redis over PostgreSQL: query results are ephemeral (1h TTL); latency matters for the polling path (~0.5ms vs ~5ms)
+- Why Redis over RabbitMQ reply-to: polling model is simpler; push model requires long-lived consumer with correlation IDs
+- In code: `graphrag/retrieval/result_store.py` (also used by query cache)
 
 ---
 
@@ -417,7 +432,7 @@ Open `config/ontologies/aerospace_regulatory.yml` in VS Code alongside the termi
 | Entity resolver | `graphrag/graph/entity_resolver.py` | — |
 | Contradiction detector | `graphrag/graph/contradiction_detector.py` | — |
 | LLM router (swap here) | `graphrag/core/llm_client.py` | `get_llm()` / `get_fast_llm()` |
-| Architecture decisions | `docs/adr/0001-*.md`, `0002-*.md`, `0003-*.md` | — |
+| Architecture decisions (6 ADRs) | `docs/adr/0001-*.md` → `0006-*.md` | — |
 
 ---
 
@@ -426,7 +441,11 @@ Open `config/ontologies/aerospace_regulatory.yml` in VS Code alongside the termi
 ### Technical fluency (the real bottleneck)
 - [ ] Whiteboard the Bayesian confidence formula from memory — derive it, explain why not averaging
 - [ ] Explain the 4-stage entity resolution pipeline: what fails at each stage, what the thresholds mean
+- [ ] Run `make smoke-test` — confirm it exits 0 before the meeting
 - [ ] Explain ADR-0001 (property graph vs triple store) conversationally — what you considered and why you decided
+- [ ] Explain ADR-0004 (Groq vs Gemini) — quota, speed, two-model design, client swap path
+- [ ] Explain ADR-0005 (Redis result store) — why not PostgreSQL, why not RabbitMQ reply-to
+- [ ] Explain ADR-0006 (8B routing + 70B synthesis) — the latency table, why not 8B for synthesis
 - [ ] Explain the 6 retrieval stages in order, what failure mode each one fixes
 - [ ] Explain the two-model agentic design: which model does what, why, latency numbers
 - [ ] Explain contradiction detection: name all 5 types, explain `positive_negative_pair` with an example

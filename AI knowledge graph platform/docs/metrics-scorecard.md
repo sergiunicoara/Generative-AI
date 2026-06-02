@@ -17,10 +17,6 @@ Real-time observability over the knowledge graph — structural health, the
 contradiction queue, and confidence calibration. *(Screenshots are generated
 reproducibly by [`scripts/capture_dashboard_screenshots.py`](../scripts/capture_dashboard_screenshots.py).)*
 
-**Graph health** — entities, edges, alias coverage, contradiction density, and live gauges:
-
-![Graph Health dashboard](./assets/dashboard-graph-health.png)
-
 **Contradiction queue** — conflicting facts detected across source documents, typed and resolvable:
 
 ![Conflicts dashboard](./assets/dashboard-conflicts.png)

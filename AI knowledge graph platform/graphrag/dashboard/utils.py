@@ -140,7 +140,7 @@ def _get(path: str, params: dict | None = None) -> dict | list | None:
     containing a human-readable error string on any failure.
     """
     try:
-        r = httpx.get(f"{API_BASE}{path}", params=params, headers=_HEADERS, timeout=10)
+        r = httpx.get(f"{API_BASE}{path}", params=params, headers=_HEADERS, timeout=4)
         r.raise_for_status()
         return r.json()
     except httpx.HTTPStatusError as exc:
@@ -157,7 +157,7 @@ def _get(path: str, params: dict | None = None) -> dict | list | None:
 def _post(path: str, json: dict | None = None) -> dict | None:
     """Synchronous HTTP POST.  Returns parsed JSON or ``{"_http_error": …}``."""
     try:
-        r = httpx.post(f"{API_BASE}{path}", json=json, headers=_HEADERS, timeout=10)
+        r = httpx.post(f"{API_BASE}{path}", json=json, headers=_HEADERS, timeout=4)
         r.raise_for_status()
         return r.json()
     except httpx.HTTPStatusError as exc:

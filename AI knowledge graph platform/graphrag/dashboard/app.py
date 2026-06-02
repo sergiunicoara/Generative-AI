@@ -252,13 +252,25 @@ def sync_tenant(value: str):
     State("tenant-store", "data"),
 )
 def render_tab(tab: str, _n: int, tenant: str):
+    from graphrag.dashboard.utils import DEMO_MODE, err  # avoid circular at module level
     tenant = tenant or "default"
-    if tab == "health":      return health.render(tenant)
-    if tab == "conflicts":   return conflicts.render(tenant)
-    if tab == "communities": return communities.render(tenant)
-    if tab == "gdpr":        return gdpr.render(tenant)
-    if tab == "calibration": return calibration.render(tenant)
-    return html.P("Unknown tab")
+    _tab_renderers = {
+        "health":      health.render,
+        "conflicts":   conflicts.render,
+        "communities": communities.render,
+        "gdpr":        gdpr.render,
+        "calibration": calibration.render,
+    }
+    renderer = _tab_renderers.get(tab)
+    if renderer is None:
+        return html.P("Unknown tab")
+    try:
+        return renderer(tenant)
+    except Exception as exc:  # suppress_callback_exceptions=True would hide this silently
+        log.exception("dashboard.render_error", tab=tab, error=str(exc))
+        hint = " — set GRAPHRAG_DASHBOARD_DEMO=1 to use sample data without a backend" \
+               if not DEMO_MODE else ""
+        return err(f"Tab '{tab}' failed to render: {type(exc).__name__}{hint}")
 
 
 # ── Standalone entry point ─────────────────────────────────────────────────────

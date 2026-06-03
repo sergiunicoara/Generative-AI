@@ -66,7 +66,7 @@ class GraphEvaluator:
         rows = await self._neo4j.run(
             """
             MATCH (e:Entity)
-            WHERE NOT e.quarantined = true
+            WHERE coalesce(e.quarantined, false) = false
               AND ($tenant = 'default' OR e.tenant = $tenant)
             OPTIONAL MATCH (e)<-[:ALIAS_OF]-(a:Alias)
             WITH e, count(a) AS alias_count
@@ -162,12 +162,12 @@ class GraphEvaluator:
         rows = await self._neo4j.run(
             """
             MATCH (e:Entity)
-            WHERE NOT e.quarantined = true
+            WHERE coalesce(e.quarantined, false) = false
               AND ($tenant = 'default' OR e.tenant = $tenant)
             WITH count(e) AS total
             MATCH (e2:Entity)
             WHERE NOT (e2)<-[:MENTIONS]-(:Chunk)
-              AND NOT e2.quarantined = true
+              AND coalesce(e2.quarantined, false) = false
               AND ($tenant = 'default' OR e2.tenant = $tenant)
             RETURN total, count(e2) AS orphans
             """,

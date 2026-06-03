@@ -1797,3 +1797,127 @@ profiles (1.7s vs 5s average) and different SLOs.
 > Report per-mode: `p95_hybrid`, `p95_agentic`. Alert on `p95_hybrid` for the SLO.
 > Alert on `agentic_rate` (not agentic latency) — a high rate means the trigger
 > is too loose; the latency is the expected cost of the capability, not a bug.
+
+---
+
+## A74 — LLM rate limits: fail-fast fallback beats sleep-and-retry for ingestion
+
+**What happened:**
+Groq free tier (100k tokens/day) exhausted mid-ingestion. The retry-backoff slept 5–10 min
+per chunk, turning a 5-minute corpus run into an 8-hour job. Switching to DeepSeek as
+fallback (OpenAI-compatible SDK, already installed) made each hit instant: Groq 429 →
+DeepSeek in <1s, no sleep.
+
+**Root cause:**
+Retry-backoff is right for transient errors (network blip). It's wrong for quota exhaustion
+where sleeping doesn't help — the quota window is hours, not seconds.
+
+**Rule:**
+> For LLM rate limits in ingestion pipelines: use `max_retries=1` on the primary, catch
+> the exception in a `FallbackLLM` wrapper, and re-issue to a secondary provider
+> immediately. Reserve retry-backoff for the secondary. Never sleep on a daily quota hit.
+
+---
+
+## A75 — Embedding provider swap: same dimensions = zero schema changes
+
+**What happened:**
+Gemini embeddings ($0 balance) blocked the entire pipeline. Switched to OpenAI
+`text-embedding-3-large` — also 3072 dimensions. Neo4j vector index, all retrieval
+queries, and all similarity thresholds worked identically. Zero schema changes required.
+
+**Root cause:**
+Dimension count was the only coupling point.
+
+**Rule:**
+> When evaluating embedding providers, match dimensions to avoid schema migrations.
+> 3072d (OpenAI large / Gemini) is a safe default for production KG work. Document
+> the dimension in `config.py` so future swaps are a one-line change.
+
+---
+
+## A76 — Audit trail MATCH without tenant returns N rows; CREATE fires N times
+
+**What happened:**
+`AuditTrail.log_entity_change()` did `MATCH (e:Entity {name: $name, type: $type})`
+with no tenant filter. Across 12 documents, the same entity name existed in multiple
+contexts. MATCH returned N rows; `CREATE (cl:ChangeLog {id: $log_id})` executed N times
+with the same UUID, triggering a `ConstraintValidationFailed` error on attempt 2+.
+
+**Root cause:**
+Audit queries matched globally, but the UUID was generated once before the query.
+
+**Rule:**
+> Every `MATCH` in an audit trail write must include `LIMIT 1` to guard against
+> multi-row returns, and wrap in try/except since audit logs are non-critical.
+> Pattern: `MATCH (e:Entity {name: $name, type: $type}) WITH e LIMIT 1 CREATE ...`
+
+---
+
+## A77 — `NOT property = true` is a null trap in Cypher
+
+**What happened:**
+`WHERE NOT e.quarantined = true` excluded all entities where `e.quarantined` was NULL
+(property not set). In Cypher, `NULL = true` → NULL, `NOT NULL` → NULL, which is
+falsy in WHERE — so all 374 entities were excluded and `entity_count=0` in snapshots.
+
+**Root cause:**
+Standard boolean negation doesn't work as expected when the property may be absent.
+
+**Rule:**
+> Never write `NOT e.property = true` in Neo4j Cypher when the property may be absent.
+> Always write `coalesce(e.property, false) = false`.
+> Same applies to `e.property = false` — use `coalesce(e.property, false) = false`.
+
+---
+
+## A78 — Degree anomaly threshold must scale with graph density
+
+**What happened:**
+`MAX_DEGREE_MULTIPLIER = 5.0` flagged FAA (degree=54), Boeing (19), MCAS (18) as
+anomalies on a 374-entity sparse graph where mean degree ≈ 1.22. These are genuinely
+important hub entities, not hallucinated noise.
+
+**Root cause:**
+The threshold was designed for dense graphs. In a sparse domain corpus (< 10k entities),
+central regulatory bodies naturally have 20–50× mean degree.
+
+**Rule:**
+> Set `MAX_DEGREE_MULTIPLIER ≥ 20` for sparse domain graphs (< 50k entities).
+> Reserve multiplier=5 for dense social/web graphs. Document why the threshold was
+> chosen so the next engineer doesn't silently lower it.
+
+---
+
+## A79 — Dashboard JWT token must include `scope` field
+
+**What happened:**
+Generated a JWT with `{"sub": "dashboard", "role": "admin"}` — got 401 (no token),
+then 403 (token accepted but missing scope). The `require_scope("read")` dependency
+checks `user.get("scope", "").split()` — if `scope` is absent, all scoped endpoints
+return 403.
+
+**Root cause:**
+JWT payload lacked the `scope` claim the API expects.
+
+**Rule:**
+> Dashboard/service tokens must include `scope: "read write"` in the JWT payload.
+> Template: `create_access_token({"sub": "service", "role": "admin", "scope": "read write"}, timedelta(days=3650))`
+
+---
+
+## A80 — API response format must match what the dashboard expects
+
+**What happened:**
+`GET /kg/snapshots` returned a plain `list[dict]`. The dashboard did
+`data.get("snapshots", [])` — since `isinstance(list, dict)` is False, `snaps = []`
+and the Graph Health tab showed "No snapshots found" despite 3 snapshots existing.
+
+**Root cause:**
+The API and dashboard were written independently with different assumptions about
+the response envelope.
+
+**Rule:**
+> List endpoints that feed UI components must return `{"items": [...], "count": N}`.
+> Never return a bare list from a REST endpoint — it breaks pagination, metadata,
+> and future extension. Check the dashboard's `_get()` call before finalising the route.

@@ -12,7 +12,7 @@ from graphrag.dashboard.utils import (
 
 
 def render(tenant: str) -> html.Div:
-    data = _get("/corrections/list-conflicts", {"tenant": tenant, "limit": 100})
+    data = _get("/corrections/conflicts", {"tenant": tenant, "limit": 100})
     if e := http_error(data):
         if not DEMO_MODE:
             return err(f"Conflicts unavailable — {e}")

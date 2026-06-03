@@ -171,9 +171,9 @@ class TestEmbedderCountMismatch:
         embedder = self._mock_embedder()
         chunks = self._make_chunks(3)
 
-        # API returns only 2 embeddings for 3 chunks
+        # API returns only 2 embeddings for 3 chunks (OpenAI format)
         mock_result = MagicMock()
-        mock_result.embeddings = [MagicMock(values=[0.1, 0.2]) for _ in range(2)]
+        mock_result.data = [MagicMock(embedding=[0.1, 0.2]) for _ in range(2)]
 
         with patch("asyncio.get_running_loop") as mock_loop:
             mock_loop.return_value.run_in_executor = AsyncMock(return_value=mock_result)
@@ -185,9 +185,9 @@ class TestEmbedderCountMismatch:
         chunks = self._make_chunks(2)
 
         mock_result = MagicMock()
-        mock_result.embeddings = [
-            MagicMock(values=[0.1, 0.2]),
-            MagicMock(values=[0.3, 0.4]),
+        mock_result.data = [
+            MagicMock(embedding=[0.1, 0.2]),
+            MagicMock(embedding=[0.3, 0.4]),
         ]
 
         with patch("asyncio.get_running_loop") as mock_loop:

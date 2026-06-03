@@ -20,9 +20,21 @@ Real-time observability over the knowledge graph — the contradiction queue and
 confidence calibration. *(Screenshots generated reproducibly by
 [`scripts/capture_dashboard_screenshots.py`](../scripts/capture_dashboard_screenshots.py).)*
 
+**Graph health** — KPI strip, resolution gauges, contradiction trend, and schema alerts:
+
+![Graph Health dashboard](./assets/dashboard-graph-health.png)
+
 **Contradiction queue** — conflicting facts detected across source documents, typed and resolvable:
 
 ![Conflicts dashboard](./assets/dashboard-conflicts.png)
+
+**Community health** — drift tracking and incremental Leiden rebuild status:
+
+![Communities dashboard](./assets/dashboard-communities.png)
+
+**GDPR & PII** — Article 17 right-to-be-forgotten audit trail and entity erasure controls:
+
+![GDPR dashboard](./assets/dashboard-gdpr.png)
 
 **Confidence calibration** — Brier score trend and calibration curve vs. perfect calibration:
 
@@ -50,27 +62,29 @@ Measured across all 104 query runs. p95 computed from real timing data in `resul
 | **Agentic (IRCoT)** | **3.4s** | 10 | Fires on ~10% of hard multi-hop queries; two-model design (8B routing + 70B synthesis) |
 | **Combined** | **2.7s** | 104 | Blended across all query types |
 
-## 🕸️ Knowledge Graph — Seed Corpus
+## 🕸️ Knowledge Graph — Real Corpus
 
-Built from a **12-document aerospace regulatory seed corpus** (`scripts/seed_demo_data.py`) covering
-FAA/EASA airworthiness directives, manufacturer records and fleet data. Graph health metrics
-below reflect representative target values for a production-scale corpus; the seed corpus
-demonstrates the full pipeline (ingestion → entity resolution → contradiction detection → community detection).
+Built from the **12-document aerospace regulatory corpus** (`scripts/ingest_corpus.py`) via the
+full LLM extraction pipeline (Groq/DeepSeek extraction + OpenAI embeddings + alias resolution +
+contradiction detection + forward-chaining). Numbers below are real, queried from Neo4j.
 
-| Metric | Seed value | Production target | Threshold |
+| Metric | Real value (2026-06-03) | Production target | Threshold |
 |---|---|---|---|
-| **Entities** | **20** | ~2k+ at scale | — |
-| **Relations** | **12** | ~7k+ at scale | — |
-| **Contradiction density** | detectable | < 0.85 / 1k edges | < 2.0 |
-| **Alias-resolution coverage** | schema wired | > 90% | > 85% |
-| **Community coherence** | schema wired | > 0.65 | > 0.50 |
+| **Entities** | **374** (after alias dedup from 600+ extracted) | ~2k+ at scale | — |
+| **Relations** | **456** (asserted + 10 forward-chain inferred) | ~7k+ at scale | — |
+| **Open conflicts** | **70** (contradiction detector, live in Neo4j) | < 0.85 / 1k edges | < 2.0 |
+| **Contradiction rate** | **153.51 / 1k edges** *(adversarial demo corpus — expected high)* | < 2.0 at scale | < 5.0 |
+| **Relation confidence** | **99.6%** edges above 0.75 threshold | > 80% | > 70% |
+| **Alias-resolution coverage** | **14.7%** entities have registered aliases; 600+→374 canonical (~38% reduction) | > 90% | > 85% |
+| **Orphan rate** | **0.0%** | < 10% | < 20% |
+| **Community coherence** | pipeline wired (no communities built yet) | > 0.65 | > 0.50 |
 
 ## 🎚️ Confidence Calibration
 
 The isotonic regression pipeline is implemented and wired. The Brier score trajectory
 (0.31 raw → 0.19 corrected) represents the expected improvement on a production corpus
-based on the calibration algorithm; the seed corpus is too small to produce a meaningful
-Brier score independently.
+based on the calibration algorithm; the real 12-doc corpus is too small to produce a
+statistically meaningful Brier score — the pipeline targets Brier < 0.20 at production scale.
 
 ## 🏗️ Engineering
 

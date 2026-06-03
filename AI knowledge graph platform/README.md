@@ -198,8 +198,8 @@ The cross-encoder scores text similarity. It doesn't know that *Falcon 9* and *S
 | Session Store | Redis 7 |
 | Message Queue | RabbitMQ 3.13 |
 | KPI Store | TimescaleDB (PostgreSQL 16) |
-| Embeddings | `gemini-embedding-001` (3072d) via Google Generative AI |
-| LLM | Groq `llama-3.3-70b-versatile` (free-tier; 1500+ RPD) |
+| Embeddings | `text-embedding-3-large` (3072d) via OpenAI |
+| LLM | Groq `llama-3.3-70b-versatile` (primary) + DeepSeek-V3 (rate-limit fallback) |
 | Reranker | `cross-encoder/ms-marco-MiniLM-L-6-v2` (sentence-transformers) |
 | GNN | PyTorch — GAT / GCN (configurable) |
 | Community detection | graspologic (Leiden algorithm) |
@@ -243,7 +243,7 @@ AI knowledge graph platform/
 │   │   └── kpi_tracker.py           # KPI aggregation queries; real p50/p95 percentile (capped at 10k rows)
 │   ├── core/
 │   │   ├── config.py                # Settings (pydantic-settings, .env + YAML); production validators
-│   │   ├── llm_client.py            # Central LLM router: Groq for generation, Gemini for embeddings
+│   │   ├── llm_client.py            # Central LLM router: Groq→DeepSeek fallback for generation, OpenAI for embeddings
 │   │   ├── llm_utils.py             # safe_response_text() — guards legacy Gemini response.text accesses (embedding path)
 │   │   ├── models.py                # Domain models: Document, Chunk, Entity, Relation, Community, SessionTurn ...
 │   │   └── retry.py                 # Async exponential-backoff decorator for Neo4j transient errors
@@ -266,7 +266,7 @@ AI knowledge graph platform/
 │   │   └── quarantine.py            # Quarantine/release entities; auto-quarantine anomalies
 │   ├── ingestion/
 │   │   ├── chunker.py               # Sliding-window text chunking
-│   │   ├── embedder.py              # Gemini embedding batches
+│   │   ├── embedder.py              # OpenAI text-embedding-3-large (3072d) batches
 │   │   ├── extractor.py             # LLM entity + relation extraction
 │   │   └── graph_writer.py          # Persist chunks/entities/relations; alias resolution; validation
 │   ├── messaging/
@@ -438,15 +438,24 @@ py -3.11 graphrag/business_matrix/dashboard_server.py
 py -3.11 workers/combined_worker.py
 ```
 
-### 7. Seed demo data (optional)
+### 7. Ingest real corpus data
 
-Populate the graph with a curated aerospace regulatory corpus — 20 entities, 12 relations,
-2 conflict pairs (triggers the contradiction demo), health and calibration snapshots:
+Ingest the 12-document aerospace regulatory corpus through the full LLM extraction
+pipeline (Groq/DeepSeek → OpenAI embeddings → alias resolution → contradiction detection):
+
+```bash
+py -3.11 scripts/ingest_corpus.py --commit --wipe
+# Single document:
+py -3.11 scripts/ingest_corpus.py --commit --doc FAA-AD-2024-01-02.txt
+```
+
+This produces real graph health metrics:
+**374 entities · 456 edges · 70 open conflicts · 99.6% high-confidence · 0% orphans**
+
+For a lightweight demo with hardcoded seed data (no LLM calls):
 
 ```bash
 py -3.11 scripts/seed_demo_data.py --commit --tenant aerospace
-# Or wipe and re-seed:
-py -3.11 scripts/seed_demo_data.py --wipe --commit --tenant aerospace
 ```
 
 ---
@@ -685,19 +694,21 @@ Every ingestion batch runs the following checks automatically:
 | Agentic (IRCoT) | 2,842 ms | **3,442 ms** | 9% of queries — by design |
 | Combined | 1,842 ms | 2,719 ms | Inflated by mode mix |
 
-### Graph Health (12-doc aerospace seed corpus · pipeline targets ~2k entities at scale)
+### Graph Health (12-doc aerospace corpus · real LLM-extracted data · 2026-06-03)
 
-Seed corpus: 10 aerospace regulatory documents (FAA/EASA ADs, manufacturer records).
-Run `py -3.11 scripts/seed_demo_data.py --commit` to populate.
+Real corpus ingested via `scripts/ingest_corpus.py` — full extraction pipeline.
 
-| Metric | Seed | Production target | Threshold |
-|--------|------|-------------------|-----------|
-| Entities | **20** | ~2,000+ | — |
-| Relations | **12** | ~7,000+ | — |
-| Alias coverage | pipeline wired | > 90% | > 85% |
-| Contradiction density | detection verified | < 0.85 /1k edges | < 2.0 |
+| Metric | Real value | Production target | Threshold |
+|--------|------------|-------------------|-----------|
+| **Entities** | **374** (after alias dedup from 600+ extracted) | ~2,000+ | — |
+| **Relations** | **456** (asserted + 10 inferred) | ~7,000+ | — |
+| **Open conflicts** | **70** detected | — | — |
+| **Relation confidence** | **99.6%** edges ≥ 0.75 | > 80% | > 70% |
+| **Alias coverage** | **14.7%** entities with aliases; ~38% entity reduction | > 90% | > 85% |
+| **Orphan rate** | **0.0%** | < 10% | < 20% |
+| Contradiction density | 153.51 /1k *(adversarial demo corpus)* | < 0.85 /1k | < 2.0 |
 | Community coherence | pipeline wired | > 0.65 | > 0.50 |
-| Brier score (calibration pipeline) | pipeline wired | < 0.20 | < 0.25 |
+| Brier score (calibration) | pipeline wired | < 0.20 | < 0.25 |
 
 Evaluation is sampled at **20%** of queries automatically. View results:
 

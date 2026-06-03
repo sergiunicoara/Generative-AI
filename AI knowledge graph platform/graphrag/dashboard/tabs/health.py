@@ -13,7 +13,7 @@ from graphrag.dashboard.utils import (
 
 
 def render(tenant: str) -> html.Div:
-    data        = _get("/kg/graph-snapshots/list", {"tenant": tenant})
+    data        = _get("/kg/snapshots", {"tenant": tenant})
     alerts_data = _get("/kg/health/alerts", {"limit": 10})
     prop_data   = _get("/kg/health/property-violations", {"tenant": tenant, "limit": 20})
 

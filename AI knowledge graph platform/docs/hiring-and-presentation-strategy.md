@@ -98,7 +98,7 @@ That separates "I built this" from "I generated this."
    - Hybrid p95: 2.2s | Agentic p95: 3.4s | Combined: 2.7s
    - Faithfulness: 0.840 | Precision: 0.907 | Recall: 0.867 (104 real query runs, 23 RAGAS-sampled)
    - Hybrid p95: 2.2s | Agentic p95: 3.4s | Agentic trigger rate: ~10%
-   - Seed graph: 20 entities, 12 relations (12-doc aerospace corpus); pipeline targets ~2k entities at scale
+   - Real corpus: 374 entities, 456 relations (12-doc aerospace corpus, LLM-extracted); 70 open conflicts detected
    - Calibration pipeline wired: isotonic regression targets Brier < 0.20 on production corpus
 
 ---

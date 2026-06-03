@@ -138,7 +138,7 @@ A gap means you know the limit and can explain the next step.
 
 | Claim | How to verify |
 |---|---|
-| "Not a tutorial project" | `make test` → 325 passing; `make smoke-test` → exits 0 |
+| "Not a tutorial project" | `make test` → 353 passing; `make smoke-test` → exits 0 |
 | "Observable" | Admin dashboard `/admin/` — 7 health metrics, Brier score, alerts |
 | "Deployable" | `docker compose -f compose.dev.yaml up` → full stack in one command |
 | "Controlled agent" | `ToolPolicy.from_defaults()` — allowlist, scopes, audit, dry-run |
@@ -157,12 +157,14 @@ A gap means you know the limit and can explain the next step.
 | Hybrid p95 | 2.2s | `GET /kpis/summary` |
 | Agentic p95 | 3.4s | same |
 | Agentic trigger rate | ~9% | same |
-| Entities (seed corpus) | 20 (12-doc aerospace seed; pipeline targets ~2k at scale) | Neo4j Browser or `/kg/health/alerts` |
-| Relations (seed corpus) | 12 (pipeline targets ~7k at scale) | same |
-| Contradiction detection | wired & verified end-to-end | Admin dashboard → Conflicts tab |
-| Alias coverage | pipeline wired; target > 90% at scale | same |
+| Entities (real corpus) | 374 (LLM-extracted, after alias dedup) | Neo4j Browser or `/kg/health/alerts` |
+| Relations (real corpus) | 456 (asserted + 10 inferred) | same |
+| Open conflicts detected | 70 (contradiction detector, verified on real data) | Admin dashboard → Conflicts tab |
+| Relation confidence | 99.6% edges ≥ 0.75 | `GET /kg/snapshots` |
+| Alias coverage | 14.7% entities with aliases; 600+→374 canonical (~38% reduction) | Admin dashboard → Graph Health |
+| Orphan rate | 0.0% | same |
 | Brier score (calibration pipeline) | target < 0.20 on production corpus | Admin dashboard → Calibration tab |
-| Passing tests | 325 | `py -3.11 -m pytest tests/unit -q` |
+| Passing tests | 353 | `py -3.11 -m pytest tests/unit -q` |
 | KG modules | 39 | `ls graphrag/graph/*.py \| wc -l` |
 | ADRs | 6 | `ls docs/adr/*.md` |
 | Lines of code | 22,650 | — |

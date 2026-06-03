@@ -164,12 +164,12 @@ to a specific file, endpoint, demo step, or test — with a one-line business va
 
 | Claim | Proof |
 |---|---|
-| "Not a tutorial project" | 304 tests, CI, Docker build, structured DLQ, 6 ADRs |
+| "Not a tutorial project" | 353 tests, CI, Docker build, structured DLQ, 6 ADRs |
 | "Observable" | 16 metrics, RAGAS 0.840/0.907/0.867 from 104 real runs, calibration pipeline wired, admin + KPI dashboards |
 | "Deployable" | `docker compose -f compose.dev.yaml up`; worker `/ready` health probes |
 | "Scalable design" | Redis alias registry, incremental community detection, RabbitMQ parallel workers |
 | "Regulated-client ready" | GDPR, multi-tenant isolation, audit trail, contradiction detection |
-| "Day-one delivery" | `py -3.11 scripts/seed_demo_data.py --commit` → populated graph in 60s |
+| "Day-one delivery" | `py -3.11 scripts/ingest_corpus.py --commit` → full real corpus in Neo4j |
 
 ---
 
@@ -183,7 +183,7 @@ to a specific file, endpoint, demo step, or test — with a one-line business va
 | 4–5 | Slide 4: JD mapping | Every requirement covered |
 | 5–10 | **Terminal: `demo_regulatory.py --live`** | Forward-chaining, contradiction detection, live Neo4j |
 | 10–12 | **Browser: admin dashboard `/admin/`** | Health metrics, conflicts, calibration |
-| 12–13 | Slide 7: technical foundation | 304 tests, 6 ADRs, smoke-test |
+| 12–13 | Slide 7: technical foundation | 353 tests, 6 ADRs, smoke-test |
 | 13–14 | Slide 8: client scenarios | Regulatory, audit, compliance |
 | 14–15 | Slide 9: close + questions | |
 
@@ -199,10 +199,12 @@ to a specific file, endpoint, demo step, or test — with a one-line business va
 | Hybrid p95 | 2.2s |
 | Agentic p95 | 3.4s (8B routing + 70B synthesis) |
 | Agentic trigger rate | ~9% of queries |
-| Entities (seed corpus) | 20 (12-doc aerospace seed; pipeline targets ~2k at scale) |
-| Relations (seed corpus) | 12 (pipeline targets ~7k at scale) |
-| Contradiction detection | wired & verified end-to-end |
-| Alias coverage | pipeline wired; target > 90% at scale |
+| Entities (real corpus) | 374 (LLM-extracted from 12-doc corpus, after alias dedup) |
+| Relations (real corpus) | 456 (asserted + 10 forward-chain inferred) |
+| Open conflicts detected | 70 (contradiction detector, verified on real data) |
+| Relation confidence | 99.6% edges ≥ 0.75 (live Neo4j snapshot) |
+| Alias coverage | 14.7% entities with aliases; 600+→374 canonical (~38% reduction) |
+| Orphan rate | 0.0% (all entities linked to source chunks) |
 | Calibration (Brier) | pipeline wired; target < 0.20 on production corpus |
 | Passing tests | 353 |
 | KG modules | 39 |

@@ -26,6 +26,13 @@ class Settings(BaseSettings):
     gemini_query_model: str = "gemini-2.0-flash"
     gemini_embed_model: str = "gemini-embedding-001"
 
+    # ── OpenAI (embeddings fallback) ────────────────────────────────────────────
+    openai_api_key: str = ""
+    openai_embed_model: str = "text-embedding-3-large"   # 3072d — matches schema
+
+    # ── DeepSeek (text generation fallback) ─────────────────────────────────────
+    deepseek_api_key: str = ""
+
     # ── Groq (text generation) ───────────────────────────────────────────────────
     groq_api_key: str = ""
     groq_model: str = "llama-3.3-70b-versatile"

@@ -90,6 +90,10 @@ and technical credibility.
 - [x] **`make smoke-test`** — unit tests + mock demo + API import check; exits 0/1
 - [x] **Local Docker Compose profile** — `compose.dev.yaml`; one command starts Neo4j + RabbitMQ + Redis + API + 3 workers + 2 dashboards; health checks wired to worker `/ready` endpoints
 - [x] **Seed data script** — `scripts/seed_demo_data.py`; 20 entities, 12 relations, 2 conflict pairs, health + calibration snapshots; `--commit`, `--wipe`, `--tenant` flags; idempotent MERGE
+- [x] **Real corpus ingestion** — `scripts/ingest_corpus.py`; full LLM extraction pipeline on 12-doc aerospace corpus; 374 entities, 456 edges, 70 conflicts in Neo4j (2026-06-03)
+- [x] **Graph health snapshot fixed** — `coalesce(e.quarantined, false)` null-safe pattern in `graph_snapshots.py` + `graph_evaluator.py`; entity_count now shows 374 correctly
+- [x] **Degree anomaly threshold** — raised `MAX_DEGREE_MULTIPLIER` 5→20 in `ingestion_validator.py`; prevents hub entities (FAA, Boeing) from being wrongly quarantined in sparse domain graphs
+- [x] **Dashboard live mode** — JWT token with `read write` scope; `GRAPHRAG_DEFAULT_TENANT` env var; `GET /kg/snapshots` response wrapped in `{"snapshots":[]}`; all 5 tabs verified live against real aerospace data
 
 ---
 

@@ -56,30 +56,35 @@ class AuditTrail:
         changed_by: str = "system",
         source_doc_id: str = "",
     ) -> None:
-        await self._neo4j.run(
-            """
-            MATCH (e:Entity {name: $name, type: $type})
-            CREATE (e)-[:HAS_CHANGE]->(cl:ChangeLog {
-                id:           $log_id,
-                target_label: 'Entity',
-                target_id:    e.id,
-                operation:    $operation,
-                changed_by:   $changed_by,
-                changed_at:   datetime(),
-                old_values:   $old_values,
-                new_values:   $new_values,
-                source_doc_id: $source_doc_id
-            })
-            """,
-            name=entity_name,
-            type=entity_type,
-            log_id=str(uuid4()),
-            operation=operation,
-            changed_by=changed_by,
-            old_values=str(old_values or {}),
-            new_values=str(new_values or {}),
-            source_doc_id=source_doc_id,
-        )
+        try:
+            await self._neo4j.run(
+                """
+                MATCH (e:Entity {name: $name, type: $type})
+                WITH e LIMIT 1
+                CREATE (e)-[:HAS_CHANGE]->(cl:ChangeLog {
+                    id:           $log_id,
+                    target_label: 'Entity',
+                    target_id:    e.id,
+                    operation:    $operation,
+                    changed_by:   $changed_by,
+                    changed_at:   datetime(),
+                    old_values:   $old_values,
+                    new_values:   $new_values,
+                    source_doc_id: $source_doc_id
+                })
+                """,
+                name=entity_name,
+                type=entity_type,
+                log_id=str(uuid4()),
+                operation=operation,
+                changed_by=changed_by,
+                old_values=str(old_values or {}),
+                new_values=str(new_values or {}),
+                source_doc_id=source_doc_id,
+            )
+        except Exception as exc:
+            log.warning("audit_trail.entity_log_failed",
+                        entity=entity_name, operation=operation, error=str(exc)[:120])
 
     async def log_relation_change(
         self,
@@ -92,31 +97,36 @@ class AuditTrail:
         changed_by: str = "system",
         source_doc_id: str = "",
     ) -> None:
-        await self._neo4j.run(
-            """
-            MATCH (s:Entity {name: $src})-[r:RELATES_TO {relation: $relation}]->(t:Entity {name: $tgt})
-            CREATE (cl:ChangeLog {
-                id:            $log_id,
-                target_label:  'Relation',
-                target_id:     $src + '->' + $tgt + ':' + $relation,
-                operation:     $operation,
-                changed_by:    $changed_by,
-                changed_at:    datetime(),
-                old_values:    $old_values,
-                new_values:    $new_values,
-                source_doc_id: $source_doc_id
-            })
-            """,
-            src=src_name,
-            tgt=tgt_name,
-            relation=relation,
-            log_id=str(uuid4()),
-            operation=operation,
-            changed_by=changed_by,
-            old_values=str(old_values or {}),
-            new_values=str(new_values or {}),
-            source_doc_id=source_doc_id,
-        )
+        try:
+            await self._neo4j.run(
+                """
+                MATCH (s:Entity {name: $src})-[r:RELATES_TO {relation: $relation}]->(t:Entity {name: $tgt})
+                WITH r LIMIT 1
+                CREATE (cl:ChangeLog {
+                    id:            $log_id,
+                    target_label:  'Relation',
+                    target_id:     $src + '->' + $tgt + ':' + $relation,
+                    operation:     $operation,
+                    changed_by:    $changed_by,
+                    changed_at:    datetime(),
+                    old_values:    $old_values,
+                    new_values:    $new_values,
+                    source_doc_id: $source_doc_id
+                })
+                """,
+                src=src_name,
+                tgt=tgt_name,
+                relation=relation,
+                log_id=str(uuid4()),
+                operation=operation,
+                changed_by=changed_by,
+                old_values=str(old_values or {}),
+                new_values=str(new_values or {}),
+                source_doc_id=source_doc_id,
+            )
+        except Exception as exc:
+            log.warning("audit_trail.relation_log_failed",
+                        src=src_name, tgt=tgt_name, operation=operation, error=str(exc)[:120])
 
     async def log_document_change(
         self,
@@ -126,28 +136,33 @@ class AuditTrail:
         new_values: dict[str, Any] | None = None,
         changed_by: str = "system",
     ) -> None:
-        await self._neo4j.run(
-            """
-            MATCH (d:Document {id: $doc_id})
-            CREATE (d)-[:HAS_CHANGE]->(cl:ChangeLog {
-                id:           $log_id,
-                target_label: 'Document',
-                target_id:    $doc_id,
-                operation:    $operation,
-                changed_by:   $changed_by,
-                changed_at:   datetime(),
-                old_values:   $old_values,
-                new_values:   $new_values,
-                source_doc_id: $doc_id
-            })
-            """,
-            doc_id=doc_id,
-            log_id=str(uuid4()),
-            operation=operation,
-            changed_by=changed_by,
-            old_values=str(old_values or {}),
-            new_values=str(new_values or {}),
-        )
+        try:
+            await self._neo4j.run(
+                """
+                MATCH (d:Document {id: $doc_id})
+                WITH d LIMIT 1
+                CREATE (d)-[:HAS_CHANGE]->(cl:ChangeLog {
+                    id:           $log_id,
+                    target_label: 'Document',
+                    target_id:    $doc_id,
+                    operation:    $operation,
+                    changed_by:   $changed_by,
+                    changed_at:   datetime(),
+                    old_values:   $old_values,
+                    new_values:   $new_values,
+                    source_doc_id: $doc_id
+                })
+                """,
+                doc_id=doc_id,
+                log_id=str(uuid4()),
+                operation=operation,
+                changed_by=changed_by,
+                old_values=str(old_values or {}),
+                new_values=str(new_values or {}),
+            )
+        except Exception as exc:
+            log.warning("audit_trail.document_log_failed",
+                        doc_id=doc_id, operation=operation, error=str(exc)[:120])
 
     async def get_history(
         self,

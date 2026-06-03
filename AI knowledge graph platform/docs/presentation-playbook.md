@@ -167,8 +167,9 @@ Narrate each of the 6 steps as it prints (don't read the screen silently):
 ### Slide 6 — Observability / metrics framework (1.5m)
 > "If you can't measure it, you can't run it in production. **16 metrics across 4
 > layers.** The real numbers from 104 query runs: faithfulness 0.840, context precision
-> 0.907, hybrid p95 **2.2s**. The seed graph (12 aerospace regulatory documents):
-> 20 entities, 12 relations, contradiction detection verified end-to-end.
+> 0.907, hybrid p95 **2.2s**. The real corpus (12 aerospace regulatory documents,
+> LLM-extracted): **374 entities, 456 relations, 70 open conflicts, 99.6% high-confidence
+> edges, 0% orphans** — all verified live in Neo4j.
 > The calibration pipeline corrects LLM confidence from raw to isotonic-adjusted —
 > Brier score is the target metric once the corpus scales."
 
@@ -176,7 +177,7 @@ Narrate each of the 6 steps as it prints (don't read the screen silently):
 *This is proof moment #2.* Switch to `http://localhost:8001/admin/`.
 > "This is the operator dashboard — running against the seed data we just ingested."
 *Click through the tabs:*
-- **Conflicts** — "three open conflicts, each typed — exclusive state, directional
+- **Conflicts** — "70 open conflicts detected on the real corpus — exclusive state, directional
   reversal, functional violation. One-click resolution with audit trail."
 - **Communities** — "14% entity drift since last rebuild — within the safe threshold."
 - **GDPR** — "GDPR Article 17 right-to-be-forgotten — with an audit log per request."

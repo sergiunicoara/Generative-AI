@@ -306,7 +306,7 @@ class GraphSnapshotService:
             """
             MATCH (e:Entity)
             WHERE ($tenant = 'default' OR e.tenant = $tenant)
-              AND NOT e.quarantined = true
+              AND coalesce(e.quarantined, false) = false
             WITH count(e) AS entity_count
             OPTIONAL MATCH ()-[r:RELATES_TO]->()
             WHERE ($tenant = 'default' OR r.tenant = $tenant)
@@ -323,7 +323,7 @@ class GraphSnapshotService:
                  count(cm) AS community_count
             OPTIONAL MATCH (orphan:Entity)
             WHERE ($tenant = 'default' OR orphan.tenant = $tenant)
-              AND NOT orphan.quarantined = true
+              AND coalesce(orphan.quarantined, false) = false
               AND NOT (orphan)<-[:MENTIONS]-(:Chunk)
             RETURN entity_count, edge_count, avg_conf, neg_count,
                    conflict_count, community_count, count(orphan) AS orphan_count

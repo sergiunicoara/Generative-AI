@@ -43,7 +43,8 @@ async def create_snapshot(request: SnapshotCreateRequest):
 async def list_snapshots(tenant: str = "default", limit: int = 50):
     from graphrag.graph.graph_snapshots import GraphSnapshotService
     svc = GraphSnapshotService(get_neo4j())
-    return await svc.list_snapshots(tenant=tenant, limit=limit)
+    snapshots = await svc.list_snapshots(tenant=tenant, limit=limit)
+    return {"snapshots": snapshots, "tenant": tenant, "count": len(snapshots)}
 
 
 @router.get(

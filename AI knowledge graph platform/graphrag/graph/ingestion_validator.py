@@ -24,7 +24,11 @@ import structlog
 log = structlog.get_logger(__name__)
 
 # Anomaly thresholds
-MAX_DEGREE_MULTIPLIER  = 5.0   # flag if degree > mean * this
+# For sparse domain graphs (< 10k entities), hub entities naturally have
+# 20–50× mean degree (e.g. FAA, Boeing in a regulatory corpus). A multiplier
+# of 5 would quarantine every important entity. 20 catches genuine poisoning
+# (a hallucinated node linked to everything) while leaving real hubs alone.
+MAX_DEGREE_MULTIPLIER  = 20.0  # flag if degree > mean * this
 MIN_CONFIDENCE         = 0.1   # flag edges with suspiciously low confidence
 MAX_ORPHAN_RATE        = 0.10  # flag if > 10% of new entities are orphans
 RELATION_RULES: dict[str, set[tuple[str, str]]] = {

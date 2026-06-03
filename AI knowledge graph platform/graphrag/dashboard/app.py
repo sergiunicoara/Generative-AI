@@ -186,7 +186,7 @@ def _brand_mark() -> html.Div:
 
 app.layout = html.Div([
     dcc.Interval(id="auto-refresh", interval=30_000, n_intervals=0),
-    dcc.Store(id="tenant-store", data="default"),
+    dcc.Store(id="tenant-store", data=os.getenv("GRAPHRAG_DEFAULT_TENANT", "default")),
 
     # ── Gradient header bar ─────────────────────────────────────────────────
     html.Div([
@@ -200,7 +200,8 @@ app.layout = html.Div([
                                         "fontSize": "10px", "fontWeight": "700",
                                         "letterSpacing": "0.1em"}),
             dcc.Input(
-                id="tenant-input", type="text", value="default", debounce=True,
+                id="tenant-input", type="text",
+                value=os.getenv("GRAPHRAG_DEFAULT_TENANT", "default"), debounce=True,
                 style={
                     "width": "170px", "padding": "7px 12px",
                     "borderRadius": "8px", "border": "1px solid rgba(255,255,255,0.18)",

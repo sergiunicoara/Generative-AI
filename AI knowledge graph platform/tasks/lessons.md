@@ -1921,3 +1921,50 @@ the response envelope.
 > List endpoints that feed UI components must return `{"items": [...], "count": N}`.
 > Never return a bare list from a REST endpoint — it breaks pagination, metadata,
 > and future extension. Check the dashboard's `_get()` call before finalising the route.
+
+---
+
+## A81 — `NOT x.quarantined = true` is a null-trap in Cypher; use `coalesce`
+
+**What happened:**
+The Communities tab (incremental drift monitor) showed "0% — 0 changed entities" even though
+all 374 entities were ingested after the last (non-existent) rebuild point. Root cause: three
+Cypher queries in `incremental_community.py` used `WHERE NOT e.quarantined = true`. When the
+`quarantined` property is absent (the common case — most entities are never quarantined), the
+comparison evaluates to `NULL`, which is falsy in a `WHERE` clause, so the entire entity is
+excluded. Result: 0 entities returned → 0% drift.
+
+**Root cause:**
+Neo4j Cypher null semantics: any comparison involving `NULL` returns `NULL`, not `false` and
+not `true`. `NOT NULL = true` → `NOT NULL` → `NULL` (falsy). The fix is `coalesce(e.quarantined,
+false) = false`.
+
+**Rule:**
+> **Every** Cypher `WHERE` clause that filters on an optional boolean property (`quarantined`,
+> `deleted`, `archived`, etc.) must use `coalesce(prop, default) = expected`, not
+> `NOT prop = true` or `prop = false`. Audit all new Cypher for this pattern before
+> committing. The null-trap is invisible unless you query a graph where the property is absent.
+
+**Scope of fix applied:**
+- `incremental_community.py` — 3 occurrences (get_changed_entities × 2, should_full_rebuild total count)
+- Previously fixed: `neo4j_client.py` (6 occurrences), `graph_snapshots.py` (2), `graph_evaluator.py` (2), `community_builder.py` (query in build_semantic_communities)
+
+---
+
+## A82 — `CommunityBuilder.build()` must record a rebuild point after every full Leiden run
+
+**What happened:**
+`CommunityBuilder.build()` ran Leiden, wrote 39 Community nodes, but never called
+`IncrementalCommunityDetector.record_rebuild_point()`. Result: no `CommunityRebuildPoint` node
+existed in Neo4j, so `community_change_summary()` treated all 374 entities as "changed"
+(change_fraction = 1.0, full_rebuild_recommended = True) — even immediately after a fresh build.
+
+**Root cause:**
+`CommunityBuilder` and `IncrementalCommunityDetector` were designed independently. The builder
+owns the Leiden run; the detector owns the rebuild-point bookkeeping. Neither called the other.
+
+**Rule:**
+> Whenever a full community rebuild completes successfully, call `record_rebuild_point()` to
+> set the drift baseline. Without it, the drift monitor is always in "full rebuild recommended"
+> state, which defeats the incremental detector's purpose.
+> Wire this in `CommunityBuilder.build()` so it's automatic — not a separate manual step.

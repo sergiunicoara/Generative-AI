@@ -68,6 +68,15 @@ class CommunityBuilder:
             community.tenant = self._tenant
             await self._neo4j.merge_community(community)
 
+        # Record a rebuild point so the incremental detector has a fresh baseline.
+        # Without this, community_change_summary() treats all entities as "changed".
+        try:
+            from graphrag.graph.incremental_community import IncrementalCommunityDetector
+            detector = IncrementalCommunityDetector(self._neo4j)
+            await detector.record_rebuild_point(self._tenant)
+        except Exception as exc:  # pragma: no cover
+            log.warning("community_builder.rebuild_point_failed", error=str(exc))
+
         log.info("community_builder.done", count=len(communities), tenant=self._tenant)
         return communities
 

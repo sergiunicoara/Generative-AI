@@ -121,7 +121,7 @@ class IncrementalCommunityDetector:
             rows = await self._neo4j.run(
                 """
                 MATCH (e:Entity {tenant: $tenant})
-                WHERE NOT e.quarantined = true
+                WHERE coalesce(e.quarantined, false) = false
                 RETURN e.name AS name, e.type AS type, e.recorded_at AS recorded_at
                 LIMIT 5000
                 """,
@@ -132,7 +132,7 @@ class IncrementalCommunityDetector:
         rows = await self._neo4j.run(
             """
             MATCH (e:Entity {tenant: $tenant})
-            WHERE NOT e.quarantined = true
+            WHERE coalesce(e.quarantined, false) = false
               AND e.recorded_at > datetime($since)
             RETURN e.name AS name, e.type AS type, e.recorded_at AS recorded_at
             ORDER BY e.recorded_at DESC
@@ -181,7 +181,7 @@ class IncrementalCommunityDetector:
         total_rows = await self._neo4j.run(
             """
             MATCH (e:Entity {tenant: $tenant})
-            WHERE NOT e.quarantined = true
+            WHERE coalesce(e.quarantined, false) = false
             RETURN count(e) AS n
             """,
             tenant=tenant,
@@ -322,7 +322,7 @@ class IncrementalCommunityDetector:
             [e["name"] for e in changed], tenant
         )
         total_rows = await self._neo4j.run(
-            "MATCH (e:Entity {tenant: $tenant}) RETURN count(e) AS n",
+            "MATCH (e:Entity {tenant: $tenant}) WHERE coalesce(e.quarantined, false) = false RETURN count(e) AS n",
             tenant=tenant,
         )
         total = total_rows[0].get("n", 0) if total_rows else 0

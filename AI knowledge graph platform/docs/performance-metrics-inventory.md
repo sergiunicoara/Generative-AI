@@ -99,17 +99,18 @@ result = cursor.fetchone()
 
 ### Sample data
 
-From `results/kpi_snapshots/kpis.db` (as of 2026-03-20):
+From `results/kpi_snapshots/kpis.db` (104 queries measured 2026-06-03):
 
 ```
-Query 5a420d85...
-  Latency: 1859.0 ms
-  Faithfulness: 0.667
-  Context Precision: 1.000
-  Context Recall: 1.000
-  Retrieval Mode: hybrid
-  Model: gemini-2.5-flash
-  Cost: $0.000000
+Aggregate across 104 queries:
+  Avg hybrid latency:  ~2.2s p95 (94 hybrid queries)
+  Avg agentic latency: ~3.4s p95 (10 agentic/IRCoT queries)
+  Faithfulness:        0.840  (LLM-judged on 23-query sample)
+  Context Precision:   0.907
+  Context Recall:      0.867
+  Retrieval Mode:      hybrid (90%) / agentic (10%)
+  Generation model:    llama-3.3-70b-versatile (Groq) / DeepSeek-V3 (fallback)
+  Embedding model:     text-embedding-3-large (OpenAI, 3072d)
 ```
 
 ---
@@ -208,20 +209,24 @@ RETURN {
 }
 ```
 
-### Interpretation example
+### Interpretation example — real aerospace corpus (2026-06-03)
 
 ```
-Snapshot at 2026-03-20 22:00:00 UTC:
-  Entity Resolution Quality: 0.92 ✓ (excellent — curated domain)
-  Relation Precision: 0.81 ✓ (healthy)
-  Contradiction Rate: 1.2 /1k edges ✓ (healthy — well below 2.0 /1k threshold)
-  Orphan Growth Rate: 0.08 ✓ (acceptable)
-  Community Coherence: 0.62 ✓ (good)
+Real data from Neo4j (12-doc aerospace regulatory corpus):
+  Entities:             374  (after alias dedup from 600+ extracted)
+  Relations:            456  (asserted + 10 forward-chain inferred)
+  Relation Precision:   99.6% edges above 0.75 threshold ✓
+  Contradiction Rate:   153.51 /1k edges  ⚠ (adversarial demo corpus — expected high)
+  Alias Coverage:       14.7% entities have registered aliases; ~38% dedup reduction
+  Orphan Rate:          0.0% ✓ (all entities linked to source chunks via MENTIONS)
+  Community Coherence:  90% (39 Leiden communities, real corpus) ✓
+  Open Conflicts:       70 (detected by contradiction detector, live in Neo4j)
 ```
 
-This indicates a clean, well-formed graph. A healthy corpus should have
-entity_resolution_quality > 0.85 (on curated domain data; expect 0.70–0.85
-on noisy enterprise data) and contradiction_rate < 2.0 /1k edges.
+The high contradiction rate (153.51 /1k) is expected on an adversarial demo corpus
+— FAA ADs intentionally supersede each other, creating dense contradiction patterns.
+A production compliance corpus would target < 2.0 /1k. The platform surfaces rather
+than hides contradictions, which is the correct behaviour for regulated domains.
 
 ---
 
@@ -396,12 +401,12 @@ The system emits alerts when metrics fall outside healthy ranges:
    Faithfulness is 0.840 — 84% of answers fully grounded in retrieved context. Context
    precision is 0.907, meaning almost everything we retrieve is relevant."
 
-2. **Show graph health**: "The knowledge graph is seeded from 12 aerospace regulatory
-   documents — FAA/EASA airworthiness directives, manufacturer records, fleet data.
-   The full pipeline is wired: entity extraction, alias resolution, contradiction detection,
-   community detection, calibration. On a production-scale corpus these health metrics
-   (entity count, contradiction density, alias coverage) scale automatically — the
-   architecture is designed for ~2k entities and ~7k edges at that scale."
+2. **Show graph health**: "The knowledge graph is built from 12 aerospace regulatory
+   documents — FAA/EASA airworthiness directives, manufacturer records, fleet data —
+   run through the full real LLM extraction pipeline (374 entities, 456 edges, 70 open
+   conflicts, 0% orphans, 90% community coherence). On a production-scale corpus these
+   health metrics scale automatically — the architecture is designed for ~2k entities
+   and ~7k edges at that scale."
 
 3. **Demonstrate calibration**: "The calibration pipeline uses isotonic regression to
    correct raw LLM confidence scores. Raw llama-3.3-70b confidence on technical corpora

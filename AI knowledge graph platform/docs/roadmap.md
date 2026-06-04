@@ -16,7 +16,7 @@ deployed workload and monitoring data behind the claim.
 
 | Capability | Status | Notes |
 |---|---|---|
-| Graph ingestion (doc → chunk → entity → relation) | ✅ Implemented / demo-ready | Groq extraction, Gemini 3072d embeddings |
+| Graph ingestion (doc → chunk → entity → relation) | ✅ Implemented / demo-ready | Groq/DeepSeek extraction, OpenAI text-embedding-3-large 3072d |
 | 6-stage hybrid retrieval (vector + BM25 + reranker + GNN + multi-hop + LLM) | ✅ Implemented / demo-ready | |
 | Agentic IRCoT fallback (two-model) | ✅ Implemented / demo-ready | 2-step max; 8B routing + 70B synthesis |
 | Forward-chaining inference (transitivity, symmetry, inverse, composition) | ✅ Implemented / demo-ready | Post-ingestion fixpoint |
@@ -94,6 +94,8 @@ and technical credibility.
 - [x] **Graph health snapshot fixed** — `coalesce(e.quarantined, false)` null-safe pattern in `graph_snapshots.py` + `graph_evaluator.py`; entity_count now shows 374 correctly
 - [x] **Degree anomaly threshold** — raised `MAX_DEGREE_MULTIPLIER` 5→20 in `ingestion_validator.py`; prevents hub entities (FAA, Boeing) from being wrongly quarantined in sparse domain graphs
 - [x] **Dashboard live mode** — JWT token with `read write` scope; `GRAPHRAG_DEFAULT_TENANT` env var; `GET /kg/snapshots` response wrapped in `{"snapshots":[]}`; all 5 tabs verified live against real aerospace data
+- [x] **Incremental community drift monitor** — `coalesce(e.quarantined, false)` null-trap fixed in `incremental_community.py`; `CommunityBuilder.build()` now calls `record_rebuild_point()` after every Leiden run; drift baseline set correctly (2026-06-04)
+- [x] **Calibration tab 404 fixed** — dashboard was calling `/kg/calibration/snapshots`; correct route is `/kg/calibration/trend`; `toString(cs.recorded_at)` added to prevent DateTime serialization error (2026-06-04)
 
 ---
 

@@ -36,7 +36,7 @@ The cost: higher operational complexity than a vector-only stack. The trade-off 
 
 **The follow-up they might ask:** "What about a hybrid — vector DB for retrieval, separate graph for reasoning?"
 
-Yes, that's a valid architecture and the platform essentially implements it: Gemini embeddings in Neo4j's native vector index for ANN search, plus the property graph for entity resolution, inference, and contradiction detection. The decision was to keep both in the same store rather than operate two separate systems, which simplifies consistency guarantees at the cost of Neo4j's vector index being less tunable than a dedicated vector DB.
+Yes, that's a valid architecture and the platform essentially implements it: OpenAI `text-embedding-3-large` embeddings (3072d) in Neo4j's native vector index for ANN search, plus the property graph for entity resolution, inference, and contradiction detection. The decision was to keep both in the same store rather than operate two separate systems, which simplifies consistency guarantees at the cost of Neo4j's vector index being less tunable than a dedicated vector DB.
 
 ---
 
@@ -95,7 +95,7 @@ Documented in `docs/adr/0003-bayesian-confidence-accumulation.md`.
 
 **Model answer:**
 
-1. **Vector ANN (3072d Gemini embeddings, cosine).** Finds semantically similar chunks. Fast, captures meaning but misses exact terminology. The 3072-dimension Gemini embeddings are higher quality than standard 768d models for domain-specific text.
+1. **Vector ANN (3072d OpenAI `text-embedding-3-large`, cosine).** Finds semantically similar chunks. Fast, captures meaning but misses exact terminology. The 3072-dimension embeddings are higher quality than standard 768d models for domain-specific text.
 
 2. **BM25 keyword search.** Finds chunks containing exact domain terms — "FAA-AD-2024-01-02", "engine mount inspection", regulation codes. Vector search misses these because sparse signals get diluted. Combined with RRF (Reciprocal Rank Fusion) to merge the two ranked lists without needing score normalization.
 
@@ -286,25 +286,21 @@ Beyond these, Neo4j handles tens of millions of nodes/edges without concern assu
 
 ---
 
-### Q13. Why Groq for text generation and Gemini for embeddings? Why not one provider?
+### Q13. Why Groq for text generation, DeepSeek as fallback, and OpenAI for embeddings? Why not one provider?
 
-**What they're testing:** Whether the dual-provider architecture was deliberate.
+**What they're testing:** Whether the multi-provider architecture was deliberate, and whether it's production-hardened.
 
 **Model answer:**
 
-Three providers, two distinct roles:
+Three providers, three distinct roles — and the splits were made deliberately:
 
-1. **Embedding: Gemini — hard constraint.** The Neo4j vector index is created with 3072 dimensions matching `gemini-embedding-001`. Switching providers requires re-embedding and recreating the index — expensive. Gemini's 3072d are high-quality and stable.
+1. **Embedding: OpenAI `text-embedding-3-large` (3072d).** The Neo4j vector index is created at 3072 dimensions. Switching providers requires re-embedding and recreating the index — expensive once you have real data. OpenAI's 3072d embeddings have strong multilingual and domain-specific performance and are reliably available. Gemini was the original choice but was replaced after Gemini's prepayment credits were exhausted mid-ingestion (blocking all embedding calls). The dimension stayed the same — zero schema migration.
 
-2. **Synthesis: Groq llama-3.3-70b — quota and speed.** Groq's free tier: 1,500+ requests/day, ~150 tok/s. Suitable for development and light production. Swapping requires one change in `llm_client.py`.
+2. **Synthesis: Groq `llama-3.3-70b-versatile` — primary, with DeepSeek-V3 instant fallback.** Groq's free tier runs at ~150 tok/s which is fast enough for interactive queries. The fallback to DeepSeek-V3 (via OpenAI-compatible SDK, fail-fast — no sleep) activates the moment Groq raises a `RateLimitError`. This prevents ingestion from stalling overnight when the 100k token daily quota is exhausted. In production both would be replaced with client-internal models.
 
-3. **Routing: Groq llama-3.1-8b-instant — latency optimisation.** The agentic IRCoT reasoning steps (trivial SEARCH/ANSWER decisions) use the 8B model at ~800 tok/s. Each step costs ~0.2s instead of ~1.5s for 70B. This is why agentic p95 is 3.4s not 6.8s — a 50% latency reduction with no quality loss on routing decisions.
+3. **Routing: Groq `llama-3.1-8b-instant` — latency optimisation.** The agentic IRCoT reasoning steps (trivial SEARCH/ANSWER decisions) use the 8B model at ~800 tok/s. Each step costs ~0.2s instead of ~1.5s for 70B. This is why agentic p95 is 3.4s not 6.8s — a 50% latency reduction with no quality loss on routing decisions.
 
-The architecture separates concerns: `get_embedder()` for embedding, `get_llm()` for synthesis, `get_fast_llm()` for routing. Swapping any provider is a single-function change. For a client deployment all three would map to the client's internal models.
-
-The RAGAS evaluator uses Groq as the judge LLM to keep evaluation consistent with the generation layer.
-
-For a client deployment, both would likely be replaced with the client's internal LLM. The architecture supports this: change `get_llm()` and `get_embedder()` in `llm_client.py` and update `settings.yml`. Nothing else changes.
+The architecture separates concerns cleanly: `get_embedder()`, `get_llm()` (returns `FallbackLLM`), `get_fast_llm()`. Swapping any provider is a one-function change in `llm_client.py`. Provider selection is documented in ADR-0004 and ADR-0006.
 
 ---
 

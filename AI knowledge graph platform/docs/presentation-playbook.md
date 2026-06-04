@@ -179,7 +179,7 @@ Narrate each of the 6 steps as it prints (don't read the screen silently):
 *Click through the tabs:*
 - **Conflicts** — "70 open conflicts detected on the real corpus — exclusive state, directional
   reversal, functional violation. One-click resolution with audit trail."
-- **Communities** — "14% entity drift since last rebuild — within the safe threshold."
+- **Communities** — "0% entity drift since the last Leiden rebuild — communities are fresh. The drift monitor triggers a rebuild recommendation at 20%."
 - **GDPR** — "GDPR Article 17 right-to-be-forgotten — with an audit log per request."
 - **Calibration** — "The calibration pipeline is wired — isotonic regression corrects
   raw LLM confidence. On a production corpus this targets Brier < 0.20."
@@ -191,7 +191,7 @@ Tie it to their world: regulatory intelligence, audit KB, compliance monitoring.
 > insurance — swap the YAML ontology, nothing else changes.**"
 
 ### Slide 9 — Technical Foundation (1.5m)
-> "22,650 lines, 353 passing tests (49 are agent safety guardrails), 39 KG modules, 6 ADRs. **This is a product,
+> "22,650 lines, 353 passing tests (49 are agent safety guardrails), 39 KG modules, 6 ADRs, 82 documented lessons. **This is a product,
 > not a prototype.**"
 
 ### Slide 10 — Close (1m)

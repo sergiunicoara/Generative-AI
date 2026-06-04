@@ -49,7 +49,7 @@ to a specific file, endpoint, demo step, or test — with a one-line business va
 | Evidence | Where |
 |---|---|
 | 22,650 lines, fully async (asyncio) | Entire `graphrag/` package |
-| 304 passing unit tests | `tests/unit/` → `pytest tests/unit -q` |
+| 353 passing unit tests | `tests/unit/` → `pytest tests/unit -q` |
 | GitHub Actions CI (pytest matrix + ruff) | `.github/workflows/` |
 | Docker multi-stage build | `Dockerfile` |
 | One-command dev stack | `docker compose -f compose.dev.yaml up` |
@@ -66,7 +66,7 @@ to a specific file, endpoint, demo step, or test — with a one-line business va
 | Evidence | Where |
 |---|---|
 | 6-stage hybrid retrieval pipeline | `graphrag/retrieval/hybrid_retriever.py` |
-| Vector ANN (Gemini 3072d embeddings) | `graphrag/ingestion/embedder.py` |
+| Vector ANN (OpenAI text-embedding-3-large 3072d) | `graphrag/ingestion/embedder.py` |
 | BM25 + Reciprocal Rank Fusion | `hybrid_retriever.py → _rrf_merge()` |
 | Cross-encoder reranking (ms-marco-MiniLM) | `graphrag/retrieval/cross_encoder_reranker.py` |
 | GNN / GAT scoring | `graphrag/retrieval/gnn_scorer.py` |
@@ -100,7 +100,7 @@ to a specific file, endpoint, demo step, or test — with a one-line business va
 | Evidence | Where |
 |---|---|
 | 6 ADRs with alternatives evaluated | `docs/adr/` |
-| 73 documented lessons (pattern library) | `tasks/lessons.md` |
+| 82 documented lessons (pattern library) | `tasks/lessons.md` |
 | CONTRIBUTING.md with ADR process, PR checklist | `CONTRIBUTING.md` |
 | Production runbook (startup, health checks, failure modes) | `docs/runbook.md` |
 | Scaling roadmap with decision thresholds | `docs/roadmap.md` |
@@ -164,7 +164,7 @@ to a specific file, endpoint, demo step, or test — with a one-line business va
 
 | Claim | Proof |
 |---|---|
-| "Not a tutorial project" | 353 tests, CI, Docker build, structured DLQ, 6 ADRs |
+| "Not a tutorial project" | 353 tests, CI, Docker build, structured DLQ, 6 ADRs, 82 documented lessons |
 | "Observable" | 16 metrics, RAGAS 0.840/0.907/0.867 from 104 real runs, calibration pipeline wired, admin + KPI dashboards |
 | "Deployable" | `docker compose -f compose.dev.yaml up`; worker `/ready` health probes |
 | "Scalable design" | Redis alias registry, incremental community detection, RabbitMQ parallel workers |
@@ -205,8 +205,11 @@ to a specific file, endpoint, demo step, or test — with a one-line business va
 | Relation confidence | 99.6% edges ≥ 0.75 (live Neo4j snapshot) |
 | Alias coverage | 14.7% entities with aliases; 600+→374 canonical (~38% reduction) |
 | Orphan rate | 0.0% (all entities linked to source chunks) |
+| Community coherence | 90% (39 Leiden communities, real corpus) |
+| Contradiction rate | 153.51 / 1k edges (adversarial corpus — expected high) |
 | Calibration (Brier) | pipeline wired; target < 0.20 on production corpus |
 | Passing tests | 353 |
 | KG modules | 39 |
 | ADRs | 6 |
+| Lessons | 82 |
 | LOC | 22,650 |

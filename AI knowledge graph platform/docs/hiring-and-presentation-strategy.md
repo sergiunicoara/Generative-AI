@@ -95,9 +95,10 @@ That separates "I built this" from "I generated this."
 4. **One sentence about PwC's practice:** "I saw PwC has been building GraphRAG capabilities in the region" — shows you've done homework
 5. **Know the real numbers cold:**
    - Faithfulness: 0.840 | Context precision: 0.907 | Recall: 0.867
-   - Hybrid p95: 2.2s | Agentic p95: 3.4s | Combined: 2.7s
    - Faithfulness: 0.840 | Precision: 0.907 | Recall: 0.867 (104 real query runs, 23 RAGAS-sampled)
-   - Hybrid p95: 2.2s | Agentic p95: 3.4s | Agentic trigger rate: ~10%
+   - Latency by mode: hybrid p95 2.2s | agentic p95 3.4s | combined p95 2.7s
+   - Agentic trigger rate: ~9-10% current; alert if >20%
+   - Why trigger rate matters: it is a direct read on retrieval health. If it climbs, the agent is covering for weak retrieval even if combined p95 still looks acceptable.
    - Real corpus: 374 entities, 456 relations (12-doc aerospace corpus, LLM-extracted); 70 open conflicts detected
    - Calibration pipeline wired: isotonic regression targets Brier < 0.20 on production corpus
 
@@ -139,7 +140,9 @@ That separates "I built this" from "I generated this."
 >
 > The second layer is the retrieval pipeline — six stages. Vector search fused with BM25 keyword search via RRF, cross-encoder reranking, multi-hop graph traversal that follows entity connections across documents, then a graph neural network that re-scores results based on graph structure, not just text similarity.
 >
-> The third layer is the agentic fallback — IRCoT iterative retrieval. When the hybrid answer has low confidence and zero citations, it fires. It uses a fast 8B model for routing decisions — SEARCH or ANSWER, 0.2 seconds each — and the full 70B model only for final synthesis. That's why the agentic p95 is 3.4 seconds, not 7."
+> The third layer is the agentic fallback — IRCoT iterative retrieval. It only fires when the hybrid answer both hedges and has zero citations. That AND condition matters: the first version used OR logic and fired far too often on sparse corpora. The current trigger rate is around 9-10%, which is the metric I watch hardest because it tells me whether retrieval is healthy or whether the agent is compensating for it.
+>
+> When the fallback does fire, it uses a fast 8B model for routing decisions — SEARCH or ANSWER, 0.2 seconds each — and the full 70B model only for final synthesis. That's why the agentic p95 is 3.4 seconds, not 7."
 
 **Anticipate:** *"What's the difference between this and LangChain or LlamaIndex?"*
 > "Those are orchestration frameworks. This is a domain-specific platform with a real Neo4j schema, ontology enforcement, forward-chaining inference, contradiction detection, and a 6-stage retrieval pipeline. LangChain gives you building blocks. This is built."
@@ -199,11 +202,13 @@ Run: `MATCH (n {tenant:'aerospace'}) RETURN n`
 **Say:**
 > "If you can't measure it, you can't run it in production. These numbers come from 104 real query runs against the pipeline.
 >
-> Faithfulness is 0.840 — 84% of answers fully grounded in retrieved context. Context precision is 0.907 — almost everything we retrieve is relevant. Hybrid p95 latency is 2.2 seconds. The agentic path — which fires on about 10% of queries for hard multi-hop questions — runs at 3.4 seconds by design.
+> Faithfulness is 0.840 — 84% of answers fully grounded in retrieved context. Context precision is 0.907 — almost everything we retrieve is relevant.
+>
+> The latency number has to be split by mode. Combined p95 is 2.7 seconds, but that hides two behaviours: hybrid p95 is 2.2 seconds, while agentic fallback p95 is 3.4 seconds. The important operational metric is not just agentic latency — it is agentic trigger rate. Mine is around 9-10%. If that climbs to 25%, the combined p95 may still look fine, but the system is quietly relying on the agent to cover retrieval misses.
 >
 > The knowledge graph is seeded from 12 aerospace regulatory documents — FAA/EASA airworthiness directives and manufacturer records. The pipeline is fully wired: entity extraction, contradiction detection, calibration, community detection. Scale the corpus and all the health metrics scale with it."
 
-**Important framing:** *"We alert on agentic rate, not agentic latency. If more than 20% of queries trigger the fallback, the threshold is too loose — not the corpus is hard."*
+**Important framing:** *"We report latency per mode, but we alert on agentic trigger rate. Agentic latency is the expected cost of the safety net; trigger rate tells us whether retrieval health is degrading. If more than 20% of queries trigger fallback, the threshold or retrieval stack needs investigation."*
 
 ---
 
@@ -323,6 +328,8 @@ These are the topics a CTO will probe. Know them without notes.
 - 8B (llama-3.1-8b-instant): ~800 tok/s on Groq → 0.2s per step
 - 70B (llama-3.3-70b-versatile): ~150 tok/s → 1.5s per step
 - With max_steps=2: 2 × 0.2s routing + 1.5s synthesis + retrieval = ~3.4s vs 6.8s
+- Trigger logic: fallback only when the answer hedges AND has zero citations. The earlier OR condition over-fired on sparse corpora, pushing agentic usage toward ~40%. The AND condition brought trigger rate back to ~9-10% without a sampled quality drop.
+- Operational rule: watch agentic trigger rate more closely than agentic p95. Agentic p95 tells you the safety net is expensive; trigger rate tells you how often retrieval needs rescuing.
 - In code: `graphrag/retrieval/agentic_retriever.py` — `_reason()` and `_synthesize()`
 
 **8. Provider split: Groq for generation, Gemini for embeddings (ADR-0004)**
@@ -387,6 +394,7 @@ These are the topics a CTO will probe. Know them without notes.
 | Leiden vs Louvain | Leiden guarantees well-connected communities; Louvain can produce internally disconnected ones |
 | Brier score | Mean squared error between predicted probability and binary outcome; 0=perfect, 0.25=random |
 | Isotonic regression calibration | Non-parametric monotone transformation that maps raw model confidence to empirical frequency |
+| Agentic trigger rate | Fraction of queries that fall from hybrid retrieval into agentic fallback; leading indicator of retrieval health |
 | Cross-encoder vs bi-encoder | Bi-encoder: embed query and doc separately (fast, approximate). Cross-encoder: score (query, doc) jointly (slow, accurate). Use bi-encoder for ANN, cross-encoder for reranking top-N. |
 | GNN message passing | Each node aggregates features from its neighbours; graph structure encodes entity relationships |
 | Datalog transitivity rule | If A→B and B→C then A→C; applied to fixpoint (until no new edges can be derived) |
@@ -474,9 +482,11 @@ Open `config/ontologies/aerospace_regulatory.yml` in VS Code alongside the termi
 - [ ] Explain ADR-0006 (8B routing + 70B synthesis) — the latency table, why not 8B for synthesis
 - [ ] Explain the 6 retrieval stages in order, what failure mode each one fixes
 - [ ] Explain the two-model agentic design: which model does what, why, latency numbers
+- [ ] Explain agentic trigger rate: why ~9-10% is healthy, why >20% is an alert, and why combined p95 hides the signal
+- [ ] Explain the OR-to-AND fallback fix: hedged answer OR zero citations over-fired; hedged answer AND zero citations reduced unnecessary agentic calls
 - [ ] Explain contradiction detection: name all 5 types, explain `positive_negative_pair` with an example
 - [ ] State the real RAGAS numbers cold: faithfulness 0.840, precision 0.907, recall 0.867
-- [ ] State the real latency numbers: hybrid p95 2.2s, agentic p95 3.4s, why reported per mode
+- [ ] State the real latency numbers: hybrid p95 2.2s, agentic p95 3.4s, combined p95 2.7s, trigger rate ~9-10%
 
 ### Demo preparation
 - [ ] Run `docker compose -f compose.dev.yaml up neo4j` (or full stack) — confirm healthy

@@ -13,7 +13,7 @@ from graphrag.dashboard.utils import (
 
 
 def render(tenant: str) -> html.Div:
-    cal_data = _get("/kg/calibration/snapshots", {"tenant": tenant, "limit": 20})
+    cal_data = _get("/kg/calibration/trend", {"tenant": tenant, "limit": 20})
 
     if http_error(cal_data):
         if not DEMO_MODE:

@@ -386,7 +386,7 @@ class CalibrationService:
                    cs.sample_count        AS sample_count,
                    cs.max_calibration_gap AS max_calibration_gap,
                    cs.verdict             AS verdict,
-                   cs.recorded_at         AS recorded_at
+                   toString(cs.recorded_at) AS recorded_at
             ORDER BY cs.recorded_at DESC
             LIMIT $limit
             """,

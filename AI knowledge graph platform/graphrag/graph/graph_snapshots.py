@@ -204,8 +204,8 @@ class GraphSnapshotService:
                    s.contradiction_rate AS contradiction_rate,
                    s.orphan_rate     AS orphan_rate,
                    s.community_coherence AS community_coherence,
-                   s.recorded_at     AS recorded_at,
-                   s.created_at      AS created_at
+                   toString(s.recorded_at) AS recorded_at,
+                   toString(s.created_at)  AS created_at
             ORDER BY s.created_at DESC
             LIMIT $limit
             """,

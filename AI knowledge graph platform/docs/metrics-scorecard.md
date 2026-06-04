@@ -77,7 +77,7 @@ contradiction detection + forward-chaining). Numbers below are real, queried fro
 | **Relation confidence** | **99.6%** edges above 0.75 threshold | > 80% | > 70% |
 | **Alias-resolution coverage** | **14.7%** entities have registered aliases; 600+→374 canonical (~38% reduction) | > 90% | > 85% |
 | **Orphan rate** | **0.0%** | < 10% | < 20% |
-| **Community coherence** | pipeline wired (no communities built yet) | > 0.65 | > 0.50 |
+| **Community coherence** | **90%** (39 Leiden communities, real corpus) | > 0.65 | > 0.50 |
 
 ## 🎚️ Confidence Calibration
 

@@ -343,10 +343,10 @@ class Neo4jClient:
             f"""
             UNWIND $chunk_ids AS cid
             MATCH (c:Chunk {{id: cid}})-[:MENTIONS]->(e:Entity)
-            WHERE NOT e.quarantined = true
+            WHERE coalesce(e.quarantined, false) = false
             OPTIONAL MATCH (e)-[r:RELATES_TO]-(neighbor:Entity)
             OPTIONAL MATCH (src_doc:Document {{id: r.source_doc_id}})
-            WHERE NOT neighbor.quarantined = true {temporal_filter}
+            WHERE coalesce(neighbor.quarantined, false) = false {temporal_filter}
               AND ($tenant = 'default' OR r.source_doc_id IS NULL OR src_doc.tenant = $tenant)
             RETURN e.name AS entity, e.type AS type, e.description AS description,
                    collect(DISTINCT neighbor.name) AS neighbors
@@ -392,10 +392,10 @@ class Neo4jClient:
             f"""
             UNWIND $chunk_ids AS cid
             MATCH (c:Chunk {{id: cid}})-[:MENTIONS]->(e:Entity)
-            WHERE NOT e.quarantined = true
+            WHERE coalesce(e.quarantined, false) = false
             MATCH path = (e)-[:RELATES_TO*1..{hops}]-(neighbor:Entity)
-            WHERE NOT neighbor.quarantined = true {temporal_filter} {tenant_filter}
-              AND ALL(n IN nodes(path) WHERE NOT n.quarantined = true)
+            WHERE coalesce(neighbor.quarantined, false) = false {temporal_filter} {tenant_filter}
+              AND ALL(n IN nodes(path) WHERE coalesce(n.quarantined, false) = false)
             MATCH (neighbor_chunk:Chunk)-[:MENTIONS]->(neighbor)
             WHERE NOT neighbor_chunk.id IN $chunk_ids
               AND ($tenant = 'default' OR neighbor_chunk.tenant = $tenant)
@@ -457,7 +457,7 @@ class Neo4jClient:
             """
             CALL db.index.fulltext.queryNodes('entity_fulltext', $query)
             YIELD node AS e, score
-            WHERE NOT e.quarantined = true
+            WHERE coalesce(e.quarantined, false) = false
             OPTIONAL MATCH (c:Chunk)-[:MENTIONS]->(e)
             WHERE ($tenant = 'default' OR c.tenant = $tenant)
             RETURN DISTINCT c.id AS chunk_id, c.text AS text, score
@@ -483,7 +483,7 @@ class Neo4jClient:
             UNWIND $chunk_ids AS cid
             MATCH (c:Chunk {id: cid})-[:MENTIONS]->(e:Entity)
             WHERE e.embedding IS NOT NULL AND size(e.embedding) > 0
-              AND NOT e.quarantined = true
+              AND coalesce(e.quarantined, false) = false
             RETURN cid          AS chunk_id,
                    e.name       AS entity_name,
                    e.type       AS entity_type,
@@ -526,8 +526,8 @@ class Neo4jClient:
                   -[r:RELATES_TO]->
                   (t:Entity {{tenant: $tenant}})
             WHERE (t.name + ':' + t.type) IN $entity_keys {temporal_filter}
-              AND NOT s.quarantined = true
-              AND NOT t.quarantined = true
+              AND coalesce(s.quarantined, false) = false
+              AND coalesce(t.quarantined, false) = false
             RETURN s.name                             AS src,
                    s.type                             AS src_type,
                    t.name                             AS tgt,
@@ -548,7 +548,7 @@ class Neo4jClient:
             """
             MATCH (c:Chunk)-[:MENTIONS]->(e:Entity)
             WHERE ($tenant = 'default' OR c.tenant = $tenant)
-              AND NOT e.quarantined = true
+              AND coalesce(e.quarantined, false) = false
             RETURN DISTINCT e.id AS id, e.name AS name, e.type AS type
             """,
             tenant=tenant,
@@ -559,10 +559,11 @@ class Neo4jClient:
             """
             MATCH (s:Entity)-[r:RELATES_TO]->(t:Entity)
             OPTIONAL MATCH (d:Document {id: r.source_doc_id})
-            WHERE NOT s.quarantined = true
-              AND NOT t.quarantined = true
+            WHERE coalesce(s.quarantined, false) = false
+              AND coalesce(t.quarantined, false) = false
               AND ($tenant = 'default' OR r.source_doc_id IS NULL OR d.tenant = $tenant)
-            RETURN s.id AS source_id, t.id AS target_id, r.relation AS relation, r.weight AS weight
+            RETURN s.id AS source_id, t.id AS target_id, r.relation AS relation,
+                   coalesce(r.weight, r.confidence, 1.0) AS weight
             """,
             tenant=tenant,
         )

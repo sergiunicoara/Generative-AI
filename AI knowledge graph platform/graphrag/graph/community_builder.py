@@ -78,7 +78,9 @@ class CommunityBuilder:
         for e in entities:
             G.add_node(e["id"], name=e["name"], type=e["type"])
         for r in relations:
-            G.add_edge(r["source_id"], r["target_id"], weight=r.get("weight", 1.0))
+            # Use confidence as weight when weight property is absent/null
+            weight = r.get("weight") or r.get("confidence") or 1.0
+            G.add_edge(r["source_id"], r["target_id"], weight=float(weight))
         return G
 
     def _run_leiden(self, G: nx.Graph) -> list[Community]:

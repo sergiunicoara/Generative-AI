@@ -22,6 +22,7 @@ from graphrag.core.llm_client import get_fast_llm, get_llm
 from graphrag.core.models import QueryResult
 from graphrag.retrieval.local_search import LocalSearch
 from graphrag.retrieval.context_builder import ContextBuilder
+from graphrag.retrieval.claim_verifier import ClaimVerifier
 
 log = structlog.get_logger(__name__)
 
@@ -43,9 +44,14 @@ B) If you need more information, respond with:
 Be concise. Do not explain."""
 
 _FINAL_PROMPT = """\
-You are an expert assistant. Answer the question using ONLY the provided context.
-If the context does not contain enough information, say so explicitly.
-Always cite sources by chunk ID.
+You are a regulatory knowledge assistant. Answer using ONLY the information in the context below.
+Rules:
+- Use ONLY facts stated in the context. Do NOT add information from your training data.
+- If a fact is not in the context, do not include it in your answer.
+- If the context does not contain enough information to answer, say so explicitly.
+- Be concise: 3-5 sentences unless the question requires more.
+- State facts directly. Do NOT preface your answer with phrases like "Based on the context", \
+"Based solely on the context", "According to the provided context", or similar.
 
 Context:
 {context}
@@ -102,6 +108,7 @@ class AgenticRetriever:
         self._local = LocalSearch()
         self._ctx_builder = ContextBuilder()
         self._max_steps = max_steps
+        self._verifier = ClaimVerifier()
 
     async def _reason(self, prompt: str) -> str:
         """Fast 8B model for cheap SEARCH/ANSWER routing decisions."""
@@ -166,8 +173,14 @@ class AgenticRetriever:
             )
 
             if reasoning.upper().startswith("ANSWER:"):
-                # LLM is confident — extract the answer
+                # LLM is confident — extract and verify the answer
                 answer = reasoning[7:].strip()
+                current_context = "\n\n---\n\n".join(context_sections)
+                cfg = get_settings().retrieval
+                if cfg.get("claim_verification", False):
+                    answer, n_removed = await self._verifier.verify(answer, current_context)
+                    if n_removed:
+                        log.info("agentic_retriever.claims_stripped", n_removed=n_removed)
                 latency_ms = (time.monotonic() - t0) * 1000
                 log.info(
                     "agentic_retriever.done",
@@ -223,6 +236,12 @@ class AgenticRetriever:
         final_answer = await self._synthesize(
             _FINAL_PROMPT.format(context=final_context, question=question)
         )
+
+        # ── Claim verification — strip ungrounded sentences ────────────────────
+        if get_settings().retrieval.get("claim_verification", False):
+            final_answer, n_removed = await self._verifier.verify(final_answer, final_context)
+            if n_removed:
+                log.info("agentic_retriever.claims_stripped", n_removed=n_removed)
 
         latency_ms = (time.monotonic() - t0) * 1000
         log.info(

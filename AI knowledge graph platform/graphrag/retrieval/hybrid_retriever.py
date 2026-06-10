@@ -14,15 +14,21 @@ from graphrag.retrieval.local_search import LocalSearch
 from graphrag.retrieval.global_search import GlobalSearch
 from graphrag.retrieval.context_builder import ContextBuilder
 from graphrag.retrieval.agentic_retriever import AgenticRetriever, _is_low_confidence
+from graphrag.retrieval.claim_verifier import ClaimVerifier
 from graphrag.retrieval.session_context import get_session_context
 from graphrag.core.llm_utils import safe_response_text
 
 log = structlog.get_logger(__name__)
 
 _ANSWER_PROMPT = """\
-You are an expert assistant. Answer the question using ONLY the provided context.
-If the context does not contain enough information, say so explicitly.
-Always cite your sources by chunk ID.
+You are a regulatory knowledge assistant. Answer using ONLY the information in the context below.
+Rules:
+- Use ONLY facts stated in the context. Do NOT add information from your training data.
+- If a fact is not in the context, do not include it in your answer.
+- If the context does not contain enough information to answer, say so explicitly.
+- Be concise: 3-5 sentences unless the question requires more.
+- State facts directly. Do NOT preface your answer with phrases like "Based on the context", \
+"Based solely on the context", "According to the provided context", or similar.
 
 Context:
 {context}
@@ -44,6 +50,7 @@ class HybridRetriever:
         self._agentic = AgenticRetriever(
             max_steps=self._cfg.get("agentic_max_steps", 4)
         )
+        self._verifier = ClaimVerifier()
         self._use_session_ctx = self._cfg.get("session_context_enabled", True)
         self._session_ctx = get_session_context() if self._use_session_ctx else None
 
@@ -82,6 +89,13 @@ class HybridRetriever:
         answer = await get_llm().generate(
             _ANSWER_PROMPT.format(context=context, question=question),
         ) or "Insufficient context to answer this question."
+
+        # ── Claim verification — strip ungrounded sentences ────────────────────
+        if self._cfg.get("claim_verification", False):
+            answer, n_removed = await self._verifier.verify(answer, context)
+            if n_removed:
+                log.info("hybrid_retriever.claims_stripped", n_removed=n_removed)
+
         latency_ms = (time.monotonic() - t0) * 1000
 
         # ── Record session turn with the real answer ───────────────────────────

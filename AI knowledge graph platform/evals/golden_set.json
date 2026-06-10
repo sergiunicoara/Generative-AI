@@ -4,7 +4,7 @@
   "description": "Golden evaluation set for the GraphRAG aerospace regulatory corpus. 40 questions across single-hop, multi-hop, contradiction, authority-chain, inference, and negative retrieval types.",
   "thresholds": {
     "min_context_precision": 0.70,
-    "min_faithfulness":      0.75,
+    "min_faithfulness":      0.80,
     "min_relevancy":         0.70,
     "min_citation_recall":   0.60,
     "pass_rate_min":         0.80

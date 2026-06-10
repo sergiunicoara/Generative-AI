@@ -1,9 +1,10 @@
 """RAGAS evaluation wrapper — faithfulness, answer_relevancy, context_precision, context_recall.
 
 The RAGAS judge LLM is resolved in priority order:
-  1. Groq (``langchain-groq``) — consistent with the generation pipeline, free-tier quota
-  2. Google Generative AI (``langchain-google-genai``) — fallback if langchain-groq absent
-  3. None — RAGAS will use its internal default LLM (may fail without API keys)
+  1. DeepSeek-V3 (``langchain-openai`` + DeepSeek base URL) — generous rate limits, fast failover
+  2. Groq (``langchain-groq``) — consistent with the generation pipeline, free-tier quota
+  3. Gemini (``langchain-google-genai``) — last resort if both above are unavailable
+  4. None — RAGAS will use its internal default LLM (may fail without API keys)
 
 Install Groq support: ``pip install langchain-groq``
 """
@@ -32,10 +33,33 @@ class RagasEvaluator:
         self._llm = self._build_llm()
 
     def _build_llm(self):
-        """Build the LLM judge for RAGAS. Tries Groq first, falls back to Gemini."""
+        """Build the LLM judge for RAGAS.
+
+        Priority: Groq → DeepSeek → Gemini.
+
+        Groq is the primary judge because its 100k TPD resets daily at midnight UTC
+        and the faithfulness eval (~35k tokens) fits well within that budget.
+        DeepSeek is the fallback when Groq is rate-limited; Gemini is the last resort.
+        """
         cfg = get_settings()
 
-        # 1st choice: Groq — consistent with generation pipeline, avoids Gemini quota
+        # 1st choice: DeepSeek — no daily token cap (paid subscription)
+        try:
+            from langchain_openai import ChatOpenAI
+            llm = ChatOpenAI(
+                model="deepseek-chat",
+                api_key=cfg.deepseek_api_key,
+                base_url="https://api.deepseek.com",
+                temperature=0.0,
+            )
+            log.info("ragas_evaluator.llm_deepseek", model="deepseek-chat")
+            return llm
+        except ImportError:
+            log.debug("ragas_evaluator.langchain_openai_missing — trying Groq")
+        except Exception as exc:
+            log.warning("ragas_evaluator.deepseek_init_failed", error=str(exc)[:120])
+
+        # 2nd choice: Groq — 100k TPD, resets daily at midnight UTC
         try:
             from langchain_groq import ChatGroq
             llm = ChatGroq(
@@ -46,11 +70,11 @@ class RagasEvaluator:
             log.info("ragas_evaluator.llm_groq", model=cfg.groq_model)
             return llm
         except ImportError:
-            log.debug("ragas_evaluator.langchain_groq_missing — trying Gemini fallback")
+            log.debug("ragas_evaluator.langchain_groq_missing — trying Gemini")
         except Exception as exc:
-            log.warning("ragas_evaluator.groq_init_failed", error=str(exc))
+            log.warning("ragas_evaluator.groq_init_failed", error=str(exc)[:120])
 
-        # 2nd choice: Gemini via langchain-google-genai
+        # 3rd choice: Gemini via langchain-google-genai
         try:
             from langchain_google_genai import ChatGoogleGenerativeAI
             llm = ChatGoogleGenerativeAI(
@@ -62,8 +86,10 @@ class RagasEvaluator:
         except ImportError:
             log.warning(
                 "ragas_evaluator.no_langchain_llm",
-                note="install langchain-groq or langchain-google-genai for RAGAS evaluation",
+                note="install langchain-openai, langchain-groq, or langchain-google-genai",
             )
+        except Exception as exc:
+            log.warning("ragas_evaluator.gemini_init_failed", error=str(exc)[:120])
 
         return None
 
@@ -109,9 +135,30 @@ class RagasEvaluator:
         try:
             from ragas import evaluate
 
+            # Only pass FakeEmbeddings when no metric needs real embeddings.
+            # answer_relevancy computes cosine similarity between generated and original
+            # question — it needs real embeddings, not random vectors.
+            _embedding_metrics = {"answer_relevancy"}
+            _needs_real_embeddings = any(
+                m in self._metrics_cfg for m in _embedding_metrics
+            )
+            if _needs_real_embeddings:
+                _eval_embeddings = None  # let RAGAS use its default (OpenAI)
+            else:
+                try:
+                    from langchain_community.embeddings import FakeEmbeddings
+                    _eval_embeddings = FakeEmbeddings(size=1)
+                except Exception:
+                    _eval_embeddings = None
+
             scores = await loop.run_in_executor(
                 None,
-                lambda: evaluate(dataset, metrics=metrics, llm=self._llm),
+                lambda: evaluate(
+                    dataset,
+                    metrics=metrics,
+                    llm=self._llm,
+                    embeddings=_eval_embeddings,
+                ),
             )
             result_dict = scores.to_pandas().iloc[0].to_dict()
         except Exception as exc:

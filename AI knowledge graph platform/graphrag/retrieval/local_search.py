@@ -106,13 +106,19 @@ class LocalSearch:
             if enriched_question != question:
                 log.info("local_search.query_enriched", session_id=session_id)
 
-        # Step 1 — vector ANN
-        embedding     = await self._embedder.embed_text(enriched_question)
-        vector_chunks = await self._neo4j.vector_search_chunks(
-            embedding,
-            top_k=top_k,
-            tenant=tenant,
-        )
+        # Step 1 — vector ANN (skipped when vector_search_enabled=false, e.g. OpenAI quota exhausted)
+        use_vector = self._cfg.get("vector_search_enabled", True)
+        embedding: list[float] | None = None
+        if use_vector:
+            embedding     = await self._embedder.embed_text(enriched_question)
+            vector_chunks = await self._neo4j.vector_search_chunks(
+                embedding,
+                top_k=top_k,
+                tenant=tenant,
+            )
+        else:
+            log.info("local_search.vector_skipped", reason="vector_search_enabled=false")
+            vector_chunks = []
 
         # Step 2 — BM25 + RRF fusion
         if use_bm25:
@@ -140,13 +146,15 @@ class LocalSearch:
             tenant=tenant,
         )
 
+        hop_top_k = self._cfg.get("multihop_top_k", 50)
         seen: set[str] = set(seed_ids)
         extra_chunks = [c for c in hop_chunks if c["chunk_id"] not in seen]
+        extra_chunks = extra_chunks[:hop_top_k]  # cap before GNN — prevents full-corpus scoring
         all_chunks   = seed_chunks + extra_chunks
         all_ids      = [c["chunk_id"] for c in all_chunks]
 
-        # Step 5 — GNN scoring with authority-weighted edges
-        if use_gnn and all_chunks:
+        # Step 5 — GNN scoring with authority-weighted edges (requires query embedding)
+        if use_gnn and all_chunks and embedding is not None:
             alpha, beta = _adaptive_weights(
                 enriched_question,
                 self._cfg.get("gnn_alpha", 0.9),

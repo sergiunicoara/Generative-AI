@@ -1,4 +1,9 @@
-"""Google ADK agent that runs RAGAS evaluation and logs KPIs."""
+"""Agent that runs RAGAS evaluation and logs KPIs.
+
+After each evaluation the (context_precision → faithfulness) pair is written
+to the CalibrationService so the dashboard Calibration tab reflects real data
+without a separate manual step.
+"""
 
 from __future__ import annotations
 
@@ -60,6 +65,28 @@ class EvaluationAgent(BaseGraphRAGAgent):
             model_version=qr.model_version,
         )
         await self._tracker.record(kpi)
+
+        # ── Wire calibration sample ────────────────────────────────────────────
+        # predicted_confidence = context_precision (how confident the retrieval was)
+        # actual_outcome       = faithfulness      (how correct the answer was)
+        # This populates the dashboard Calibration tab automatically after each run.
+        try:
+            from graphrag.graph.confidence_calibration import CalibrationService
+            from graphrag.graph.neo4j_client import get_neo4j
+            tenant = getattr(job, "tenant", "default")
+            cal_svc = CalibrationService(get_neo4j())
+            await cal_svc.add_sample(
+                predicted_confidence=eval_result.context_precision,
+                actual_outcome=eval_result.faithfulness,
+                relation=qr.retrieval_mode,
+                source_doc_id=qr.query_id,
+                prompt_version=qr.model_version,
+                tenant=tenant,
+                verified_by="ragas",
+            )
+            log.debug("evaluation_agent.calibration_sample_added", tenant=tenant)
+        except Exception as exc:
+            log.warning("evaluation_agent.calibration_sample_failed", error=str(exc))
 
         log.info(
             "evaluation_agent.done",

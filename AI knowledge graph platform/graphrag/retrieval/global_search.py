@@ -41,6 +41,11 @@ class GlobalSearch:
         self._embedder = Embedder()
 
     async def search(self, question: str, tenant: str = "default") -> dict:
+        # Skip global search when vector_search_enabled=false (e.g. OpenAI quota exhausted)
+        if not self._cfg.get("vector_search_enabled", True):
+            log.info("global_search.vector_skipped", reason="vector_search_enabled=false")
+            return {"communities": [], "synthesized_answer": ""}
+
         embedding = await self._embedder.embed_text(question)
 
         top_k = self._cfg.get("global_top_communities", 5)

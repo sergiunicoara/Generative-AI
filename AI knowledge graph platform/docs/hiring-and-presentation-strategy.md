@@ -102,8 +102,8 @@ That separates "I built this" from "I generated this."
 3. **API running (optional):** `uvicorn api.main:app --port 8000 --reload`
 4. **One sentence about PwC's practice:** "I saw PwC has been building GraphRAG capabilities in the region" — shows you've done homework
 5. **Know the real numbers cold:**
-   - Faithfulness (full 39-question golden set, measured 2026-06-10): **0.785** answerable (25/39 scored, 14 refusals) | baseline 0.840 | delta -0.055. ⚠ **Do not cite 0.937** — that figure was measured on a 10-question subset and is not comparable to the full set (see `tasks/lessons.md` A99). 0.785 is the honest, full-set, current number.
-   - Two golden categories (`architecture`, `domain` — "what retrieval stages does the platform use", "is the ontology hard-coded") score 0.0/refused by design: the corpus contains only aerospace regulatory documents, so the system correctly refuses to answer questions about its own architecture rather than hallucinating. If asked about the 0.785 figure, lead with this — it shows the refusal behavior is working, which is part of the pitch.
+   - Faithfulness (full 39-question golden set, measured 2026-06-10): **0.940** answerable (23/39 scored, 16 refusals) | baseline 0.840 | delta +0.100. This now legitimately exceeds the old 10-question-subset figure of 0.937 (see `tasks/lessons.md` A99/A100) — and unlike that number, it's measured on the full set. The earlier same-day reading of 0.785 was caused by two bugs (an eval `contexts=` measurement bug and stale, supersession-unaware community summaries), both fixed — see A100.
+   - Two golden categories (`architecture`, `domain` — "what retrieval stages does the platform use", "is the ontology hard-coded") score 0.0/refused by design: the corpus contains only aerospace regulatory documents, so the system correctly refuses to answer questions about its own architecture rather than hallucinating. If asked about the 0.940 figure, lead with this — it shows the refusal behavior is working, which is part of the pitch.
    - Latency by mode: hybrid p95 2.2s | agentic p95 3.4s | combined p95 2.7s — ⚠ measured before the 2026-06-10 supersession fix and re-ingest; re-verify if quoting precisely.
    - Agentic trigger rate: ~9-10% current; alert if >20%
    - Why trigger rate matters: it is a direct read on retrieval health. If it climbs, the agent is covering for weak retrieval even if combined p95 still looks acceptable.
@@ -119,10 +119,10 @@ That separates "I built this" from "I generated this."
      each time (non-deterministic at temperature=0 — see A96/A98). The numbers
      below **will be wrong again by the time you read this. Run the Part 6 queries
      live, in front of the room.**
-   - Real corpus (verified live 2026-06-10, after supersession fix — re-verify before use): 368 entities, 422 edges (412 document + 10 inferred, 12-doc aerospace corpus, LLM-extracted); 4 open conflicts; 9.48/1k contradiction rate; 53 Leiden communities (re-verify coherence % live)
+   - Real corpus (verified live 2026-06-10, after supersession fix — re-verify before use): 368 entities, 422 edges (412 document + 10 inferred, 12-doc aerospace corpus, LLM-extracted); 4 open conflicts; 9.48/1k contradiction rate; 58 Leiden communities (rebuilt 2026-06-10 with supersession-aware summaries — re-verify coherence % live)
    - Pipeline: raw extraction → alias-deduplicated entity count varies run-to-run — don't quote a specific raw count or dedup % from memory; query `MATCH (a:Alias {tenant:'aerospace'}) RETURN count(a)` and the entity count live, then describe the *mechanism* ("4-stage alias resolution collapses duplicate mentions into canonical entities") rather than a number that will be stale within hours
    - SUPERSEDES chain (fixed 2026-06-10): `FAA-AD-2024-01-02 → FAA-AD-2022-03-07 → FAA-AD-2020-05-11`, with `superseded_by` set on the older docs — verify with `MATCH (a:Document)-[:SUPERSEDES]->(b:Document) RETURN a.filename, b.filename`
-   - Calibration: the pipeline (`confidence_calibration.py`, Brier score + isotonic regression) now has **real live data**: 25 samples written during the 2026-06-10 faithfulness eval, **Brier score 0.700, verdict "under-confident"** (snapshot `961f2a4b`). This is an honest first measurement, not a good one — 0.700 is poor calibration (closer to 0 is better). If asked: "The calibration pipeline is wired end-to-end and has its first live sample — 25 points, Brier 0.70, currently under-confident. That's expected for a first batch; the next step is accumulating more samples and checking whether isotonic regression tightens it." Do not say "Brier score 0.052" — that number was never real.
+   - Calibration: the pipeline (`confidence_calibration.py`, Brier score + isotonic regression) now has **real live data**: 48 cumulative samples written across the 2026-06-10 faithfulness eval runs, **Brier score 0.809, verdict "under-confident"** (snapshot `6d0dd987`). This is an honest measurement, not a good one — 0.809 is poor calibration (closer to 0 is better). If asked: "The calibration pipeline is wired end-to-end and has live samples — 48 points, Brier 0.81, currently under-confident. That's expected this early; the next step is accumulating more samples and checking whether isotonic regression tightens it." Do not say "Brier score 0.052" — that number was never real.
 
 ---
 
@@ -335,7 +335,7 @@ Then run the second query (all inferred edges) and narrate:
 **Say:**
 > "If you can't measure it, you can't run it in production. These numbers come from real query runs against the live pipeline.
 >
-> Faithfulness is 0.937 on answerable questions — but the framing matters. Overall it's 0.842. The difference is correct refusals: when the corpus doesn't contain the answer, the system says so explicitly rather than hallucinating. RAGAS scores those refusals as zero, which is right — a system that declines is better than one that invents. I keep both numbers because 0.937 measures answer quality; 0.842 measures how often we answer at all. Alert threshold is 0.80 — we're comfortably above both. Context precision is 0.907 — almost everything retrieved is relevant.
+> Faithfulness is 0.940 on answerable questions — the full 39-question golden set, 23 scored and 16 refused. The framing matters: refusals aren't failures here. When the corpus doesn't contain the answer, the system says so explicitly rather than hallucinating, and RAGAS scores those refusals as zero rather than counting them toward faithfulness. Alert threshold is 0.80 — we're comfortably above it. Context precision is 0.907 — almost everything retrieved is relevant.
 >
 > The latency number has to be split by mode. Hybrid p95 is 2.2 seconds. Agentic fallback p95 is 3.4 seconds. Reporting a single combined number hides the more important signal: agentic trigger rate. Mine is around 9-10%. If that climbs to 25%, combined p95 may still look fine while the system quietly relies on the agent to cover retrieval misses. That's the metric I watch hardest.
 >
@@ -357,11 +357,11 @@ Then run the second query (all inferred edges) and narrate:
 
 - **Conflicts** — "[N] open conflicts detected on the real corpus — exclusive state, directional reversal, functional violation. One-click resolution with audit trail. Every resolved conflict records who resolved it, when, and why — compliance audit log." *(was 4 at last live check (2026-06-10), was 7 a few hours earlier, was 11/18 on older runs — click the tab and read the actual count)*
 
-- **Communities** — "[N] Leiden communities with [N]% coherence. Entity drift monitor triggers a rebuild recommendation at 20% — right now it's [N]%, meaning the graph is stable and the communities are fresh." *(53 communities present at last live check (2026-06-10) — re-verify coherence % live, click the tab and read the gauge)*
+- **Communities** — "[N] Leiden communities with [N]% coherence. Entity drift monitor triggers a rebuild recommendation at 20% — right now it's [N]%, meaning the graph is stable and the communities are fresh." *(58 communities present after the 2026-06-10 supersession-aware rebuild — re-verify coherence % live, click the tab and read the gauge)*
 
 - **GDPR** — "GDPR Article 17 right-to-be-forgotten. Click 'erase' and the system atomically removes that entity and all its edges, generates an audit log, keeps the graph consistent."
 
-- **Calibration** — *(this tab now has real data — 25 samples from the 2026-06-10 faithfulness eval)* "This is the calibration pipeline — Brier score, isotonic regression, drift trend over time. As of the last eval run it has its first live snapshot: 25 samples, Brier score 0.70, currently flagged 'under-confident'. That's an honest first measurement, not a polished one — same discipline as the refusal handling in faithfulness scoring: I show you the real number and what it means, not a number I can't reproduce on demand."
+- **Calibration** — *(this tab now has real data — 48 cumulative samples from the 2026-06-10 faithfulness eval runs)* "This is the calibration pipeline — Brier score, isotonic regression, drift trend over time. As of the last eval run it has 48 samples, Brier score 0.81, currently flagged 'under-confident'. That's an honest measurement, not a polished one — same discipline as the refusal handling in faithfulness scoring: I show you the real number and what it means, not a number I can't reproduce on demand."
 
 ---
 
@@ -724,7 +724,7 @@ ORDER BY count DESC
 - [ ] Explain agentic trigger rate: why ~9-10% is healthy, why >20% is an alert, and why combined p95 hides the signal
 - [ ] Explain the OR-to-AND fallback fix: hedged answer OR zero citations over-fired; hedged answer AND zero citations reduced unnecessary agentic calls
 - [ ] Explain contradiction detection: name all 5 types, explain `positive_negative_pair` with an example
-- [ ] State the real RAGAS numbers cold: faithfulness 0.785 on the full 39-question golden set (25 scored, 14 refusals), baseline 0.840 — and explain why the refusal split matters, and why `architecture`/`domain` questions correctly score 0/refused (no info-leak about the system's own internals from an aerospace corpus)
+- [ ] State the real RAGAS numbers cold: faithfulness 0.940 on the full 39-question golden set (23 scored, 16 refusals), baseline 0.840 — and explain why the refusal split matters, and why `architecture`/`domain` questions correctly score 0/refused (no info-leak about the system's own internals from an aerospace corpus)
 - [ ] State the real latency numbers: hybrid p95 2.2s, agentic p95 3.4s, combined p95 2.7s, trigger rate ~9-10%
 
 ### Demo preparation

@@ -2394,3 +2394,75 @@ full-set score, which hid (1) for an unknown number of sessions.
 >    set, but nothing was ever setting it. Any new corpus with supersession
 >    language needs an explicit map like `_SUPERSESSION_MAP` in
 >    `ingest_corpus.py`, ordered predecessor-first.
+
+## A100 — AUT-03 regression (1.0 → 0.0) traced to a `contexts=` measurement bug + stale community summaries; fixing both lifted full-set faithfulness 0.785 → 0.940
+
+**What happened:**
+User asked to investigate why AUT-03 (authority_chain) dropped from
+faithfulness 1.0 to 0.0 in the post-A99 re-ingestion run. A debug script
+(`scripts/debug_aut03.py`, dumping the exact context + answer for AUT-03)
+found two independent, compounding bugs:
+
+1. **`hybrid_retriever.py:139`** built `QueryResult.contexts` from
+   `local_results["chunks"]` only — but the synthesis prompt
+   (`context_builder.build()`) ALSO injects an "Entity context" section and a
+   "Community knowledge" section (GlobalSearch's `synthesized_answer`). AUT-03's
+   answer was grounded almost entirely in "Community knowledge", which RAGAS
+   never saw — every claim read as ungrounded → 0.0. This wasn't AUT-03-specific:
+   SH-02 (0.5→1.0) and SH-07 (0.6→1.0) jumped the same run, confirming it was
+   silently penalizing answers across categories whenever the LLM used
+   global/entity context that wasn't echoed in the (narrower) local chunks.
+
+2. **`community_summarizer.py`** built community summaries from entity
+   name/type/description only, with no visibility into document supersession.
+   For the community containing the AD chain, it picked AD 2020-05-11 (the
+   oldest) as "the key directive" — directly contradicting the SUPERSEDES data
+   from A99's fix, and feeding the LLM a stale "foundational AD" framing that
+   produced AUT-03's hallucinated answer.
+
+**Fix:**
+1. `contexts=[context] if context else []` — use the FULL assembled context
+   string (same one fed to the LLM), not just local chunks. Preserves
+   empty-list-means-refusal semantics for `run_faithfulness_eval.py`.
+   `agentic_retriever.py` was unaffected (always passes `global_results={}`,
+   builds `contexts` from the same `all_chunks` used for synthesis).
+2. `community_summarizer._summarize_one()` now OPTIONAL MATCHes each entity's
+   source `Document` and `(:Document)-[:SUPERSEDES]->(d)`, annotates superseded
+   entities with `[NOTE: ... not the current/effective regulation]`, and the
+   summary prompt now explicitly asks the LLM to identify the
+   current/effective document in a supersession chain. Regenerated all
+   communities via `python scripts/community_rebuild.py --tenant aerospace --force`
+   (53 → 58 communities).
+
+**Result:** Full 39-question faithfulness: **0.785 → 0.940** (baseline 0.840,
+delta +0.100). This is now ABOVE the old (incomparable, 10-question-subset)
+0.937 headline — and unlike that number, it's measured on the full set.
+single_hop 0.8875→1.000, authority_chain 0.500→1.000 (AUT-03 now correctly
+refuses instead of hallucinating), contextual 0.500→1.000, negative
+0.367→1.000.
+
+**New minor item (not a regression from this fix):** PRE-02 scored 0.0 with
+answer `"AD 2024-01-02."` — factually correct and exactly what the question
+asked ("What is the exact document ID..."), but RAGAS's faithfulness metric
+appears to score very short, predicate-less answers as ungrounded (likely a
+statement-extraction artifact on terse single-fact answers). Worth a follow-up
+if it recurs across runs — not addressed in this session.
+
+**Rule:**
+> 1. **`QueryResult.contexts` (used for RAGAS faithfulness/precision/recall and
+>    calibration) must always be built from the SAME material that was fed to
+>    the synthesis LLM.** If a retriever assembles context from multiple
+>    sources (local chunks, entity context, global community summaries), either
+>    pass the full assembled context string as `contexts`, or keep a parallel
+>    list of every section — never silently narrow it to "just the chunks",
+>    or RAGAS will score real, grounded claims as hallucinations.
+> 2. **When a graph gets new SUPERSEDES/authority edges, anything that
+>    pre-summarizes entities (community reports, cached descriptions) must be
+>    regenerated** — otherwise stale summaries describing "the key directive"
+>    can directly contradict the graph's own authority data and mislead
+>    synthesis. Run `community_rebuild.py --force` after any supersession-chain
+>    change.
+> 3. **A single faithfulness number swinging on one root cause can move by
+>    +0.10-0.15** — when a "regression" investigation turns up a real bug,
+>    expect (and re-measure) a broad shift, not just a fix to the one flagged
+>    question.

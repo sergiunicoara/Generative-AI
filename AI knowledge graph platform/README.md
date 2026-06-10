@@ -455,7 +455,7 @@ python scripts/ingest_corpus.py --commit --doc FAA-AD-2024-01-02.txt
 This produces real graph health metrics (⚠ LLM extraction is non-deterministic —
 these numbers shift on every fresh `--wipe --commit` run; verify live before
 presenting, see `tasks/lessons.md` A96/A98):
-**368 entities · 422 edges · 4 open conflicts · 9.48/1k contradiction rate · 53 Leiden communities** (verified live 2026-06-10, after fixing a missing document-supersession chain — see A99)
+**368 entities · 422 edges · 4 open conflicts · 9.48/1k contradiction rate · 58 Leiden communities** (verified live 2026-06-10, after fixing a missing document-supersession chain and rebuilding communities with supersession-aware summaries — see A99/A100)
 
 For a lightweight demo with hardcoded seed data (no LLM calls):
 
@@ -686,7 +686,7 @@ Every ingestion batch runs the following checks automatically:
 
 | Metric | Measured | Target |
 |--------|----------|--------|
-| `faithfulness` | **0.785** (full 39-question golden set, 25 scored / 14 refusals)¹ | ≥ 0.85 ✗ (gap below) |
+| `faithfulness` | **0.940** (full 39-question golden set, 23 scored / 16 refusals)¹ | ≥ 0.85 ✓ |
 
 ¹ *Correct refusals (when the corpus genuinely lacks the answer — including 2 questions that ask about the system's own architecture, which the aerospace corpus has no information on) score 0 in RAGAS and are excluded from the scored denominator. A system that declines rather than invents is the desired behaviour. `answer_relevancy`/`context_precision`/`context_recall` figures below are from an earlier 10-question subset and have not been re-measured on the full set — do not cite them as current.*
 
@@ -721,8 +721,8 @@ presenting — never quote these from memory of a prior run.**
 | **Relations** | **422** (412 `source_type='document'` + 10 `source_type='inferred'`) | ~7,000+ | — |
 | **Open conflicts** | **4** detected | — | — |
 | Contradiction density | **9.48 /1k edges** | < 0.85 /1k | < 2.0 |
-| Community coherence | 53 Leiden communities (coherence % not re-measured this run) | > 0.65 | > 0.50 |
-| Brier score (calibration) | **0.700** (25 live samples, verdict "under-confident") — first real measurement | < 0.20 | < 0.25 ✗ |
+| Community coherence | 58 Leiden communities (rebuilt 2026-06-10 with supersession-aware summaries; coherence % not re-measured this run) | > 0.65 | > 0.50 |
+| Brier score (calibration) | **0.809** (48 cumulative live samples, verdict "under-confident") | < 0.20 | < 0.25 ✗ |
 
 Evaluation is sampled at **20%** of queries automatically. View results:
 

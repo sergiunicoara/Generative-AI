@@ -136,7 +136,11 @@ class HybridRetriever:
         return QueryResult(
             question=question,
             answer=answer,
-            contexts=[c["text"] for c in local_results.get("chunks", [])],
+            # `context` is the full string fed to the synthesis LLM (local chunks +
+            # entity context + global community knowledge). Using only local chunks
+            # here caused RAGAS to judge claims grounded in "Community knowledge"
+            # as unsupported (faithfulness=0.0 false negatives, e.g. AUT-03).
+            contexts=[context] if context else [],
             citations=citations,
             latency_ms=latency_ms,
             retrieval_mode=mode,

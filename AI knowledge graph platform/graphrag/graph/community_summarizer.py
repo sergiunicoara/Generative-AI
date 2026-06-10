@@ -22,24 +22,38 @@ class CommunitySummarizer:
         return await asyncio.gather(*tasks)
 
     async def _summarize_one(self, community: Community) -> Community:
-        # Fetch entity names for this community
+        # Fetch entity names for this community, plus document-supersession status
+        # via each entity's source document — lets the summary identify the
+        # current/effective regulation in a chain rather than the oldest one.
         entity_names = await self._neo4j.run(
             """
             UNWIND $ids AS eid
             MATCH (e:Entity {id: eid})
-            RETURN e.name AS name, e.type AS type, e.description AS description
+            OPTIONAL MATCH (d:Document {id: e.source_doc_id})
+            OPTIONAL MATCH (newer:Document)-[:SUPERSEDES]->(d)
+            RETURN e.name AS name, e.type AS type, e.description AS description,
+                   d.superseded_by AS superseded_by
             """,
             ids=community.member_entity_ids,
         )
 
-        entity_text = "\n".join(
-            f"- {e['name']} ({e['type']}): {e['description']}" for e in entity_names
-        )
+        def _format_entity(e: dict) -> str:
+            note = (
+                " [NOTE: this directive has been superseded — it is not the current/effective regulation]"
+                if e.get("superseded_by")
+                else ""
+            )
+            return f"- {e['name']} ({e['type']}): {e['description']}{note}"
+
+        entity_text = "\n".join(_format_entity(e) for e in entity_names)
 
         prompt = (
             "You are summarizing a community of related entities from a knowledge graph.\n"
             "Write a concise 2-3 sentence summary of what this group of entities represents, "
-            "their relationships, and why they are grouped together.\n\n"
+            "their relationships, and why they are grouped together.\n"
+            "If the entities include a chain of regulatory documents/directives, identify the "
+            "current/effective one (not marked as superseded) as the primary/key document, "
+            "and mention the supersession chain if present.\n\n"
             f"Entities:\n{entity_text}\n\nSummary:"
         )
 

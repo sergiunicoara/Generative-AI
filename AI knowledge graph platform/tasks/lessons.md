@@ -2448,6 +2448,16 @@ appears to score very short, predicate-less answers as ungrounded (likely a
 statement-extraction artifact on terse single-fact answers). Worth a follow-up
 if it recurs across runs — not addressed in this session.
 
+**Also noted: multi_hop dropped slightly, 0.952 → 0.875** — composition of
+scored questions shifted (MH-02 went scored→refusal, MH-06 went
+refusal→scored, roughly a wash, both ~1.0 either way), but **MH-01 dropped
+1.0 → 0.75**. Previous run's MH-01 answer was a clean supersession chain;
+this run's added a self-referential, unsupported final clause — *"AD
+2020-05-11 superseded AD 2020-05-11"* — which RAGAS correctly flagged as
+ungrounded (3/4 statements supported = 0.75). This is LLM generation
+non-determinism (A96/A98), not caused by this session's fixes — no action
+needed unless it recurs.
+
 **Rule:**
 > 1. **`QueryResult.contexts` (used for RAGAS faithfulness/precision/recall and
 >    calibration) must always be built from the SAME material that was fed to

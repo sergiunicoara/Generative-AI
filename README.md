@@ -37,4 +37,4 @@ Earlier explorations kept for reference: document Q&A chatbots, LLaMA fine-tunin
 
 ---
 
-📫 [LinkedIn — Sergiu Nicoara](https://www.linkedin.com/in/sergiu-nicoara)
+📫 [LinkedIn — Sergiu Nicoara](https://www.linkedin.com/in/sergiu-nicoara-31b27013/)

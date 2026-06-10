@@ -11,10 +11,10 @@ After completion, prints real entity/edge/conflict counts queried from Neo4j
 and records them in a GraphHealthSnapshot so the dashboard reflects real data.
 
 Usage:
-    py -3.11 scripts/ingest_corpus.py                     # dry-run check only
-    py -3.11 scripts/ingest_corpus.py --commit            # full ingestion
-    py -3.11 scripts/ingest_corpus.py --commit --wipe     # wipe tenant first
-    py -3.11 scripts/ingest_corpus.py --commit --doc FAA-AD-2024-01-02.txt
+    python scripts/ingest_corpus.py                     # dry-run check only
+    python scripts/ingest_corpus.py --commit            # full ingestion
+    python scripts/ingest_corpus.py --commit --wipe     # wipe tenant first
+    python scripts/ingest_corpus.py --commit --doc FAA-AD-2024-01-02.txt
 """
 
 from __future__ import annotations
@@ -141,9 +141,23 @@ async def ingest_all(
     # ── Forward-chaining inference ────────────────────────────────────────────
     print(f"\n[*] Running forward-chaining inference on '{TENANT}' tenant...")
     try:
+        from graphrag.graph.domain_ontology import load_domain_ontology
+        from graphrag.graph.inference_engine import InferenceRule
+        from pathlib import Path as _Path
+        _ontology = load_domain_ontology(_Path("config/ontologies/aerospace_regulatory.yml"))
         engine = ForwardChainingEngine(neo4j)
+        for rule_cfg in _ontology.get("inference_rules", []):
+            engine.add_rule(InferenceRule(
+                name=rule_cfg["name"],
+                rule_type=rule_cfg["rule_type"],
+                relation=rule_cfg["relation"],
+                derived_relation=rule_cfg.get("derived_relation", ""),
+                body_relation_2=rule_cfg.get("body_relation_2", ""),
+                max_depth=rule_cfg.get("max_depth", 3),
+                confidence_decay=rule_cfg.get("confidence_decay", 0.9),
+            ))
         fc_report = await engine.run(tenant=TENANT)
-        inferred_edges = fc_report.get("total_derived", 0)
+        inferred_edges = fc_report.get("total_inferred", 0)
         print(f"       Derived edges written: {inferred_edges}")
     except Exception as exc:
         log.warning("ingest_corpus.inference_failed", error=str(exc))

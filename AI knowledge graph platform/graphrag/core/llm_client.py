@@ -1,5 +1,5 @@
-"""Central LLM client — routes text generation to Groq with Gemini fallback;
-embeddings stay on Gemini.
+"""Central LLM client — routes text generation to Groq with DeepSeek fallback;
+embeddings use OpenAI text-embedding-3-large (3072d).
 
 Usage:
     from graphrag.core.llm_client import get_llm, get_embedder
@@ -9,10 +9,11 @@ Usage:
 
 Provider strategy
 -----------------
-Primary:  Groq (llama-3.3-70b-versatile) — lowest latency (~280 tok/s).
-Fallback: Gemini 2.0 Flash — kicks in automatically when Groq exhausts its
-          daily quota (100k TPD on the free tier).  Gemini's free tier allows
-          1M TPD, so the full 12-doc corpus runs without any rate-limit sleeps.
+Primary:  Groq (llama-3.3-70b-versatile) — lowest latency (~150 tok/s).
+Fallback: DeepSeek-V3 (deepseek-chat) — kicks in immediately on Groq rate-limit;
+          no sleep, no queuing, same OpenAI-compatible API.
+Embeddings: OpenAI text-embedding-3-large (3072d) — replaced Gemini; same
+          dimensions, same Neo4j schema, no re-indexing required.
 
 Rate-limit handling (Groq)
 ---------------------------
@@ -20,7 +21,7 @@ When Groq returns a 429, the error message contains the exact wait time in the
 form "Please try again in XmY.Zs".  ``GroqLLM.generate()`` parses that value
 and sleeps for that duration (capped at ``_MAX_RETRY_WAIT`` seconds) before
 retrying.  After ``_MAX_RETRIES`` failed attempts the exception is propagated
-to ``FallbackLLM``, which transparently re-issues the call to Gemini instead.
+to ``FallbackLLM``, which transparently re-issues the call to DeepSeek instead.
 """
 
 from __future__ import annotations
@@ -381,26 +382,41 @@ class GeminiEmbedder:
 
 # ── Singletons ────────────────────────────────────────────────────────────────
 
-_llm:      FallbackLLM | None = None
+_llm:      BaseLLM | None = None
 _fast_llm: FallbackLLM | None = None
 _embedder: OpenAIEmbedder | None = None
 
 
-def get_llm() -> FallbackLLM:
+def get_llm() -> BaseLLM:
     """Return the primary (large) LLM — llama-3.3-70b via Groq, DeepSeek-V3 fallback.
 
     Normal path:   Groq llama-3.3-70b (~280 tok/s, lowest latency).
     Fallback path: DeepSeek-V3 on first Groq 429 — no sleep, generous limits.
+
+    One-shot override — ``LLM_INGEST_PROVIDER=deepseek``:
+        Bypasses Groq/FallbackLLM entirely and returns a bare ``DeepSeekLLM``.
+        For populating the deterministic-ingestion cache (``LLM_CACHE_ENABLED=1``)
+        in a single clean pass: one provider's extraction "voice" for the whole
+        corpus, no Groq daily-cap stalls, ~$0.07/1M input tokens. Unset this
+        env var afterwards — it's a one-shot knob, not a permanent switch.
     """
     global _llm
     if _llm is None:
         from graphrag.core.config import get_settings
         cfg = get_settings()
-        _llm = FallbackLLM(
-            api_key_groq=cfg.groq_api_key,
-            default_model_groq=cfg.groq_model,
-            api_key_deepseek=cfg.deepseek_api_key,
-        )
+        if cfg.llm_ingest_provider == "deepseek":
+            log.warning(
+                "llm_client.single_provider_override",
+                provider="deepseek",
+                reason="LLM_INGEST_PROVIDER=deepseek — Groq bypassed for this run",
+            )
+            _llm = DeepSeekLLM(api_key=cfg.deepseek_api_key)
+        else:
+            _llm = FallbackLLM(
+                api_key_groq=cfg.groq_api_key,
+                default_model_groq=cfg.groq_model,
+                api_key_deepseek=cfg.deepseek_api_key,
+            )
     return _llm
 
 

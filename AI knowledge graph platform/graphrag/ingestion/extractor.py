@@ -1,7 +1,7 @@
 """Entity + relation extraction from text chunks using Groq (llama-3.3-70b) with JSON output.
 
 Text generation is routed through ``graphrag.core.llm_client.get_llm`` (Groq);
-embeddings stay on Gemini.  The LLM is asked for strict JSON (``json_mode=True``)
+embeddings use OpenAI text-embedding-3-large (3072d).  The LLM is asked for strict JSON (``json_mode=True``)
 and the parsed relations have their confidence clamped to ``[0, 1]`` so the
 Bayesian merge formula downstream cannot be corrupted by out-of-range values.
 """
@@ -15,6 +15,7 @@ import re
 import structlog
 
 from graphrag.core.config import get_settings
+from graphrag.core.llm_cache import get_llm_cache
 from graphrag.core.llm_client import get_llm
 from graphrag.core.models import Chunk, Entity, Relation
 
@@ -56,13 +57,39 @@ class Extractor:
             "entity_types", ["PERSON", "ORG", "PRODUCT", "CONCEPT", "LOCATION", "EVENT"]
         )
 
+    async def _generate(self, prompt: str) -> str:
+        """Run the extraction prompt — through the deterministic-ingestion cache
+        when enabled (`LLM_CACHE_ENABLED=1`), straight to the live LLM otherwise.
+
+        The cache makes repeated `--wipe --commit` runs of the same corpus
+        replay byte-identical extraction results: same prompt → same response,
+        regardless of which provider (Groq or its DeepSeek fallback) originally
+        served it. See `graphrag.core.llm_cache` for why this is necessary —
+        Groq/DeepSeek are not reproducible at temperature=0.
+
+        Reads the flag fresh from settings each call (rather than caching it on
+        `self` in `__init__`) so this works whether the `Extractor` was built
+        normally or via `Extractor.__new__()` in tests that bypass `__init__`.
+        """
+        if not get_settings().llm_cache_enabled:
+            return await get_llm().generate(prompt, json_mode=True)
+
+        cache = get_llm_cache()
+        cached = cache.get(model=self._model_name, temperature=0.0, json_mode=True, prompt=prompt)
+        if cached is not None:
+            return cached
+
+        raw = await get_llm().generate(prompt, json_mode=True)
+        cache.set(model=self._model_name, temperature=0.0, json_mode=True, prompt=prompt, response=raw)
+        return raw
+
     async def extract(self, chunk: Chunk) -> tuple[list[Entity], list[Relation]]:
         prompt = _EXTRACT_PROMPT.format(
             entity_types=", ".join(self._entity_types),
             text=chunk.text,
         )
 
-        raw = await get_llm().generate(prompt, json_mode=True)
+        raw = await self._generate(prompt)
 
         try:
             if not raw:

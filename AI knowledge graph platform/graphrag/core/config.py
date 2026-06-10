@@ -20,13 +20,13 @@ def _load_yaml() -> dict:
 
 
 class Settings(BaseSettings):
-    # ── Google AI (embeddings only) ──────────────────────────────────────────────
+    # ── Google AI (last-resort fallback for RAGAS judge only; embeddings use OpenAI) ──
     google_api_key: str = ""
     gemini_ingest_model: str = "gemini-2.0-flash"
     gemini_query_model: str = "gemini-2.0-flash"
     gemini_embed_model: str = "gemini-embedding-001"
 
-    # ── OpenAI (embeddings fallback) ────────────────────────────────────────────
+    # ── OpenAI (primary embeddings + DeepSeek fallback path) ────────────────────
     openai_api_key: str = ""
     openai_embed_model: str = "text-embedding-3-large"   # 3072d — matches schema
 
@@ -46,6 +46,30 @@ class Settings(BaseSettings):
     # Off by default to keep ingestion fast and avoid Wikidata rate limits.
     # Enable with WIKIDATA_LINKING=1 or wikidata_linking_enabled: true in settings.yml.
     wikidata_linking_enabled: bool = False
+
+    # Deterministic-ingestion cache: Groq/DeepSeek are NOT reproducible at
+    # temperature=0 (batched GPU/LPU inference + mid-run rate-limit fallback
+    # between model families), so re-ingesting the same corpus produces a
+    # different graph shape every run. This memoizes raw extraction responses
+    # so repeated `--wipe --commit` runs replay identical results — essential
+    # for demo scripts that reference specific entity names / confidence values.
+    # Off by default — production ingestion of new documents must hit the live LLM.
+    # Enable with LLM_CACHE_ENABLED=1 or llm_cache_enabled: true in settings.yml.
+    llm_cache_enabled: bool = False
+
+    # Temporary single-provider override for get_llm(): bypasses Groq entirely
+    # (and therefore the Groq→DeepSeek FallbackLLM split) so a one-time
+    # cache-populating ingestion run uses ONE provider's extraction "voice"
+    # for the whole corpus. Mixing Groq + DeepSeek mid-run — which happens
+    # naturally when Groq rate-limits partway through — pollutes the cache
+    # with two different models' outputs for what should be one deterministic
+    # baseline (see llm_cache.py). Pairs with LLM_CACHE_ENABLED=1.
+    # "" = normal Groq-primary FallbackLLM behavior (default).
+    # "deepseek" = route get_llm() straight to DeepSeek-V3 — generous rate
+    #              limits, ~$0.07/1M input tokens, no Groq daily-cap risk.
+    # Enable with LLM_INGEST_PROVIDER=deepseek; remove/unset afterwards —
+    # this is a one-shot knob, not a permanent provider switch.
+    llm_ingest_provider: str = ""
 
     # ── Neo4j ───────────────────────────────────────────────────────────────────
     neo4j_uri: str = "bolt://localhost:7687"

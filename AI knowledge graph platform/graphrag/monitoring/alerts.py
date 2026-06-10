@@ -19,7 +19,7 @@ Architecture
 
 Configuration (config/settings.yml → business_matrix.alert_thresholds):
   latency_p95_ms:      3000   # breach if API p95 latency exceeds this (ms)
-  faithfulness:        0.7    # breach if RAGAS faithfulness drops below this
+  faithfulness:        0.8    # breach if RAGAS faithfulness drops below this
   context_recall:      0.6    # breach if RAGAS context_recall drops below this
   contradiction_rate:  0.05   # breach if conflicts_per_1k_edges exceeds 5 %
   orphan_rate:         0.10   # breach if orphan_rate exceeds 10 %
@@ -51,7 +51,7 @@ _REDIS_URL     = os.getenv("REDIS_URL", "")
 
 _DEFAULT_THRESHOLDS: dict[str, float] = {
     "latency_p95_ms":     3000.0,
-    "faithfulness":       0.7,
+    "faithfulness":       0.8,
     "context_recall":     0.6,
     "contradiction_rate": 0.05,   # conflicts_per_1k_edges / 1000 (normalised to 0-1)
     "orphan_rate":        0.10,

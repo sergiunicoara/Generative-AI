@@ -7,14 +7,14 @@ checks the answer against expected citations and required phrases,
 and exits non-zero if the pass rate is below the configured threshold.
 
 Usage:
-    py -3.11 scripts/run_golden_eval.py                          # all questions
-    py -3.11 scripts/run_golden_eval.py --type multi_hop         # subset by type
-    py -3.11 scripts/run_golden_eval.py --ids MH-01 MH-02 SH-03  # specific IDs
-    py -3.11 scripts/run_golden_eval.py --dry-run                 # print plan only
+    python scripts/run_golden_eval.py                          # all questions
+    python scripts/run_golden_eval.py --type multi_hop         # subset by type
+    python scripts/run_golden_eval.py --ids MH-01 MH-02 SH-03  # specific IDs
+    python scripts/run_golden_eval.py --dry-run                 # print plan only
 
 Requires:
     - API running on GRAPHRAG_API_URL (default http://localhost:8000)
-    - Tenant seeded: py -3.11 scripts/seed_demo_data.py --commit
+    - Tenant seeded: python scripts/seed_demo_data.py --commit
 
 Exit codes:
     0  All checks passed and pass rate >= threshold

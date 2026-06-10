@@ -186,7 +186,7 @@ def _brand_mark() -> html.Div:
 
 app.layout = html.Div([
     dcc.Interval(id="auto-refresh", interval=30_000, n_intervals=0),
-    dcc.Store(id="tenant-store", data=os.getenv("GRAPHRAG_DEFAULT_TENANT", "default")),
+    dcc.Store(id="tenant-store", data=os.getenv("GRAPHRAG_DEFAULT_TENANT", "aerospace")),
 
     # ── Gradient header bar ─────────────────────────────────────────────────
     html.Div([
@@ -201,7 +201,7 @@ app.layout = html.Div([
                                         "letterSpacing": "0.1em"}),
             dcc.Input(
                 id="tenant-input", type="text",
-                value=os.getenv("GRAPHRAG_DEFAULT_TENANT", "default"), debounce=True,
+                value=os.getenv("GRAPHRAG_DEFAULT_TENANT", "aerospace"), debounce=True,
                 style={
                     "width": "170px", "padding": "7px 12px",
                     "borderRadius": "8px", "border": "1px solid rgba(255,255,255,0.18)",
@@ -278,4 +278,6 @@ def render_tab(tab: str, _n: int, tenant: str):
 
 if __name__ == "__main__":
     # requests_pathname_prefix is set at construction and read-only; keep /admin/
-    app.run(debug=True, port=8050)
+    # debug=False avoids the Werkzeug reloader spawning a child process that does
+    # not inherit env vars on Windows (token would be missing → 401 on all API calls).
+    app.run(debug=False, port=8050)

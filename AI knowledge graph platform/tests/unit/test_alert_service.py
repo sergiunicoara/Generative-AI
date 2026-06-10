@@ -63,14 +63,14 @@ def test_low_confidence_rate_breach():
 
 def test_faithfulness_breach_below_threshold():
     """faithfulness < threshold fires a 'below' direction alert."""
-    svc = AlertService(thresholds={"faithfulness": 0.7})
+    svc = AlertService(thresholds={"faithfulness": 0.8})
     report = _report(faithfulness=0.5)
     alerts = svc.check(report)
     faith_alerts = [a for a in alerts if a["metric"] == "faithfulness"]
     assert len(faith_alerts) == 1
     assert faith_alerts[0]["direction"] == "below"
     assert faith_alerts[0]["value"] == pytest.approx(0.5)
-    assert faith_alerts[0]["threshold"] == pytest.approx(0.7)
+    assert faith_alerts[0]["threshold"] == pytest.approx(0.8)
 
 
 def test_faithfulness_absent_from_report_skipped():

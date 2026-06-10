@@ -1,4 +1,4 @@
-"""Abstract Google ADK Agent base with shared tool registration."""
+"""Abstract agent base with shared tool registration."""
 
 from __future__ import annotations
 
@@ -12,8 +12,7 @@ log = structlog.get_logger(__name__)
 
 class BaseGraphRAGAgent(ABC):
     """
-    Thin wrapper around the Google ADK Agent.
-    Subclasses register tools via `_tools()` and implement `run()`.
+    Abstract agent base. Subclasses register tools via `_tools()` and implement `run()`.
     """
 
     def __init__(self, name: str):
@@ -33,22 +32,19 @@ class BaseGraphRAGAgent(ABC):
                 instruction=self._instruction(),
             )
         except ImportError:
-            log.warning("google_adk.not_installed — running in tool-only mode")
+            log.warning("agent_scaffold.not_installed — running in tool-only mode")
             return None
 
     @abstractmethod
     def _model(self) -> str:
-        """Return the model identifier for the ADK agent scaffold.
+        """Return the model identifier (e.g. cfg.groq_model) used for provenance stamping.
 
-        This string is passed to the Google ADK ``Agent(model=...)`` constructor.
-        For Groq-backed pipelines, return ``cfg.groq_model``; it is used for
-        ADK wiring and provenance stamping, not for direct API calls (those go
-        through ``graphrag.core.llm_client.get_llm()``).
+        Actual API calls go through ``graphrag.core.llm_client.get_llm()``.
         """
 
     @abstractmethod
     def _tools(self) -> list:
-        """Return list of ADK FunctionTool objects."""
+        """Return list of tool objects registered to this agent."""
 
     @abstractmethod
     def _instruction(self) -> str:

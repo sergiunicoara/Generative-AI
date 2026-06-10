@@ -1,11 +1,6 @@
-# ── Google ADK + Gemini (embeddings only) ─────────────────────────────────────
-google-adk>=1.0.0
-google-generativeai>=0.8.0
-google-genai>=1.0.0
-
-# ── Groq (text generation — replaces Gemini generate_content) ─────────────────
+# ── Groq (text generation + RAGAS judge) ──────────────────────────────────────
 groq>=0.9.0
-langchain-groq>=0.1.0          # RAGAS judge LLM (Groq-consistent); falls back to Gemini if absent
+langchain-groq>=0.1.0
 
 # ── Graph processing ───────────────────────────────────────────────────────────
 neo4j>=5.20.0

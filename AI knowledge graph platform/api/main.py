@@ -62,7 +62,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(  # noqa: E302 — rate limiter attached below
     title="AI Knowledge Graph & Ontology Platform API",
     description=(
-        "Production knowledge graph platform with Neo4j, OWL-RL reasoning, SPARQL, TransE link prediction, RabbitMQ, RAGAS, and Google ADK.\n\n"
+        "Production knowledge graph platform with Neo4j, OWL-RL reasoning, SPARQL, TransE link prediction, RabbitMQ, RAGAS, and dual-LLM agentic retrieval (IRCoT).\n\n"
         "**Browser auth:** visit [`/auth/dev-login`](/auth/dev-login) (dev) "
         "or [`/auth/login`](/auth/login) (Google)\n\n"
         "**M2M auth:** `POST /auth/token` with `client_credentials` grant"

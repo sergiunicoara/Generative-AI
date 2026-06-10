@@ -44,6 +44,26 @@ def _normalize(text: str) -> str:
     return text
 
 
+# Regulatory agency prefixes that are stripped when normalizing AD / regulation names.
+# "EASA AD 2022-0201" and "AD 2022-0201" refer to the same document —
+# the prefix is a source attribution, not a distinguishing identifier.
+_REGULATORY_PREFIXES = re.compile(
+    r"^(easa|faa|icao|dot|tc|stc|pma|tso)\s+",
+    re.IGNORECASE,
+)
+
+
+def _normalize_regulatory(text: str) -> str:
+    """Like _normalize but also strips known regulatory agency prefixes.
+
+    Applied to AIRWORTHINESS_DIRECTIVE and REGULATION entity names so that
+    'EASA AD 2022-0201' and 'AD 2022-0201' resolve to the same canonical key,
+    enabling forward-chaining transitivity to fire across the supersession chain.
+    """
+    stripped = _REGULATORY_PREFIXES.sub("", text.strip())
+    return _normalize(stripped)
+
+
 async def _get_redis():
     """Return an async Redis client or None if unavailable."""
     try:
@@ -89,14 +109,23 @@ class AliasRegistry:
             """,
             tenant=self._tenant,
         )
+        _REGULATION_TYPES = {"AIRWORTHINESS_DIRECTIVE", "REGULATION", "TYPE_CERTIFICATE",
+                              "SUPPLEMENTAL_TYPE_CERTIFICATE", "AIRWORTHINESS_APPROVAL"}
+
         self._exact.clear()
         for row in rows:
             cname = row["canonical_name"]
             ctype = row["canonical_type"]
             self._exact[_normalize(cname)] = (cname, ctype)
+            # Also index under prefix-stripped key for regulatory entities so
+            # "EASA AD 2022-0201" and "AD 2022-0201" resolve to the same node.
+            if ctype in _REGULATION_TYPES:
+                self._exact[_normalize_regulatory(cname)] = (cname, ctype)
             for alias in row.get("aliases") or []:
                 if alias:
                     self._exact[_normalize(alias)] = (cname, ctype)
+                    if ctype in _REGULATION_TYPES:
+                        self._exact[_normalize_regulatory(alias)] = (cname, ctype)
         self._loaded = True
         log.info("alias_registry.loaded", tenant=self._tenant, entries=len(self._exact))
 
@@ -133,6 +162,14 @@ class AliasRegistry:
         # 1. Exact / normalized match (in-memory — loaded from Redis or Neo4j)
         if key in self._exact:
             return self._exact[key]
+
+        # 1b. Regulatory prefix-stripped match
+        # "EASA AD 2022-0201" → "AD 2022-0201" canonical key
+        reg_key = _normalize_regulatory(raw_name)
+        if reg_key != key and reg_key in self._exact:
+            log.debug("alias_registry.regulatory_prefix_match", raw=raw_name,
+                      canonical=self._exact[reg_key][0])
+            return self._exact[reg_key]
 
         # 2. Fuzzy match (optional, requires rapidfuzz)
         try:

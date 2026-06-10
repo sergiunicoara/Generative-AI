@@ -5,7 +5,7 @@ backend required), drives a headless Chromium via Playwright, visits each tab,
 and writes tight PNGs into ``docs/assets/``.
 
 Usage:
-    py -3.11 scripts/capture_dashboard_screenshots.py
+    python scripts/capture_dashboard_screenshots.py
 
 If a dashboard is already serving on the target port it is reused; otherwise a
 demo-mode uvicorn server is started and torn down automatically.

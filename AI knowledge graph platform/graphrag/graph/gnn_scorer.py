@@ -32,7 +32,7 @@ GAT layer  (Veličković et al. 2018) — attention via cosine similarity
     h'_i = Σ_j  α_ij · h_j
 
 Both variants are zero-shot (no training) — they leverage the existing
-Gemini text-embedding-004 entity embeddings stored in Neo4j.
+OpenAI text-embedding-3-large (3072d) entity embeddings stored in Neo4j.
 
 Scoring
 -------

@@ -7,9 +7,9 @@ builds communities, and seeds KPI events — giving a populated graph
 within ~2 minutes with no external data required.
 
 Usage:
-    py -3.11 scripts/seed_demo_data.py              # dry-run summary only
-    py -3.11 scripts/seed_demo_data.py --commit     # write to real Neo4j
-    py -3.11 scripts/seed_demo_data.py --commit --tenant demo
+    python scripts/seed_demo_data.py              # dry-run summary only
+    python scripts/seed_demo_data.py --commit     # write to real Neo4j
+    python scripts/seed_demo_data.py --commit --tenant demo
 
 The script is idempotent: re-running with --commit will MERGE nodes, not
 duplicate them.  Use --wipe to clear the tenant before seeding.

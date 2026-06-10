@@ -1,4 +1,4 @@
-"""Google ADK agent that orchestrates the full document ingestion pipeline."""
+"""Agent that orchestrates the full document ingestion pipeline."""
 
 from __future__ import annotations
 

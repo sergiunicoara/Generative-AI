@@ -8,8 +8,8 @@ No Neo4j required — runs chunk → LLM extract in-memory and reports:
   - supersession chains found
 
 Usage:
-    py -3.11 scripts/test_corpus_ingestion.py
-    py -3.11 scripts/test_corpus_ingestion.py --doc FAA-AD-2024-01-02.txt  # single file
+    python scripts/test_corpus_ingestion.py
+    python scripts/test_corpus_ingestion.py --doc FAA-AD-2024-01-02.txt  # single file
 """
 
 from __future__ import annotations

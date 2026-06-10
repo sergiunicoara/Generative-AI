@@ -1,4 +1,4 @@
-"""Google ADK agent that handles query orchestration."""
+"""Agent that handles query orchestration (dual-LLM IRCoT: 8B routing + 70B synthesis)."""
 
 from __future__ import annotations
 

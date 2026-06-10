@@ -12,6 +12,7 @@ a projector in front of a technical audience.
 from __future__ import annotations
 
 import os
+from pathlib import Path
 
 import httpx
 import plotly.graph_objects as go
@@ -19,6 +20,16 @@ import structlog
 from dash import dash_table, html
 
 log = structlog.get_logger(__name__)
+
+# Load .env so the token is available even when the Dash debug reloader spawns
+# a child process that doesn't inherit shell env vars (Windows behaviour).
+try:
+    from dotenv import load_dotenv
+    _env_path = Path(__file__).resolve().parents[2] / ".env"
+    if _env_path.exists():
+        load_dotenv(_env_path, override=False)  # override=False: shell vars win
+except ImportError:
+    pass  # python-dotenv not installed — rely on env vars set externally
 
 # ── API client config ──────────────────────────────────────────────────────────
 

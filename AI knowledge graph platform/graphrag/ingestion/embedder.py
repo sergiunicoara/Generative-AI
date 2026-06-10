@@ -1,4 +1,4 @@
-"""Batch embeddings via Gemini (kept for 3072-d vector compatibility)."""
+"""Batch embeddings via OpenAI text-embedding-3-large (3072d)."""
 
 from __future__ import annotations
 

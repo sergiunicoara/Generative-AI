@@ -55,6 +55,77 @@ async def record_rebuild_point(tenant: str = "default"):
     return {"rebuild_point_id": rp_id, "tenant": tenant}
 
 
+# ── Community rebuild history ─────────────────────────────────────────────────
+
+@router.get(
+    "/community-history",
+    dependencies=[Depends(require_scope("read"))],
+    summary="List community rebuild history with graph metrics",
+)
+async def community_history(tenant: str = "default", limit: int = 20):
+    """
+    Returns recent community rebuild snapshots from GraphSnapshot nodes,
+    enriched with entity count, edge count, and community coherence.
+
+    Falls back to CommunityRebuildPoint nodes if no GraphSnapshots exist.
+    """
+    neo4j = get_neo4j()
+
+    # Prefer GraphSnapshot — richer data (entity count, coherence, etc.)
+    rows = await neo4j.run(
+        """
+        MATCH (s:GraphSnapshot {tenant: $tenant})
+        RETURN s.id          AS snapshot_id,
+               s.entity_count AS entity_count,
+               s.edge_count   AS edge_count,
+               s.community_coherence AS community_coherence,
+               toString(s.recorded_at) AS recorded_at
+        ORDER BY s.recorded_at DESC
+        LIMIT $limit
+        """,
+        tenant=tenant,
+        limit=limit,
+    )
+
+    if rows:
+        history = [
+            {
+                "snapshot_id":        (r.get("snapshot_id") or "")[:8],
+                "entity_count":       r.get("entity_count") or 0,
+                "edge_count":         r.get("edge_count") or 0,
+                "community_coherence": f"{round(float(r.get('community_coherence') or 0) * 100, 1)}%",
+                "recorded_at":        (r.get("recorded_at") or "")[:19],
+                "is_rebuild":         "yes",
+            }
+            for r in rows
+        ]
+        return {"history": history, "source": "GraphSnapshot"}
+
+    # Fallback — CommunityRebuildPoint only has the timestamp
+    rp_rows = await neo4j.run(
+        """
+        MATCH (rp:CommunityRebuildPoint {tenant: $tenant})
+        RETURN rp.id AS snapshot_id, toString(rp.rebuilt_at) AS recorded_at
+        ORDER BY rp.rebuilt_at DESC
+        LIMIT $limit
+        """,
+        tenant=tenant,
+        limit=limit,
+    )
+    history = [
+        {
+            "snapshot_id":        (r.get("snapshot_id") or "")[:8],
+            "entity_count":       "—",
+            "edge_count":         "—",
+            "community_coherence": "—",
+            "recorded_at":        (r.get("recorded_at") or "")[:19],
+            "is_rebuild":         "yes",
+        }
+        for r in rp_rows
+    ]
+    return {"history": history, "source": "CommunityRebuildPoint"}
+
+
 # ── HDBSCAN Semantic Community Detection ─────────────────────────────────────
 
 @router.post(

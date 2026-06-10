@@ -13,7 +13,7 @@ from graphrag.dashboard.utils import (
 
 def render(tenant: str) -> html.Div:
     stale_data   = _get("/kg/incremental-community/summary", {"tenant": tenant})
-    history_data = _get("/community-history", {"tenant": tenant, "limit": 20})
+    history_data = _get("/kg/community-history", {"tenant": tenant, "limit": 20})
 
     if e := http_error(stale_data):
         if not DEMO_MODE:
@@ -32,7 +32,8 @@ def render(tenant: str) -> html.Div:
     hist_table   = themed_table(
         data=[{k: str(v) for k, v in h.items()} for h in history],
         columns=[{"name": c.replace("_", " ").title(), "id": c} for c in
-                 ["snapshot_id", "entity_count", "edge_count", "recorded_at", "is_rebuild"]],
+                 ["snapshot_id", "entity_count", "edge_count",
+                  "community_coherence", "recorded_at"]],
         page_size=10,
     ) if history else html.Div("No version history yet.",
                                style={"color": "#8A99B5", "padding": "10px"})

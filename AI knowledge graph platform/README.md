@@ -455,7 +455,7 @@ python scripts/ingest_corpus.py --commit --doc FAA-AD-2024-01-02.txt
 This produces real graph health metrics (⚠ LLM extraction is non-deterministic —
 these numbers shift on every fresh `--wipe --commit` run; verify live before
 presenting, see `tasks/lessons.md` A96/A98):
-**368 entities · 422 edges · 7 open conflicts · 53 Leiden communities · 90.3% community coherence**
+**368 entities · 422 edges · 4 open conflicts · 9.48/1k contradiction rate · 53 Leiden communities** (verified live 2026-06-10, after fixing a missing document-supersession chain — see A99)
 
 For a lightweight demo with hardcoded seed data (no LLM calls):
 
@@ -686,12 +686,15 @@ Every ingestion batch runs the following checks automatically:
 
 | Metric | Measured | Target |
 |--------|----------|--------|
-| `faithfulness` | **0.937** (answerable) / **0.842** overall¹ | ≥ 0.85 ✓ |
-| `answer_relevancy` | **0.816** | ≥ 0.80 ✓ |
-| `context_precision` | **0.907** | ≥ 0.80 ✓ |
-| `context_recall` | **0.867** | ≥ 0.80 ✓ |
+| `faithfulness` | **0.785** (full 39-question golden set, 25 scored / 14 refusals)¹ | ≥ 0.85 ✗ (gap below) |
 
-¹ *Correct refusals (when the corpus genuinely lacks the answer) score 0 in RAGAS and are excluded from the answerable denominator. A system that declines rather than invents is the desired behaviour.*
+¹ *Correct refusals (when the corpus genuinely lacks the answer — including 2 questions that ask about the system's own architecture, which the aerospace corpus has no information on) score 0 in RAGAS and are excluded from the scored denominator. A system that declines rather than invents is the desired behaviour. `answer_relevancy`/`context_precision`/`context_recall` figures below are from an earlier 10-question subset and have not been re-measured on the full set — do not cite them as current.*
+
+| Metric (10-question subset, not re-verified on full set) | Measured |
+|--------|----------|
+| `answer_relevancy` | 0.816 |
+| `context_precision` | 0.907 |
+| `context_recall` | 0.867 |
 
 ### Latency — reported per retrieval mode (A73: never combine)
 
@@ -701,26 +704,25 @@ Every ingestion batch runs the following checks automatically:
 | Agentic (IRCoT) | 2,842 ms | **3,442 ms** | 9% of queries — by design |
 | Combined | 1,842 ms | 2,719 ms | Inflated by mode mix |
 
-### Graph Health (12-doc aerospace corpus · real LLM-extracted data · 2026-06-07)
+### Graph Health (12-doc aerospace corpus · real LLM-extracted data · 2026-06-10)
 
 Real corpus ingested via `scripts/ingest_corpus.py` — full extraction pipeline.
 
 ⚠ **These numbers are a snapshot of one ingestion run, not a stable baseline.**
 LLM extraction is non-deterministic at temperature=0 (batched GPU/LPU inference
 — see `tasks/lessons.md` A96/A98): a fresh `--wipe --commit` of the *same* 12-doc
-corpus produced 364 entities/380 edges/11 conflicts on 2026-06-07 morning and
-368/422/7 a few hours later, same day. **Always re-run the live queries below
-immediately before presenting — never quote these from memory of a prior run.**
+corpus produced 364/380/11, then 368/422/7, then 368/422/4 across three runs in
+the same week. **Always re-run the live queries below immediately before
+presenting — never quote these from memory of a prior run.**
 
-| Metric | Real value (verified live, 2026-06-07) | Production target | Threshold |
+| Metric | Real value (verified live, 2026-06-10) | Production target | Threshold |
 |--------|------------|-------------------|-----------|
 | **Entities** | **368** (alias-deduplicated; raw extraction count is run-dependent — don't hardcode it) | ~2,000+ | — |
 | **Relations** | **422** (412 `source_type='document'` + 10 `source_type='inferred'`) | ~7,000+ | — |
-| **Open conflicts** | **7** detected | — | — |
-| **Orphan rate** | **10.9%** (40 entities without relations) | < 10% | < 20% |
-| Contradiction density | **16.59 /1k edges** | < 0.85 /1k | < 2.0 |
-| Community coherence | **90.3%** (53 Leiden communities) | > 0.65 | > 0.50 |
-| Brier score (calibration) | pipeline wired, **0 live samples** — empty-state, not a number | < 0.20 | < 0.25 |
+| **Open conflicts** | **4** detected | — | — |
+| Contradiction density | **9.48 /1k edges** | < 0.85 /1k | < 2.0 |
+| Community coherence | 53 Leiden communities (coherence % not re-measured this run) | > 0.65 | > 0.50 |
+| Brier score (calibration) | **0.700** (25 live samples, verdict "under-confident") — first real measurement | < 0.20 | < 0.25 ✗ |
 
 Evaluation is sampled at **20%** of queries automatically. View results:
 

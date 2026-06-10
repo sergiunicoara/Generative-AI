@@ -2328,3 +2328,69 @@ it right now, in front of you" is.
 >    they print**, never recite a memorized figure — the gap between "what I
 >    memorized this morning" and "what's on screen this afternoon" is exactly
 >    the kind of discrepancy that destroys credibility under "show me."
+
+## A99 — Headline faithfulness number (0.937) was measured on a 10-question subset; the real full-set number is 0.785, and a real bug was hiding behind the gap
+
+**What happened:**
+The hiring strategy doc cited faithfulness 0.937 ("9/10 answered, 1 correct
+refusal excluded"). Re-running `run_faithfulness_eval.py` on the full 39-question
+golden set gave **0.710** — a large, alarming drop. Investigation found the cause
+was NOT random drift: `ingest_corpus.py` never populated `Document.supersedes`,
+so `DocumentAuthorityService.register_supersession()` was never called. The
+SUPERSEDES edge chain (FAA-AD-2024-01-02 → 2022-03-07 → 2020-05-11) and the
+`superseded_by` property did not exist in the graph — explaining 5 of 15
+refusals (MH-01, MH-04/05/06, INF-01, all supersession-chain questions) and one
+outright hallucination (SH-02 claimed 2024-01-02 directly supersedes 2020-05-11,
+skipping the intermediate AD).
+
+Fixed by adding `_SUPERSESSION_MAP` to `ingest_corpus.py` (declares the chain
+from corpus text, ingested in alphabetical/predecessor-first order so doc IDs
+exist when needed) and re-ingesting `--wipe --commit`. Result: faithfulness
+0.710 → **0.785** (+10.6% relative), MH-01 went REFUSAL → 1.000,
+multi_hop 0.833→0.952, single_hop 0.748→0.888, temporal 0.5→1.0.
+
+Even after the fix, 0.785 is still below the 0.840 baseline and well below the
+0.937 headline — because **0.937 was measured on a 10-question subset**, not
+the 39-question golden set. The two numbers were never comparable. Two
+remaining categories (`architecture`, `domain` — ARC-01/02, DOM-01/02) score
+0.0/refused in BOTH runs, but this is *correct behavior*: those questions ask
+about the GraphRAG system's own architecture (e.g. "what is the role of the
+IRCoT agentic retriever?"), and the ingested corpus contains only aerospace
+regulatory documents — there is no context to ground an answer, so refusal is
+right. RAGAS scores a refusal-with-no-context as 0.0/unscored, which makes the
+aggregate look worse than the qualitative reality.
+
+**Root cause:**
+Two compounding issues: (1) a real pipeline bug (supersession chain never
+written) that had been silently degrading 5+ of 39 golden questions since the
+ontology/inference work was built, undetected because the only faithfulness
+number ever cited was from a 10-question smoke subset that didn't happen to
+exercise the supersession chain; (2) citing a subset score as if it were the
+full-set score, which hid (1) for an unknown number of sessions.
+
+**Rule:**
+> 1. **The headline faithfulness/precision/recall number for a pitch must come
+>    from the FULL golden set (39 questions in `evals/golden_set.json`), never
+>    a subset** — a subset that happens to avoid the hard categories
+>    (multi-hop, supersession chains, negative/refusal cases) will always look
+>    better and is not representative.
+> 2. **When a metric drops sharply after a "boring" infra change (re-ingest,
+>    schema migration, dependency bump), don't assume drift (A96/A98) — diff
+>    the per-question results against the previous run first.** A uniform
+>    small drop is drift; a cluster of refusals/hallucinations concentrated in
+>    one question category (here: every supersession-chain question) is a real
+>    regression with a findable root cause.
+> 3. **`architecture`/`domain`-type golden questions test "does the system
+>    correctly refuse when given irrelevant retrieved context"**, not "can the
+>    system answer questions about itself". A 0.0/refused result on these is a
+>    PASS, not a failure — don't let it drag down a headline average without
+>    noting this, and consider excluding these 2 categories from the headline
+>    faithfulness average (or reporting them separately as a "refusal
+>    correctness" metric) so the number isn't punished for correct behavior.
+> 4. **Document-level `supersedes` relationships declared in corpus text
+>    ("This AD supersedes AD 2022-03-07") must be wired into ingestion** —
+>    `graph_writer.write_document()` already calls
+>    `DocumentAuthorityService.register_supersession()` if `doc.supersedes` is
+>    set, but nothing was ever setting it. Any new corpus with supersession
+>    language needs an explicit map like `_SUPERSESSION_MAP` in
+>    `ingest_corpus.py`, ordered predecessor-first.

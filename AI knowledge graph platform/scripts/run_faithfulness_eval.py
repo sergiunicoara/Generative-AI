@@ -13,6 +13,19 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parents[1]))
 
+# Fail fast on a wrong interpreter (e.g. another project's venv on PATH).
+# Without this, retrieval works but every RAGAS judge call errors out and a
+# 15-minute run produces a results file full of errors instead of scores.
+try:
+    import ragas  # noqa: F401
+    import langchain_community  # noqa: F401
+except ImportError as _exc:
+    sys.exit(
+        f"Missing eval dependency ({_exc.name}) — wrong Python interpreter?\n"
+        f"  running : {sys.executable}\n"
+        f"  expected: the project's Python 3.11 with requirements installed"
+    )
+
 _REFUSAL = (
     "does not contain",
     "no information",

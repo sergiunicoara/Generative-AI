@@ -56,6 +56,18 @@ def _authority_level(filename: str) -> int:
     return 4
 
 
+# Document-level supersession chains, as declared in the corpus text
+# ("This AD supersedes AD 2022-03-07"). Predecessors sort before successors
+# alphabetically, so they are always ingested first and their doc IDs are
+# known by the time the superseding document is written. graph_writer
+# registers these via DocumentAuthorityService (SUPERSEDES edges +
+# superseded_by property), which retrieval's authority weighting reads.
+_SUPERSESSION_MAP = {
+    "FAA-AD-2022-03-07.txt": ["FAA-AD-2020-05-11.txt"],
+    "FAA-AD-2024-01-02.txt": ["FAA-AD-2022-03-07.txt"],
+}
+
+
 async def ingest_all(
     doc_filter: str | None,
     commit: bool,
@@ -128,6 +140,7 @@ async def ingest_all(
     total_relations = 0
     total_conflicts = 0
     results: list[dict] = []
+    doc_ids_by_filename: dict[str, str] = {}
 
     for i, path in enumerate(paths, 1):
         print(f"[{i}/{len(paths)}] {path.name}")
@@ -136,6 +149,12 @@ async def ingest_all(
         doc = load_document(path)
         doc.tenant          = TENANT
         doc.authority_level = _authority_level(path.name)
+        doc.supersedes = [
+            doc_ids_by_filename[f]
+            for f in _SUPERSESSION_MAP.get(path.name, [])
+            if f in doc_ids_by_filename
+        ]
+        doc_ids_by_filename[path.name] = doc.id
 
         msg = IngestMessage(
             job_id=str(uuid.uuid4()),

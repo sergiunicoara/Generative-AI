@@ -102,8 +102,9 @@ That separates "I built this" from "I generated this."
 3. **API running (optional):** `uvicorn api.main:app --port 8000 --reload`
 4. **One sentence about PwC's practice:** "I saw PwC has been building GraphRAG capabilities in the region" — shows you've done homework
 5. **Know the real numbers cold:**
-   - Faithfulness: 0.937 on answerable questions | 0.842 overall (correct refusals excluded from numerator) | Precision: 0.907 | Recall: 0.867
-   - Latency by mode: hybrid p95 2.2s | agentic p95 3.4s | combined p95 2.7s
+   - Faithfulness (full 39-question golden set, measured 2026-06-10): **0.785** answerable (25/39 scored, 14 refusals) | baseline 0.840 | delta -0.055. ⚠ **Do not cite 0.937** — that figure was measured on a 10-question subset and is not comparable to the full set (see `tasks/lessons.md` A99). 0.785 is the honest, full-set, current number.
+   - Two golden categories (`architecture`, `domain` — "what retrieval stages does the platform use", "is the ontology hard-coded") score 0.0/refused by design: the corpus contains only aerospace regulatory documents, so the system correctly refuses to answer questions about its own architecture rather than hallucinating. If asked about the 0.785 figure, lead with this — it shows the refusal behavior is working, which is part of the pitch.
+   - Latency by mode: hybrid p95 2.2s | agentic p95 3.4s | combined p95 2.7s — ⚠ measured before the 2026-06-10 supersession fix and re-ingest; re-verify if quoting precisely.
    - Agentic trigger rate: ~9-10% current; alert if >20%
    - Why trigger rate matters: it is a direct read on retrieval health. If it climbs, the agent is covering for weak retrieval even if combined p95 still looks acceptable.
    - ⚠⚠ **STOP — these graph-health numbers are NOT stable. Re-run the live queries
@@ -111,15 +112,17 @@ That separates "I built this" from "I generated this."
      was audited and "verified live" at 364 entities/380 edges/11 conflicts/92.12%
      coherence on the morning of 2026-06-07 — by that same afternoon, after one more
      `--wipe --commit` of the *identical* 12-doc corpus, the live graph showed
-     **368 entities, 422 edges, 7 open conflicts, 90.27% coherence**. Same corpus,
-     same code, different LLM extraction (non-deterministic at temperature=0 — see
-     `tasks/lessons.md` A96 and A98). The numbers below are what was true at the
-     moment of the second check (2026-06-07 afternoon) — **they will be wrong again
-     by the time you read this. Run the Part 6 queries live, in front of the room.**
-   - Real corpus (verified live 2026-06-07 PM — re-verify before use): 368 entities, 422 edges (12-doc aerospace corpus, LLM-extracted); 7 open conflicts; 90.27% community coherence
+     368 entities/422 edges/7 conflicts/90.27% coherence. After a third
+     `--wipe --commit` on 2026-06-10 (with a supersession-chain fix — see A99), the
+     live graph showed **368 entities, 422 edges, 4 open conflicts, 9.48/1k
+     contradiction rate, 53 communities**. Same corpus, different LLM extraction
+     each time (non-deterministic at temperature=0 — see A96/A98). The numbers
+     below **will be wrong again by the time you read this. Run the Part 6 queries
+     live, in front of the room.**
+   - Real corpus (verified live 2026-06-10, after supersession fix — re-verify before use): 368 entities, 422 edges (412 document + 10 inferred, 12-doc aerospace corpus, LLM-extracted); 4 open conflicts; 9.48/1k contradiction rate; 53 Leiden communities (re-verify coherence % live)
    - Pipeline: raw extraction → alias-deduplicated entity count varies run-to-run — don't quote a specific raw count or dedup % from memory; query `MATCH (a:Alias {tenant:'aerospace'}) RETURN count(a)` and the entity count live, then describe the *mechanism* ("4-stage alias resolution collapses duplicate mentions into canonical entities") rather than a number that will be stale within hours
-   - Graph health (2026-06-07 PM): orphan rate 10.9% (40 entities) | contradiction density 16.59/1k edges | 53 Leiden communities | re-run `MATCH ()-[r:RELATES_TO {tenant:'aerospace'}]->() RETURN r.source_type, count(r)` for the document/inferred split (was 412/10 at last check)
-   - ⚠ Calibration: the pipeline (`confidence_calibration.py`, Brier score + isotonic regression, wired into `EvaluationAgent.add_sample()`) is built and unit-tested — but **0 `CalibrationSnapshot` nodes exist in the live graph right now** (verified: `MATCH (cs:CalibrationSnapshot {tenant:'aerospace'}) RETURN count(cs)` → 0). The dashboard's Calibration tab shows a graceful empty state, not a number. **Do not say "Brier score 0.052 on 420 samples" — that figure isn't backed by any live data and would collapse under "show me the calibration run."** If asked, say: "The calibration scoring pipeline is built and tested — Brier score, isotonic regression, trend tracking — but I haven't yet accumulated enough live query samples to populate it at production scale. Here's the empty-state tab and the code that computes it." That's a more defensible story than a number you can't produce on request.
+   - SUPERSEDES chain (fixed 2026-06-10): `FAA-AD-2024-01-02 → FAA-AD-2022-03-07 → FAA-AD-2020-05-11`, with `superseded_by` set on the older docs — verify with `MATCH (a:Document)-[:SUPERSEDES]->(b:Document) RETURN a.filename, b.filename`
+   - Calibration: the pipeline (`confidence_calibration.py`, Brier score + isotonic regression) now has **real live data**: 25 samples written during the 2026-06-10 faithfulness eval, **Brier score 0.700, verdict "under-confident"** (snapshot `961f2a4b`). This is an honest first measurement, not a good one — 0.700 is poor calibration (closer to 0 is better). If asked: "The calibration pipeline is wired end-to-end and has its first live sample — 25 points, Brier 0.70, currently under-confident. That's expected for a first batch; the next step is accumulating more samples and checking whether isotonic regression tightens it." Do not say "Brier score 0.052" — that number was never real.
 
 ---
 
@@ -350,15 +353,15 @@ Then run the second query (all inferred edges) and narrate:
 
 **Click through the tabs:**
 
-- **Graph Health** — "[N] entities, [N] edges, 12 documents ingested. Contradiction density: [N] per 1,000 edges. The live graph validates itself — any schema violation surfaces here as a health alert." *(read [N] off the gauges on screen — last live check 2026-06-07 PM: 368 entities, 422 edges, 16.59/1k density; was 364/380/28.95 that same morning)*
+- **Graph Health** — "[N] entities, [N] edges, 12 documents ingested. Contradiction density: [N] per 1,000 edges. The live graph validates itself — any schema violation surfaces here as a health alert." *(read [N] off the gauges on screen — last live check 2026-06-10, after the supersession-chain fix: 368 entities, 422 edges, 9.48/1k density; was 16.59/1k and 28.95/1k on earlier runs that same week)*
 
-- **Conflicts** — "[N] open conflicts detected on the real corpus — exclusive state, directional reversal, functional violation. One-click resolution with audit trail. Every resolved conflict records who resolved it, when, and why — compliance audit log." *(was 7 at last live check, was 11 a few hours earlier, was 18 on an older run — click the tab and read the actual count)*
+- **Conflicts** — "[N] open conflicts detected on the real corpus — exclusive state, directional reversal, functional violation. One-click resolution with audit trail. Every resolved conflict records who resolved it, when, and why — compliance audit log." *(was 4 at last live check (2026-06-10), was 7 a few hours earlier, was 11/18 on older runs — click the tab and read the actual count)*
 
-- **Communities** — "[N] Leiden communities with [N]% coherence. Entity drift monitor triggers a rebuild recommendation at 20% — right now it's [N]%, meaning the graph is stable and the communities are fresh." *(was 53 communities / 90.27% coherence at last live check, was 55 / 92.12% that same morning — click the tab and read the gauge)*
+- **Communities** — "[N] Leiden communities with [N]% coherence. Entity drift monitor triggers a rebuild recommendation at 20% — right now it's [N]%, meaning the graph is stable and the communities are fresh." *(53 communities present at last live check (2026-06-10) — re-verify coherence % live, click the tab and read the gauge)*
 
 - **GDPR** — "GDPR Article 17 right-to-be-forgotten. Click 'erase' and the system atomically removes that entity and all its edges, generates an audit log, keeps the graph consistent."
 
-- **Calibration** — *(this tab will render an honest empty state — plan for it)* "This is the calibration pipeline — Brier score, isotonic regression, drift trend over time. It's wired into the evaluation agent and unit-tested, but it hasn't accumulated enough live samples yet to populate a trend, so it shows an empty state rather than a fabricated number. That's the same discipline as the refusal handling in faithfulness scoring — I'd rather show you 'not enough data yet' than a number I can't reproduce on demand."
+- **Calibration** — *(this tab now has real data — 25 samples from the 2026-06-10 faithfulness eval)* "This is the calibration pipeline — Brier score, isotonic regression, drift trend over time. As of the last eval run it has its first live snapshot: 25 samples, Brier score 0.70, currently flagged 'under-confident'. That's an honest first measurement, not a polished one — same discipline as the refusal handling in faithfulness scoring: I show you the real number and what it means, not a number I can't reproduce on demand."
 
 ---
 
@@ -721,7 +724,7 @@ ORDER BY count DESC
 - [ ] Explain agentic trigger rate: why ~9-10% is healthy, why >20% is an alert, and why combined p95 hides the signal
 - [ ] Explain the OR-to-AND fallback fix: hedged answer OR zero citations over-fired; hedged answer AND zero citations reduced unnecessary agentic calls
 - [ ] Explain contradiction detection: name all 5 types, explain `positive_negative_pair` with an example
-- [ ] State the real RAGAS numbers cold: faithfulness 0.937 on answerable / 0.842 overall, precision 0.907, recall 0.867 — and explain why the refusal split matters
+- [ ] State the real RAGAS numbers cold: faithfulness 0.785 on the full 39-question golden set (25 scored, 14 refusals), baseline 0.840 — and explain why the refusal split matters, and why `architecture`/`domain` questions correctly score 0/refused (no info-leak about the system's own internals from an aerospace corpus)
 - [ ] State the real latency numbers: hybrid p95 2.2s, agentic p95 3.4s, combined p95 2.7s, trigger rate ~9-10%
 
 ### Demo preparation

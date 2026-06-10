@@ -131,7 +131,7 @@ Alert thresholds in `config/settings.yml` → `business_matrix.alert_thresholds`
 | Metric | Default threshold | Meaning |
 |---|---|---|
 | `latency_p95_ms` | 3000ms | p95 query latency ceiling |
-| `faithfulness` | 0.7 | RAGAS faithfulness floor |
+| `faithfulness` | 0.8 | RAGAS faithfulness floor |
 | `context_recall` | 0.6 | RAGAS recall floor |
 | `contradiction_rate` | 0.05 | conflicts per 1k edges |
 | `orphan_rate` | 0.10 | fraction of entities with no chunk link |
@@ -231,7 +231,7 @@ The schema is idempotent. Re-run `scripts/init_neo4j.py` to recreate indexes and
 
 1. Add the Cypher statement to `graphrag/graph/schema.cypher`
 2. Run `python scripts/init_neo4j.py` — all statements are idempotent (`IF NOT EXISTS`)
-3. For vector indexes: specify correct dimensions (3072 for Gemini `gemini-embedding-001`)
+3. For vector indexes: specify correct dimensions (3072 for OpenAI `text-embedding-3-large`)
 
 ### Renaming an entity type across the graph
 

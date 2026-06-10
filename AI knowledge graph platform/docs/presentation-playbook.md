@@ -35,19 +35,19 @@ live, in-the-room demonstrations.
 cd "C:\Users\Sergiu\Desktop\Projects\Generative-AI\AI knowledge graph platform"
 
 # 1. Dependencies (the dashboard mount needs a2wsgi)
-py -3.11 -m pip install -r requirements.txt
-py -3.11 -c "import a2wsgi; print('a2wsgi OK')"
+python -m pip install -r requirements.txt
+python -c "import a2wsgi; print('a2wsgi OK')"
 
 # 2. Smoke-test the deck regenerates (only if you edit it)
 cd "C:\Users\Sergiu\Desktop"; node graphrag_pitch.js   # → GraphRAG_PwC_Pitch.pptx
 
 # 3. Smoke-test the mock demo runs with zero backend
 cd "C:\Users\Sergiu\Desktop\Projects\Generative-AI\AI knowledge graph platform"
-py -3.11 scripts/demo_regulatory.py        # should print 6 steps, no errors
+python scripts/demo_regulatory.py        # should print 6 steps, no errors
 
 # 4. Confirm the dashboard launches in demo mode
 $env:GRAPHRAG_DASHBOARD_DEMO = "1"
-py -3.11 -m uvicorn api.main:app --port 8001
+python -m uvicorn api.main:app --port 8001
 #   → open http://localhost:8001/admin/  → all 5 tabs populated → Ctrl-C
 ```
 
@@ -79,21 +79,21 @@ docker compose -f compose.dev.yaml up -d neo4j
 # wait ~30s, then verify:
 curl http://localhost:7474     # Neo4j Browser responds
 # Seed demo data (if graph is empty):
-py -3.11 scripts/seed_demo_data.py --commit
+python scripts/seed_demo_data.py --commit
 ```
 
 **Terminal 2 — start the admin dashboard in demo mode:**
 ```powershell
 cd "C:\Users\Sergiu\Desktop\Projects\Generative-AI\AI knowledge graph platform"
 $env:GRAPHRAG_DASHBOARD_DEMO = "1"
-py -3.11 -m uvicorn api.main:app --port 8001
+python -m uvicorn api.main:app --port 8001
 # leave running → http://localhost:8001/admin/
 ```
 
 **Terminal 3 — start the business KPI dashboard (optional):**
 ```powershell
 cd "C:\Users\Sergiu\Desktop\Projects\Generative-AI\AI knowledge graph platform"
-py -3.11 graphrag/business_matrix/dashboard_server.py
+python graphrag/business_matrix/dashboard_server.py
 # leave running → http://localhost:8050/dashboard/
 ```
 
@@ -106,7 +106,7 @@ cd "C:\Users\Sergiu\Desktop\Projects\Generative-AI\AI knowledge graph platform"
 **Browser — pre-open these tabs (in order):**
 1. `http://localhost:8001/admin/` (Graph Health tab showing)
 2. `http://localhost:7474` (Neo4j Browser — only if live demo)
-3. `https://github.com/sergiunicoara/Generative-AI` (the repo, for "it's all real")
+3. `https://github.com/sergiunicoara/Generative-AI/tree/main/AI%20knowledge%20graph%20platform` (the project, for "it's all real")
 
 **Pre-flight checklist:**
 - [ ] Deck open in PowerPoint, presenter view, slide 1
@@ -147,10 +147,10 @@ Walk the three layers left-to-right (Knowledge Graph → Retrieval → Agent).
 
 ```powershell
 # Live (real Neo4j) — preferred:
-py -3.11 scripts/demo_regulatory.py --live
+python scripts/demo_regulatory.py --live
 
 # OR mock (instant, zero backend) — fallback:
-py -3.11 scripts/demo_regulatory.py
+python scripts/demo_regulatory.py
 ```
 
 Narrate each of the 6 steps as it prints (don't read the screen silently):
@@ -166,23 +166,34 @@ Narrate each of the 6 steps as it prints (don't read the screen silently):
 
 ### Slide 6 — Observability / metrics framework (1.5m)
 > "If you can't measure it, you can't run it in production. **16 metrics across 4
-> layers.** The real numbers from 104 query runs: faithfulness 0.840, context precision
+> layers.** The real numbers from live pipeline runs: faithfulness **0.937 on answerable questions** (0.842 overall — correct refusals excluded), context precision
 > 0.907, hybrid p95 **2.2s**. The real corpus (12 aerospace regulatory documents,
-> LLM-extracted): **374 entities, 456 relations, 70 open conflicts, 99.6% high-confidence
-> edges, 0% orphans** — all verified live in Neo4j.
-> The calibration pipeline corrects LLM confidence from raw to isotonic-adjusted —
-> Brier score is the target metric once the corpus scales."
+> LLM-extracted) — ⚠ **re-run this query live, immediately before presenting** (numbers
+> drift run-to-run — LLM extraction is non-deterministic, see `tasks/lessons.md` A96/A98;
+> verified live on 2026-06-07: **368 entities, 422 edges, 7 open conflicts**, contradiction
+> density 16.59 per 1,000 edges, 53 Leiden communities at 90% coherence — but expect the
+> exact figures to differ by the time you present)."
+> The calibration pipeline corrects LLM confidence from raw to isotonic-adjusted via
+> Brier score + isotonic regression — **but say so honestly: 0 `CalibrationSnapshot`
+> samples exist in the live graph right now**, so there's no number to quote yet.
+> ("The pipeline's built and unit-tested; here's the empty-state tab and the code
+> that computes it" is the defensible line — see `docs/hiring-and-presentation-strategy.md`
+> line ~112 for the full framing. Do NOT say "Brier score 0.052 on 420 samples" —
+> that figure was never backed by live data.)"
 
 ### Slide 7 — The Dashboard, Live (then SWITCH to browser tab 1) (3m)
 *This is proof moment #2.* Switch to `http://localhost:8001/admin/`.
 > "This is the operator dashboard — running against the seed data we just ingested."
 *Click through the tabs:*
-- **Conflicts** — "70 open conflicts detected on the real corpus — exclusive state, directional
-  reversal, functional violation. One-click resolution with audit trail."
+- **Conflicts** — "[N] open conflicts detected on the real corpus — exclusive state, directional
+  reversal, functional violation. One-click resolution with audit trail." *(⚠ verify the live
+  count on the tab before you say a number — it was 7 on 2026-06-07, was 11 a few hours
+  earlier the same day, was 18 on an earlier run. Read it off the screen, don't recite it.)*
 - **Communities** — "0% entity drift since the last Leiden rebuild — communities are fresh. The drift monitor triggers a rebuild recommendation at 20%."
 - **GDPR** — "GDPR Article 17 right-to-be-forgotten — with an audit log per request."
 - **Calibration** — "The calibration pipeline is wired — isotonic regression corrects
-  raw LLM confidence. On a production corpus this targets Brier < 0.20."
+  raw LLM confidence — but it's showing an honest empty state right now: 0 live samples
+  accumulated yet. On a production corpus this targets Brier < 0.20."
 *(Optional: switch to `:8050/dashboard/` for the latency/RAGAS time-series.)*
 
 ### Slide 8 — Client Scenarios (2m)
@@ -191,7 +202,7 @@ Tie it to their world: regulatory intelligence, audit KB, compliance monitoring.
 > insurance — swap the YAML ontology, nothing else changes.**"
 
 ### Slide 9 — Technical Foundation (1.5m)
-> "22,650 lines, 353 passing tests (49 are agent safety guardrails), 39 KG modules, 6 ADRs, 82 documented lessons. **This is a product,
+> "22,650 lines, 362 passing tests (49 are agent safety guardrails), 39 KG modules, 6 ADRs, 90 documented lessons. **This is a product,
 > not a prototype.**"
 
 ### Slide 10 — Close (1m)
@@ -219,7 +230,7 @@ Fast lookup:
 | Test coverage | Q10 |
 | Multi-tenancy / isolation | Q11 |
 | Scale limits | Q12 |
-| Why Groq + Gemini | Q13 |
+| Why Groq + DeepSeek + OpenAI | Q13 |
 | Handling wrong extractions | Q14 |
 | "No commercial experience" | Q15 — *be honest, lean on the foundation* |
 
@@ -245,7 +256,7 @@ show it.** Switch to the terminal, grep the function, run the test.
 
 | If… | Then… |
 |---|---|
-| Neo4j won't start | Drop to mock demo: `py -3.11 scripts/demo_regulatory.py`. Say "running the in-process test harness" — it's true. |
+| Neo4j won't start | Drop to mock demo: `python scripts/demo_regulatory.py`. Say "running the in-process test harness" — it's true. |
 | Dashboard won't load | **Slide 7 IS the dashboard** (native gauges) — present it as the screen. You lose nothing. |
 | `/admin` 404s | You forgot `a2wsgi` or the env var. Fallback to slide 7. (Root cause: `grep admin_dashboard_unavailable` in the API log.) |
 | Internet down | Everything is local except the GitHub tab — skip it. The demo and dashboards are offline-capable. |
@@ -270,6 +281,6 @@ The live demo writes to the `aerospace` tenant; it self-clears on the next
 
 ## 9. The 60-second version (if you only remember one thing)
 
-1. Open deck. 2. Run `py -3.11 scripts/demo_regulatory.py` — narrate the
+1. Open deck. 2. Run `python scripts/demo_regulatory.py` — narrate the
 contradiction being caught. 3. Open `http://localhost:8001/admin/` (demo mode) —
 point at the green gauges. 4. "It's all in the repo — grep it, run it." Done.

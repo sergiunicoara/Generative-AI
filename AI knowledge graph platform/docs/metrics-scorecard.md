@@ -10,7 +10,7 @@
 ![Context Precision](https://img.shields.io/badge/Context_Precision-0.91-success)
 ![Context Recall](https://img.shields.io/badge/Context_Recall-0.87-success)
 ![Hybrid p95](https://img.shields.io/badge/Hybrid_p95-2.2s-success)
-![Tests](https://img.shields.io/badge/Tests-353_passing-success)
+![Tests](https://img.shields.io/badge/Tests-362_passing-success)
 
 ---
 
@@ -48,7 +48,7 @@ Evaluated on 23 sampled queries out of 104 total runs. Judge: llama-3.3-70b via 
 
 | Metric | Value | What it means | Target |
 |---|---|---|---|
-| **Faithfulness** | **0.840** | 84% of answers fully grounded in retrieved context — minimal hallucination | ≥ 0.85 |
+| **Faithfulness** | **0.937** (answerable) / **0.842** overall | 93.7% on answerable questions; overall includes correct refusals scored as 0 | ≥ 0.85 |
 | **Context Precision** | **0.907** | Almost everything retrieved is actually relevant | ≥ 0.80 |
 | **Context Recall** | **0.867** | The pipeline finds most of the relevant context that exists | ≥ 0.80 |
 
@@ -66,9 +66,19 @@ Measured across all 104 query runs. p95 computed from real timing data in `resul
 
 Built from the **12-document aerospace regulatory corpus** (`scripts/ingest_corpus.py`) via the
 full LLM extraction pipeline (Groq/DeepSeek extraction + OpenAI embeddings + alias resolution +
-contradiction detection + forward-chaining). Numbers below are real, queried from Neo4j.
+contradiction detection + forward-chaining). Numbers below were real, queried from Neo4j — **on
+2026-06-03**.
 
-| Metric | Real value (2026-06-03) | Production target | Threshold |
+⚠ **Stale snapshot — do not quote these from memory.** LLM extraction is non-deterministic at
+temperature=0.0: re-ingesting the *identical* corpus with `--wipe --commit` produces a different
+graph shape every run (proven twice in a single day on 2026-06-07 alone — entities went
+364→368, edges 380→422, open conflicts 11→7, community coherence 92.12%→90.27%; see
+`tasks/lessons.md` A96/A98). The 2026-06-03 figures below (374 entities, 456 relations, 70
+conflicts, 153.51/1k contradiction rate) are **three corpus-shape generations stale** as of
+2026-06-07. Before presenting any "real value" row, re-run the live Cypher count and report
+what it returns — never the number printed here.
+
+| Metric | Real value (2026-06-03 — STALE, re-verify live) | Production target | Threshold |
 |---|---|---|---|
 | **Entities** | **374** (after alias dedup from 600+ extracted) | ~2k+ at scale | — |
 | **Relations** | **456** (asserted + 10 forward-chain inferred) | ~7k+ at scale | — |
@@ -90,7 +100,7 @@ statistically meaningful Brier score — the pipeline targets Brier < 0.20 at pr
 
 | Metric | Value |
 |---|---|
-| **Unit tests** | **353 passing** (49 are agent-safety guardrails) |
+| **Unit tests** | **362 passing** (49 are agent-safety guardrails) |
 | **Knowledge-graph modules** | 39 |
 | **Architecture Decision Records** | 6 |
 | **Lines of code** | ~22,650 |

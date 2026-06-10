@@ -23,7 +23,7 @@ to a specific file, endpoint, demo step, or test — with a one-line business va
 | Bitemporal `as_of(vt, tt)` queries | `neo4j_client.py → as_of_query()` |
 | Cypher patterns (6 production patterns) | `docs/cypher-patterns.md` |
 | Schema: indexes, constraints | `graphrag/graph/schema.cypher` |
-| **Demo:** Live Neo4j with inferred edges | `py -3.11 scripts/demo_regulatory.py --live` |
+| **Demo:** Live Neo4j with inferred edges | `python scripts/demo_regulatory.py --live` |
 | **Business value:** Multi-hop traversal finds connections a vector index cannot |
 
 ---
@@ -49,7 +49,7 @@ to a specific file, endpoint, demo step, or test — with a one-line business va
 | Evidence | Where |
 |---|---|
 | 22,650 lines, fully async (asyncio) | Entire `graphrag/` package |
-| 353 passing unit tests | `tests/unit/` → `pytest tests/unit -q` |
+| 362 passing unit tests | `tests/unit/` → `pytest tests/unit -q` |
 | GitHub Actions CI (pytest matrix + ruff) | `.github/workflows/` |
 | Docker multi-stage build | `Dockerfile` |
 | One-command dev stack | `docker compose -f compose.dev.yaml up` |
@@ -100,7 +100,7 @@ to a specific file, endpoint, demo step, or test — with a one-line business va
 | Evidence | Where |
 |---|---|
 | 6 ADRs with alternatives evaluated | `docs/adr/` |
-| 82 documented lessons (pattern library) | `tasks/lessons.md` |
+| 91 documented lessons (pattern library) | `tasks/lessons.md` |
 | CONTRIBUTING.md with ADR process, PR checklist | `CONTRIBUTING.md` |
 | Production runbook (startup, health checks, failure modes) | `docs/runbook.md` |
 | Scaling roadmap with decision thresholds | `docs/roadmap.md` |
@@ -164,12 +164,12 @@ to a specific file, endpoint, demo step, or test — with a one-line business va
 
 | Claim | Proof |
 |---|---|
-| "Not a tutorial project" | 353 tests, CI, Docker build, structured DLQ, 6 ADRs, 82 documented lessons |
-| "Observable" | 16 metrics, RAGAS 0.840/0.907/0.867 from 104 real runs, calibration pipeline wired, admin + KPI dashboards |
+| "Not a tutorial project" | 362 tests, CI, Docker build, structured DLQ, 6 ADRs, 90 documented lessons |
+| "Observable" | 16 metrics, RAGAS faithfulness 0.937 (answerable) / 0.842 overall, precision 0.907, recall 0.867, calibration pipeline wired, admin + KPI dashboards |
 | "Deployable" | `docker compose -f compose.dev.yaml up`; worker `/ready` health probes |
 | "Scalable design" | Redis alias registry, incremental community detection, RabbitMQ parallel workers |
 | "Regulated-client ready" | GDPR, multi-tenant isolation, audit trail, contradiction detection |
-| "Day-one delivery" | `py -3.11 scripts/ingest_corpus.py --commit` → full real corpus in Neo4j |
+| "Day-one delivery" | `python scripts/ingest_corpus.py --commit` → full real corpus in Neo4j |
 
 ---
 
@@ -183,7 +183,7 @@ to a specific file, endpoint, demo step, or test — with a one-line business va
 | 4–5 | Slide 4: JD mapping | Every requirement covered |
 | 5–10 | **Terminal: `demo_regulatory.py --live`** | Forward-chaining, contradiction detection, live Neo4j |
 | 10–12 | **Browser: admin dashboard `/admin/`** | Health metrics, conflicts, calibration |
-| 12–13 | Slide 7: technical foundation | 353 tests, 6 ADRs, smoke-test |
+| 12–13 | Slide 7: technical foundation | 362 tests, 6 ADRs, smoke-test |
 | 13–14 | Slide 8: client scenarios | Regulatory, audit, compliance |
 | 14–15 | Slide 9: close + questions | |
 
@@ -191,9 +191,19 @@ to a specific file, endpoint, demo step, or test — with a one-line business va
 
 ## Quick-reference: Key numbers
 
+⚠ **The "real corpus" graph-health rows below (entities, relations, conflicts,
+orphan rate, community coherence, contradiction rate) are a snapshot of ONE
+ingestion run, not stable facts.** LLM extraction is non-deterministic at
+temperature=0 — re-running `--wipe --commit` on the *identical* 12-doc corpus
+produces a different graph shape every time (proven twice in one day on
+2026-06-07: 364→368 entities, 380→422 edges, 11→7 conflicts, 92.12%→90.27%
+coherence — see `tasks/lessons.md` A96/A98). **Before quoting any row marked
+"(real corpus)" or "(live Neo4j snapshot)" out loud, re-run the live Cypher
+query and use what it returns — not what's printed here.**
+
 | Metric | Value |
 |---|---|
-| Faithfulness (RAGAS) | 0.840 |
+| Faithfulness (RAGAS) | 0.937 (answerable) / 0.842 overall |
 | Context precision | 0.907 |
 | Context recall | 0.867 |
 | Hybrid p95 | 2.2s |
@@ -208,7 +218,7 @@ to a specific file, endpoint, demo step, or test — with a one-line business va
 | Community coherence | 90% (39 Leiden communities, real corpus) |
 | Contradiction rate | 153.51 / 1k edges (adversarial corpus — expected high) |
 | Calibration (Brier) | pipeline wired; target < 0.20 on production corpus |
-| Passing tests | 353 |
+| Passing tests | 362 |
 | KG modules | 39 |
 | ADRs | 6 |
 | Lessons | 82 |

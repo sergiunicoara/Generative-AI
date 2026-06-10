@@ -1,3 +1,80 @@
+# Current: Deterministic ingestion via LLM extraction cache (2026-06-07)
+
+## Context
+Groq/DeepSeek are NOT deterministic at temperature=0 (batched GPU/LPU inference +
+mid-run Groq→DeepSeek fallback on rate limit). Each `--wipe --commit` re-ingest of
+the same 12-doc corpus produces different entity/edge/conflict counts, which keeps
+breaking the hiring-strategy demo script's hardcoded examples (already hit twice —
+the FAA AD SUPERSEDES chain and the Boeing conflict rows both vanished between runs).
+
+## Plan
+- [x] Design: content-addressable disk cache keyed by sha256(model|temperature|json_mode|prompt),
+      hooked ONLY into `Extractor.extract()` (the call site responsible for graph shape) —
+      NOT retrieval/query LLM calls, which must stay live.
+- [x] New module `graphrag/core/llm_cache.py` — `LLMCache` (get/set, JSON files under `.cache/llm_extraction/`) + `get_llm_cache()` singleton
+- [x] New setting `llm_cache_enabled: bool = False` in `graphrag/core/config.py` (env: `LLM_CACHE_ENABLED=1`), off by default so production ingestion of new docs always hits the live LLM
+- [x] Wire into `graphrag/ingestion/extractor.py::Extractor._generate()` — cache lookup before `get_llm().generate()`, store on miss (reads the flag fresh from settings each call so it works with `Extractor.__new__()` test fixtures too)
+- [x] Add `.cache/` to `.gitignore`
+- [x] Run unit tests — all 362 pass; smoke-tested `LLMCache` get/set/key-isolation directly
+- [x] Update `tasks/lessons.md` with the pattern (A96)
+
+## Verification
+```powershell
+$env:LLM_CACHE_ENABLED = "1"
+py -3.11 scripts/ingest_corpus.py --commit --wipe   # run 1 — populates cache
+py -3.11 scripts/ingest_corpus.py --commit --wipe   # run 2 — must replay cache, identical counts
+```
+Compare "Entities in Neo4j", "Edges in Neo4j", "Open conflicts", "Inferred edges" — must match exactly.
+**Not yet run** (requires a live ingestion against Neo4j + Groq/DeepSeek keys, ~2-3 min
+each — recommend running this once before your next pitch-prep session to confirm and
+to populate the cache for good).
+
+## Review
+- Implementation is complete and unit-tested (362/362 pass + standalone cache smoke test:
+  miss→set→hit, correct key isolation between distinct prompts).
+- Design choice: cache is keyed by the *configured* model name, not whichever provider
+  (Groq vs. DeepSeek fallback) actually served the request — intentional, since the goal
+  is "replay whatever was returned the first time" for graph-shape reproducibility, not
+  provider attribution.
+- Off by default (`LLM_CACHE_ENABLED=0`) — zero behavior change for production ingestion
+  of new documents. Only opt-in demo/pitch-prep re-ingestion runs are affected.
+- End-to-end verification (two `--wipe --commit` runs producing identical counts) is the
+  one remaining step — needs a live Neo4j + LLM-key environment to execute, which I don't
+  want to kick off unprompted given it wipes the tenant's data. Recommend running it
+  yourself with the command above before relying on it for an interview.
+
+## Follow-up: single-provider override for the cache-populating run (2026-06-07)
+**Why:** user is currently rate-limited ("out of tokens") on Groq. A naive run would
+either stall on Groq's daily cap or mid-run fall through to DeepSeek — mixing two
+providers' extraction "voices" into one cache baseline (defeats the determinism goal).
+**Fix:** added a one-shot env override so `get_llm()` can bypass Groq/FallbackLLM
+entirely and route straight to DeepSeek-V3 (already wired, ~$0.07/1M input tokens,
+"generous rate limits, no sleep, no queuing" per its own docstring).
+
+- [x] New setting `llm_ingest_provider: str = ""` in `graphrag/core/config.py`
+      (env: `LLM_INGEST_PROVIDER=deepseek`) — empty string = unchanged FallbackLLM behavior
+- [x] `get_llm()` in `graphrag/core/llm_client.py` checks the flag first; when set to
+      `"deepseek"` returns a bare `DeepSeekLLM` (logs `llm_client.single_provider_override`)
+      instead of constructing `FallbackLLM`. Return type widened `FallbackLLM` → `BaseLLM`
+      (the actual common parent — both `FallbackLLM` and `DeepSeekLLM` extend it) and
+      `_llm` singleton retyped to match.
+- [x] Confirmed only `graphrag/ingestion/extractor.py` calls `get_llm()` anywhere in the
+      ingestion path (`get_fast_llm()` — untouched — is agentic-retriever-only, not used
+      during ingestion), so this override cannot have query-time side effects.
+- [x] Full unit suite re-run after the change — 362/362 pass (no regressions)
+
+**To use (when Groq quota resets or you want to skip waiting for it):**
+```powershell
+$env:LLM_CACHE_ENABLED     = "1"
+$env:LLM_INGEST_PROVIDER   = "deepseek"
+py -3.11 scripts/ingest_corpus.py --commit --wipe
+# afterwards: Remove-Item Env:\LLM_INGEST_PROVIDER  — one-shot knob, not a permanent switch
+```
+Estimated cost: ~$0.05–$0.30 for the 100-chunk / 12-doc corpus. Estimated time: similar
+to or better than the documented 20–30 min baseline (no Groq rate-limit stalls).
+
+---
+
 # GraphRAG — Production Hardening & Architecture Completion
 
 All work completed across two sessions. Tracked retroactively per CLAUDE.md.

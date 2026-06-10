@@ -38,9 +38,9 @@ A search algorithm that finds the vectors most similar to a query vector — not
 ### Asserted edge / Asserted fact
 A fact explicitly stated in a source document, as opposed to an *inferred* fact derived by a reasoning engine.
 
-**Example:** Document states "FAA-AD-2024-01-02 supersedes FAA-AD-2022-03-07." That creates an asserted `SUPERSEDES` edge with `source_type='asserted'`.
+**Example:** Document states "FAA-AD-2024-01-02 supersedes FAA-AD-2022-03-07." That creates an asserted `SUPERSEDES` edge — recorded with `source_type='document'` (see note below on the literal property value).
 
-**In this project:** All edges written by the extractor have `source_type='asserted'`. The inference engine writes edges with `source_type='inferred'`. Contradiction detection uses this distinction to trace the origin of any conflict.
+**In this project:** All edges written by the extractor carry `source_type='document'` — ⚠ **not** the literal string `'asserted'` (verified live: `MATCH ()-[r:RELATES_TO {tenant:'aerospace'}]->() RETURN r.source_type, count(r)` returns only `'document'` and `'inferred'`). "Asserted" is the human-readable concept — "stated in a source document, as opposed to derived by inference" — but a query filtered on `{source_type: 'asserted'}` returns **zero rows**. Use `'document'`. The inference engine writes edges with `source_type='inferred'`. Contradiction detection uses this distinction to trace the origin of any conflict.
 
 ---
 
@@ -60,7 +60,7 @@ A formula for combining confidence scores from multiple independent sources into
 ### Bi-encoder
 A retrieval model that encodes the query and the document independently into separate vectors, then scores them by vector similarity (e.g., cosine). Fast because document embeddings can be pre-computed.
 
-**Example:** `gemini-embedding-001` encodes both queries and documents into 3072d vectors. At query time, only the query needs encoding; all document embeddings are pre-computed and stored in the vector index.
+**Example:** `text-embedding-3-large` encodes both queries and documents into 3072d vectors. At query time, only the query needs encoding; all document embeddings are pre-computed and stored in the vector index.
 
 **Contrast with:** Cross-encoder — encodes query and document *jointly*, which is more accurate but much slower (can't pre-compute).
 
@@ -192,7 +192,7 @@ A dense vector representation of text (or other data) that captures its semantic
 
 **Example:** "engine mount inspection" and "nacelle attachment inspection" have high cosine similarity because they describe the same concept in different words. "engine mount inspection" and "quarterly earnings report" have low similarity.
 
-**In this project:** 3072-dimensional Gemini embeddings (`gemini-embedding-001`). Stored on `(:Chunk).embedding` and `(:Entity).embedding` in Neo4j. Used for ANN search and entity resolution.
+**In this project:** 3072-dimensional OpenAI embeddings (`text-embedding-3-large`). Stored on `(:Chunk).embedding` and `(:Entity).embedding` in Neo4j. Used for ANN search and entity resolution.
 
 ---
 
@@ -219,7 +219,7 @@ Measures whether the generated answer is factually grounded in the retrieved con
 
 **Example:** Context contains "G-ABCD failed the AD-2024-01-02 compliance check." Answer says "G-ABCD is airworthy." Faithfulness ≈ 0 (answer contradicts context). Answer says "G-ABCD has not completed the required inspection per AD-2024-01-02." Faithfulness ≈ 1.
 
-**In this project:** Computed by `graphrag/evaluation/ragas_evaluator.py`. Logged in `KPIEvent.faithfulness`. Threshold: 0.7 (alert if below).
+**In this project:** Computed by `graphrag/evaluation/ragas_evaluator.py`. Logged in `KPIEvent.faithfulness`. Threshold: 0.8 (alert if below). Measured: **0.937** on answerable questions; **0.842** overall (correct refusals score 0 and are excluded from the answerable denominator).
 
 ---
 
@@ -451,7 +451,7 @@ A technique for grounding LLM answers in external knowledge. Instead of relying 
 ### RAGAS
 A framework for evaluating RAG pipelines on four metrics: faithfulness, answer relevancy, context precision, context recall. Uses an LLM as the judge.
 
-**In this project:** `graphrag/evaluation/ragas_evaluator.py`. Samples 20% of queries automatically. Judge LLM: Groq (Gemini fallback).
+**In this project:** `graphrag/evaluation/ragas_evaluator.py`. Samples 20% of queries automatically. Judge LLM: Groq (DeepSeek-V3 fallback).
 
 ---
 
@@ -561,7 +561,7 @@ A knowledge graph embedding model that learns entity and relation embeddings suc
 ### Vector search
 Retrieval by similarity in embedding space. The query is encoded into a vector, and documents are ranked by cosine similarity (or other distance metrics) to the query vector.
 
-**In this project:** Stage 1. 3072d Gemini embeddings, Neo4j HNSW index. See `graphrag/graph/neo4j_client.py: vector_search_chunks()`.
+**In this project:** Stage 1. 3072d OpenAI embeddings (`text-embedding-3-large`), Neo4j HNSW index. See `graphrag/graph/neo4j_client.py: vector_search_chunks()`.
 
 ---
 

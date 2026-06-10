@@ -105,7 +105,7 @@ From `results/kpi_snapshots/kpis.db` (104 queries measured 2026-06-03):
 Aggregate across 104 queries:
   Avg hybrid latency:  ~2.2s p95 (94 hybrid queries)
   Avg agentic latency: ~3.4s p95 (10 agentic/IRCoT queries)
-  Faithfulness:        0.840  (LLM-judged on 23-query sample)
+  Faithfulness:        0.937 on answerable / 0.842 overall  (correct refusals excluded from answerable)
   Context Precision:   0.907
   Context Recall:      0.867
   Retrieval Mode:      hybrid (90%) / agentic (10%)
@@ -209,24 +209,36 @@ RETURN {
 }
 ```
 
-### Interpretation example — real aerospace corpus (2026-06-03)
+### Interpretation example — real aerospace corpus (2026-06-04)
 
 ```
 Real data from Neo4j (12-doc aerospace regulatory corpus):
-  Entities:             374  (after alias dedup from 600+ extracted)
-  Relations:            456  (asserted + 10 forward-chain inferred)
-  Relation Precision:   99.6% edges above 0.75 threshold ✓
-  Contradiction Rate:   153.51 /1k edges  ⚠ (adversarial demo corpus — expected high)
-  Alias Coverage:       14.7% entities have registered aliases; ~38% dedup reduction
-  Orphan Rate:          0.0% ✓ (all entities linked to source chunks via MENTIONS)
+  Entities:             362  (after alias dedup from 684 extracted — 47% reduction)
+  Relations:            382  (420 pipeline extracted → 371 asserted + 11 inferred = 382 in graph)
+  Inferred edges:       11   (forward-chaining: 9 supersedes_transitivity + 1 certifies_inverse + 1 related_to)
+  Contradiction Rate:   48.26 /1k edges
+  Orphan Rate:          17%  (61 isolated entities — no relations resolved)
   Community Coherence:  90% (39 Leiden communities, real corpus) ✓
-  Open Conflicts:       70 (detected by contradiction detector, live in Neo4j)
+  Open Conflicts:       18 (detected by contradiction detector, live in Neo4j)
 ```
 
-The high contradiction rate (153.51 /1k) is expected on an adversarial demo corpus
-— FAA ADs intentionally supersede each other, creating dense contradiction patterns.
-A production compliance corpus would target < 2.0 /1k. The platform surfaces rather
-than hides contradictions, which is the correct behaviour for regulated domains.
+⚠ **This is a dated illustrative example (2026-06-04), not a current baseline —
+do not quote these numbers as "the real corpus figures" today.** LLM extraction
+is non-deterministic at temperature=0; every fresh `--wipe --commit` of the same
+12-doc corpus reshapes the graph (entity count alone has read 362, 364, and 368
+on three different runs, two of them on the *same day*, 2026-06-07 — see
+`tasks/lessons.md` A96/A98). Use this block to learn **how to read** a graph-health
+report — contradiction rate, orphan rate, inferred-edge breakdown — then re-run
+the live queries in `docs/hiring-and-presentation-strategy.md` Part 6 for
+whatever the actual current numbers are before presenting.
+
+The contradiction rate (48.26 /1k, *as measured on 2026-06-04 — will differ today*)
+reflects genuine document disagreements in the aerospace regulatory corpus. The
+orphan rate (17% on that date) reflects entities mentioned in
+passing in documents without enough context to extract relations — expected in
+technical manuals where tools and part numbers appear without explicit relationships.
+A production run with richer documents would reduce orphan rate through second-pass
+relation extraction.
 
 ---
 
@@ -383,7 +395,7 @@ The system emits alerts when metrics fall outside healthy ranges:
 | `p95_latency_ms` (hybrid) | > 3000 | ⚠️ Warning | Alert on **hybrid-only** p95. Hybrid p95 target: < 2.5s. |
 | `p95_latency_ms` (agentic) | > 10000 | ⚠️ Warning | Agentic/IRCoT runs 3–4 LLM rounds by design; 4–8s is expected and correct. Alert only on outliers. |
 | `agentic_rate` | > 20% | ⚠️ Warning | If >20% of queries trigger agentic fallback, the hybrid confidence threshold is too loose — tighten `_is_low_confidence` trigger. |
-| `faithfulness` | < 0.70 (3-sample window) | ⚠️ Warning | Check recent document ingestions; may have extraction errors. Target is **≥ 0.85**; 0.70 is the alert floor, not the goal. |
+| `faithfulness` | < 0.80 (3-sample window) | ⚠️ Warning | Check recent document ingestions; may have extraction errors. Target is **≥ 0.85**; 0.80 is the alert floor, not the goal. Measured: 0.937 on answerable questions; 0.842 overall (correct refusals score 0 and are excluded from answerable). |
 | `contradiction_rate` | > 3.0 /1k edges | ⚠️ Warning | Moderate contradiction density — review recent ingestion batch |
 | `contradiction_rate` | > 5.0 /1k edges | 🔴 Critical | High contradiction density — indicates schema drift or malformed source docs |
 | `orphan_growth_rate` | > 0.30 | ⚠️ Warning | Entities not connecting to rest of graph; review extraction |
@@ -398,15 +410,18 @@ The system emits alerts when metrics fall outside healthy ranges:
 1. **Start with KPI data**: "We have 104 queries recorded against a live Neo4j instance.
    Hybrid p95 latency is 2.2s. The agentic IRCoT path — which fires on roughly 9% of queries
    for hard multi-hop questions — runs at 3.4s p95 by design. Combined p95 is 2.7s.
-   Faithfulness is 0.840 — 84% of answers fully grounded in retrieved context. Context
+   Faithfulness is 0.937 on answerable questions (0.842 overall including correct refusals). Context
    precision is 0.907, meaning almost everything we retrieve is relevant."
 
 2. **Show graph health**: "The knowledge graph is built from 12 aerospace regulatory
    documents — FAA/EASA airworthiness directives, manufacturer records, fleet data —
-   run through the full real LLM extraction pipeline (374 entities, 456 edges, 70 open
-   conflicts, 0% orphans, 90% community coherence). On a production-scale corpus these
-   health metrics scale automatically — the architecture is designed for ~2k entities
-   and ~7k edges at that scale."
+   run through the full real LLM extraction pipeline (368 entities, 422 edges, 7 open
+   conflicts, 90% community coherence — verified live, 2026-06-07). Raw extraction counts
+   resolve down to that through 4-stage alias deduplication; the exact raw-vs-final ratio
+   varies run to run because LLM extraction is non-deterministic at temperature=0
+   (see `tasks/lessons.md` A96/A98) — don't quote a specific dedup percentage from
+   memory, re-run the live count first. On a production-scale corpus these health
+   metrics scale automatically."
 
 3. **Demonstrate calibration**: "The calibration pipeline uses isotonic regression to
    correct raw LLM confidence scores. Raw llama-3.3-70b confidence on technical corpora

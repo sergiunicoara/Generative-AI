@@ -1,6 +1,6 @@
-# ADR-0004 — Groq for text generation, Gemini for embeddings
+# ADR-0004 — Groq for text generation, OpenAI for embeddings
 
-**Status:** Accepted  
+**Status:** Amended (embeddings provider updated 2026-06-03)  
 **Date:** 2026-05-30  
 **Author:** Sergiu Nicoara
 
@@ -14,6 +14,8 @@ The platform requires two distinct LLM capabilities:
 2. **Embeddings** — 3072d vector representations for ANN search and entity resolution
 
 Initially both were served by Google Gemini (`gemini-2.0-flash` for generation, `gemini-embedding-001` for embeddings). Under load, Gemini's free-tier rate limits (15 RPM / 1M TPM on Flash) became the ingestion bottleneck — a moderate corpus would exhaust daily quota before completing.
+
+*Note: A subsequent amendment (2026-06-03) also migrated embeddings from Gemini to OpenAI `text-embedding-3-large` (3072d). See the Amendment section at the end of this document.*
 
 ---
 
@@ -68,8 +70,38 @@ Configured via `groq_model` and `groq_fast_model` in `settings.yml`.
 - Provider swap is a single-function change
 
 **Negative / watch:**
-- The RAGAS evaluation judge (`ragas_evaluator.py`) uses Groq with Gemini as fallback — if Groq quota is exhausted, RAGAS samples fail silently (logged as WARNING)
+- The RAGAS evaluation judge (`ragas_evaluator.py`) uses Groq with DeepSeek-V3 as fallback — if Groq quota is exhausted, RAGAS samples fail silently (logged as WARNING)
 - Model attribution in result provenance reflects the synthesis model (`groq_model`); routing model is not surfaced in citations
 
 **Migration path for client deployments:**
 Change `get_llm()`, `get_fast_llm()`, and `get_embedder()` in `graphrag/core/llm_client.py`. Nothing else requires modification.
+
+---
+
+## Amendment — 2026-06-03: Embeddings migrated from Gemini to OpenAI
+
+### Context
+
+After ADR-0004 was accepted, the Google Gemini API key was revoked, removing access to `gemini-embedding-001`. The embeddings provider was migrated to OpenAI `text-embedding-3-large`.
+
+### Decision
+
+- **Embeddings:** Switch from `gemini-embedding-001` to `openai/text-embedding-3-large` (3072d)
+- **Generation fallback:** Switch from Gemini Flash to DeepSeek-V3 (`deepseek-chat`) via OpenAI-compatible API
+
+### Why OpenAI for embeddings
+
+- `text-embedding-3-large` also produces 3072d vectors — no schema migration required; the existing Neo4j vector index is fully compatible
+- Switching was a single-line change in `get_embedder()` in `llm_client.py`
+- Cost: ~$0.13/1M tokens (negligible for the 12-doc corpus)
+- Quality on technical text is at least equivalent to `gemini-embedding-001`
+
+### Why DeepSeek-V3 as generation fallback
+
+- OpenAI-compatible REST API — the existing `openai` SDK is reused
+- Generous rate limits; instant failover on Groq 429 with no sleep required
+- Cost: ~$0.07/1M input tokens (cheaper than Gemini Flash)
+
+### Impact
+
+No behavioral change to the retrieval pipeline. Vector dimensions unchanged. All 367 entities and 380 edges re-embedded and re-indexed without schema changes.

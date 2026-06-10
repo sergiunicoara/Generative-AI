@@ -226,7 +226,7 @@ The mock is not a weakness — it's a test strategy. Every production test suite
 
 ---
 
-### Q10. You have 353 passing tests. What's actually being tested?
+### Q10. You have 362 passing tests. What's actually being tested?
 
 **What they're testing:** Whether you know the test coverage or just the number.
 
@@ -244,7 +244,7 @@ Unit tests cover the most failure-prone logic in isolation:
 
 Integration tests require live Docker services (Neo4j, RabbitMQ, Redis) and test the full ingest → query → result round-trip. They auto-skip if Docker is unavailable.
 
-The 353 number matters less than what it covers. The critical paths — confidence arithmetic, embedding alignment, cross-process result sharing, and agent tool safety — all have regression tests from real bugs that were found and fixed.
+The 362 number matters less than what it covers. The critical paths — confidence arithmetic, embedding alignment, cross-process result sharing, and agent tool safety — all have regression tests from real bugs that were found and fixed.
 
 ---
 
@@ -391,11 +391,11 @@ Before any meeting, verify you can do all of these **cold, without notes:**
 - [ ] Run `make smoke-test` — confirm green before the call
 - [ ] Run `python scripts/demo_regulatory.py` and narrate each step without reading the output
 - [ ] Run `python scripts/demo_regulatory.py --live` (requires Neo4j) and show the persisted graph
-- [ ] State the real RAGAS numbers cold: faithfulness 0.840, precision 0.907, recall 0.867
+- [ ] State the real RAGAS numbers cold: faithfulness 0.937 (answerable) / 0.842 overall, precision 0.907, recall 0.867
 - [ ] State the real latency numbers: hybrid p95 2.2s, agentic p95 3.4s, combined 2.7s
 - [ ] Explain why p95 must be reported per mode, not combined
 - [ ] Explain the two-model design: 8B for routing (~0.2s/step), 70B for synthesis (~1.5s)
 - [ ] Answer Q15 (agent control) from memory: allowlist, risk levels, scopes, cross-tenant, dry-run, timeout, audit
-- [ ] Know the test count cold: 353 passing (49 are tool safety guardrail tests)
+- [ ] Know the test count cold: 362 passing (49 are tool safety guardrail tests)
 - [ ] Open `docs/pwc-jd-mapping.md` — know the Gap column entries honestly
 - [ ] Answer Q16 conversationally, honestly, without sounding defensive

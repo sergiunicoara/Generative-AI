@@ -20,7 +20,7 @@ A gap means you know the limit and can explain the next step.
 | Schema design | Indexes, constraints, vector index (3072d) | `graphrag/graph/schema.cypher` | — | None |
 | Multi-hop traversal | `Chunk→Entity→RELATES_TO*→Entity→Chunk` depth 2 | `hybrid_retriever.py → _multihop_expand()` | Demo step 4 | None |
 | 6 production Cypher patterns | Multi-hop, bitemporal, transitive supersession, contradiction scan, community ANN, entity audit | `docs/cypher-patterns.md` | — | None |
-| Live Neo4j demo | Persisted entities, edges, inferred SUPERSEDES edge | `py -3.11 scripts/demo_regulatory.py --live` | Demo step 4–6 | None |
+| Live Neo4j demo | Persisted entities, edges, inferred SUPERSEDES edge | `python scripts/demo_regulatory.py --live` | Demo step 4–6 | None |
 
 ---
 
@@ -55,13 +55,13 @@ A gap means you know the limit and can explain the next step.
 
 | JD Requirement | Project Evidence | File / Endpoint | Demo Step | Gap |
 |---|---|---|---|---|
-| Vector search | Gemini 3072d embeddings, cosine ANN | `graphrag/ingestion/embedder.py` | — | None |
+| Vector search | OpenAI 3072d embeddings (text-embedding-3-large), cosine ANN | `graphrag/ingestion/embedder.py` | — | None |
 | Hybrid retrieval | BM25 + Vector fused via RRF (k=60) | `hybrid_retriever.py → _rrf_merge()` | — | None |
 | Reranking | ms-marco-MiniLM-L-6-v2 cross-encoder | `graphrag/retrieval/cross_encoder_reranker.py` | — | None |
 | GNN scoring | GAT message-passing over entity subgraph | `graphrag/retrieval/gnn_scorer.py` | — | GNN not pre-trained on domain data; uses random init |
 | Agentic retrieval | IRCoT: 8B routing + 70B synthesis, max 2 steps | `graphrag/retrieval/agentic_retriever.py` | — | None |
 | Agent tool safety | Allowlist, scopes, arg validation, timeout, dry-run, audit | `graphrag/agents/tool_policy.py` | — | None |
-| RAGAS evaluation | Faithfulness 0.840, precision 0.907, recall 0.867 | `graphrag/evaluation/ragas_evaluator.py` | — | Evaluation is sampled 20%, not every query |
+| RAGAS evaluation | Faithfulness 0.937 (answerable) / 0.842 overall, precision 0.907, recall 0.867 | `graphrag/evaluation/ragas_evaluator.py` | — | Evaluation is sampled 20%, not every query |
 | Golden eval set | 40 questions, citation recall, pass/fail thresholds | `evals/golden_set.json`, `scripts/run_golden_eval.py` | — | Golden set requires live API; not in CI yet |
 
 ---
@@ -73,7 +73,7 @@ A gap means you know the limit and can explain the next step.
 | Chose property graph over RDF | ADR-0001: 5 alternatives evaluated | `docs/adr/0001-property-graph-over-triple-store.md` | — | None |
 | Inference design | ADR-0002: forward-chaining over backward-chaining | `docs/adr/0002-forward-chaining-over-backward-chaining.md` | Demo step 4 | None |
 | Confidence model | ADR-0003: Bayesian 1-(1-c₁)(1-c₂) over last-write-wins | `docs/adr/0003-bayesian-confidence-accumulation.md` | — | None |
-| Provider choice | ADR-0004: Groq for generation, Gemini for embeddings | `docs/adr/0004-groq-over-gemini-for-text-generation.md` | — | None |
+| Provider choice | ADR-0004: Groq for generation, OpenAI for embeddings; DeepSeek-V3 fallback | `docs/adr/0004-groq-over-gemini-for-text-generation.md` | — | None |
 | Architecture | ADR-0005: Redis result store; ADR-0006: dual-LLM design | `docs/adr/0005-*.md`, `docs/adr/0006-*.md` | — | None |
 
 ---
@@ -138,7 +138,7 @@ A gap means you know the limit and can explain the next step.
 
 | Claim | How to verify |
 |---|---|
-| "Not a tutorial project" | `make test` → 353 passing; `make smoke-test` → exits 0 |
+| "Not a tutorial project" | `make test` → 362 passing; `make smoke-test` → exits 0 |
 | "Observable" | Admin dashboard `/admin/` — 7 health metrics, Brier score, alerts |
 | "Deployable" | `docker compose -f compose.dev.yaml up` → full stack in one command |
 | "Controlled agent" | `ToolPolicy.from_defaults()` — allowlist, scopes, audit, dry-run |
@@ -149,22 +149,30 @@ A gap means you know the limit and can explain the next step.
 
 ## Quick-Reference Numbers
 
+⚠ **Graph-health rows ("real corpus", "isolated entities", etc.) below are a stale
+single-run snapshot — re-verify live before quoting.** LLM extraction is
+non-deterministic at temperature=0; the *identical* 12-doc corpus produces a
+different entity/edge/conflict/orphan count on every `--wipe --commit` (proven
+twice in one day on 2026-06-07: 364→368 entities, 11→7 conflicts, 92.12%→90.27%
+coherence — see `tasks/lessons.md` A96/A98). The 362/382/18/17% figures below
+predate even that — use `GET /kg/health/alerts` or the Admin dashboard's Graph
+Health tab to read the *current* numbers, not these.
+
 | Metric | Value | How to verify |
 |---|---|---|
-| Faithfulness | 0.840 | `GET /evaluation/summary` |
+| Faithfulness | 0.937 (answerable) / 0.842 overall | `GET /evaluation/summary` |
 | Context precision | 0.907 | same |
 | Context recall | 0.867 | same |
 | Hybrid p95 | 2.2s | `GET /kpis/summary` |
 | Agentic p95 | 3.4s | same |
 | Agentic trigger rate | ~9% | same |
-| Entities (real corpus) | 374 (LLM-extracted, after alias dedup) | Neo4j Browser or `/kg/health/alerts` |
-| Relations (real corpus) | 456 (asserted + 10 inferred) | same |
-| Open conflicts detected | 70 (contradiction detector, verified on real data) | Admin dashboard → Conflicts tab |
-| Relation confidence | 99.6% edges ≥ 0.75 | `GET /kg/snapshots` |
-| Alias coverage | 14.7% entities with aliases; 600+→374 canonical (~38% reduction) | Admin dashboard → Graph Health |
-| Orphan rate | 0.0% | same |
+| Entities (real corpus) | 362 (LLM-extracted, after alias dedup from 684 raw) | Neo4j Browser or `/kg/health/alerts` |
+| Relations (real corpus) | 382 (371 asserted + 11 inferred) | same |
+| Open conflicts detected | 18 (contradiction detector, verified on real data) | Admin dashboard → Conflicts tab |
+| Alias dedup rate | ~47% reduction (684 extracted → 362 canonical) | Admin dashboard → Graph Health |
+| Orphan rate | 17% (61 isolated entities) | same |
 | Brier score (calibration pipeline) | target < 0.20 on production corpus | Admin dashboard → Calibration tab |
-| Passing tests | 353 | `py -3.11 -m pytest tests/unit -q` |
+| Passing tests | 362 | `python -m pytest tests/unit -q` |
 | KG modules | 39 | `ls graphrag/graph/*.py \| wc -l` |
 | ADRs | 6 | `ls docs/adr/*.md` |
 | Lines of code | 22,650 | — |

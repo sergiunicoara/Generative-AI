@@ -28,7 +28,7 @@ deployed workload and monitoring data behind the claim.
 | Document authority hierarchy + SUPERSEDES chains | ✅ Implemented / demo-ready | |
 | Multi-tenant isolation | ✅ Implemented / demo-ready | `(name, type, tenant)` key |
 | Leiden community detection (multi-resolution) | ✅ Implemented / demo-ready | graspologic |
-| RAGAS evaluation (20% sampling) | ✅ Implemented / demo-ready | Groq judge (Gemini fallback) |
+| RAGAS evaluation (20% sampling) | ✅ Implemented / demo-ready | Groq judge (DeepSeek-V3 fallback) |
 | OAuth 2.0 (Google browser + M2M JWT) | ✅ Implemented / demo-ready | |
 | GDPR erasure | ✅ Implemented / demo-ready | cascade + audit log |
 | Domain ontologies (YAML-configurable) | ✅ Implemented / demo-ready | Aerospace regulatory demo |
@@ -138,7 +138,7 @@ and technical credibility.
 - **Graph-native reranking** — embed the full RELATES_TO subgraph (not just entity embeddings) as a GNN input; move from static entity embeddings to dynamic multi-hop pooled representations
 - **Multi-modal entities** — `graphrag/graph/multimodal.py` provides storage; add extraction pipeline for images (OCR + visual embeddings) and audio (transcript + speaker embeddings)
 - **Cross-tenant federated queries** — allow read-only federation across tenants with explicit permission grants for cross-domain regulatory queries (e.g. ITAR across suppliers)
-- **Domain-specific embedding models** — replace `gemini-embedding-001` with a fine-tuned domain model (e.g. BioBERT for healthcare, LegalBERT for regulatory) without changing the 3072d index if dimensions match, or via embedding registry migration otherwise
+- **Domain-specific embedding models** — replace `text-embedding-3-large` with a fine-tuned domain model (e.g. BioBERT for healthcare, LegalBERT for regulatory) without changing the 3072d index if dimensions match, or via embedding registry migration otherwise
 
 ### ADRs to write
 
@@ -146,7 +146,7 @@ The following decisions are pending documentation:
 
 | Decision | Status |
 |---|---|
-| Groq over Gemini for text generation | ✅ ADR-0004 written |
+| Groq for text generation + OpenAI for embeddings (amended ADR-0004) | ✅ ADR-0004 written |
 | Redis as cross-process result store | ✅ ADR-0005 written |
 | Dual LLM architecture (8B routing + 70B synthesis) | ✅ ADR-0006 written |
 | Session context enrichment strategy (pre-embed, not pre-LLM) | Documented in lessons.md (A03); upgrade to ADR |

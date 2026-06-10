@@ -188,53 +188,63 @@ and SPARQL endpoints without requiring a full migration to a triple store.
 
 ---
 
-## 9. LLM Routing — Groq for Generation, Gemini for Embeddings
+## 9. LLM Routing — Groq for Generation, OpenAI for Embeddings
 
 All LLM calls are centralised through `graphrag/core/llm_client.py`. This module
-routes text generation to Groq and embeddings to Gemini, with a clean singleton
-interface used across all pipeline stages.
+routes text generation to Groq (with DeepSeek-V3 fallback) and embeddings to
+OpenAI `text-embedding-3-large`, with a clean singleton interface used across
+all pipeline stages.
 
 ```
-                ┌─────────────────────────────┐
-                │       llm_client.py          │
-                │                              │
-                │  get_llm()    → GroqLLM      │
-                │  get_embedder() → GeminiEmbedder │
-                └───────────┬─────────┬────────┘
-                            │         │
-               ┌────────────▼─┐   ┌───▼────────────────┐
-               │ Groq API     │   │ Gemini API          │
-               │ llama-3.3-   │   │ gemini-embedding-   │
-               │ 70b-versatile│   │ 001 (3072d vectors) │
-               └──────────────┘   └────────────────────┘
+                ┌─────────────────────────────────────┐
+                │          llm_client.py               │
+                │                                      │
+                │  get_llm()      → FallbackLLM        │
+                │  get_fast_llm() → FallbackLLM        │
+                │  get_embedder() → OpenAIEmbedder     │
+                └───────────┬──────────────┬───────────┘
+                            │              │
+               ┌────────────▼──┐   ┌───────▼──────────────┐
+               │ Groq API      │   │ OpenAI API            │
+               │ llama-3.3-    │   │ text-embedding-3-     │
+               │ 70b-versatile │   │ large (3072d vectors) │
+               └──────┬────────┘   └──────────────────────┘
+                      │ rate limit
+               ┌──────▼────────┐
+               │ DeepSeek API  │
+               │ deepseek-chat │
+               │ (DeepSeek-V3) │
+               └───────────────┘
 ```
 
 ### Why this split?
 
-| Concern | Groq | Gemini |
+| Concern | Groq + DeepSeek | OpenAI |
 |---|---|---|
-| Text generation | llama-3.3-70b-versatile, free tier, 1500+ RPD | quota-limited, rate-throttled for free keys |
-| Embedding | — | `gemini-embedding-001` (3072d), high-dimensional, cosine-compatible |
-| Cost | Free tier sufficient for dev/testing | Free tier for embeddings only |
+| Text generation | llama-3.3-70b-versatile, ~150 tok/s; DeepSeek-V3 instant failover on 429 | — |
+| Routing steps | llama-3.1-8b-instant, ~800 tok/s | — |
+| Embedding | — | `text-embedding-3-large` (3072d), cosine-compatible, same schema as prior Gemini index |
+| Cost | Free tier sufficient for dev/testing | ~$0.13/1M tokens |
 
-### What uses Groq
+### What uses Groq / DeepSeek
 
 - `graphrag/ingestion/extractor.py` — entity + relation extraction from chunks
 - `graphrag/retrieval/local_search.py` — answer synthesis from retrieved context
 - `graphrag/retrieval/global_search.py` — map-reduce community summarisation
-- `graphrag/retrieval/agentic_retriever.py` — IRCoT sub-queries
+- `graphrag/retrieval/agentic_retriever.py` — IRCoT routing (8B) and synthesis (70B)
 - `graphrag/graph/community_summarizer.py` — LLM community summaries
-- `graphrag/evaluation/ragas_evaluator.py` — RAGAS judge LLM (Groq-first; falls back to Gemini if `langchain-groq` absent)
+- `graphrag/evaluation/ragas_evaluator.py` — RAGAS judge LLM (Groq-first; DeepSeek fallback)
 
-### What uses Gemini (embeddings only)
+### What uses OpenAI (embeddings only)
 
 - `graphrag/ingestion/embedder.py` — chunk embedding batches
 - `graphrag/retrieval/local_search.py` — query embedding for vector ANN
+- `graphrag/agents/ingestion_agent.py` — entity name+description embedding
 
 > **RAGAS evaluator note:** The judge LLM for RAGAS metrics is resolved in priority
-> order: Groq (`langchain-groq`) → Gemini (`langchain-google-genai`) → None.
-> Using Groq keeps the evaluation consistent with the generation pipeline and
-> avoids re-introducing Gemini quota risk. Install with `pip install langchain-groq`.
+> order: Groq (`langchain-groq`) → DeepSeek → None.
+> Using Groq keeps the evaluation consistent with the generation pipeline.
+> Install with `pip install langchain-groq`.
 
 ### Cross-process result store
 

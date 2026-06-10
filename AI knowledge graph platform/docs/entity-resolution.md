@@ -106,7 +106,7 @@ than 50,000 distinct entities.
 ## Stage 3: Embedding Similarity
 
 When fuzzy matching also fails, the pipeline checks whether the incoming entity's
-3072-dimensional Gemini embedding is very close to an existing entity's embedding.
+3072-dimensional OpenAI embedding (text-embedding-3-large) is very close to an existing entity's embedding.
 
 ```cypher
 CALL db.index.vector.queryNodes('entity_embeddings', 5, $embedding)

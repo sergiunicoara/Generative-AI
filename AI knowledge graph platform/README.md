@@ -43,7 +43,7 @@ The graph is not a RAG index. It is a formally modeled knowledge base:
 - [`docs/adr/0001-property-graph-over-triple-store.md`](docs/adr/0001-property-graph-over-triple-store.md) — Why Neo4j over RDF triple stores
 - [`docs/adr/0002-forward-chaining-over-backward-chaining.md`](docs/adr/0002-forward-chaining-over-backward-chaining.md) — Why materialised inference over query-time reasoning
 - [`docs/adr/0003-bayesian-confidence-accumulation.md`](docs/adr/0003-bayesian-confidence-accumulation.md) — Why `1−(1−c₁)(1−c₂)` over last-write-wins
-- [`docs/adr/0004-groq-over-gemini-for-text-generation.md`](docs/adr/0004-groq-over-gemini-for-text-generation.md) — Why Groq for generation + Gemini for embeddings; two-model design rationale
+- [`docs/adr/0004-groq-over-gemini-for-text-generation.md`](docs/adr/0004-groq-over-gemini-for-text-generation.md) — LLM provider selection; two-model design rationale; OpenAI for embeddings
 - [`docs/adr/0005-redis-as-cross-process-result-store.md`](docs/adr/0005-redis-as-cross-process-result-store.md) — Why Redis over PostgreSQL and RabbitMQ reply-to for result persistence
 - [`docs/adr/0006-dual-llm-architecture.md`](docs/adr/0006-dual-llm-architecture.md) — Why 8B routing + 70B synthesis cuts agentic p95 from 6.8 s to 3.4 s
 - [`docs/pwc-jd-mapping.md`](docs/pwc-jd-mapping.md) — Every JD requirement mapped to file + endpoint + demo step + honest gap
@@ -203,7 +203,7 @@ The cross-encoder scores text similarity. It doesn't know that *Falcon 9* and *S
 | Reranker | `cross-encoder/ms-marco-MiniLM-L-6-v2` (sentence-transformers) |
 | GNN | PyTorch — GAT / GCN (configurable) |
 | Community detection | graspologic (Leiden algorithm) |
-| Agent Framework | Google ADK |
+| Agent Framework | Custom dual-LLM IRCoT (8B routing + 70B synthesis) |
 | Evaluation | RAGAS |
 | API | FastAPI + Uvicorn |
 | Dashboard | Plotly Dash |
@@ -233,7 +233,7 @@ AI knowledge graph platform/
 │
 ├── graphrag/
 │   ├── agents/
-│   │   ├── base_agent.py            # Abstract Google ADK agent base
+│   │   ├── base_agent.py            # Abstract agent base
 │   │   ├── ingestion_agent.py       # Document → chunk → embed → extract → graph
 │   │   ├── query_agent.py           # Question → retrieve → answer
 │   │   └── evaluation_agent.py      # RAGAS scoring agent
@@ -277,7 +277,7 @@ AI knowledge graph platform/
 │       ├── local_search.py          # 6-stage pipeline: vector + BM25 + rerank + multihop + GNN + context
 │       ├── global_search.py         # Community embedding search + map-reduce synthesis
 │       ├── hybrid_retriever.py      # Combines local + global; agentic fallback; session turn recording
-│       ├── agentic_retriever.py     # Iterative IRCoT re-search (Google ADK)
+│       ├── agentic_retriever.py     # Iterative IRCoT re-search (dual-LLM: 8B routing + 70B synthesis)
 │       ├── bm25_search.py           # HybridBM25Search with RRF (k=60)
 │       ├── reranker.py              # CrossEncoderReranker (ms-marco-MiniLM-L-6-v2)
 │       ├── session_context.py       # Async session context: query enrichment from prior turns
@@ -325,7 +325,7 @@ Full end-to-end test completed 2026-03-21 (updated 2026-05-31 with Groq integrat
 |------|-----------|--------|
 | Infrastructure | Neo4j + RabbitMQ + TimescaleDB + Redis | ✅ Healthy |
 | API | FastAPI + OAuth + lifespan hook | ✅ Running on :8000 |
-| Ingestion | doc → chunk → embed (Gemini 3072d) → extract (Groq Llama) → graph | ✅ |
+| Ingestion | doc → chunk → embed (OpenAI text-embedding-3-large 3072d) → extract (Groq/DeepSeek Llama) → graph | ✅ |
 | Schema | Vector indexes + BM25 fulltext indexes (6 total, all ONLINE) | ✅ |
 | Graph counts | 1 doc · 1 chunk · 5 entities · 4 relations | ✅ |
 | Hybrid search | BM25=10 + vector=10 → fused=10 chunks | ✅ |
@@ -352,20 +352,23 @@ Full end-to-end test completed 2026-03-21 (updated 2026-05-31 with Groq integrat
 ```bash
 git clone <repo>
 cd "AI knowledge graph platform"
-py -3.11 -m pip install -r requirements.txt
+python -m pip install -r requirements.txt
 ```
 
 ### 3. Configure `.env`
 
 ```env
-# Google AI — embeddings only (3072d vectors)
-GOOGLE_API_KEY=AIzaSy...
-GEMINI_EMBED_MODEL=gemini-embedding-001
+# OpenAI — embeddings only (text-embedding-3-large, 3072d)
+# Get key at: https://platform.openai.com/api-keys
+OPENAI_API_KEY=sk-...
 
-# Groq — text generation (free-tier, 1500+ RPD)
+# Groq — text generation primary (100k TPD free tier)
 # Get key at: https://console.groq.com/keys
 GROQ_API_KEY=gsk_...
 GROQ_MODEL=llama-3.3-70b-versatile
+
+# DeepSeek — generation fallback on Groq rate-limit
+DEEPSEEK_API_KEY=sk-...
 
 # Neo4j
 NEO4J_URI=bolt://localhost:7687
@@ -382,8 +385,8 @@ REDIS_URL=redis://localhost:6379/0
 TIMESCALE_URL=postgresql+asyncpg://graphrag:graphrag_dev@localhost:5432/graphrag_kpis
 
 # OAuth 2.0
-JWT_SECRET_KEY=<run: py -3.11 -c "import secrets; print(secrets.token_hex(32))">
-SESSION_SECRET_KEY=<run: py -3.11 -c "import secrets; print(secrets.token_hex(32))">
+JWT_SECRET_KEY=<run: python -c "import secrets; print(secrets.token_hex(32))">
+SESSION_SECRET_KEY=<run: python -c "import secrets; print(secrets.token_hex(32))">
 GOOGLE_OAUTH_CLIENT_ID=your-client-id.apps.googleusercontent.com
 GOOGLE_OAUTH_CLIENT_SECRET=your-client-secret
 CORS_ORIGINS=["http://localhost:8000","http://localhost:8050"]
@@ -402,7 +405,7 @@ docker compose -f compose.dev.yaml up   # full stack: Neo4j + RabbitMQ + Redis +
 ### 5. Initialize Neo4j schema
 
 ```bash
-py -3.11 scripts/init_neo4j.py
+python scripts/init_neo4j.py
 ```
 
 Run once after Neo4j first starts. Creates vector indexes, fulltext indexes, constraints, and relation indexes (all idempotent).
@@ -418,24 +421,24 @@ All services start in dependency order. Workers expose `GET /ready` health probe
 **Option B — Local Python (four terminals):**
 ```bash
 # Terminal 1 — API
-py -3.11 -m uvicorn api.main:app --host 0.0.0.0 --port 8000 --reload
+python -m uvicorn api.main:app --host 0.0.0.0 --port 8000 --reload
 
 # Terminal 2 — Ingestion worker  (health probe: http://localhost:8081/ready)
-py -3.11 workers/ingestion_worker.py
+python workers/ingestion_worker.py
 
 # Terminal 3 — Query worker      (health probe: http://localhost:8082/ready)
-py -3.11 workers/query_worker.py
+python workers/query_worker.py
 
 # Terminal 4 — Evaluation worker (health probe: http://localhost:8083/ready)
-py -3.11 workers/evaluation_worker.py
+python workers/evaluation_worker.py
 
 # Terminal 5 — Dashboard
-py -3.11 graphrag/business_matrix/dashboard_server.py
+python graphrag/business_matrix/dashboard_server.py
 ```
 
 **Single-machine shortcut:**
 ```bash
-py -3.11 workers/combined_worker.py
+python workers/combined_worker.py
 ```
 
 ### 7. Ingest real corpus data
@@ -444,18 +447,20 @@ Ingest the 12-document aerospace regulatory corpus through the full LLM extracti
 pipeline (Groq/DeepSeek → OpenAI embeddings → alias resolution → contradiction detection):
 
 ```bash
-py -3.11 scripts/ingest_corpus.py --commit --wipe
+python scripts/ingest_corpus.py --commit --wipe
 # Single document:
-py -3.11 scripts/ingest_corpus.py --commit --doc FAA-AD-2024-01-02.txt
+python scripts/ingest_corpus.py --commit --doc FAA-AD-2024-01-02.txt
 ```
 
-This produces real graph health metrics:
-**374 entities · 456 edges · 70 open conflicts · 99.6% high-confidence · 0% orphans**
+This produces real graph health metrics (⚠ LLM extraction is non-deterministic —
+these numbers shift on every fresh `--wipe --commit` run; verify live before
+presenting, see `tasks/lessons.md` A96/A98):
+**368 entities · 422 edges · 7 open conflicts · 53 Leiden communities · 90.3% community coherence**
 
 For a lightweight demo with hardcoded seed data (no LLM calls):
 
 ```bash
-py -3.11 scripts/seed_demo_data.py --commit --tenant aerospace
+python scripts/seed_demo_data.py --commit --tenant aerospace
 ```
 
 ---
@@ -506,13 +511,13 @@ Invoke-RestMethod -Uri http://localhost:8000/corrections/conflict-resolve -Metho
 
 ```bash
 # Check staleness, rebuild if needed
-py -3.11 scripts/community_rebuild.py --tenant default
+python scripts/community_rebuild.py --tenant default
 
 # Force rebuild regardless of staleness
-py -3.11 scripts/community_rebuild.py --tenant default --force
+python scripts/community_rebuild.py --tenant default --force
 
 # Dry-run: check without rebuilding
-py -3.11 scripts/community_rebuild.py --tenant default --dry-run
+python scripts/community_rebuild.py --tenant default --dry-run
 ```
 
 ---
@@ -677,14 +682,16 @@ Every ingestion batch runs the following checks automatically:
 
 ## Measured Performance (live, aerospace regulatory corpus)
 
-### Answer Quality — RAGAS (20% sample, llama-3.3-70b, 104 queries)
+### Answer Quality — RAGAS (llama-3.3-70b synthesis, DeepSeek RAGAS judge)
 
 | Metric | Measured | Target |
 |--------|----------|--------|
-| `faithfulness` | **0.840** | ≥ 0.85 |
+| `faithfulness` | **0.937** (answerable) / **0.842** overall¹ | ≥ 0.85 ✓ |
 | `answer_relevancy` | **0.816** | ≥ 0.80 ✓ |
 | `context_precision` | **0.907** | ≥ 0.80 ✓ |
 | `context_recall` | **0.867** | ≥ 0.80 ✓ |
+
+¹ *Correct refusals (when the corpus genuinely lacks the answer) score 0 in RAGAS and are excluded from the answerable denominator. A system that declines rather than invents is the desired behaviour.*
 
 ### Latency — reported per retrieval mode (A73: never combine)
 
@@ -694,21 +701,26 @@ Every ingestion batch runs the following checks automatically:
 | Agentic (IRCoT) | 2,842 ms | **3,442 ms** | 9% of queries — by design |
 | Combined | 1,842 ms | 2,719 ms | Inflated by mode mix |
 
-### Graph Health (12-doc aerospace corpus · real LLM-extracted data · 2026-06-03)
+### Graph Health (12-doc aerospace corpus · real LLM-extracted data · 2026-06-07)
 
 Real corpus ingested via `scripts/ingest_corpus.py` — full extraction pipeline.
 
-| Metric | Real value | Production target | Threshold |
+⚠ **These numbers are a snapshot of one ingestion run, not a stable baseline.**
+LLM extraction is non-deterministic at temperature=0 (batched GPU/LPU inference
+— see `tasks/lessons.md` A96/A98): a fresh `--wipe --commit` of the *same* 12-doc
+corpus produced 364 entities/380 edges/11 conflicts on 2026-06-07 morning and
+368/422/7 a few hours later, same day. **Always re-run the live queries below
+immediately before presenting — never quote these from memory of a prior run.**
+
+| Metric | Real value (verified live, 2026-06-07) | Production target | Threshold |
 |--------|------------|-------------------|-----------|
-| **Entities** | **374** (after alias dedup from 600+ extracted) | ~2,000+ | — |
-| **Relations** | **456** (asserted + 10 inferred) | ~7,000+ | — |
-| **Open conflicts** | **70** detected | — | — |
-| **Relation confidence** | **99.6%** edges ≥ 0.75 | > 80% | > 70% |
-| **Alias coverage** | **14.7%** entities with aliases; ~38% entity reduction | > 90% | > 85% |
-| **Orphan rate** | **0.0%** | < 10% | < 20% |
-| Contradiction density | 153.51 /1k *(adversarial demo corpus)* | < 0.85 /1k | < 2.0 |
-| Community coherence | pipeline wired | > 0.65 | > 0.50 |
-| Brier score (calibration) | pipeline wired | < 0.20 | < 0.25 |
+| **Entities** | **368** (alias-deduplicated; raw extraction count is run-dependent — don't hardcode it) | ~2,000+ | — |
+| **Relations** | **422** (412 `source_type='document'` + 10 `source_type='inferred'`) | ~7,000+ | — |
+| **Open conflicts** | **7** detected | — | — |
+| **Orphan rate** | **10.9%** (40 entities without relations) | < 10% | < 20% |
+| Contradiction density | **16.59 /1k edges** | < 0.85 /1k | < 2.0 |
+| Community coherence | **90.3%** (53 Leiden communities) | > 0.65 | > 0.50 |
+| Brier score (calibration) | pipeline wired, **0 live samples** — empty-state, not a number | < 0.20 | < 0.25 |
 
 Evaluation is sampled at **20%** of queries automatically. View results:
 
@@ -782,7 +794,7 @@ GRAPHRAG_DASHBOARD_DEMO=1 uvicorn api.main:app --port 8001   # → http://localh
 
 | Error | Cause | Fix |
 |-------|-------|-----|
-| `No such vector schema index: chunk_embeddings` | Schema not initialized | Run `py -3.11 scripts/init_neo4j.py` |
+| `No such vector schema index: chunk_embeddings` | Schema not initialized | Run `python scripts/init_neo4j.py` |
 | `startup.session_store_unavailable` | Redis unreachable at startup | Start Redis or set `session_store_strict: false` in settings.yml |
 | `graspologic is not installed` | Leiden community detection unavailable | `pip install graspologic` or set `require_leiden: false` (degrades global search) |
 | `No module named 'groq'` | Groq package not installed | `pip install groq` |
@@ -791,7 +803,7 @@ GRAPHRAG_DASHBOARD_DEMO=1 uvicorn api.main:app --port 8001   # → http://localh
 | `NotImplementedError: add_signal_handler` (Windows) | Signal handlers not supported on Windows | Fixed in workers — guarded with `if sys.platform != "win32":` |
 | `size((e)-[:RELATES_TO]-()) deprecated` | Neo4j 5.x deprecation | Fixed — queries use `COUNT { (e)-[:RELATES_TO]-() }` |
 | Query stuck at `status: queued` forever | Worker and API in separate processes with no shared store | Ensure Redis is running; both processes use `ResultStore` backed by Redis |
-| `403 API key leaked/expired` | Google revoked the Gemini key | Create new key at aistudio.google.com, update `.env`, restart |
+| `403 API key leaked/expired` | OpenAI or DeepSeek key expired | Regenerate at platform.openai.com or platform.deepseek.com, update `.env`, restart |
 | `AMQPConnectionError` | RabbitMQ not running | `docker compose -f compose.dev.yaml up rabbitmq` |
 | `Invalid token: Not enough segments` | Empty/expired JWT | Re-run `/auth/dev-token` and rebuild `$h` headers |
 | Workers connecting to wrong host in Docker | `.env` uses `localhost` | Docker overrides in `docker-compose.yml` use service names |

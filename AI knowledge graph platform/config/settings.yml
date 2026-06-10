@@ -39,6 +39,7 @@ retrieval:
   local_top_k: 10          # validated baseline — precision 0.907 measured at this value
   multihop_depth: 2        # validated baseline — depth 3 diluted retrieval and caused refusals on answerable questions
   multihop_top_k: 50       # max hop chunks fed to GNN — prevents full-corpus scoring on dense graphs (bug fix: 21min→30s)
+  multihop_semantic_weight: 0.5  # blend hop ranking: (1-w)·path_score + w·cos(chunk,query), cosine computed in Neo4j. 0 = pure path score (pre-2026-06 behavior). Gated on retrieval eval — see scripts/eval_hop_ranking.py
   global_top_communities: 5
   rerank_top_k: 5          # validated baseline — precision 0.907 measured at this value
   hybrid_weight_local: 0.6

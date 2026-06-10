@@ -140,10 +140,18 @@ class LocalSearch:
         seed_ids = [c["chunk_id"] for c in seed_chunks]
 
         # Step 4 — multi-hop graph traversal
+        # Semantic blend: rank hop chunks by (1-w)·path_score + w·cos(chunk, query)
+        # BEFORE the multihop_top_k cap, so the cap keeps query-relevant chunks
+        # rather than just topologically-cheap ones. Cosine runs inside Neo4j —
+        # no embeddings cross the wire. Requires the query embedding, so it
+        # degrades to pure path-score ranking when vector search is disabled.
+        sem_weight = self._cfg.get("multihop_semantic_weight", 0.0)
         hop_chunks = await self._neo4j.get_multihop_chunks(
             seed_ids,
             hops=hops,
             tenant=tenant,
+            query_embedding=embedding if sem_weight > 0 else None,
+            semantic_weight=sem_weight,
         )
 
         hop_top_k = self._cfg.get("multihop_top_k", 50)

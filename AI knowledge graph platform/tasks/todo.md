@@ -430,3 +430,44 @@ all gaps introduced by the Groq migration and missing leadership/ops artifacts.
 ### Verified
 - Unit suite: **304 passed, 0 failed**
 - `scripts/demo_regulatory.py` runs all 6 steps on Windows without live services
+
+---
+
+## Done: Semantic blending for multi-hop chunk ranking (2026-06-10)
+
+**Problem:** hop chunks were capped at 50 (`multihop_top_k`) ranked purely by
+`path_score = path_confidence / path_length` — graph topology only. On dense
+graphs, semantically relevant chunks could fall below the cap while
+topologically-cheap-but-irrelevant ones survived.
+
+**Change:** rank hop chunks by `(1-w)·path_score + w·cos(chunk_emb, query_emb)`
+BEFORE the cap, with the cosine computed inside Neo4j
+(`vector.similarity.cosine`) so no embeddings cross the wire.
+
+- [x] `graphrag/graph/neo4j_client.py` — `get_multihop_chunks()` accepts
+      `query_embedding` + `semantic_weight`; null-safe fallback for chunks
+      without embeddings; blend computed in Cypher
+- [x] `graphrag/retrieval/local_search.py` — passes query embedding (already
+      computed for vector search — zero extra embed calls); degrades to pure
+      path score when vector search disabled
+- [x] `config/settings.yml` — `multihop_semantic_weight: 0.5`
+- [x] `scripts/eval_hop_ranking.py` — retrieval-level A/B gate (no LLM judge):
+      citation hit rate / coverage / MRR on golden set, both arms
+- [x] `scripts/ingest_corpus.py` — now applies `schema.cypher` (idempotent)
+      before commit writes; guards against fresh Neo4j volumes missing
+      `chunk_embeddings` / `chunk_fulltext` indexes (found during eval setup:
+      both were missing from the live DB — vector + BM25 retrieval would
+      silently break on a fresh clone)
+
+**Eval gate result (33 golden questions with expected citations):**
+| arm | hit rate | coverage | MRR | p50 |
+|---|---|---|---|---|
+| baseline w=0 | 1.000 | 1.000 | 0.385 | 10.36s |
+| blend w=0.5 | 1.000 | 1.000 | **0.545** | 10.67s |
+
+MRR +0.160 (+42% relative) — expected-citation chunks rank visibly higher;
+zero hit/coverage regression; +0.3s latency (cosine on ~3.7k chunks in-DB).
+VERDICT: keep w=0.5. Results: `evals/hop_ranking_eval_results.json`.
+
+**Verified:** 362/362 unit tests pass; dry-run ingest OK; eval ran against
+live Neo4j (aerospace tenant, 368 entities / 422 edges).

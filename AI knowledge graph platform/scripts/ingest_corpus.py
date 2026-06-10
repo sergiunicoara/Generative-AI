@@ -81,6 +81,27 @@ async def ingest_all(
 
     neo4j = get_neo4j()
 
+    if commit:
+        # Ensure schema (constraints + vector/fulltext indexes) before any
+        # writes. All statements are IF NOT EXISTS, so this is idempotent —
+        # and it guards against a fresh/recreated Neo4j volume where e.g.
+        # chunk_embeddings / chunk_fulltext are missing, which silently breaks
+        # vector + BM25 retrieval after an otherwise-successful ingestion.
+        schema_path = Path(__file__).parents[1] / "graphrag" / "graph" / "schema.cypher"
+        applied = 0
+        for stmt in schema_path.read_text(encoding="utf-8").split(";"):
+            stmt = "\n".join(
+                l for l in stmt.splitlines() if not l.strip().startswith("--")
+            ).strip()
+            if not stmt:
+                continue
+            try:
+                await neo4j.run(stmt)
+                applied += 1
+            except Exception as exc:  # index may exist with other options — non-fatal
+                log.warning("ingest_corpus.schema_stmt_failed", error=str(exc)[:120])
+        print(f"  [schema] {applied} constraint/index statements ensured\n")
+
     if wipe and commit:
         log.info("ingest_corpus.wipe_tenant", tenant=TENANT)
         await neo4j.run(

@@ -1,0 +1,426 @@
+{
+  "run_at": "2026-06-10T06:54:55.447834+00:00",
+  "tenant": "aerospace",
+  "baseline": {
+    "weight": 0.0,
+    "n_questions": 33,
+    "hit_rate": 1.0,
+    "mean_coverage": 1.0,
+    "mrr": 0.38523186442811175,
+    "p50_latency_s": 10.35742559999926,
+    "per_question": [
+      {
+        "id": "SH-01",
+        "hit": true,
+        "coverage": 1.0,
+        "mrr": 0.16666666666666666
+      },
+      {
+        "id": "SH-02",
+        "hit": true,
+        "coverage": 1.0,
+        "mrr": 0.041666666666666664
+      },
+      {
+        "id": "SH-03",
+        "hit": true,
+        "coverage": 1.0,
+        "mrr": 0.5
+      },
+      {
+        "id": "SH-04",
+        "hit": true,
+        "coverage": 1.0,
+        "mrr": 0.3333333333333333
+      },
+      {
+        "id": "SH-05",
+        "hit": true,
+        "coverage": 1.0,
+        "mrr": 1.0
+      },
+      {
+        "id": "SH-06",
+        "hit": true,
+        "coverage": 1.0,
+        "mrr": 1.0
+      },
+      {
+        "id": "SH-07",
+        "hit": true,
+        "coverage": 1.0,
+        "mrr": 1.0
+      },
+      {
+        "id": "SH-08",
+        "hit": true,
+        "coverage": 1.0,
+        "mrr": 0.3333333333333333
+      },
+      {
+        "id": "MH-01",
+        "hit": true,
+        "coverage": 1.0,
+        "mrr": 0.25
+      },
+      {
+        "id": "MH-02",
+        "hit": true,
+        "coverage": 1.0,
+        "mrr": 0.3333333333333333
+      },
+      {
+        "id": "MH-03",
+        "hit": true,
+        "coverage": 1.0,
+        "mrr": 0.3333333333333333
+      },
+      {
+        "id": "MH-04",
+        "hit": true,
+        "coverage": 1.0,
+        "mrr": 0.08333333333333333
+      },
+      {
+        "id": "MH-05",
+        "hit": true,
+        "coverage": 1.0,
+        "mrr": 1.0
+      },
+      {
+        "id": "MH-06",
+        "hit": true,
+        "coverage": 1.0,
+        "mrr": 1.0
+      },
+      {
+        "id": "CON-01",
+        "hit": true,
+        "coverage": 1.0,
+        "mrr": 0.07142857142857142
+      },
+      {
+        "id": "CON-02",
+        "hit": true,
+        "coverage": 1.0,
+        "mrr": 0.03125
+      },
+      {
+        "id": "AUT-01",
+        "hit": true,
+        "coverage": 1.0,
+        "mrr": 0.058823529411764705
+      },
+      {
+        "id": "AUT-02",
+        "hit": true,
+        "coverage": 1.0,
+        "mrr": 1.0
+      },
+      {
+        "id": "AUT-03",
+        "hit": true,
+        "coverage": 1.0,
+        "mrr": 0.06666666666666667
+      },
+      {
+        "id": "INF-01",
+        "hit": true,
+        "coverage": 1.0,
+        "mrr": 0.25
+      },
+      {
+        "id": "INF-02",
+        "hit": true,
+        "coverage": 1.0,
+        "mrr": 1.0
+      },
+      {
+        "id": "NEG-01",
+        "hit": true,
+        "coverage": 1.0,
+        "mrr": 0.06666666666666667
+      },
+      {
+        "id": "NEG-02",
+        "hit": true,
+        "coverage": 1.0,
+        "mrr": 1.0
+      },
+      {
+        "id": "TMP-01",
+        "hit": true,
+        "coverage": 1.0,
+        "mrr": 0.2
+      },
+      {
+        "id": "TMP-02",
+        "hit": true,
+        "coverage": 1.0,
+        "mrr": 0.2
+      },
+      {
+        "id": "TMP-03",
+        "hit": true,
+        "coverage": 1.0,
+        "mrr": 0.3333333333333333
+      },
+      {
+        "id": "PRE-01",
+        "hit": true,
+        "coverage": 1.0,
+        "mrr": 0.034482758620689655
+      },
+      {
+        "id": "PRE-02",
+        "hit": true,
+        "coverage": 1.0,
+        "mrr": 0.3333333333333333
+      },
+      {
+        "id": "CAL-01",
+        "hit": true,
+        "coverage": 1.0,
+        "mrr": 0.1
+      },
+      {
+        "id": "AGT-01",
+        "hit": true,
+        "coverage": 1.0,
+        "mrr": 0.1
+      },
+      {
+        "id": "AGT-02",
+        "hit": true,
+        "coverage": 1.0,
+        "mrr": 0.125
+      },
+      {
+        "id": "CTX-01",
+        "hit": true,
+        "coverage": 1.0,
+        "mrr": 0.16666666666666666
+      },
+      {
+        "id": "CTX-02",
+        "hit": true,
+        "coverage": 1.0,
+        "mrr": 0.2
+      }
+    ]
+  },
+  "blended": {
+    "weight": 0.5,
+    "n_questions": 33,
+    "hit_rate": 1.0,
+    "mean_coverage": 1.0,
+    "mrr": 0.5450222122391933,
+    "p50_latency_s": 10.667544200005068,
+    "per_question": [
+      {
+        "id": "SH-01",
+        "hit": true,
+        "coverage": 1.0,
+        "mrr": 1.0
+      },
+      {
+        "id": "SH-02",
+        "hit": true,
+        "coverage": 1.0,
+        "mrr": 1.0
+      },
+      {
+        "id": "SH-03",
+        "hit": true,
+        "coverage": 1.0,
+        "mrr": 0.08333333333333333
+      },
+      {
+        "id": "SH-04",
+        "hit": true,
+        "coverage": 1.0,
+        "mrr": 1.0
+      },
+      {
+        "id": "SH-05",
+        "hit": true,
+        "coverage": 1.0,
+        "mrr": 1.0
+      },
+      {
+        "id": "SH-06",
+        "hit": true,
+        "coverage": 1.0,
+        "mrr": 0.5
+      },
+      {
+        "id": "SH-07",
+        "hit": true,
+        "coverage": 1.0,
+        "mrr": 1.0
+      },
+      {
+        "id": "SH-08",
+        "hit": true,
+        "coverage": 1.0,
+        "mrr": 0.3333333333333333
+      },
+      {
+        "id": "MH-01",
+        "hit": true,
+        "coverage": 1.0,
+        "mrr": 0.5
+      },
+      {
+        "id": "MH-02",
+        "hit": true,
+        "coverage": 1.0,
+        "mrr": 0.1111111111111111
+      },
+      {
+        "id": "MH-03",
+        "hit": true,
+        "coverage": 1.0,
+        "mrr": 1.0
+      },
+      {
+        "id": "MH-04",
+        "hit": true,
+        "coverage": 1.0,
+        "mrr": 0.0625
+      },
+      {
+        "id": "MH-05",
+        "hit": true,
+        "coverage": 1.0,
+        "mrr": 1.0
+      },
+      {
+        "id": "MH-06",
+        "hit": true,
+        "coverage": 1.0,
+        "mrr": 1.0
+      },
+      {
+        "id": "CON-01",
+        "hit": true,
+        "coverage": 1.0,
+        "mrr": 1.0
+      },
+      {
+        "id": "CON-02",
+        "hit": true,
+        "coverage": 1.0,
+        "mrr": 0.047619047619047616
+      },
+      {
+        "id": "AUT-01",
+        "hit": true,
+        "coverage": 1.0,
+        "mrr": 0.047619047619047616
+      },
+      {
+        "id": "AUT-02",
+        "hit": true,
+        "coverage": 1.0,
+        "mrr": 1.0
+      },
+      {
+        "id": "AUT-03",
+        "hit": true,
+        "coverage": 1.0,
+        "mrr": 0.03571428571428571
+      },
+      {
+        "id": "INF-01",
+        "hit": true,
+        "coverage": 1.0,
+        "mrr": 0.16666666666666666
+      },
+      {
+        "id": "INF-02",
+        "hit": true,
+        "coverage": 1.0,
+        "mrr": 1.0
+      },
+      {
+        "id": "NEG-01",
+        "hit": true,
+        "coverage": 1.0,
+        "mrr": 0.0625
+      },
+      {
+        "id": "NEG-02",
+        "hit": true,
+        "coverage": 1.0,
+        "mrr": 1.0
+      },
+      {
+        "id": "TMP-01",
+        "hit": true,
+        "coverage": 1.0,
+        "mrr": 0.3333333333333333
+      },
+      {
+        "id": "TMP-02",
+        "hit": true,
+        "coverage": 1.0,
+        "mrr": 1.0
+      },
+      {
+        "id": "TMP-03",
+        "hit": true,
+        "coverage": 1.0,
+        "mrr": 1.0
+      },
+      {
+        "id": "PRE-01",
+        "hit": true,
+        "coverage": 1.0,
+        "mrr": 0.027777777777777776
+      },
+      {
+        "id": "PRE-02",
+        "hit": true,
+        "coverage": 1.0,
+        "mrr": 0.2
+      },
+      {
+        "id": "CAL-01",
+        "hit": true,
+        "coverage": 1.0,
+        "mrr": 1.0
+      },
+      {
+        "id": "AGT-01",
+        "hit": true,
+        "coverage": 1.0,
+        "mrr": 0.0625
+      },
+      {
+        "id": "AGT-02",
+        "hit": true,
+        "coverage": 1.0,
+        "mrr": 0.14285714285714285
+      },
+      {
+        "id": "CTX-01",
+        "hit": true,
+        "coverage": 1.0,
+        "mrr": 0.018867924528301886
+      },
+      {
+        "id": "CTX-02",
+        "hit": true,
+        "coverage": 1.0,
+        "mrr": 0.25
+      }
+    ]
+  },
+  "deltas": {
+    "hit_rate": 0.0,
+    "coverage": 0.0,
+    "mrr": 0.1597903478110816
+  },
+  "verdict": "IMPROVEMENT \u2014 blend lifts coverage/MRR with no hit regression"
+}

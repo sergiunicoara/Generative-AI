@@ -362,6 +362,8 @@ class Neo4jClient:
         hops: int = 2,
         as_of: str | None = None,
         tenant: str = "default",
+        query_embedding: list[float] | None = None,
+        semantic_weight: float = 0.0,
     ) -> list[dict]:
         """
         Multi-hop graph traversal with temporal filtering and path quality scoring.
@@ -374,6 +376,15 @@ class Neo4jClient:
         Temporal filter: only traverses edges valid at `as_of` datetime.
         Quarantine filter: skips quarantined entities.
         Tenant filter: only returns chunks for the given tenant.
+
+        Semantic blend: when `query_embedding` is given and `semantic_weight`
+        > 0, ranking becomes
+            (1-w) * (path_confidence / path_length) + w * cos(chunk_emb, query_emb)
+        with the cosine computed *inside Neo4j* (`vector.similarity.cosine`),
+        so no embeddings cross the wire. The caller caps hop chunks (e.g. at
+        50) before GNN scoring — pure topology ranking can push semantically
+        relevant chunks below that cap on dense graphs. Chunks without an
+        embedding fall back to the pure path score.
         """
         temporal_filter = (
             "AND ALL(r IN relationships(path) WHERE "
@@ -387,6 +398,18 @@ class Neo4jClient:
             "MATCH (d:Document {id: r.source_doc_id}) "
             "WHERE d.tenant = $tenant })"
             if tenant != "default" else ""
+        )
+        use_semantic = query_embedding is not None and semantic_weight > 0
+        score_expr = (
+            # blend graph-path quality with query similarity; null-safe fallback
+            "CASE WHEN sem_sim IS NULL THEN base_score "
+            "ELSE (1.0 - $sem_w) * base_score + $sem_w * sem_sim END"
+            if use_semantic else "base_score"
+        )
+        sem_sim_expr = (
+            "CASE WHEN neighbor_chunk.embedding IS NULL THEN NULL "
+            "ELSE vector.similarity.cosine(neighbor_chunk.embedding, $query_emb) END"
+            if use_semantic else "NULL"
         )
         results = await self.run(
             f"""
@@ -405,15 +428,20 @@ class Neo4jClient:
                 neighbor.name       AS via_entity,
                 length(path)        AS path_length,
                 reduce(conf = 1.0, r IN relationships(path) |
-                    conf * coalesce(r.confidence, 1.0)) AS path_confidence
+                    conf * coalesce(r.confidence, 1.0)) AS path_confidence,
+                {sem_sim_expr} AS sem_sim
+            // path score: penalise longer paths, reward high-confidence paths
+            WITH chunk_id, text, via_entity, path_length, path_confidence, sem_sim,
+                 (path_confidence / toFloat(path_length)) AS base_score
             RETURN chunk_id, text, via_entity, path_length, path_confidence,
-                   // path score: penalise longer paths, reward high-confidence paths
-                   (path_confidence / toFloat(path_length)) AS path_score
+                   sem_sim, {score_expr} AS path_score
             ORDER BY path_score DESC
             """,
             chunk_ids=chunk_ids,
             tenant=tenant,
             **({"as_of": as_of} if as_of else {}),
+            **({"query_emb": query_embedding, "sem_w": float(semantic_weight)}
+               if use_semantic else {}),
         )
         # Normalise to list[dict] with score field for downstream compatibility
         for row in results:

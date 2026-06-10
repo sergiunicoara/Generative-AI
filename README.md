@@ -5,7 +5,7 @@ Each project below is self-contained with its own README, tests, and run instruc
 
 ---
 
-## 🏗 Flagship: [AI Knowledge Graph Platform](./AI%20knowledge%20graph%20platform)
+## 🏗 Flagship: [AI Knowledge Graph Platform](./ai-knowledge-graph-platform)
 
 **Production GraphRAG + knowledge graph platform for regulatory compliance.**
 

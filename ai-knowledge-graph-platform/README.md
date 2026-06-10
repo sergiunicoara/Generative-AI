@@ -215,7 +215,7 @@ The cross-encoder scores text similarity. It doesn't know that *Falcon 9* and *S
 ## Project Structure
 
 ```
-AI knowledge graph platform/
+ai-knowledge-graph-platform/
 ├── api/
 │   ├── main.py                      # FastAPI app, lifespan hook, middleware, routes
 │   ├── limiter.py                   # slowapi rate-limiter singleton (20/min ingest, 60/min query)
@@ -351,7 +351,7 @@ Full end-to-end test completed 2026-03-21 (updated 2026-05-31 with Groq integrat
 
 ```bash
 git clone <repo>
-cd "AI knowledge graph platform"
+cd ai-knowledge-graph-platform
 python -m pip install -r requirements.txt
 ```
 

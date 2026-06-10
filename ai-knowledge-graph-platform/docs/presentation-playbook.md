@@ -32,7 +32,7 @@ live, in-the-room demonstrations.
 
 ```powershell
 # From the project root
-cd "C:\Users\Sergiu\Desktop\Projects\Generative-AI\AI knowledge graph platform"
+cd "C:\Users\Sergiu\Desktop\Projects\Generative-AI\ai-knowledge-graph-platform"
 
 # 1. Dependencies (the dashboard mount needs a2wsgi)
 python -m pip install -r requirements.txt
@@ -42,7 +42,7 @@ python -c "import a2wsgi; print('a2wsgi OK')"
 cd "C:\Users\Sergiu\Desktop"; node graphrag_pitch.js   # → GraphRAG_PwC_Pitch.pptx
 
 # 3. Smoke-test the mock demo runs with zero backend
-cd "C:\Users\Sergiu\Desktop\Projects\Generative-AI\AI knowledge graph platform"
+cd "C:\Users\Sergiu\Desktop\Projects\Generative-AI\ai-knowledge-graph-platform"
 python scripts/demo_regulatory.py        # should print 6 steps, no errors
 
 # 4. Confirm the dashboard launches in demo mode
@@ -71,7 +71,7 @@ browser with tabs pre-opened.
 
 **Terminal 1 — (only if doing the live demo) start Neo4j:**
 ```powershell
-cd "C:\Users\Sergiu\Desktop\Projects\Generative-AI\AI knowledge graph platform"
+cd "C:\Users\Sergiu\Desktop\Projects\Generative-AI\ai-knowledge-graph-platform"
 # Quick: just Neo4j
 docker compose -f compose.dev.yaml up -d neo4j
 # OR full stack (API + workers + dashboards auto-start):
@@ -84,7 +84,7 @@ python scripts/seed_demo_data.py --commit
 
 **Terminal 2 — start the admin dashboard in demo mode:**
 ```powershell
-cd "C:\Users\Sergiu\Desktop\Projects\Generative-AI\AI knowledge graph platform"
+cd "C:\Users\Sergiu\Desktop\Projects\Generative-AI\ai-knowledge-graph-platform"
 $env:GRAPHRAG_DASHBOARD_DEMO = "1"
 python -m uvicorn api.main:app --port 8001
 # leave running → http://localhost:8001/admin/
@@ -92,14 +92,14 @@ python -m uvicorn api.main:app --port 8001
 
 **Terminal 3 — start the business KPI dashboard (optional):**
 ```powershell
-cd "C:\Users\Sergiu\Desktop\Projects\Generative-AI\AI knowledge graph platform"
+cd "C:\Users\Sergiu\Desktop\Projects\Generative-AI\ai-knowledge-graph-platform"
 python graphrag/business_matrix/dashboard_server.py
 # leave running → http://localhost:8050/dashboard/
 ```
 
 **Terminal 4 — keep this one empty and ready** to run the demo on cue:
 ```powershell
-cd "C:\Users\Sergiu\Desktop\Projects\Generative-AI\AI knowledge graph platform"
+cd "C:\Users\Sergiu\Desktop\Projects\Generative-AI\ai-knowledge-graph-platform"
 # (you'll type the demo command live during slide 5)
 ```
 

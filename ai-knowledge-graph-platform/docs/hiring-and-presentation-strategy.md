@@ -1,4 +1,4 @@
-# Hiring & Presentation Strategy — GraphRAG Knowledge Platform
+﻿# Hiring & Presentation Strategy — GraphRAG Knowledge Platform
 
 > **Purpose:** Everything you need to get the meeting, deliver the 15-minute pitch, survive the technical Q&A, and close. Includes the honest risks, the JD compliance matrix, the learning path, and step-by-step presentation script.
 
@@ -10,7 +10,7 @@
 |---|---|---|
 | **Neo4j + Cypher in production** | 38 KG modules, 572-line `neo4j_client.py`; vector ANN, BM25 fulltext, `UNWIND`×22, `EXISTS {}`×12, APOC-with-fallback, bitemporal `as_of` queries | ✅ Strong |
 | **Ontology / taxonomy modeling** | Versioned `OntologyRegistry` w/ domain/range rules + migration map; `type_taxonomy.py` (`SUBCLASS_OF`, LCA for merges); config-driven domain overlays (aerospace YAML) | ✅ Strong |
-| **Python engineering** | 26,600 LOC, async throughout, 362 passing tests, CI, Docker multi-stage, `make smoke-test`, retry/backoff, structured logging | ✅ Strong |
+| **Python engineering** | 26,600 LOC, async throughout, 364 passing tests, CI, Docker multi-stage, `make smoke-test`, retry/backoff, structured logging | ✅ Strong |
 | **KG × LLM / RAG / vector** | 6-stage pipeline: vector→BM25+RRF→cross-encoder→multi-hop→GAT GNN→LLM; agentic IRCoT fallback (8B routing + 70B synthesis) | ✅ Exceptional |
 | **Formal semantics ↔ pragmatic** | OWL-RL reasoner (`owlrl`), SPARQL bridge, RDF/Turtle export — *plus* 6 ADRs documenting every major architectural decision | ✅ Strong |
 | **Lead technically while hands-on** | 6 ADRs, 90 documented lessons, phased `todo.md`, `CONTRIBUTING.md`, `runbook.md`, `roadmap.md` | ✅ Good |
@@ -73,7 +73,7 @@ python scripts/demo_regulatory.py --live   # real Neo4j, no mocks
 
 ### What to say in the outreach message
 
-> "I saw PwC has been building GraphRAG capabilities in the region. I built a production-grade GraphRAG + knowledge graph platform from scratch over the past few months — it runs a regulatory compliance demo live, has 362 passing tests, and the codebase is public. I'm not asking for a job offer — just 15 minutes to show you what it can do. Would that be useful?"
+> "I saw PwC has been building GraphRAG capabilities in the region. I built a production-grade GraphRAG + knowledge graph platform from scratch over the past few months — it runs a regulatory compliance demo live, has 364 passing tests, and the codebase is public. I'm not asking for a job offer — just 15 minutes to show you what it can do. Would that be useful?"
 
 ### Pre-empting the AI-authorship question
 
@@ -129,7 +129,7 @@ That separates "I built this" from "I generated this."
 ### Slide 1 — Title *(30 seconds)*
 
 **Say:**
-> "Thanks for the time. I'm going to show you something concrete — a production-grade GraphRAG platform I built from scratch. Not a tutorial project, not a PoC — a platform with 38 knowledge graph modules, 362 passing tests, and a regulatory compliance demo that runs live against real Neo4j. I'll show you the code and run it. Let me start with why this matters."
+> "Thanks for the time. I'm going to show you something concrete — a production-grade GraphRAG platform I built from scratch. Not a tutorial project, not a PoC — a platform with 38 knowledge graph modules, 364 passing tests, and a regulatory compliance demo that runs live against real Neo4j. I'll show you the code and run it. Let me start with why this matters."
 
 **Don't linger.** Move immediately to slide 2.
 
@@ -176,7 +176,7 @@ That separates "I built this" from "I generated this."
 **Say:**
 > "I won't go through every row — you can read it. The point is: every requirement in the job description maps directly to a specific module in the codebase. This isn't conceptual alignment — I can open any of these files right now and show you the code.
 >
-> The one I'll call out: 'Design, implement, and validate MVP solutions' — 362 passing tests, GitHub Actions CI, Docker multi-stage build, a production runbook. That's the operational proof."
+> The one I'll call out: 'Design, implement, and validate MVP solutions' — 364 passing tests, GitHub Actions CI, Docker multi-stage build, a production runbook. That's the operational proof."
 
 ---
 
@@ -381,7 +381,7 @@ Then run the second query (all inferred edges) and narrate:
 ### Slide 9 — Technical Foundation *(1 minute)*
 
 **Say:**
-> "26,600 lines of production Python. 362 tests. 38 knowledge graph modules. Six architecture decision records — every major choice documented: property graph vs triple store, forward-chaining vs backward-chaining, Bayesian confidence accumulation, LLM provider selection, Redis result store, two-model agentic design.
+> "26,600 lines of production Python. 364 tests. 38 knowledge graph modules. Six architecture decision records — every major choice documented: property graph vs triple store, forward-chaining vs backward-chaining, Bayesian confidence accumulation, LLM provider selection, Redis result store, two-model agentic design.
 >
 > The two-model agentic design — 8B for routing decisions, 70B for synthesis — cut agentic p95 from 6.8 seconds to 3.4 seconds. The LLM stack uses Groq as the primary, with DeepSeek-V3 as an instant fallback on rate-limit — no sleep, no queuing. Embeddings are OpenAI `text-embedding-3-large`, 3072 dimensions. Every one of these choices has a documented ADR explaining what I considered and why I decided. That's the difference between a platform and a prototype."
 
@@ -710,7 +710,7 @@ ORDER BY count DESC
 ### Technical fluency (the real bottleneck)
 - [ ] Whiteboard the Bayesian confidence formula from memory — derive it, explain why not averaging
 - [ ] Explain the 4-stage entity resolution pipeline: what fails at each stage, what the thresholds mean
-- [ ] Run `make smoke-test` — confirm it exits 0 before the meeting (362 tests)
+- [ ] Run `make smoke-test` — confirm it exits 0 before the meeting (364 tests)
 - [ ] Know `docs/pwc-jd-mapping.md` — open it when any JD question comes up
 - [ ] Know the answer to "how do you control the agent?" cold (ToolPolicy, 4 risk levels, audit log)
 - [ ] Explain ADR-0001 (property graph vs triple store) conversationally — what you considered and why you decided

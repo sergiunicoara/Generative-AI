@@ -38,18 +38,23 @@ async def submit_query(request: Request, body: QueryRequest):
     Rate-limited to prevent LLM quota exhaustion.
     Default: 60 requests/minute per client IP (override via GRAPHRAG_RATE_LIMIT_QUERY).
     """
+    from uuid import uuid4
+    query_id = str(uuid4())
+    # Write "queued" BEFORE publishing — prevents a fast cache-hit in the worker
+    # from writing "completed" before this line, which would then get overwritten.
+    await get_result_store().set_status(query_id, "queued")
     try:
-        query_id = await publish_query(
+        await publish_query(
             question=body.question,
             mode=body.mode,
             ground_truth=body.ground_truth,
             tenant=body.tenant,
             session_id=body.session_id,
+            query_id=query_id,
         )
     except Exception as exc:
         raise HTTPException(status_code=503, detail=f"Queue unavailable: {exc}")
 
-    await get_result_store().set_status(query_id, "queued")
     return QueryResponse(query_id=query_id)
 
 

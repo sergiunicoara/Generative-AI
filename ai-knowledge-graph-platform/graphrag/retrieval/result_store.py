@@ -124,6 +124,14 @@ class ResultStore:
         """Write a lightweight status-only entry (used by the API on enqueue)."""
         await self.set(query_id, {"status": status, "query_id": query_id})
 
+    async def push_progress(self, query_id: str, step: str) -> None:
+        """Append a progress step to an in-flight result (visible to polling clients)."""
+        current = await self.get(query_id) or {"status": "processing", "query_id": query_id}
+        steps = current.setdefault("steps", [])
+        if step not in steps:  # deduplicate — agentic fallback may re-run the retriever
+            steps.append(step)
+        await self.set(query_id, current)
+
     async def delete(self, query_id: str) -> None:
         """Remove a result entry (optional cleanup)."""
         if self._redis is not None:

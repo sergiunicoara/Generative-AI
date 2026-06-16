@@ -29,6 +29,27 @@ Rules:
 - Be concise: 3-5 sentences unless the question requires more.
 - State facts directly. Do NOT preface your answer with phrases like "Based on the context", \
 "Based solely on the context", "According to the provided context", or similar.
+- When a document or procedure has a revision/version number (e.g. "rev.2", "revizia 2", "v.2"), \
+state it using the compact document-ID form by removing the dot/space, e.g. "rev.2" -> "rev2". \
+Apply this compact form to EVERY revision number you mention, every time you mention it — \
+including when you restate the same number later in the answer.
+- If a question asks which revision is REFERENCED by one document and whether it matches the \
+CURRENT/IN-FORCE revision of another, your answer MUST explicitly state BOTH revision numbers \
+in compact form (e.g. "rev2" and "rev4") and explicitly say whether they match or not — do not \
+describe the mismatch only in words ("an older revision") without naming both numbers.
+- A "=== METADATA ===" block contains a "doc_id" line identifying that chunk's source document \
+and revision (e.g. "doc_id: IL-INS-03-rev4"). Treat this as a fact about which revision exists \
+when the question concerns document revisions.
+- A chunk header may include "Source: <filename>" identifying which document that chunk came \
+from. This is for attribution and revision-comparison only — do NOT refuse to use a fact merely \
+because its chunk's Source differs from a document named in the question. Use all relevant facts \
+from the context to answer fully.
+- If the question names specific documents (e.g. "conform X și Y"), and the context contains a \
+fact from a chunk whose Source is NOT one of those documents, prefer a fact from a chunk whose \
+Source IS one of the named documents when the two conflict.
+- A "Community knowledge:" section is a coarse, lower-precision summary. If it conflicts with a \
+specific fact stated in a numbered "[Chunk ...]" section above it, the chunk-level fact is more \
+reliable — prefer it.
 
 Context:
 {context}
@@ -60,22 +81,36 @@ class HybridRetriever:
         mode: str = "hybrid",
         tenant: str = "default",
         session_id: str = "",
+        query_id: str = "",
     ) -> QueryResult:
         t0 = time.monotonic()
+
+        from graphrag.retrieval.result_store import get_result_store
+        _store = get_result_store() if query_id else None
+
+        async def _step(msg: str):
+            if _store and query_id:
+                await _store.push_progress(query_id, msg)
 
         local_results = {}
         global_results = {}
 
         if mode in ("local", "hybrid"):
+            await _step("🔍 Căutare BM25 + vector în graf...")
+            await _step("🕸️ Scorare GNN — traversare 2 hop-uri...")
             local_results = await self._local.search(
                 question,
                 session_id=session_id,
                 tenant=tenant,
             )
+            n_reranked = self._cfg.get("rerank_top_k", 5)
+            await _step(f"📊 Reranking cross-encoder → top {n_reranked} fragmente")
 
         if mode in ("global", "hybrid"):
+            await _step("🕸️ Expansiune graf (comunități Leiden)...")
             global_results = await self._global.search(question, tenant=tenant)
 
+        await _step("✍️ Sinteză răspuns cu LLM...")
         context, citations = self._context_builder.build(
             local_results=local_results,
             global_results=global_results,

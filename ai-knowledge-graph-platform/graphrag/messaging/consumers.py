@@ -79,14 +79,18 @@ class QueryConsumer:
             )
 
             # Persist result via Redis-backed ResultStore so the API process
-            # (a separate container) can read it.
+            # (a separate container) can read it. Preserve any progress steps
+            # that were pushed during retrieval so the UI can render them.
             from graphrag.retrieval.result_store import get_result_store
-            await get_result_store().set(msg.query_id, {
+            _store = get_result_store()
+            _prior = await _store.get(msg.query_id) or {}
+            await _store.set(msg.query_id, {
                 "status":     "completed",
                 "query_id":   msg.query_id,
                 "answer":     result.answer,
                 "citations":  result.citations,
                 "latency_ms": result.latency_ms,
+                "steps":      _prior.get("steps", []),
             })
 
             # Async RAGAS evaluation on sampled queries

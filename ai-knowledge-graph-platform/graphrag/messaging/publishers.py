@@ -29,6 +29,7 @@ async def publish_query(
     ground_truth: str = "",
     tenant: str = "default",
     session_id: str = "",
+    query_id: str = "",
 ) -> str:
     mq = await get_rabbitmq()
     msg = QueryMessage(
@@ -37,6 +38,7 @@ async def publish_query(
         ground_truth=ground_truth,
         tenant=tenant,
         session_id=session_id,
+        **({"query_id": query_id} if query_id else {}),
     )
     await mq.publish(
         QUERY_EXCHANGE,

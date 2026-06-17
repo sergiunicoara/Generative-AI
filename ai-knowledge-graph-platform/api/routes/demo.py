@@ -264,7 +264,6 @@ async function ask(question) {
     const latency = ((Date.now() - t0) / 1000).toFixed(1);
     await new Promise(res => setTimeout(res, 300));
     document.getElementById(thinkId)?.remove();
-    traceEl.remove();
 
     if (!result || result.status !== 'completed') {
       addBubble(i18n[lang].timeout, 'assistant');
@@ -281,7 +280,6 @@ async function ask(question) {
   } catch(e) {
     console.error('[demo] error', e);
     document.getElementById(thinkId)?.remove();
-    document.getElementById(traceId)?.remove();
     addBubble('Error: ' + e.message, 'assistant');
   }
   send.disabled = false;

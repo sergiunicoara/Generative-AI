@@ -60,6 +60,7 @@ class QueryConsumer:
                     "citations":  cached.get("citations", []),
                     "latency_ms": 0,
                     "cache_hit":  True,
+                    "steps":      ["⚡ Răspuns din cache semantic (entități: " + ", ".join(cached.get("citations", [])) + ")"],
                 })
                 return
 

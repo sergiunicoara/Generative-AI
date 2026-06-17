@@ -159,6 +159,31 @@ const i18n = {
   }
 };
 
+const stepTranslations = {
+  "🔍 Căutare BM25 + vector în graf...":               "🔍 BM25 + vector search in graph...",
+  "🕸️ Scorare GNN — traversare 2 hop-uri...":          "🕸️ GNN scoring — 2-hop traversal...",
+  "📊 Reranking cross-encoder → top 5 fragmente":      "📊 Cross-encoder reranking → top 5 chunks",
+  "📊 Reranking cross-encoder → top 3 fragmente":      "📊 Cross-encoder reranking → top 3 chunks",
+  "📊 Reranking cross-encoder → top 7 fragmente":      "📊 Cross-encoder reranking → top 7 chunks",
+  "🕸️ Expansiune graf (comunități Leiden)...":         "🕸️ Graph expansion (Leiden communities)...",
+  "✍️ Sinteză răspuns cu LLM...":                      "✍️ Synthesising answer with LLM...",
+};
+
+function translateStep(step) {
+  if (lang === 'ro') return step;
+  // exact match first
+  if (stepTranslations[step]) return stepTranslations[step];
+  // prefix match for dynamic rerank counts
+  for (const [ro, en] of Object.entries(stepTranslations)) {
+    if (step.startsWith(ro.slice(0, 20))) return en;
+  }
+  // cache step: translate the prefix
+  if (step.startsWith('⚡ Răspuns din cache semantic')) {
+    return step.replace('⚡ Răspuns din cache semantic (entități:', '⚡ Semantic cache hit (entities:');
+  }
+  return step;
+}
+
 let lang = 'ro';
 let token = null;
 
@@ -230,7 +255,7 @@ async function ask(question) {
     for (let i = renderedCount; i < steps.length; i++) {
       const d = document.createElement('div');
       d.className = 'trace-step';
-      d.textContent = steps[i];
+      d.textContent = translateStep(steps[i]);
       traceEl.appendChild(d);
     }
     renderedCount = steps.length;

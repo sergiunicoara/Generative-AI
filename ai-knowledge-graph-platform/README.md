@@ -115,6 +115,7 @@ Ingests two genuinely conflicting documents, runs the real inference engine, and
 
 | Feature | Details |
 |---------|---------|
+| **Batched ingestion writes** | Entity embeddings (A131) + chunk/entity/relation writes (A129 + A132) batched via UNWIND to minimize Neo4j round-trips — 30-doc corpus ingests in ~48 min wall-clock (90+ min → 48 min after A129-A132 optimization) |
 | **6-stage retrieval pipeline** | Vector ANN → BM25+RRF → Cross-encoder → Multi-hop → GAT GNN → LLM |
 | **Graph Attention Network (GAT)** | GCN/GAT re-scores chunks using entity embedding propagation; attention weights by cosine similarity between neighbours |
 | **Query-adaptive GNN weights** | Relational queries (e.g. "how did X cause Y") auto-shift to 50/50 text/GNN; factoid queries use default α/β |
@@ -452,10 +453,39 @@ python scripts/ingest_corpus.py --commit --wipe
 python scripts/ingest_corpus.py --commit --doc FAA-AD-2024-01-02.txt
 ```
 
+**Performance:** Batched entity embeddings (A131) + batched chunk writes (A132) 
+reduce write-phase round-trips by 80-90%. A 30-document automotive corpus 
+(3013 entities, 9364 relations) ingests in ~48 minutes wall-clock after full 
+optimization (A129 + A131 + A132) — previously 90+ minutes with unbatched 
+per-entity / per-chunk writes stacked against the serialized writer phase.
+
 This produces real graph health metrics (⚠ LLM extraction is non-deterministic —
 these numbers shift on every fresh `--wipe --commit` run; verify live before
 presenting, see `tasks/lessons.md` A96/A98):
 **368 entities · 422 edges · 4 open conflicts · 9.48/1k contradiction rate · 58 Leiden communities** (verified live 2026-06-10, after fixing a missing document-supersession chain and rebuilding communities with supersession-aware summaries — see A99/A100)
+
+#### Other tenants / domain corpora
+
+`--tenant` selects the corpus, authority map, and supersession chains (see
+`scripts/ingest_corpus.py` → `_corpus_config()`); each tenant's data lives in
+the same Neo4j instance, partitioned by the `tenant` property:
+
+```bash
+# Automotive IATF 16949 corpus (data/automotive/, 30 docs, ontology: config/ontologies/automotive_iatf.yml)
+python scripts/ingest_corpus.py --tenant automotive --commit --wipe
+
+# Golden eval set for that tenant (data/eval_golden/queries_automotive.json)
+python scripts/run_golden_eval.py --tenant automotive
+```
+
+**After every `--commit` ingestion (and especially before a `--wipe` of one
+tenant), run the tenant isolation check** — it confirms no node is missing a
+`tenant` property and no edge (`RELATES_TO`/`PART_OF`/`MENTIONS`/`MEMBER_OF`)
+crosses between two tenants' graphs:
+
+```bash
+python scripts/verify_tenant_isolation.py
+```
 
 For a lightweight demo with hardcoded seed data (no LLM calls):
 
@@ -530,11 +560,13 @@ All tuning is in `config/settings.yml`:
 ingestion:
   chunk_size: 512
   chunk_overlap: 64
-  embedding_batch_size: 100
+  embedding_batch_size: 100        # also controls chunk/entity write batch size (A131-A132)
+  doc_extract_concurrency: 4       # concurrent document extractions (LLM-bound)
+  extraction_concurrency: 5        # chunks per document extracted concurrently
   entity_types: [PERSON, ORG, PRODUCT, CONCEPT, LOCATION, EVENT]
-  alias_embedding_threshold: 0.92   # cosine similarity to treat as duplicate entity
-  alias_fuzzy_threshold: 85         # rapidfuzz ratio for soft name matching
-  validate_after_ingestion: true    # run graph health check after every doc
+  alias_embedding_threshold: 0.92  # cosine similarity to treat as duplicate entity
+  alias_fuzzy_threshold: 85        # rapidfuzz ratio for soft name matching
+  validate_after_ingestion: true   # run graph health check after every doc
   auto_remove_self_loops: true
   detect_cycles_after_ingestion: true
 

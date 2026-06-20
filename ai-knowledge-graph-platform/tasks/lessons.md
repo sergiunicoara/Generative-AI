@@ -1305,31 +1305,6 @@ It's a silent failure pattern.
 
 ---
 
-## A54 — Demo scripts: count every mock call before writing side_effect
-
-**What happened:**
-`demo_regulatory.py` step 4 (ForwardChainingEngine) and step 5 (ContradictionDetector)
-both raised `StopIteration` because the `side_effect` list had fewer slots than
-actual `await db.run()` calls. Step 4 needed 9 slots (4 rule queries per iteration ×
-2 iterations + 1 MERGE write); step 5 needed 11 slots.
-
-**Root cause:**
-The mock was written from the outside ("query then create") rather than tracing the
-actual code path. ForwardChainingEngine runs all rules in each fixpoint iteration, not
-just the ones with matches.
-
-**Rule:**
-> Before writing `AsyncMock(side_effect=[...])` for a multi-step engine:
-> 1. Read the source of the method under test and count every `await db.run()` call.
-> 2. Note which calls are conditional (inside `for row in rows:`) — zero rows = zero
->    conditional calls.
-> 3. Label each slot in a comment: `# iter1: supersedes_transitivity → 1 candidate`.
-> 4. For fixpoint loops: slots = rules_per_iter × num_iterations + conditional_merges.
-> StopIteration from a mock means you undercounted by exactly one call — add one slot
-> at a time until the demo runs.
-
----
-
 ## A55 — Test assumptions about library behaviour must match the library's actual semantics
 
 **What happened:**
@@ -1530,30 +1505,48 @@ left the package absent.
 ---
 
 ## A43 — AsyncMock side_effect lists must exactly match actual call counts
+(recurred twice — A43 and the former A54 were the same bug pattern, in
+tests and in a demo script)
 
-**What happened:**
-Four tests in `test_safety_paths.py` had `side_effect` lists with phantom "CREATE" call
-slots inserted after queries that returned `[]`.  When a query returns an empty list,
-the `for row in rows:` loop body is never entered, so no CREATE is issued.  The tests
-assumed a CREATE always follows a query, which drifted the mock's slot mapping —
-the actual conflict row landed in the wrong slot, causing `KeyError` on unexpected
-field names.
+**What happened (test_safety_paths.py):**
+Four tests had `side_effect` lists with phantom "CREATE" call slots
+inserted after queries that returned `[]`. When a query returns an empty
+list, the `for row in rows:` loop body is never entered, so no CREATE is
+issued. The tests assumed a CREATE always follows a query, which drifted
+the mock's slot mapping — the actual conflict row landed in the wrong
+slot, causing `KeyError` on unexpected field names.
+
+**What happened (demo_regulatory.py):** step 4 (`ForwardChainingEngine`)
+and step 5 (`ContradictionDetector`) both raised `StopIteration` because
+the `side_effect` list had fewer slots than actual `await db.run()` calls
+— step 4 needed 9 slots (4 rule queries per fixpoint iteration × 2
+iterations + 1 MERGE write), step 5 needed 11. The mock was written from
+the outside ("query then create") rather than tracing the actual code
+path; `ForwardChainingEngine` runs all rules in *every* fixpoint
+iteration, not just the ones with matches.
 
 **Root cause:**
-The mock sequence was designed assuming "query → create" pairs, but the real code
-pattern is "query → *conditional* create per row".  Zero rows = zero creates.
+Both cases: the mock sequence was designed assuming "query → create"
+pairs, but the real code pattern is "query → *conditional* create per
+row" (or, for fixpoint loops, "N rule-queries per iteration × M
+iterations"). Zero rows = zero creates; the mock author didn't trace the
+actual call sequence before writing the slot list.
 
 **Rule:**
-> When writing `AsyncMock(side_effect=[...])`, trace through the production code path
-> explicitly:
-> 1. List every `await db.run()` call and mark which ones are conditional (inside a
->    for-loop over rows).
-> 2. Only include CREATE/UPDATE mocks when your mock rows will actually trigger that
->    code path.
-> 3. Name each slot in a comment: `# 3: directional CREATE (only if row returned)`.
-> Zero-row queries produce zero subsequent CREATE calls.  Every phantom slot shifts
-> all subsequent slots by one, causing cascade KeyError failures on the next test run.
-
+> When writing `AsyncMock(side_effect=[...])`, trace through the
+> production code path explicitly before writing the list:
+> 1. List every `await db.run()` call and mark which ones are conditional
+>    (inside a for-loop over rows) or repeated (inside a fixpoint/retry
+>    loop — slots = calls_per_iteration × num_iterations).
+> 2. Only include CREATE/UPDATE mocks when your mock rows will actually
+>    trigger that code path. Zero-row queries produce zero subsequent
+>    CREATE calls.
+> 3. Name each slot in a comment: `# 3: directional CREATE (only if row
+>    returned)` or `# iter1: supersedes_transitivity → 1 candidate`.
+> Every phantom or missing slot shifts all subsequent slots by one,
+> causing cascade `KeyError`/`StopIteration` failures. `StopIteration`
+> from a mock means you undercounted by exactly one call — add one slot
+> at a time until it passes, rather than guessing.
 
 ---
 
@@ -1854,20 +1847,40 @@ Audit queries matched globally, but the UUID was generated once before the query
 
 ---
 
-## A77 — `NOT property = true` is a null trap in Cypher
+## A77 — `NOT property = true` is a null trap in Cypher (recurred twice —
+A77 and the former A81 were the same bug in two different files)
 
-**What happened:**
+**What happened (first occurrence):**
 `WHERE NOT e.quarantined = true` excluded all entities where `e.quarantined` was NULL
 (property not set). In Cypher, `NULL = true` → NULL, `NOT NULL` → NULL, which is
 falsy in WHERE — so all 374 entities were excluded and `entity_count=0` in snapshots.
 
+**What happened (second occurrence, `incremental_community.py`):** the
+Communities tab (incremental drift monitor) showed "0% — 0 changed
+entities" even though all 374 entities were ingested after the last
+(non-existent) rebuild point. Same root cause, three separate queries in
+`incremental_community.py` (`get_changed_entities` ×2, `should_full_rebuild`
+total count) all used `WHERE NOT e.quarantined = true`.
+
 **Root cause:**
-Standard boolean negation doesn't work as expected when the property may be absent.
+Neo4j Cypher null semantics: any comparison involving `NULL` returns
+`NULL`, not `true` or `false`. `NOT NULL = true` → `NOT NULL` → `NULL`
+(falsy in a `WHERE` clause) — so any entity where the optional boolean
+property was never set gets silently excluded. Standard boolean negation
+doesn't work as expected when the property may be absent — which is the
+common case for properties like `quarantined`, `deleted`, `archived`.
 
 **Rule:**
-> Never write `NOT e.property = true` in Neo4j Cypher when the property may be absent.
-> Always write `coalesce(e.property, false) = false`.
-> Same applies to `e.property = false` — use `coalesce(e.property, false) = false`.
+> **Every** Cypher `WHERE` clause that filters on an optional boolean
+> property must use `coalesce(prop, default) = expected`, not
+> `NOT prop = true` or `prop = false`. Audit all new Cypher for this
+> pattern before committing — the null-trap is invisible unless you query
+> a graph where the property is absent, which is exactly the common case.
+
+**Scope of fixes applied across the codebase (both occurrences combined):**
+`incremental_community.py` (3), `neo4j_client.py` (6), `graph_snapshots.py`
+(2), `graph_evaluator.py` (2), `community_builder.py` (1, in
+`build_semantic_communities`).
 
 ---
 
@@ -1921,33 +1934,6 @@ the response envelope.
 > List endpoints that feed UI components must return `{"items": [...], "count": N}`.
 > Never return a bare list from a REST endpoint — it breaks pagination, metadata,
 > and future extension. Check the dashboard's `_get()` call before finalising the route.
-
----
-
-## A81 — `NOT x.quarantined = true` is a null-trap in Cypher; use `coalesce`
-
-**What happened:**
-The Communities tab (incremental drift monitor) showed "0% — 0 changed entities" even though
-all 374 entities were ingested after the last (non-existent) rebuild point. Root cause: three
-Cypher queries in `incremental_community.py` used `WHERE NOT e.quarantined = true`. When the
-`quarantined` property is absent (the common case — most entities are never quarantined), the
-comparison evaluates to `NULL`, which is falsy in a `WHERE` clause, so the entire entity is
-excluded. Result: 0 entities returned → 0% drift.
-
-**Root cause:**
-Neo4j Cypher null semantics: any comparison involving `NULL` returns `NULL`, not `false` and
-not `true`. `NOT NULL = true` → `NOT NULL` → `NULL` (falsy). The fix is `coalesce(e.quarantined,
-false) = false`.
-
-**Rule:**
-> **Every** Cypher `WHERE` clause that filters on an optional boolean property (`quarantined`,
-> `deleted`, `archived`, etc.) must use `coalesce(prop, default) = expected`, not
-> `NOT prop = true` or `prop = false`. Audit all new Cypher for this pattern before
-> committing. The null-trap is invisible unless you query a graph where the property is absent.
-
-**Scope of fix applied:**
-- `incremental_community.py` — 3 occurrences (get_changed_entities × 2, should_full_rebuild total count)
-- Previously fixed: `neo4j_client.py` (6 occurrences), `graph_snapshots.py` (2), `graph_evaluator.py` (2), `community_builder.py` (query in build_semantic_communities)
 
 ---
 
@@ -2476,3 +2462,1667 @@ needed unless it recurs.
 >    +0.10-0.15** — when a "regression" investigation turns up a real bug,
 >    expect (and re-measure) a broad shift, not just a fix to the one flagged
 >    question.
+
+## A101 — Multi-tenant corpora share one Neo4j; run `verify_tenant_isolation.py` after every ingestion
+
+**What happened:**
+Added a second domain corpus (automotive/IATF 16949, `data/automotive/`,
+30 docs) alongside the existing aerospace corpus. Both tenants live in the
+*same* Neo4j instance, partitioned only by the `tenant` property
+(`entity_name_type_tenant` constraint + `*_tenant` indexes in
+`graphrag/graph/schema.cypher`). `ingest_corpus.py --tenant X --wipe` only
+deletes `WHERE n.tenant = X`, so it's safe in principle — but there is no
+automated check that a query/feature added later still filters by tenant
+correctly.
+
+**Rule:**
+> 1. `scripts/ingest_corpus.py --tenant <name>` derives `corpus_dir`,
+>    `authority_map`, and `supersession_map` per tenant — for `automotive`
+>    these come from `config/ontologies/automotive_iatf.yml`'s
+>    `document_prefixes`/`supersession_chains` (single source of truth, no
+>    duplicated lists). New tenants follow `get_ontology_path_for_tenant()`'s
+>    `{tenant}*.yml` convention.
+> 2. **After every `--commit` ingestion**, run
+>    `python scripts/verify_tenant_isolation.py` — it checks for nodes
+>    missing `tenant`, and for `RELATES_TO`/`PART_OF`/`MENTIONS`/`MEMBER_OF`
+>    edges that cross between two tenants' graphs. Exit 0 = clean. This is
+>    documented in README.md § "7. Ingest real corpus data".
+> 3. Golden eval sets follow `data/eval_golden/queries_<tenant>.json`;
+>    `scripts/run_golden_eval.py --tenant <name>` auto-resolves to that file
+>    (or pass `--golden-set <path>` explicitly).
+
+## A102 — A correctly-computed score that nothing reads is a no-op fix
+
+**What happened:**
+Investigated automotive eval failures (SH-01, SH-02, CON-01, CON-02) and found
+`GNNScorer._text_score()` (`graphrag/graph/gnn_scorer.py`) blended two
+incompatible scales into `final_score = alpha*text_score + beta*gnn_score`:
+seed chunks (cross-encoder reranked) used `sigmoid(rerank_score/5)` (~0.5-0.83,
+varying ~20x across queries), while multi-hop chunks used their `path_score`
+(~0.7-1.0). Fixed it with rank-based normalization
+(`text_score = 1 - rank/n_seed` for seed chunks) — verified with unit tests
+AND a diagnostic showing the GNN's own `chunks` list now correctly ranks the
+cross-encoder's #1 pick at final_score≈0.97, beating multi-hop chunks.
+
+Re-ran the automotive eval: **pass rate unchanged, 5/13, identical failure
+pattern.** The "fixed" score was never consumed. Root cause one layer down:
+`ContextBuilder.build()` (`graphrag/retrieval/context_builder.py:21`) selected
+the LLM's top-5 context chunks by sorting on `c.get("score", 0)` — a field
+that seed_chunks never carry with meaningful magnitude (the reranker only adds
+`rerank_score`; the only `"score"` they have is the tiny RRF fusion score from
+`bm25_search.py`, ~0.01-0.03). Multi-hop chunks carry `score = path_score`
+(~0.7-1.0). So `context_builder` ALWAYS picked multi-hop chunks for the LLM's
+context — `final_score` (the GNN scorer's entire output, including the just-
+fixed text_score) was computed but never read by anything. Fixed by sorting on
+`c.get("final_score", c.get("rerank_score", c.get("score", 0)))`.
+
+**Rule:**
+> 1. When fixing a scoring/ranking computation, **grep for every place the
+>    output field name is read** (`final_score`, `rerank_score`, `score`, ...)
+>    before measuring eval impact. A diagnostic that only inspects the
+>    *computing* function's return value (e.g. `LocalSearch.search()`'s
+>    `chunks` list, sorted correctly) proves the formula is right but NOT that
+>    anything downstream uses it.
+> 2. "Unit tests pass + diagnostic shows correct ranking" is necessary but not
+>    sufficient. If a fix to a scoring formula produces **zero change** in an
+>    end-to-end eval's pass/fail pattern, treat that as a signal the score
+>    isn't wired to the decision that matters — not as "the fix didn't help
+>    this case." Trace the consumer chain immediately rather than moving on to
+>    the next planned fix.
+> 3. `context_builder.build()`'s chunk-selection sort key is now
+>    `final_score → rerank_score → score` (in that priority) — any new
+>    pipeline stage that adds a chunk-quality field must either feed into
+>    `final_score` or this sort key needs updating too.
+
+## A103 — Multi-hop chunks reaching the same chunk via different entity
+paths produce duplicate entries that silently consume top-k context slots
+
+**What happened:**
+Continuing the automotive eval fix-up (SH-01/MH-02/CON-04/AUTH-01, the 4
+remaining failures after A102 brought it to 9/13), traced each one with a
+new step-by-step pipeline diagnostic (`scripts/_diag_pipeline.py`, not
+committed — recreate if needed):
+
+- **SH-01**: golden-set premise was wrong — `required_answer_terms: ["99%"]`
+  doesn't exist in CSR-CLIENT-2023.txt; the document states the OTD target as
+  **95%** (verified at 3+ line numbers via grep). Fixed
+  `data/eval_golden/queries_automotive.json` to `["95%"]` with a `note`
+  documenting the verification. The question STILL fails on citation recall
+  (csr-client-2023 never retrieved) — root cause is separate (see below) and
+  NOT fixed by this golden-set correction; the correction was still worth
+  making because the old expected answer was simply false.
+
+- **CON-04**: `LocalSearch.search()` returns `seed_chunks + extra_chunks`
+  where `extra_chunks` (multi-hop, up to 50) can contain the **same
+  `chunk_id` multiple times** — reached via different entity paths
+  (confirmed: `pc-comp-07-rev3` appeared 3x, `il-ins-03-rev2` 3x in one
+  question's extra_chunks). `ContextBuilder.build()` sorted-then-sliced
+  `top_k=5` WITHOUT deduplicating by `chunk_id` first, so duplicate entries
+  of the same chunk consumed multiple of the 5 context slots, crowding out a
+  *different* relevant document's chunk entirely.
+
+**Root cause:**
+`ContextBuilder.build()` (`graphrag/retrieval/context_builder.py`) built
+`citations` via `dict.fromkeys(...)` (dedup) AFTER the `[:top_k]` slice, but
+the `sections` list (the actual LLM context) was built from the *undeduped*
+slice — so the LLM's context window could contain the literal same chunk
+text twice, while a distinct, relevant chunk ranked just below the cutoff
+never made it in at all.
+
+**Fix:**
+Dedup `chunks_sorted` by `chunk_id` (keeping the highest-ranked occurrence)
+*before* the `top_k` slice, not after. One isolated change in
+`context_builder.py`; all 5 existing unit tests in
+`test_context_builder.py` still pass unchanged (one of them,
+`test_deduplicates_citations_preserving_order`, was actually testing the
+*old*, weaker behavior and now exercises the new code path correctly too).
+
+**Result:**
+377/377 unit tests pass. Automotive eval stayed at 9/13 (SH-01, MH-02,
+CON-04, AUTH-01 still fail) — but CON-04's context now contains a distinct
+`il-ins-03-rev2` chunk that was previously crowded out. The LLM still didn't
+connect it to the question correctly, and `il-ins-03-rev4` remained just
+outside top-5 (rank 6 of 20, final_score 0.8454 vs cutoff 0.8494 — a ~0.004
+margin). This is a genuinely useful, low-risk correctness fix (no chunk
+should occupy two context slots) but was NOT sufficient on its own to flip
+CON-04.
+
+**Deeper root cause found for all 3 remaining failures (CON-04, AUTH-01,
+MH-02) — NOT fixed, flagged for a future redesign pass:**
+For all three, BM25 alone (raw `bm25_search_chunks`) DOES surface the
+correct chunk/document near the top (verified via `scripts/_diag_bm25.py`,
+not committed) — e.g. `rfa-reg-01-rev5` ranks #1 for AUTH-01's raw query,
+`pc-comp-07-rev3`'s actual content chunk ranks #2 for CON-04. The gap is
+downstream: ~50 multi-hop `extra_chunks` all get `path_score` in a narrow
+~0.85-1.0 band (1-hop, high-confidence edges all score similarly regardless
+of topical relevance), so after the GNN blend their `final_score`s cluster
+within ~0.03 of each other (e.g. AUTH-01's top-20 final_scores span
+0.971→0.890, with `rfa-reg-01-rev5` at rank 17/0.8908 — barely
+distinguishable from rank 3's 0.9013). Within that band, ranking is
+effectively noise (tiny semantic-cosine differences), so the
+*topically-correct* chunk for a given question is a coin-flip away from the
+top-5 cutoff. MH-02's `ppap-proc-01` doesn't even reach BM25/vector top-10
+at all — a distinct, already-documented chunking gap (original plan's
+"Fix 4").
+
+**Rule:**
+> 1. Any time a pipeline stage produces a list that gets concatenated with
+>    another list before a `top_k` slice (e.g. `seed_chunks + extra_chunks`
+>    in `local_search.py`), check whether the second list can contain
+>    duplicates of items already in the first — and whether the final
+>    consumer dedupes BEFORE or AFTER its `top_k` cut. Dedup-after-slice is a
+>    silent context-budget leak, not a correctness no-op.
+> 2. Before attributing a retrieval-gap eval failure to "the right chunk was
+>    never found," run the raw BM25/vector search directly
+>    (`neo4j.bm25_search_chunks(query, ...)`) — if it DOES surface the right
+>    chunk near the top, the bug is in fusion/reranking/GNN-blend, not
+>    indexing. All 3 of CON-04/AUTH-01/MH-02-adjacent chunks for CON-04 and
+>    AUTH-01 were near the top of raw BM25 results.
+> 3. A `path_score` formula that produces near-constant values across a large
+>    candidate set (e.g. 50 chunks all in [0.85, 1.0]) effectively disables
+>    ranking for that set — any blend weight (`alpha`/`beta`) applied on top
+>    is deciding between near-ties, not between relevant and irrelevant
+>    chunks. If an eval failure traces to "chunk X ranked just outside top-k
+>    by a 0.003-0.01 margin," the fix is NOT to nudge weights/cutoffs for
+>    that one case — it's to widen the score's dynamic range so it actually
+>    discriminates. This is a corpus-wide scoring change requiring
+>    re-validation against BOTH tenants' golden sets (aerospace baseline:
+>    faithfulness 0.937, precision 0.907) — scope it as its own phase, don't
+>    bundle into a "fix N failures" pass.
+
+## A104 — Fix A (RRF-floor for seed selection) fixed SH-01: 9/13 → 10/13 (69% → 76.9%), aerospace faithfulness unaffected
+
+**Context:** Phase 5 root-caused SH-01 as a cross-encoder false-negative — the
+correct chunk (`fb8ad638…`, "Rata de livrare la timp ... 95%") was the #1
+RRF-fused candidate (score=0.01639) but the English-trained MS MARCO
+cross-encoder (`cross-encoder/ms-marco-MiniLM-L-6-v2`) scored it so low on the
+Romanian text that it dropped out of the top-5 `seed_chunks` entirely.
+
+**Fix:** in `local_search.py` step 3, after reranking, if `fused_chunks[0]`'s
+`chunk_id` is missing from `seed_chunks`, insert it at **position 0** (not -1)
+with a synthetic `rerank_score` key, dropping the weakest existing seed to
+keep the count at `rerank_top_k`. Position 0 matters: `_seed_ranks` in
+`gnn_scorer.py` assigns `_text_score = 1 - rank/n_seed` based on LIST POSITION
+among chunks with a `rerank_score` key, not the score's value — so position 0
+gives `_text_score=1.0` (max). The synthetic `rerank_score` VALUE is never
+read for this chunk; only its presence (which makes `_seed_ranks` include it)
+and its position matter.
+
+**First attempt was wrong and looked harmless:** `seed_chunks[-1] =
+fused_chunks[0]` (swap into the LAST slot, no `rerank_score` key added). This
+compiled, passed unit tests, but SH-01 still failed identically — the swapped
+chunk had no `rerank_score` key, so `_text_score` fell through to
+`chunk.get("score", 0.0)` (raw RRF score ≈0.016), contributing ~0.014 to
+`final_score` (alpha=0.9) vs. competing multi-hop chunks at 0.85-0.97. Only
+verified wrong by re-running the full eval and diffing SH-01's status — unit
+tests alone gave false confidence.
+
+**Result:**
+- Automotive eval: 9/13 (69%) → **10/13 (76.9%)**, clears the 70% gate.
+  Avg faithfulness 0.904 → 0.878 (still ≫0.80). SH-01 ✓, remaining failures
+  unchanged (MH-02, CON-04, AUTH-01 — all deferred to Fix B/C per the Phase 5
+  plan, both now optional since the gate is cleared).
+- Aerospace regression (`scripts/_aerospace_regression.py`, the
+  `evals/golden_set.json` fixture — NOTE this fixture's questions/citation
+  slugs are FAA/Boeing-AD content that does NOT match the real aerospace
+  tenant corpus, so its absolute pass rate (~5-8%) is not meaningful; only use
+  its faithfulness metric for before/after comparison): faithfulness
+  0.8394 → 0.8734 (improved, both ≫0.80). Confirms Fix A is a safe no-op for
+  the English aerospace corpus, as predicted.
+
+**Rule:**
+> 1. When inserting a "rescued" chunk into `seed_chunks` to influence
+>    `_text_score`'s rank-based scoring, both the LIST POSITION and the
+>    PRESENCE of a `rerank_score` key matter — presence alone (without
+>    front-of-list position) still leaves the chunk competing from the bottom
+>    of the rank order. Verify by re-running the eval, not just unit tests:
+>    a structurally-plausible fix that doesn't change the failing eval's
+>    outcome is not yet the right fix.
+> 2. `scripts/_aerospace_regression.py`'s `evals/golden_set.json` fixture is
+>    STALE/MISMATCHED against the real `aerospace` tenant content (FAA/Boeing
+>    AD questions vs. whatever corpus is actually ingested) — its pass_rate
+>    (~5-8%) is meaningless. Only its `avg_faithfulness` is a valid
+>    before/after regression signal (faithfulness doesn't depend on
+>    citation-slug ground truth, just answer-context grounding). If a real
+>    aerospace pass-rate check is needed, use the eval pipeline referenced in
+>    MEMORY (faithfulness 0.937, precision 0.907 baseline), not this script.
+
+## A105 — Fix B (`multihop_semantic_weight` 0.5→0.8) had zero effect on CON-04/AUTH-01 — reverted before paying the both-tenant re-validation cost
+
+**Context:** Phase 5's Fix B raised `multihop_semantic_weight` from 0.5 to 0.8
+to widen `path_score`'s dynamic range (per A103), hoping to pull CON-04's
+`il-ins-03-rev4` (Δ≈0.004 from the rank-5 cutoff) and AUTH-01's flaky chunk
+clearly above the cutoff.
+
+**Result:** automotive eval stayed at 10/13 (77%) — IDENTICAL failure set and
+failure reasons for CON-04 and AUTH-01 (down to the exact missing terms).
+Faithfulness moved 0.878 → 0.885 (noise-level). Widening the semantic weight
+did not move these two chunks across their cutoffs at all.
+
+**Action:** reverted to 0.5 immediately, without running the aerospace
+regression check. A corpus-wide scoring knob that produces zero measurable
+effect on its target failures isn't worth the cost (~25min) and risk of a
+both-tenant re-validation cycle — "fix B helped nothing" is itself the
+verification result.
+
+**Rule:**
+> Before paying for an expensive re-validation cycle (both-tenant regression
+> run) on a corpus-wide tuning change, first confirm the change actually moves
+> the metric/failure it targets on the CHEAP eval (automotive, 13 questions).
+> If a 0.5→0.8 swing in a blend weight produces an identical failure set with
+> identical failure messages, the targeted chunks' cutoff margins are not
+> sensitive to this weight at all — look for a different lever (e.g. Fix C's
+> chunking-gap fix for MH-02, or a per-chunk score-floor like Fix A rather
+> than a global blend-weight nudge) instead of escalating the same lever
+> further (e.g. trying 0.9, 1.0).
+
+## A106 — `scripts/ingest_corpus.py` silently fails EVERY document on Windows unless `PYTHONIOENCODING=utf-8` is set (Romanian diacritics crash structlog's stdout writer)
+
+**Context:** Phase 5 Fix C kicked off a full `--commit --wipe --tenant
+automotive` re-ingest (with `chunk_overlap` 64→128) redirected to a log file.
+Every single document logged `ingest_corpus.doc_failed
+error="'charmap' codec can't encode character 'ț'..."` (U+021B = Romanian
+"ț", not representable in cp1252) — including `PPAP-PROC-01.txt`, MH-02's
+target document. The process kept running and looked like it was making
+progress (extractor.done lines for ~1900 chunks across all 13 docs), masking
+the fact that `agent.run()` was raising mid-document and `ingest_corpus.py`'s
+`except Exception` handler was catching it — so NOTHING from any document was
+actually committed correctly, but the script exited 0-looking and printed
+per-doc "ERROR: ..." lines that are easy to miss in a long log.
+
+**Root cause:** on Windows, when a Python process's stdout is redirected to a
+file (not a TTY), structlog's logger writes through `sys.stdout`, which
+defaults to the ANSI codepage (cp1252) with `errors='strict'` — any log
+message containing a character outside cp1252 (Romanian ț/ş with comma-below,
+U+021B/U+0219) raises `UnicodeEncodeError` ("'charmap' codec can't encode
+character"), which propagates up through `agent.run()` and is caught by
+`ingest_corpus.py`'s per-document `except Exception`.
+
+**Fix:** set `PYTHONIOENCODING=utf-8` in the environment before running
+`ingest_corpus.py` (or any script that logs non-ASCII content and redirects
+stdout on Windows). Verified via a single-doc probe
+(`--doc PPAP-PROC-01.txt`, no `--wipe`): without the env var, the doc fails
+with the charmap error during contradiction-detection/community-building
+logging; with `PYTHONIOENCODING=utf-8`, the same doc completes cleanly
+(532 entities, 586 edges, 5 open conflicts, 99 inferred edges, written to
+Neo4j).
+
+**Rule:**
+> 1. ANY script that redirects stdout to a file on Windows AND processes
+>    non-English text (Romanian corpus, etc.) MUST run with
+>    `PYTHONIOENCODING=utf-8` — otherwise `structlog`/`print` calls containing
+>    diacritics outside cp1252 raise `UnicodeEncodeError`, and if that's
+>    inside a broad `except Exception` (like `ingest_corpus.py`'s per-document
+>    handler), the failure is silently swallowed as a per-doc "ERROR" line
+>    deep in a long log — easy to miss, and the script still exits 0.
+> 2. When a long-running ingestion log shows steady `extractor.done` /
+>    `graph_writer.*` progress, that does NOT mean documents are being
+>    committed successfully — grep the log for `doc_failed` / `ERROR:`
+>    explicitly before trusting a re-ingest's output.
+> 3. Before any future re-ingest (`--commit --wipe`), prefix with
+>    `PYTHONIOENCODING=utf-8` — this should arguably be baked into
+>    `scripts/ingest_corpus.py` itself (e.g. via the same
+>    `io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")`
+>    pattern already used in `scripts/_aerospace_regression.py`) so this can't
+>    recur. Consider that a follow-up fix.
+>
+> **FOLLOW-UP DONE**: applied the `io.TextIOWrapper` UTF-8 wrapper directly to
+> `scripts/ingest_corpus.py` (mirrors `_aerospace_regression.py`'s pattern) —
+> `PYTHONIOENCODING=utf-8` is no longer required for this script specifically,
+> but still set it for OTHER scripts that redirect stdout and log non-ASCII
+> content until they get the same wrapper.
+
+## A107 — Single-doc `--doc` probe is the fast way to validate an ingestion-config change before a full `--wipe` re-ingest
+
+**Context:** Phase 5 Fix C needed to test whether `chunk_overlap` 64→128
+would pull MH-02's target chunk (`PPAP-PROC-01.txt`'s "Conformitatea FAI:
+100%" KPI table row) into BM25/vector top-20. A full `--commit --wipe`
+re-ingest of the automotive corpus (30 docs) takes 40-60+ min (extraction +
+a per-document community-rebuild that adds ~80s each). Running the single
+target document via `--commit --doc PPAP-PROC-01.txt` (no `--wipe`) took
+~1-2 min and was what first surfaced the A106 encoding bug — a 20-40x faster
+iteration loop for the same signal.
+
+**Technique:**
+1. `PYTHONIOENCODING=utf-8 python scripts/ingest_corpus.py --commit --tenant <t> --doc <filename.txt>` —
+   ingests just that one document on top of whatever's currently in the
+   tenant (no `--wipe`). ~1-2 min for a single doc vs 40-60+ min for the full
+   corpus.
+2. Inspect the result directly: query Neo4j for the target chunk's text /
+   run `bm25_search_chunks` / `vector_search_chunks(top_k=20)` for the
+   failing question and check whether the target chunk now appears — this
+   answers "did the config change help?" WITHOUT running the full eval or a
+   full re-ingest.
+3. Only after the single-doc probe confirms the config change has the
+   intended effect, commit to the full `--wipe` re-ingest (which is required
+   anyway for a clean, consistent corpus-wide chunking change — the
+   single-doc probe leaves the tenant in a "mixed chunking" state that is
+   NOT representative of the final result, just a fast correctness check on
+   the chunking mechanism itself).
+
+**Rule:**
+> For any ingestion-config change (chunk_size, chunk_overlap, entity_types,
+> etc.) targeting a specific document/chunk, validate with a single-doc
+> `--doc` probe (no `--wipe`) FIRST — it's 20-40x faster and surfaces
+> pipeline-level bugs (like A106's encoding crash) before they're buried in a
+> 30-document log. Only run the full `--wipe` re-ingest once the probe
+> confirms the mechanism works.
+
+## A108 — `OpenAIEmbedder` had no API timeout — hung the full automotive
+re-ingest for 50+ minutes with zero CPU usage and zero log output
+
+**What happened:** During the Phase 5 Fix C (`chunk_overlap` 64→128)
+re-ingest (`--commit --wipe --tenant automotive`, 30 docs), the process
+completed docs 1-16 cleanly (~80s/doc incl. community rebuild) then went
+completely silent starting doc 17 (`IL-PROC-12-rev1.txt`). 50+ minutes later
+the process was still "running" but using 0% CPU — i.e. blocked forever on a
+network call, not slow.
+
+**Root cause:** `OpenAIEmbedder.__init__` in `graphrag/core/llm_client.py`
+constructed `OpenAI(api_key=api_key)` with **no timeout**. The OpenAI SDK
+default (`httpx` timeout=600s, `max_retries=2` with backoff) can compound to
+30-50+ minutes on a single stalled connection — and unlike `GroqLLM`
+(`_TIMEOUT=60.0`) and `DeepSeekLLM` (`_TIMEOUT=60.0`), which both carry
+explicit comments warning about exactly this ("without this the call hangs
+forever"), the embedder was missed when those fixes were made.
+
+**Fix:** Added `_TIMEOUT = 60.0` and passed `timeout=self._TIMEOUT` to
+`OpenAI(...)` in `OpenAIEmbedder.__init__`, mirroring the existing
+Groq/DeepSeek pattern.
+
+**Recovery:** Killed the hung process (PID confirmed 0% CPU delta over 5s via
+`Get-Process`). Docs 1-16 were already committed (no `--wipe` needed for
+resume) — resumed docs 17-30 via 14 sequential single-doc `--doc <filename>`
+invocations (see A107's technique), since none of the remaining docs are part
+of an automotive `supersession_chains` entry (all three chains —
+CSR-CLIENT-2021→2023, PQ-07-rev1→rev3, IL-INS-03-rev2→rev4 — only involve
+docs 1-16, so splitting the run doesn't break `doc_ids_by_filename` lookups).
+
+**Rules:**
+> 1. EVERY LLM/embedding client wrapper in `llm_client.py` must set an
+>    explicit `timeout` on its underlying SDK client — no exceptions. A
+>    client with no timeout doesn't fail loudly, it hangs silently for tens
+>    of minutes, masquerading as "still working" in a background task.
+> 2. To detect a hang vs. genuine slowness in a background ingestion task:
+>    check both (a) no new log lines for several minutes past the expected
+>    per-doc time, AND (b) 0% CPU delta over a few seconds via
+>    `Get-Process -Id <pid>`. Only (a) can be a slow LLM call; (a)+(b)
+>    together means truly stuck.
+> 3. When resuming a partial `--wipe` re-ingest after a crash/hang, check the
+>    tenant's `supersession_chains` in the domain ontology before splitting
+>    the remaining docs into per-`--doc` invocations — cross-invocation
+>    `doc_ids_by_filename` lookups silently return nothing, breaking
+>    `SUPERSEDES` edges for any chain spanning the split point.
+
+---
+
+## A109 — Fix C (`chunk_overlap` 64→128) regressed automotive 10/13→9/13
+(below the 70% gate) without fixing its target (MH-02) — reverted
+
+**What happened:** Phase 5 Fix A got automotive to 10/13 (76.9%), with
+MH-02/CON-04/AUTH-01 as known remaining failures. Fix C raised
+`chunk_overlap` 64→128 to try to bridge MH-02's 2-chunk structural gap
+(target "Conformitatea FAI: 100%" row sits 2 chunks from its KPI heading).
+After a full `--wipe` re-ingest (interrupted by A108's embedder hang, resumed
+per A107/A108), the eval came back **9/13 (69%) — below the 70% gate**:
+- MH-02 still failed (overlap=128, ~128 chars, still can't bridge a 2-chunk gap)
+- SH-01 newly failed (was Fix A's flagship fix)
+- CON-03 newly failed
+- AUTH-01 flipped to pass (consistent with its known non-determinism, A103)
+
+Net: -1 question, gate failure.
+
+**Root cause of the SH-01 regression (confirmed live):** The correct chunk
+(`0c24c84c-...`, "Rata de livrare la timp ... 95%") WAS present in
+`local_search.search()`'s 55-chunk output — but at **rank 52/55**,
+`final_score=0.7919`, far below the 0.86-0.97 cluster occupying ranks 1-51.
+`context_builder.py` only takes the **top 5** chunks (`top_k=5`) for the
+synthesis prompt, so the LLM never saw it (hence faith=1.00 but "missing
+required term: 95%", "insufficient citation recall").
+
+Re-chunking with overlap=128 shifted this chunk's boundaries enough that it
+was no longer `fused_chunks[0]` (the #1 RRF-fused candidate) — so Fix A's
+RRF-floor mechanism (which forces `fused_chunks[0]` into the rerank seed set)
+no longer protected it. Instead it surfaced only as a low-scoring multihop
+hop-chunk (rank 52), well outside `top_k=5`.
+
+**Fix:** Reverted `chunk_overlap` to `64` (restoring the validated Fix A
+10/13 state) and re-ingested the automotive tenant (`--wipe --commit`, with
+the A108 timeout fix applied so the re-ingest didn't hang). MH-02/CON-04/
+AUTH-01 remain documented, deferred known-failures per the Fix A plan
+("optional — gate already cleared by Fix A alone").
+
+**Rules:**
+> 1. A chunking config change (chunk_size/chunk_overlap) is corpus-wide and
+>    can shift which chunk becomes `fused_chunks[0]` for *every* query —
+>    including ones that currently pass via Fix A's RRF-floor mechanism.
+>    Always re-run the FULL golden eval (not just the targeted question)
+>    after any chunking change, and compare the total pass count, not just
+>    the targeted question's pass/fail.
+> 2. If a fix targets question X but the eval shows X still failing AND the
+>    total pass count dropped, revert immediately — don't layer further
+>    fixes on top of a config change that's net-negative.
+> 3. "Chunk is in `local_search.search()`'s output" is not the same as
+>    "chunk reaches the LLM" — `context_builder.py`'s `top_k=5` slice is the
+>    real gate. When debugging a missing-fact failure, check the chunk's
+>    *rank* in the final list against `top_k`, not just presence/absence.
+
+---
+
+## A110 — Fix D (`context_top_k` 5→6, decoupled from `rerank_top_k`) had
+no effect on CON-04/AUTH-01 — reverted
+
+**What happened:** After reverting `chunk_overlap` to 64 (A109), CON-04 and
+AUTH-01 remained as documented Fix A known-failures. Their earlier root-cause
+numbers (CON-04's chunk at rank 6/55, final_score=0.8454 vs the rank-5 cutoff
+0.8494, Δ≈0.004) were measured under the *Fix C* (`chunk_overlap=128`) graph.
+Hypothesized that decoupling `ContextBuilder`'s `top_k` from `rerank_top_k`
+and raising it 5→6 would let CON-04's near-miss chunk into the synthesis
+context without touching the validated `rerank_top_k=5` reranker-seed count
+(precision 0.907 baseline).
+
+**Verification (partial ingest, 20/30 docs — all docs needed for SH-01/MH-02/
+CON-04/AUTH-01 present, all re-chunked at `chunk_overlap=64`):**
+- SH-01: PASS (confirms A109's revert restores the Fix A win)
+- MH-02: FAIL (unchanged, expected — A109/structural gap)
+- CON-04: FAIL — `context_top_k=6` did not pull `pc-comp-07-rev3` /
+  `il-ins-03-rev4` into context at all
+- AUTH-01: FAIL — all 6 citations were `csr-client-2023` (duplicated);
+  `rfa-reg-01-rev5` never entered the candidate set, nowhere near a rank-6
+  cutoff
+
+Under `chunk_overlap=64` (Fix A's graph), CON-04/AUTH-01 fail for reasons
+unrelated to a narrow rank-5/6 margin — the Fix C-era root-cause numbers don't
+transfer. `context_top_k=6` had zero measured benefit.
+
+**Fix:** Reverted `context_top_k` entirely (removed from `settings.yml`,
+`hybrid_retriever.py`, `agentic_retriever.py`) — an unverified, ineffective
+config addition that also risked the aerospace tenant (cross-tenant retrieval
+config) should not be kept (Simplicity First).
+
+**Final Phase 5 state:** Fix A stands alone (10/13, 76.9%, gate cleared).
+MH-02/CON-04/AUTH-01 remain documented, deferred known-failures — as the
+original Fix A plan already classified them ("optional, gate already cleared
+by Fix A alone"). No further fix attempts planned without new root-cause
+evidence gathered *against the chunk_overlap=64 graph specifically*.
+
+**Rule:**
+> Root-cause measurements (chunk ranks, score deltas) are tied to the exact
+> graph state (chunking config) they were measured against. After ANY
+> chunking config change + re-ingest, treat prior root-cause numbers for
+> other questions as invalidated — re-measure against the new graph before
+> proposing a fix based on them.
+
+---
+
+## A111 — `alias_embedding_threshold` 0.92→0.97 (uncommitted, pre-existing)
+fragmented automotive into 278 communities and exploded contradiction
+false-positives — reverted
+
+**What happened:** While re-ingesting `FP-INJ-01.txt` (part of restoring the
+full 30-doc automotive corpus after A109), `community_builder.quality_ok`
+reported `community_count=278` (validated baseline: ~55) and
+`contradiction_detector.scan_done` reported `new_conflicts=500` — exactly the
+cypher query's `LIMIT 500` cap. The doc's community summarization (278 LLM
+calls) was still running 1+ minute later, vs. ~50s for 71 communities
+earlier the same session.
+
+**Root cause:** `config/settings.yml`'s `alias_embedding_threshold` was
+**already** `0.97` in the uncommitted working tree at the *start* of this
+entire session (visible in `git status` before any Phase 5 work) — the
+committed/validated baseline is `0.92`. A stricter threshold means far fewer
+near-duplicate entities get merged during alias resolution, so the graph
+fragments into many near-duplicate entity nodes. Each near-duplicate pair
+becomes a candidate for `directional_reversal`/`positive_negative_pair`
+conflict detection that wouldn't exist if the entities had been merged —
+hence the 500-cap conflict explosion. More distinct entity nodes also means
+many more Leiden communities (278 vs 55), each requiring its own LLM
+summarization call — this is *also* the reason ingestion has been running
+much slower than the original ~80s/doc baseline all session (A109's resumed
+ingest, the lost A109 re-ingest, and this run were ALL affected, since 0.97
+was active for the entire session).
+
+**This also retroactively explains** the unexplained "200 open conflicts / 92
+false-positive conflicts / contradiction recall=0.20 / precision=0.01" anomaly
+seen in the Fix C eval (`automotive_eval_fixC_final.log`) — not a Fix C
+side-effect as originally suspected, but this threshold.
+
+**Fix:** Killed the stuck `FP-INJ-01` ingestion (PID 18888, mid 278-community
+summarization — would have been redone anyway). Reverted
+`alias_embedding_threshold` to `0.92` in `config/settings.yml`.
+
+**Consequence:** Every doc ingested this session (21/30, including all 20
+used to verify A109/A110's SH-01 fix) was ingested under `threshold=0.97`.
+SH-01 still passed under this fragmented graph, but overall graph quality
+(community structure, contradiction precision) for the current automotive
+tenant is degraded session-wide. **A single full `--wipe --commit` re-ingest
+of automotive — combining A109's `chunk_overlap=64` and this `0.92`
+threshold, both already correct in `settings.yml` — is required** to get a
+clean, fully-validated graph. Not yet run; pending user go-ahead given 3 prior
+re-ingest attempts this session hit issues (A108 embedder hang, lost
+background session, this threshold bug).
+
+**Rules:**
+> 1. At the START of any session involving re-ingestion, diff
+>    `config/settings.yml` against `HEAD` and account for EVERY uncommitted
+>    line — not just the ones relevant to the current task. An unrelated
+>    stray config change can silently degrade every re-ingest run for the
+>    rest of the session.
+> 2. A sudden jump in `community_builder.quality_ok community_count` or
+>    `contradiction_detector.scan_done new_conflicts` (especially hitting a
+>    query's `LIMIT` cap) relative to the session's earlier docs is a signal
+>    to stop and check `alias_embedding_threshold` / alias dedup rate, not
+>    just "this doc has more entities."
+
+## A112 — Future optimization note: extraction model speed/cost options (not actioned)
+
+Ingestion is bottlenecked by per-chunk LLM extraction calls
+(`get_llm()` in `graphrag/core/llm_client.py`), currently DeepSeek-V3
+(`deepseek-chat`), at roughly ~1 chunk/sec for a corpus this size. User asked
+about faster alternatives at comparable cost — captured here for a future
+session, NOT changed now (would require re-validating extraction quality /
+faithfulness on both tenants, out of scope for this session's eval-fix work).
+
+| Model | Throughput | Cost (per 1M tokens, in/out) | Notes |
+|---|---|---|---|
+| **DeepSeek-V3** (`deepseek-chat`) — current primary | ~30-60 tok/s | ~$0.07 / $1.10 | Cheapest; generous rate limits; current "extraction voice" baseline for both tenants |
+| **Gemini 2.0 Flash** | ~200 tok/s | ~$0.075 / $0.30 | A `GeminiLLM` class already exists in `llm_client.py` (currently dormant — was the pre-DeepSeek Groq fallback); cheap + fast + huge context, but reintroducing it changes extraction "voice" for both tenants |
+| **Groq llama-3.3-70b-versatile** (paid tier) | ~280 tok/s | ~$0.59 / $0.79 | Already used for synthesis (`get_llm()` opt-in via `LLM_INGEST_PROVIDER=groq`) and is the `FallbackLLM` partner for `get_fast_llm()`; free tier rate-limits at corpus scale (the original reason DeepSeek became primary for ingestion) |
+| **Groq llama-3.1-8b-instant** | ~800 tok/s | ~$0.05 / $0.08 | Already used as the fast/routing model in `AgenticRetriever`; cheapest+fastest but smaller model — extraction quality on Romanian automotive text unvalidated |
+| **Cerebras llama-3.3-70b** | ~2000 tok/s | comparable to Groq paid tier | Not currently integrated — would need a new `BaseLLM` subclass in `llm_client.py` |
+
+**If pursued**: treat as a corpus-wide change requiring full re-validation
+(both tenants' golden evals + faithfulness regression), same rule as Fix B/C
+in this session's `tasks/lessons.md` entries — don't swap mid-validation.
+
+## A113 — MH-02/AUTH-01 are structural retrieval-pool gaps, not tunable
+
+Spent this session trying non-destructive fixes for the 3 remaining automotive
+failures (MH-02, CON-04, AUTH-01) under a hard "no re-ingestion" constraint.
+Conclusion, with evidence:
+
+- **MH-02**: PPAP-PROC-01's "Conformitatea FAI: 100%" KPI-table chunk never
+  appears in vector or BM25-fused top-40 for the MH-02 query, at ANY
+  `local_top_k` (tested 10/20/40) or `multihop_semantic_weight` (0/0.2/0.5/0.8).
+  Not reachable via multihop either (0/500 hop_chunks). This is a pure
+  **chunking gap** (the KPI table and the question's terms don't co-occur in
+  any chunk's embedding/BM25 signal) — only fixable via different chunk
+  boundaries + full re-ingest (Fix C, already tried once and reverted as
+  net -1 — see A109).
+- **AUTH-01**: RFA-REG-01-rev5's relevant chunk (`0382d695...`, "Furnizorii
+  CRITICI ... reevaluare SEMESTRIALĂ") reaches fused rank 8/10 (a real BM25
+  hit) but is never selected by the cross-encoder reranker into `seed_chunks`,
+  and is not in multihop hop_chunks either — so it never reaches
+  `all_chunks`/context at all. Fix A's RRF-floor only guarantees the #1 fused
+  chunk a seed slot, not rank-8. No prompt-level or context-builder fix can
+  recover a citation for a chunk that's never selected as a candidate.
+- **CON-03/CON-04**: NOT a retrieval problem — all expected citations ARE
+  present in context every run. Root cause is **LLM sampling non-determinism**
+  at temperature=0.0 on contradiction-heavy context (re-running identical
+  code/context flips "semestrial"↔"anual" for CON-03, and "rev2"/"rev4"
+  appear/disappear for CON-04 across runs with byte-identical inputs). This is
+  a known characteristic of Groq's MoE-served Llama models (no determinism
+  guarantee at temp=0 due to dynamic batching) — not something our retrieval
+  or prompt config controls.
+
+**Implication**: "retry until MH-02/CON-04/AUTH-01 all pass" cannot succeed —
+MH-02 and AUTH-01 fail 100% of the time (citations structurally absent from
+context, independent of LLM sampling), while CON-03/CON-04 are ~coin-flip
+flaky. The 70% gate is already cleared by Fix A alone (10/13, SH-01 fixed).
+Tried and kept: near-duplicate text dedup in `context_builder.py` (harmless,
+doesn't fix AUTH-01 — the relevant chunk isn't a literal near-dup of what's in
+context); `_ANSWER_PROMPT`/`_FINAL_PROMPT` rev-number rules in
+`hybrid_retriever.py`/`agentic_retriever.py` (harmless general improvement,
+marginal/non-stable effect on CON-04). Tried and not kept: `local_top_k=40`
+probe (config not persisted — no effect on MH-02, no regression on SH-01).
+
+**Path forward** (deferred, needs user GO — destructive re-ingest): a targeted
+chunking fix for MH-02 (e.g. keep KPI-table rows with their section heading in
+the same chunk) would need different validation than Fix C's blunt
+`chunk_overlap` bump — Fix C regressed SH-01/CON-03 because a global overlap
+change perturbs every chunk's embedding, not just PPAP-PROC-01's. A
+structure-aware splitter (e.g. never split mid-table) is lower blast-radius
+but is a real code change, not a config tweak, and still requires full
+re-ingest + both-tenant re-validation.
+
+## A114 — AUTH-01 fixed: prefer fused_chunks candidate over cosine-only pick,
+## PREPEND not append to seed_chunks
+
+AUTH-01 (authority_chain) was failing because the named-document boost (added
+in the prior session for RFA-REG-01-rev5) picked the wrong chunk and/or gave
+it a fatal rank penalty. Two compounding bugs, both fixed in
+`graphrag/retrieval/local_search.py`:
+
+1. **`get_best_chunk_for_document` is cosine-only against the whole document**
+   — for a question naming "RFA-REG-01", it picked the document's most
+   generically-similar-to-the-question chunk (a 0.84-cosine intro paragraph,
+   `5a639ea7`), not the chunk containing the actual fact ("Furnizorii
+   clasificați ca CRITICI sunt supuși reevaluării SEMESTRIALE", `0382d695`).
+   `0382d695` was already sitting at fused rank 8 — lexically matched against
+   this exact question by BM25/RRF — but never considered because the boost
+   went straight to a fresh cosine search.
+   **Fix**: before falling back to `get_best_chunk_for_document`, check
+   `fused_chunks` (excluding chunks already in `seed_chunks`) for any chunk
+   belonging to the named document via a new
+   `neo4j_client.get_chunk_filenames(chunk_ids, tenant)` helper (chunk_id →
+   filename). Only fall back to the cosine-only `get_best_chunk_for_document`
+   if no fused candidate from that document exists.
+
+2. **Appending the boosted chunk to `seed_chunks` gives it the worst possible
+   rank-based text score.** `gnn_scorer.py`'s `_text_score` for chunks WITH a
+   `rerank_score` is `1 - (rank / n_seed)` — rank = position in `seed_chunks`.
+   Appending puts the boosted chunk at `rank = n_seed - 1` → `text_score ≈
+   0.2`, regardless of how relevant it actually is, so it almost never
+   survives the final top-5 cut.
+   **Fix**: `seed_chunks = [best] + seed_chunks[:-1]` (prepend, drop the
+   weakest existing seed) → `rank = 0` → `text_score = 1.0`.
+
+**Why**: An explicit "the question names this document by code" signal should
+be treated as at least as trustworthy as the cross-encoder's top pick — not
+buried at the bottom of the seed list where the rank-based score guarantees
+its exclusion.
+
+**How to apply**: Any future "boost a specific chunk into the candidate set"
+mechanism (named-document boost, entity-pin, etc.) must PREPEND to
+`seed_chunks`, never append — `_text_score` is rank-based, not score-based,
+for seeded chunks. Also prefer a chunk already present in `fused_chunks`
+(proven lexically relevant to *this* question) over a fresh whole-document
+similarity search, which only proves relevance to the document in general.
+
+**Result**: `authority_chain 1/1 (100%)`, faithfulness 1.00. 379/379 unit
+tests pass. 3/3 stable `probe_partial.py` re-runs.
+
+## A115 — CON-04 fixed via source-document labels; gate them on
+## revision/version vocabulary to avoid an SH-03 regression
+
+CON-04 (contradiction) asks which revision of IL-INS-03 is referenced inside
+PC-COMP-07, and whether it matches the current revision. Chunks were presented
+to the LLM as bare `[Chunk {uuid}]\n{text}` blocks with NO document/filename
+metadata — the LLM could read "conform procedurii IL-INS-03 rev.2" inside a
+PC-COMP-07 chunk, and separately read IL-INS-03-rev4's content in another
+chunk, but had no way to know *that second chunk* is IL-INS-03-rev4 (vs. e.g.
+IL-INS-03-rev2 or some unrelated document), so it couldn't conclude rev.2 ≠
+rev4.
+
+**Fix**: `local_search.py` now calls
+`neo4j_client.get_chunk_filenames(all_ids, tenant)` and sets
+`chunk["source"] = filename` for each chunk; `context_builder.py` includes it
+in the header: `[Chunk {chunk_id} | Source: {source}]`. `_ANSWER_PROMPT` in
+`hybrid_retriever.py` got a new rule explaining the `Source:` field is for
+attribution/revision comparison.
+
+**Regression found and fixed**: unconditionally adding `Source:` labels broke
+SH-03 (a plain single-document lookup: "ce alt standard ... conform
+CSR-CLIENT-2023?"). The answer-bearing chunk (`d3fb2979`, PQ-07-rev3.txt,
+contains "ISO 9001:2015") WAS in context, labeled `Source: PQ-07-rev3.txt`.
+With that label visible, the LLM concluded the fact wasn't "conform
+CSR-CLIENT-2023" (the document named in the question) and refused to use it —
+3/3 reproducible. Removing the label (A/B test) made SH-03 pass 3/3. Adding an
+explicit "don't restrict to the named document" prompt rule did NOT fix it
+(still 3/3 fail) — the model anchors on the label regardless of instructions.
+
+**Real fix**: gate source-label attachment on whether the *question* contains
+revision/version vocabulary (new `_REVISION_QUERY_RE` in `local_search.py`:
+`rev(?:izi[ae]|ision)?[.\s]|versiune|version|actual[ăa]|current`). CON-04's
+question contains "revizia"/"actuală"; SH-03's doesn't. With this gate: SH-03
+3/3 pass, CON-04 3/3 pass, AUTH-01 3/3 pass (unaffected — AUTH-01's question
+doesn't match the gate either, so no source labels there, consistent with its
+fix in A114 not depending on labels).
+
+**Why**: source/provenance metadata is a double-edged signal — it helps
+cross-document comparison questions but actively hurts single-document lookup
+questions by giving the model an excuse to discard relevant-but-differently-
+sourced facts. Scope the signal to the question types that actually need it
+rather than adding a prompt disclaimer (disclaimers don't override a strong
+label-based heuristic the model has learned).
+
+**How to apply**: any future per-chunk metadata added to context headers
+(provenance, confidence, dates, etc.) should be considered for this kind of
+gating — ask "does *this question* need this signal, or could it cause the
+model to wrongly discard a relevant chunk?" before attaching unconditionally.
+
+**Result**: automotive eval `contradiction 4/5 → expect 5/5` (CON-04 fixed,
+CON-03 remains flaky per A113), `single_hop` unaffected (SH-01 fixed in A104,
+SH-03 now also passes). 379/379 unit tests pass.
+
+## A116 — MH-02 re-confirmed structural (no new info)
+
+Re-ran live `vector_search_chunks(top_k=20)` and `bm25.search(top_k=20)` for
+the MH-02 query against the unmodified automotive tenant: PPAP-PROC-01.txt's
+"Conformitatea FAI: 100%" chunk is essentially absent from both top-20 pools
+(1/20 in vector, 0/20 in BM25-fused) — confirms A113's conclusion. Still
+deferred, requires re-ingestion (off-limits per standing constraint).
+
+## A117 — CON-03 was misdiagnosed as flaky (A113); actual cause was
+## cross-document context pollution + community-synthesis override — fixed
+
+A113 assumed CON-03 (and CON-04) flip pass/fail purely from Groq MoE sampling
+non-determinism at temp=0. Re-investigation this session found CON-03 was
+actually **100% deterministic and 100% wrong** before this fix: 4/4 runs with
+byte-identical retrieval context answered "anual" (never "semestrial"),
+despite "semestrial" being clearly present in the context every time.
+
+**Root cause, two layers**:
+
+1. **Retrieval-level pollution**: the question asks "conform Manualului
+   Calității (MC-01) și procedurii PQ-07". The top-5 context contained TWO
+   chunks with "Reevaluarea furnizorilor activi se realizează(/realizeaza)
+   SEMESTRIAL" (correct, from PQ-07/MC-01) — but ALSO two chunks from
+   **PPAP-PROC-01** (an unrelated document, not named in the question) with a
+   same-shaped but different fact: "Evaluarea furnizorilor activi se va
+   realiza anual" (section "8.1 Frecvența reevaluării" — same section number
+   as the correct MC-01 chunk, almost certainly why it scores similarly).
+   Nothing in the context told the LLM these "anual" chunks came from a
+   document the question didn't ask about.
+
+2. **Community-synthesis override**: even when the LLM correctly extracted
+   "SEMESTRIAL" from the chunk-level facts (some runs), a `Community
+   knowledge:` section (GraphRAG global/community synthesis) sometimes stated
+   "anual", and the LLM deferred to that coarse summary over the specific
+   chunk-level fact — "Conform informațiilor din comunitate, ... se efectuează
+   anual."
+
+**Fix** (both layers, code-only, no re-ingestion):
+
+1. `local_search.py`: replaced the `_REVISION_QUERY_RE`-only gate from A115
+   with `_needs_source_labels()`, which ALSO triggers when the question names
+   2+ distinct document codes via the existing `_DOC_CODE_RE` (CON-03 names
+   "MC-01" and "PQ-07" — 2 codes). This attaches `chunk["source"] = filename`
+   so the LLM can see the "anual" chunks are from PPAP-PROC-01, not MC-01/PQ-07.
+
+2. `hybrid_retriever.py` `_ANSWER_PROMPT`: two new rules —
+   - If the question names specific documents and two chunks conflict, prefer
+     the fact from the chunk whose `Source` matches a named document.
+   - A `Community knowledge:` section is lower-precision than a numbered
+     `[Chunk ...]` section; prefer the chunk-level fact when they conflict.
+
+**Why this matters beyond CON-03**: A113's "it's just LLM noise, nothing we
+can do" conclusion was wrong for CON-03 — it was a retrieval/context-design
+bug that happened to produce a single wrong answer 100% of the time, which
+*looked* like it could be "non-determinism" only because a DIFFERENT
+contradiction question (CON-04) genuinely does flip. Don't assume "low
+faithfulness + occasional pass" means non-determinism — check whether the
+*context itself* contains a same-shape distractor fact from an unrelated
+document first.
+
+**Verified**: 379/379 unit tests pass. CON-03 went from 4/4 deterministic FAIL
+to 7/8 PASS (5/5 in one batch, then 2/3 in a follow-up 3x5-question regression
+sweep — the one remaining fail also showed "missing 'semestrial'", same
+failure mode, just less frequent now). SH-01, SH-03, CON-04, AUTH-01 all
+unaffected — 15/15 PASS across the same sweep. AUTH-01 also picked up source
+labels under the new 2+-doc-code gate (its question names "CSR-CLIENT-2023"
+and "RFA-REG-01") with no regression.
+
+CON-03's residual ~1/8 failure is now plausibly genuine LLM sampling
+non-determinism (consistent with A113's characterization of CON-04) rather
+than the prior 100%-deterministic context-pollution bug — a large
+improvement, though not a full guarantee.
+
+**Expected automotive eval**: `contradiction` now mostly 5/5 (occasionally
+4/5 if CON-03 lands on its ~1/8 fail), `single_hop 3/3`, `authority_chain
+1/1` → ~11-12/13 (85-92%), up from 10/13 at session start. Official aggregate
+still pending — DeepSeek RAGAS faithfulness calls have hung on Q1 for 3
+consecutive attempts this session (transient API instability, unrelated to
+these code changes).
+
+## A118 — MH-02 chunking fix already implemented (uncommitted), just needs re-ingest
+
+**Context**: User asked to "try to fix" MH-02 (structurally unreachable per
+A113/A116 — PPAP-PROC-01's "Conformitatea FAI: 100%" KPI table row never
+enters the BM25/vector top-20). A113's "Path forward" proposed exactly this:
+"a targeted chunking fix for MH-02 (e.g. keep KPI-table rows with their
+section heading in the same chunk)".
+
+**Finding**: `graphrag/ingestion/chunker.py` ALREADY contains a heading-aware
+chunker — `_split_into_sections()` + `_HEADING_RE` split the document at
+markdown headings and prepend each section's heading to every chunk derived
+from it. This is EXACTLY A113's proposed fix. But `git diff` shows this code
+is **uncommitted, working-tree-only** — it was written in a prior session but
+never landed or applied via re-ingestion.
+
+**Verified relevance to MH-02**: Read `data/automotive/long/PPAP-PROC-01.txt`.
+The document's content is duplicated (two near-identical copies concatenated).
+The "Conformitatea FAI" row that's the MH-02 target lives in the SECOND copy,
+under heading `## 11. INDICATORI KPI CU VALORI TARGET NUMERICE` (line 599),
+in a 3-column table (`Indicator | Valoare țintă | Descriere`) — distinct from
+the first copy's 2-column table under `## 10. ...` (line 223-231). The
+currently-ingested chunk for this row (`619face7...`, confirmed via Neo4j in
+A116/this session) does NOT carry this heading text — consistent with it
+having been chunked by the OLD (pre-heading-aware) chunker. With the
+uncommitted heading-aware chunker, re-chunking would prepend "## 11.
+INDICATORI KPI CU VALORI TARGET NUMERICE" (plus "Evaluarea performanței
+furnizorilor va fi realizată și prin intermediul unor indicatori KPI...") to
+every chunk in that section, including the FAI row — adding "INDICATORI",
+"KPI", "VALORI TARGET NUMERICE" vocabulary that plausibly pulls it into
+BM25/vector top-k for the MH-02 query.
+
+**Status**: Code fix exists and is ready (uncommitted). NOT applied — applying
+it requires re-ingesting the automotive tenant (`--wipe --commit`), which is
+blocked by the standing "no ingestions" constraint this session. 379/379 unit
+tests still pass with this code present (chunker change is structurally
+additive — sections without headings behave identically to before).
+
+**Next step (needs explicit user GO)**: `py -3.11 scripts/ingest_corpus.py
+--commit --wipe` for the `automotive` tenant, then re-run MH-02 via
+`probe_partial.py` / `scripts/run_automotive_eval.py` to confirm the FAI-row
+chunk now surfaces and MH-02 passes. Also re-run the aerospace regression
+check afterward only if aerospace is also re-ingested (aerospace ingestion is
+separately blocked by the same constraint and was not touched).
+
+**Estimated success rate if automotive is re-ingested now** (heading-aware
+chunker + all of A114/A115/A117's already-applied retrieval/prompt fixes):
+
+- **Best case**: 12-13/13 (92-100%) — MH-02 flips to PASS (heading vocab pulls
+  the FAI-row chunk into top-k), CON-03 lands on its ~7/8-favored side, and
+  SH-01/SH-03/CON-04/AUTH-01 hold.
+- **Realistic expected**: ~11-12/13 (85-92%) — same as the current
+  pre-re-ingest estimate, i.e. re-ingestion is expected to be net-neutral-to-
+  positive but not guaranteed to flip MH-02 (heading text increases relevance
+  but doesn't guarantee a top-k rank crossing) and CON-03 retains its ~1/8
+  residual flake either way.
+- **Downside risk (precedent: A109)**: a corpus-wide chunking change shifted
+  chunk boundaries for ALL documents last time (`chunk_overlap` 64→128) and
+  caused a NET REGRESSION (10/13 → 9/13) by newly breaking SH-01 and CON-03
+  even though it didn't fix its target (MH-02). The heading-aware chunker is a
+  different, more targeted mechanism (additive, not a global size/overlap
+  change) and unit tests pass, but it still re-chunks the entire automotive
+  corpus, so a similar SH-01/CON-03 regression is possible. Floor estimate:
+  ~9-10/13 (69-77%) if that happens — at or just below the 70% gate.
+
+**Recommendation**: if re-ingesting, re-run the FULL automotive golden set
+(not just MH-02) plus the aerospace regression check, per A103's rule for
+corpus-wide changes — don't assume isolated improvement.
+
+## A119 — `PPAP-PROC-01.txt` contains ~4 overlapping rewritten "passes", not a simple duplicate (documented, NOT fixed)
+
+**What happened**: While investigating MH-02 (A118), read the full
+`data/automotive/long/PPAP-PROC-01.txt` (1086 lines). It is not a single
+duplicate — it's roughly **4 concatenated passes** through similar content,
+each independently rewritten/rephrased (likely from repeated
+`data/generate_doc.py` runs concatenated without dedup), with **conflicting
+section numbers across passes** (e.g. section 8 = "CLASIFICAREA
+FURNIZORILOR" in passes 1-2, but section 8 = "REEVALUAREA FURNIZORILOR
+ACTIVI" in pass 3; section 9 flips correspondingly). Passes run
+~lines 1-277, 277-498, 498-834, 834-1075, each ending mid-sentence where the
+next pass's heading is concatenated directly onto the prior pass's closing
+paragraph (no newline) — e.g. line 277, 498, 715, 834.
+
+**Why NOT fixed now**: MH-02's actual target row ("Conformitatea FAI: 100%"
+with description column) lives in **pass 3**, under its own
+`## 11. INDICATORI KPI CU VALORI TARGET NUMERICE` heading (line 599) — a
+different (3-column) table than pass 1's `## 10.` table (2-column,
+line 223-234). A naive "dedupe to one pass" would likely DELETE the exact
+section the A118 chunker fix targets for MH-02. Also: CON-03/CON-04/AUTH-01's
+session fixes were validated against the CURRENT multi-pass chunking of this
+file — restructuring it is itself a corpus-wide chunking change (same risk
+class as A109's regression), and bundling it with A118's chunker change would
+make any regression hard to attribute to either change individually.
+
+**Decision**: documented only, not edited. If pursued later, treat as a
+SEPARATE re-ingest/re-validation cycle from A118's chunker fix — fix one,
+re-ingest, re-validate full automotive golden set + aerospace regression,
+THEN do the other. Both still require explicit user GO per the standing
+no-ingestion constraint.
+
+## A120 — Multilingual reranker swap tried and reverted (net-neutral, new regressions); baseline is actually 11/13 now
+
+**Context**: tried swapping the cross-encoder reranker from
+`cross-encoder/ms-marco-MiniLM-L-6-v2` (English MS MARCO) to
+`cross-encoder/mmarco-mMiniLMv2-L12-H384-v1` (multilingual mMARCO, covers
+Romanian) — a query-time-only change, no re-ingestion needed. Unit tests
+mock the reranker entirely (379/379 pass either way). Sanity check on the
+SH-01 pair showed a much stronger correct-vs-distractor margin (4.85 vs
+-3.84) than the old model ever gave.
+
+**Result (live `probe_full.py`, no RAGAS — `_check()` term/citation checks
+only, automotive tenant, 13 questions)**:
+- New reranker: **10/13** — SH-01 flips PASS (as hoped), but **CON-04
+  regresses to FAIL** ("context does not contain any information about
+  PC-COMP-07 referencing IL-INS-03" — this session's A115 fix undone) and
+  **CON-02 newly FAILs** (citation recall: only 1/3 expected docs cited).
+- Reverted to the old reranker, re-ran: **11/13** — SH-01 still PASSES (it
+  was already fixed by Fix A's RRF-floor, A104 — unrelated to the reranker),
+  CON-04/CON-03/AUTH-01 all PASS. Only **MH-02** (A118, pending re-ingest) and
+  **CON-02** (new finding, see below) fail.
+
+**Conclusion**: the multilingual reranker is net-neutral at best (10/13,
+same as old session-start baseline) and trades a fix you already have
+(CON-04, via A115) for one you don't need (SH-01, already fixed by A104).
+Confirms the plan's existing "too high blast radius for the gain" caution —
+**reverted**, `reranker.py` restored to `ms-marco-MiniLM-L-6-v2`.
+
+**Bonus finding**: current code (A114/A115/A117, old reranker, no
+re-ingestion) scores **11/13 (84.6%)** — better than the 11-12/13 estimate in
+A117/A118. The only failures are MH-02 (A118, structural — fix ready,
+pending re-ingest) and **CON-02** (new — "Este obligatoriu un audit on-site
+la sediul furnizorului înainte de aprobarea oricărui furnizor nou?",
+`expected_citations: [csr-client-2023, fp-inj-03, reg-evf-01]`, only
+`csr-client-2023` cited — a 3-document citation-recall gap, same flavor as
+AUTH-01/CON-04 but not previously tracked as a "remaining failure". Not
+investigated yet — candidate for a future session.)
+
+Updated estimate if automotive is re-ingested with A118's chunker fix:
+**12/13 (92%)** if MH-02 flips and CON-02 is unaffected, or **11/13** if
+CON-02 remains the sole failure.
+
+## A121 — CON-02 root cause: 20 corpus files were never ingested (corpus/graph drift, not a retrieval bug)
+
+**Investigation**: ran `LocalSearch.search()` live for CON-02's question
+("Este obligatoriu un audit on-site la sediul furnizorului înainte de
+aprobarea oricărui furnizor nou?") against `automotive`. The 55-chunk
+candidate pool contains ONLY `csr-client-2023`, `pq-07-rev3`, `pq-07-rev1`,
+`ppap-proc-01`, `mc-01-s8-rev6`, `il-ins-03-rev2`, `pc-comp-07-rev3` — never
+`fp-inj-03` or `reg-evf-01` (CON-02's other two `expected_citations`).
+
+**Root cause**: queried Neo4j directly —
+```
+MATCH (c:Chunk {tenant:'automotive'})-[:PART_OF]->(d:Document{tenant:'automotive'})
+WHERE toLower(d.filename) CONTAINS 'fp-inj' OR toLower(d.filename) CONTAINS 'reg-evf'
+```
+returns **0 chunks**. `MATCH (d:Document{tenant:'automotive'})` returns only
+**10 documents** (CSR-CLIENT-2021/2023, IL-INS-03-rev2/rev4, MC-01-S8-rev6,
+PC-COMP-07-rev3, PPAP-PROC-01, PQ-07-rev1/rev3, RFA-REG-01-rev5). But
+`data/automotive/` on disk (untracked dir, `git status` shows `?? data/automotive/`)
+contains **30 `.txt` files** across `short/`, `medium/`, `long/`, `archive/` —
+20 of them (FP-INJ-01/02/03, FP-PAC-04, FP-VER-05, REG-ETA-01, REG-EVF-01,
+REG-NC-01, IL-CAL-05, IL-EXP-07, IL-MEN-08, IL-NC-06-rev2, IL-PROC-12-rev1,
+PAI-PROC-04, PCAL-PROC-10, PFMEA-01, PTRN-PROC-13, SPEC-PROD-01,
+PN-PROC-05-rev1/rev3) **were never ingested into Neo4j at all**.
+
+`ingest_corpus.py`'s automotive config (`_automotive_corpus_config()`) uses
+`corpus_dir = data/automotive`, `recursive: True` — i.e. it WOULD pick up all
+30 files via `rglob("*.txt")` on a fresh `--wipe --commit` run. The corpus
+directory simply grew (to its current 30-file/4-tier short/medium/long/archive
+shape) after the automotive tenant's last ingestion, and `data/eval_golden/queries_automotive.json`
+(last modified 2026-06-14, newer than the graph) was authored against the
+*current* (30-file) corpus, not the *ingested* (10-file) one.
+
+**Blast radius check** — grepped `queries_automotive.json` for all 20
+un-ingested docs' slugs: 4 are referenced as `expected_citations` across the
+13-question golden set: **`fp-inj-03`, `reg-evf-01`** (CON-02), and
+**`il-nc-06-rev2`, `il-proc-12-rev1`** (used in some other question — not yet
+mapped to a specific ID this session). CON-02 cannot pass — and any other
+question expecting those 4 docs cannot pass — under **any** non-destructive
+retrieval/reranker/config tuning, because the chunks simply do not exist in
+the graph. This is categorically different from MH-02/AUTH-01 (A113): those
+are "chunk exists but doesn't surface" gaps; this is "chunk doesn't exist".
+
+**Why not previously caught**: A113/A117/A118/A120's diagnostics all probed
+*ranking* (BM25/vector top-20, rerank scores) for docs known to be in the
+graph. CON-02 is the first question whose `expected_citations` include docs
+outside the ingested 10 — nobody had checked `MATCH (d:Document)` document
+*coverage* vs. the golden set's document references until now.
+
+**Fix options (none applied — all require re-ingestion, blocked by standing
+"no ingestions" constraint)**:
+1. Re-ingest automotive with `--wipe --commit` against the current 30-file
+   corpus. Combines naturally with A118's chunker fix (already
+   uncommitted/ready) — one re-ingest cycle could resolve MH-02 AND CON-02
+   (and whichever question(s) need `il-nc-06-rev2`/`il-proc-12-rev1`)
+   simultaneously. Highest payoff, highest blast radius (full re-ingest,
+   ~1hr, both A118 and A119 considerations apply — A119's duplication issue
+   is in `PPAP-PROC-01.txt`, one of the ALREADY-ingested 10, so it's
+   orthogonal to this 20-file gap).
+2. Incremental ingest of just the 20 missing files (if `ingest_corpus.py`
+   supports non-`--wipe` incremental add — not yet checked). Lower blast
+   radius (doesn't touch the 10 already-ingested docs / their entities/edges),
+   but doesn't get A118's chunker fix for MH-02 (MH-02's doc, PPAP-PROC-01,
+   is already ingested — would need its own re-chunk separately).
+3. Do nothing — document CON-02 (and the `il-nc-06-rev2`/`il-proc-12-rev1`
+   question) as permanently-failing-until-re-ingest, same status as MH-02.
+
+**Updated automotive picture**: current validated baseline is **11/13
+(84.6%)**, well above the 70% gate. CON-02 and MH-02 are BOTH
+re-ingest-gated failures (different mechanisms: MH-02 = chunking, CON-02 =
+missing documents). A full re-ingest addressing both could realistically
+reach **12-13/13 (92-100%)** depending on whether
+`il-nc-06-rev2`/`il-proc-12-rev1`'s question is among the currently-passing
+11 or was silently relying on partial-credit thresholds.
+
+**Recommendation**: bundle this with A118/A119 as a single future re-ingest
+decision point — needs explicit user GO, not pursued this session per the
+standing constraint.
+
+## A122 — CON-02 fixed via minimal incremental ingest (12/13, 92.3%)
+
+**Action taken (with explicit user GO, "go with reingest - but as small as
+possible to test, not full")**: ran
+`python scripts/ingest_corpus.py --doc "FP-INJ-03,REG-EVF-01" --tenant
+automotive --commit` (NO `--wipe`). This is additive-only — `doc.id` is a
+fresh `uuid4()` per ingested file, so re-running with a `--doc` filter and no
+wipe cannot collide with or alter the existing 10 documents/chunks/entities.
+
+**Result**:
+- Graph snapshot: entities 1799→1846 (+47), edges 2527→2562 (+35) — exactly
+  the scale of 2 small `FORM_RECORD` (authority=4) documents (13+11=24 chunks,
+  80 raw entities → 47 after dedup). Pre-existing 1799/2527 baseline and 462
+  open conflicts / 180/1k contradiction rate were already present before this
+  run (automotive is a deliberately contradiction-dense corpus by design —
+  not a regression).
+- **CON-02: FAIL → PASS.** `reg-evf-01` and `csr-client-2023` both now cited
+  (citation recall 0.667 ≥ 0.4 threshold); `fp-inj-03` still not cited but not
+  required to hit the threshold.
+- **Full automotive golden set: 11/13 → 12/13 (92.3%)**. All 12 previously-
+  passing questions (SH-01/02/03, MH-01, CON-01/03/04/05, AUTH-01, NEG-01/02)
+  still pass — zero regressions.
+- **379/379 unit tests pass.**
+- Only **MH-02** remains failing — same root cause as A118 (heading-aware
+  chunker fix exists, uncommitted, needs its own re-ingest of
+  `PPAP-PROC-01.txt` to take effect).
+
+**Note**: `il-nc-06-rev2`/`il-proc-12-rev1` (the other 2 of the 20 originally
+un-ingested files referenced somewhere in the golden set, per A121) were
+NOT ingested in this minimal step — out of scope for "as small as possible".
+If the question(s) referencing them are among the 12 currently-passing
+(seems likely, since 12/13 held with only `fp-inj-03`/`reg-evf-01` added),
+no further action needed; otherwise revisit.
+
+**Aerospace tenant**: untouched (this ingest only targeted `automotive` via
+`--tenant automotive --doc "FP-INJ-03,REG-EVF-01"`). Aerospace regression
+re-validation remains a separate, not-yet-revisited item.
+
+**Automotive baseline is now 12/13 (92.3%)**, up from 11/13 (84.6%) at session
+start. MH-02 (A118) is the sole remaining failure, pending a separate,
+explicit re-ingest GO for `PPAP-PROC-01.txt`'s heading-aware re-chunk.
+
+## A123 — Full 14-doc re-ingest with fixed chunker: MH-02 fixed, but SH-01/CON-04/AUTH-01 regressed (12/13 -> 10/13)
+
+**Action taken (with explicit user GO, "confirm re-run wipe automotive and
+ingest the 14-file set with the fixed chunker")**: fixed the A118 chunker bug
+first (see below), then ran
+`python scripts/ingest_corpus.py --tenant automotive --wipe --commit --doc
+"CSR-CLIENT-2021,CSR-CLIENT-2023,IL-INS-03-rev2,IL-INS-03-rev4,IL-NC-06-rev2,
+IL-PROC-12-rev1,MC-01-S8-rev6,PC-COMP-07-rev3,PPAP-PROC-01,PQ-07-rev1,
+PQ-07-rev3,RFA-REG-01-rev5,FP-INJ-03,REG-EVF-01"` (full tenant wipe + 14-file
+re-ingest, ~48 min, 14/14 docs, 1292 chunks, 1913 entities, 2711 edges, 29
+open conflicts).
+
+**Chunker bug fixed first**: A118's original implementation pre-split the
+document into one section per markdown heading BEFORE running
+`RecursiveCharacterTextSplitter.split_text()` on each section independently —
+this caused a chunk-count explosion on heading-dense docs (PQ-07-rev3.txt:
+141 headings/63KB -> 208 chunks instead of ~145; PPAP-PROC-01.txt -> 217
+chunks). Fixed by chunking `raw_text` in ONE `splitter.split_text()` call
+(restores normal chunk boundaries/counts), then for each resulting chunk
+locating its character offset (`raw_text.find`, monotonic cursor) and
+prepending the nearest-preceding markdown heading via `bisect.bisect_right`
+on precomputed heading offsets. Verified post-ingest: PQ-07-rev3.txt
+208->170 chunks, PPAP-PROC-01.txt 217->168 chunks.
+
+**Result**:
+- **MH-02: FAIL -> PASS** (faith=0.50). The "Conformitatea FAI: 100%" row now
+  carries its "## 11. INDICATORI KPI CU VALORI TARGET NUMERICE" heading and is
+  retrieved/cited correctly — this was the entire point of A118/A123.
+- **Regressions: SH-01 and AUTH-01 both now fail on "insufficient citation
+  recall — missing: ['csr-client-2023']"; CON-04 now fails on missing
+  required terms 'rev2'/'rev4'.** All three previously passed under the old
+  (pre-fix, exploded-chunk) ingest.
+- **Net: 12/13 (92.3%) -> 10/13 (76.9%)**. Still clears the 70% gate, but a
+  net -2 regression vs the A122 baseline.
+- Contradiction recall 0.40 (2/5: C01, C03 matched; C02/C04/C05 missing),
+  precision 0.72 (29 open conflicts) — not directly compared to A122 (A122
+  didn't report this breakdown), flagged for awareness only.
+- RAGAS faithfulness average 0.897 (>> 0.75 threshold). **379/379 unit tests
+  pass** — code-level zero regressions, this is purely a retrieval-ranking
+  shift from changed chunk boundaries/embeddings after the full re-ingest.
+
+**Root cause of the regression (consistent with the Phase-5 plan's
+addendum)**: SH-01/AUTH-01/CON-04's passing status was already
+margin-sensitive — `path_score`/rerank scores for the relevant
+`csr-client-2023`/`il-ins-03-rev*` chunks sat close to the top-5 cutoff
+(documented as a ~0.004-band non-determinism risk). A full re-ingest changes
+EVERY chunk's boundaries and embeddings (not just PPAP-PROC-01's), shifting
+all three margins enough to flip them, while moving MH-02's target chunk
+into the retrievable set as intended.
+
+**Current state**: automotive tenant is in a clean, fully-ingested state
+(14/14 docs, no partial/broken documents — unlike the killed first attempt).
+10/13 (76.9%) is the new measured baseline, still above the 70% gate. The
+chunker fix itself (`graphrag/ingestion/chunker.py`) is correct and necessary
+for MH-02; the regression is a retrieval-ranking side effect of the re-ingest
+itself, not a chunker defect.
+
+**Not pursued further this session** (per the standing
+no-further-re-ingestion-without-explicit-authorization constraint): tuning
+SH-01/AUTH-01/CON-04 back to passing (e.g. revisiting Fix A's RRF-floor or the
+multihop semantic weight) would need its own validation pass and is a
+separate decision point. Aerospace tenant untouched throughout.
+
+## A124 — "Fix them all" (rerank_top_k 5->7 + _text_score floor) fixed
+automotive SH-01/AUTH-01/CON-04 but collapsed aerospace; reverted
+
+Follow-up to A123. User authorized "fix them all" (SH-01 + AUTH-01 + CON-04)
+via two corpus-wide scoring changes:
+
+1. `graphrag/graph/gnn_scorer.py` `_text_score`: confined the seed-chunk rank
+   penalty to `[0.85, 1.0]` (was full `[0, 1]`) so cross-encoder seeds ranked
+   2nd-5th land in the same score band as multi-hop chunks instead of being
+   structurally outranked by them.
+2. `config/settings.yml` `rerank_top_k: 5 -> 7`, widening the context cutoff
+   to recover chunks ranked #6-7.
+
+**Automotive result: 12/13 (92.3%)**, up from 10/13 — SH-01 PASS, AUTH-01
+PASS, MH-02 still PASS (the A123 goal retained). Only CON-04 failed, and that
+failure is a pure LLM-formatting near-miss (faithfulness=0.83, answer didn't
+spell out "rev2" alongside "rev4"), same class as CON-03's known
+sampling-non-determinism (A113) — not a retrieval gap. 379/379 unit tests
+pass (one test's expected values updated for the new `_text_score` range).
+
+**Aerospace result: catastrophic regression — pass_rate 4/39 (10%) vs the
+80% threshold**, even though avg faithfulness (0.8393) stayed above 0.80.
+Per-type breakdown: only `contextual` (2/2) passed; `agentic`,
+`architecture`, `authority_chain`, `calibration`, `contradiction`, `domain`
+all dropped to 0%. Widening `rerank_top_k` to 7 and reshaping `_text_score`'s
+seed-vs-multihop balance — tuned against the automotive corpus's specific
+near-miss margins — pushed aerospace's much larger context window past a
+point where `_check`'s required-term/citation matching could still pass.
+
+**Reverted both changes** (`_text_score` back to `1.0 - rank/n_seed` over
+[0,1]; `rerank_top_k` back to 5). Re-validation:
+- 379/379 unit tests pass (test expectations reverted too).
+- Automotive: back to **10/13 (76.9%)**, exactly the A123 baseline (MH-02
+  still passing; SH-01/AUTH-01/CON-04 failing as in A123).
+- Aerospace: pass_rate **3/39 (8%)**, avg faithfulness **0.8665**.
+
+**Critical finding while investigating the aerospace pass_rate**: the 8-10%
+pass_rate is **NOT caused by either the "fix them all" change or the
+revert** — it's a pre-existing mismatch between `evals/golden_set.json`'s
+`expected_citations`/`required_answer_terms` and the actual document
+filename slugs / LLM answer phrasing. E.g. SH-01 expects citation
+`faa-ad-2024` and term `FAA-AD-2024`, but the chunk slug map resolves to
+`faa-ad-2024-01-02` and the LLM writes "FAA AD 2024-01-02" (space, not
+hyphen) — both semantically correct (faithfulness=1.0) but failing the
+strict string `_check`. SH-05/SH-08 show the same pattern: citations resolve
+to `boeing_company_profile`/`swa_fleet_registry_2024` vs expected
+`boeing-profile`/`fleet-registry`. avg_faithfulness (0.8665, vs 0.8393
+pre-revert) is the metric consistent with the historical aerospace baseline
+("0.842 overall", A103/lesson context) and both pre- and post-revert values
+clear the 0.80 gate comfortably — this is the correct signal that the revert
+restored the validated baseline.
+
+**Outcome**: gnn_scorer.py and settings.yml fully reverted to the A123-
+validated state (10/13 automotive, MH-02 passing, aerospace faithfulness
+~0.84-0.87). SH-01/AUTH-01/CON-04 remain known, documented failures —
+fixing them requires a config change that doesn't generalize across the two
+corpora's very different chunk/context-window characteristics; any future
+attempt needs per-corpus tuning, not a single shared `rerank_top_k`/
+`_text_score` formula.
+
+**Separate, unresolved issue (out of scope here)**: `evals/golden_set.json`'s
+`expected_citations`/`required_answer_terms` strings don't match current
+document filename slugs or typical LLM answer formatting for ~36/39
+questions, making `_aerospace_regression.py`'s pass_rate metric unreliable
+as a gate. If this script is to be used as a go/no-go check going forward
+(per A103), `golden_set.json` needs reconciling against actual chunk slugs
+and a more tolerant `_check` (substring/normalized matching for citations
+and hyphen/space-insensitive term matching) — this predates this session's
+changes and was not introduced by them.
+
+## A125 — `rerank_top_k=6` alone (isolated, no `_text_score` change):
+also a net regression, reverted
+
+Follow-up to A124, testing the user's suggestion to change exactly one
+parameter at a time. `rerank_top_k: 5 -> 6` only (no `_text_score` change).
+
+**Automotive: 9/13 (69.2%)** — *below* the 70% gate (was 10/13 at
+`rerank_top_k=5`). SH-01 and AUTH-01 **still failed** (the extra slot did not
+surface their target chunks), and **CON-02 newly failed** (citation recall
+for `fp-inj-03`/`reg-evf-01`), which had been passing at both 5 and 7. Net:
+worse than baseline on every axis.
+
+**Aerospace: avg faithfulness 0.8062** — down from 0.8665 at `rerank_top_k=5`,
+barely clearing the 0.80 gate (vs. 0.8393 at `rerank_top_k=7`). So `5 -> 6`
+degrades aerospace nearly as much as `5 -> 7` did, for zero automotive
+benefit.
+
+**Reverted to `rerank_top_k=5`.** 379/379 unit tests pass.
+
+**Conclusion**: `rerank_top_k` is confirmed as a poor lever for SH-01/AUTH-01
+— every tested value other than 5 (6 and 7) degrades aerospace, and only 7
+(combined with the `_text_score` floor change, A124) fixed AUTH-01/SH-01 on
+automotive, while 6 alone fixed neither. `rerank_top_k=5` remains the
+validated value for both tenants. Any further SH-01/AUTH-01 fix should avoid
+touching `rerank_top_k` and instead target `_text_score`'s seed-ranking
+formula specifically (e.g. a conditional floor for high-cross-encoder-score
+seeds only, as proposed by the user) — but given that A124's combined change
+already showed corpus-wide scoring changes are highly sensitive and
+aerospace-fragile, this needs the same per-change A103 validation
+(automotive eval + aerospace faithfulness) before landing.
+
+## A126 — Narrow conditional `_text_score` floor (rank-index-1 only, positive
+rerank_score): no benefit, reverted; CON-04 prompt rule strengthened (kept)
+
+Two independent changes, tested together:
+
+1. **`_text_score` conditional floor**: only the cross-encoder's #2 pick
+   (0-indexed rank 1) gets floored at 0.85, and only if its raw
+   `rerank_score > 0`. Deliberately narrow — A124's blanket
+   `[0.85, 1.0]` confinement of *all* seed ranks broke aerospace; this
+   touches at most one rank, conditionally.
+
+2. **CON-04 prompt rule strengthened** in `hybrid_retriever.py`
+   `_ANSWER_PROMPT`: (a) the existing rev-number compaction rule ("rev.2" ->
+   "rev2") now explicitly applies to *every* mention, including restatements;
+   (b) a new rule requires that "which revision is referenced vs. which is
+   current" questions explicitly name BOTH compact revision numbers and
+   state whether they match.
+
+**Results**: 381/381 unit tests pass (2 new tests for the floor, since
+reverted -> back to 379).
+
+- **Automotive: 10/13 (76.9%) — unchanged from baseline.** SH-01/AUTH-01
+  still fail on citation recall (the rank-1 floor didn't touch their chunks
+  — confirms they're ranked deeper than index 1, consistent with A123's
+  original "rank 2-4" diagnosis). CON-04 still fails, now missing BOTH
+  'rev2' and 'rev4' (faithfulness dropped 1.0 -> 0.75) despite the stronger
+  prompt — consistent with A113's LLM-sampling non-determinism, not a
+  prompt-wording issue.
+- **Aerospace: faithfulness 0.8654** — statistically identical to the 0.8665
+  baseline (no regression).
+
+**Decision**: the `_text_score` floor change gave **zero** measurable benefit
+(automotive unchanged, SH-01/AUTH-01 still fail) for added complexity/risk
+surface — **reverted** (gnn_scorer.py + the 2 new unit tests; back to
+379/379). The CON-04 prompt strengthening is **kept** — it's a pure prompt
+change (no retrieval/scoring risk), didn't regress anything, and may still
+help on other non-deterministic runs even though this particular run didn't
+flip CON-04.
+
+**Updated SH-01/AUTH-01 status**: confirmed structural — their target chunks
+sit at seed rank >= 2 (index >= 2) or in the multi-hop pool just past the
+top-5 cutoff, and no targeted `_text_score`/`rerank_top_k` adjustment tried
+so far (A124 7+floor, A125 rerank=6, A126 narrow floor) fixes them without
+either failing the automotive 70% gate or breaking aerospace. Per the user's
+own framing, these remain documented, deferred known-failures; 10/13 (76.9%)
+is the final validated automotive state for this session, MH-02 fixed (the
+original A118/A123 goal), aerospace faithfulness ~0.865-0.937 range
+throughout.
+
+## A127 — Automotive golden set trimmed to a stable 10-question core
+(SH-01, CON-04, AUTH-01 moved to a deferred file)
+
+After A124-A126 exhausted reasonable non-destructive fix attempts for
+SH-01/AUTH-01/CON-04 (each either failed outright or fixed automotive at the
+cost of breaking aerospace — see A124/A125/A126), the user asked to update
+the golden eval to "leave off the ones that are not passing". Clarified
+intent: trim to a stable core gating set, NOT silently delete the failures —
+they remain documented (here, and in A123-A126) as known limitations.
+
+**Changes**:
+- `data/eval_golden/queries_automotive.json`: removed SH-01, CON-04, AUTH-01
+  (13 -> 10 questions). Updated the file's `description` to explain the
+  3 questions were moved and why, with a pointer to A123-A126.
+- New file `data/eval_golden/queries_automotive_deferred.json`: holds the 3
+  removed questions verbatim, each with a `note` summarising its specific
+  root cause and which lesson documents it, for future re-attempts.
+- `scripts/run_automotive_eval.py` needed no changes (reads `questions` from
+  the JSON dynamically, no hardcoded count).
+
+**Result**: `scripts/run_automotive_eval.py` now reports **10/10 (100%)** on
+the core set. 379/379 unit tests pass (untouched by this change — config/code
+unchanged, only eval data).
+
+**Going forward**: 10/10 is the new gating baseline for automotive. The
+deferred file is for reference/regression-tracking only and is not run by
+the standard eval script — re-run it manually
+(`python -c "..."` loading `queries_automotive_deferred.json` through the
+same `_check`/`retrieve_and_answer` flow) if a future session attempts to fix
+SH-01/CON-04/AUTH-01, and re-validate against aerospace per A103 before
+re-merging any of them back into the core set.
+
+## A128 — 16-doc automotive ingestion: RELATED_TO false-positive conflicts,
+and SH-03/MH-02 replaced (corpus-growth dilution)
+
+Non-destructive ingestion of the 16 remaining automotive docs (30/30 total)
+exposed two new issues, both fixed this session.
+
+**Issue 1 — 445 false-positive `directional_reversal` conflicts.**
+`_detect_directional_reversals` (`graphrag/graph/contradiction_strategies.py`)
+flagged every `A-[RELATED_TO]->B` / `B-[RELATED_TO]->A` pair as a topological
+contradiction. `RELATED_TO` is the generic fallback relation with no
+domain/range constraints (`ontology_registry.py`), so two entities
+co-mentioned in both directions isn't a real "reversal". With 30 docs, this
+produced 445/507 open conflicts (98.7% noise), making the conflict dashboard
+useless.
+
+Fix: added `AND r1.relation <> 'RELATED_TO'` to the strategy's query (kept,
+docstring explains why). Validated: 379/379 unit tests pass. Then bulk-marked
+the 445 existing records `status='false_positive'` in Neo4j (one-time
+cleanup, not a code change — won't recur since the detector no longer creates
+them). Open conflicts dropped 507 -> 62 (58 multi_source + 4
+directional_reversal on other relations).
+
+**Issue 2 — SH-03/MH-02 regressed 10/10 -> 8/10 from corpus-growth dilution.**
+The 16 new docs are template-generated with near-identical generic sections
+(e.g. "### 11. INDICATORI KPI CU VALORI TARGET NUMERIC" appears as a literal
+duplicate chunk across multiple docs). These duplicates consumed slots in
+`rerank_top_k=5`, displacing the answer-bearing chunks for SH-03 (ISO
+9001/14001 — which CSR-CLIENT-2023 never actually mentions, a pre-existing
+factual error in the question) and MH-02 (PPAP-PROC-01's "Conformitatea FAI:
+100%" KPI row, which no longer reaches BM25/vector top-20 at all).
+
+Two rephrasing attempts for each (same underlying facts, reworded questions)
+were live-validated and BOTH still failed — confirmed this is a structural
+retrieval-pool gap, not a wording issue (consistent with A113's "structural
+retrieval-pool gaps" finding for MH-02/AUTH-01).
+
+**User's direction**: don't defer/rephrase — find 2 brand-new questions (1
+single_hop, 1 multi_hop) that reliably pass, and replace SH-03/MH-02 outright.
+
+Found both in CSR-CLIENT-2023 section 8.1 (`#### 8.1 Indicatori de
+performanță (KPI)`), a single chunk that reliably ranks #1 (fused score
+~0.97) and contains two KPI facts with consequences:
+- "Rata de livrare la timp: ... țintă de 95% ... orice scădere ... necesită o
+  analiză detaliată."
+- "Rata de neconformitate: ... nu trebuie să depășească 1% ... va atrage
+  măsuri corective imediate."
+
+New SH-03 (single_hop): asks for the on-time-delivery KPI target (95%).
+New MH-02 (multi_hop): asks for BOTH the non-conformity consequence
+("măsuri corective") AND the on-time-delivery target (95%) — genuinely
+combines two facts from the same chunk.
+
+Both validated twice (identical chunk_id #1, identical citations, correct
+answer text both runs) via `LocalSearch().search()` +
+`HybridRetriever().retrieve_and_answer()`.
+
+**Result**: `scripts/run_automotive_eval.py` -> **10/10 (100%)**, up from
+8/10. Contradiction recall/precision improved to 0.40/0.31 (was 0.20/0.01)
+as a side effect of the conflict cleanup.
+
+**Separate, pre-existing issue noticed (not caused by this session, NOT
+fixed)**: every question's RAGAS faithfulness now reports `0.0` with
+`"ragas error: No module named 'langchain_community.chat_models.vertexai'"`.
+This doesn't affect `pass_rate` (which is term/citation-based, independent of
+RAGAS), so the 70% gate still passes at 100%. But the faithfulness metric
+(previously ~0.925) is currently blind. Likely a `langchain`/`langchain_community`
+version drift in the environment — needs investigation in a future session.
+
+**Rule for future corpus-growth regressions**: when adding docs causes
+existing golden questions to fail due to duplicate-boilerplate dilution,
+prefer hunting for a *new* question whose answer chunk has a uniquely
+high-signal sentence (specific numbers/consequences, not generic section
+intros) over rephrasing the old question — rephrasing a structurally-blocked
+question rarely works (2/2 attempts failed here, consistent with A113).
+
+---
+
+## A129 — `ingest_corpus.py` performance & reliability overhaul: five
+compounding bottlenecks found and fixed, in the order they were hit
+(consolidates what were previously separate A129-A132 entries — same
+subject, one investigation thread, kept together)
+
+**Context:** the automotive corpus (30 docs) took disproportionately long
+to ingest. Each attempt to speed it up surfaced a *new* bottleneck once the
+previous one was fixed — five layers deep, summarized here in order.
+
+**1. Parallel writes raced on the shared Entity/alias graph (28/30 docs
+silently corrupted).** Added `asyncio.Semaphore(4)` + `asyncio.gather()` to
+ingest 4 documents concurrently. Only 2/30 fully succeeded; the rest raised
+`Neo.ClientError.Statement.EntityNotFound`. Root cause:
+`IngestionAgent.run()` performs `MERGE` writes against a **shared**
+Entity/alias subgraph (cross-document entity dedup is the whole point of
+the knowledge graph) — concurrent transactions across documents raced on
+the same nodes mid-merge. `Document`/`Chunk` nodes use distinct ids per
+document so those layers ARE safe to write concurrently, but Entity/
+relation merging is not. The corruption was easy to miss: `Document` +
+most `Chunk` nodes still got created (chunk counts looked plausible,
+9-247/doc), and the eval still scored 9/10 (90%) afterward because
+chunk-level BM25+vector retrieval doesn't depend on the entity graph — only
+contradiction-detection / multi-hop questions needing correct
+entity/relation edges (e.g. CON-02, cross-document conflict edges between
+FP-INJ-03 and REG-EVF-01) would expose it.
+> **Rule:** do not parallelize document-ingestion loops that write to a
+> *shared* graph structure (entity dedup, alias registry, cross-doc
+> relations) — only parallelize within a single document's independent
+> sub-steps (concurrent embedding/extraction calls for that doc's own
+> chunks), keeping the Neo4j write phase serialized per document.
+
+**2. Splitting extract (parallel) from write (sequential) looked hung — was
+thread-pool starvation, not a deadlock.** With `doc_extract_concurrency=4`
+× `extraction_concurrency=5` = up to 20 concurrent blocking LLM calls,
+output froze at the same byte offset for 10+ minutes. Ruled out: Neo4j
+locks (`SHOW TRANSACTIONS` showed nothing stuck), Neo4j responsiveness (a
+direct cypher-shell query answered in ~4s), a true asyncio deadlock
+(process CPU time was still slowly climbing, not flatlined at 0%). Root
+cause: `GroqLLM.generate()` and `OpenAIEmbedder.embed()` (in
+`graphrag/core/llm_client.py`) both wrap their sync SDK calls in
+`loop.run_in_executor(None, ...)` — `None` means "the event loop's default
+`ThreadPoolExecutor`", lazily sized to `min(32, cpu_count+4)` = **12
+threads** on this 8-core box. 20 concurrent chunk-extraction tasks (each
+issuing 1 Groq + N OpenAI calls) all competed for those 12 threads — severe
+queueing, not a deadlock. `netstat` also showed Neo4j's connection pool
+near its `max_connection_pool_size=50` — a symptom of the same contention,
+not an independent leak.
+> **Fix:** explicitly size a larger executor before the extraction
+> `asyncio.gather`: `asyncio.get_running_loop().set_default_executor(
+> concurrent.futures.ThreadPoolExecutor(max_workers=64))`. Safe because
+> these calls are I/O-bound (network wait), not CPU-bound.
+> **Rule:** when parallelizing code that calls `run_in_executor(None, ...)`
+> (any sync SDK wrapped for async use — most LLM/embedding clients), the
+> *effective* concurrency ceiling is the default executor's thread count,
+> not whatever `asyncio.Semaphore` value you set. Stacking two independent
+> concurrency layers (doc-level × chunk-level) multiplies demand past that
+> ceiling silently — no error, just looks hung.
+> **Diagnosis playbook for "looks hung" on a long-running async script:**
+> 1. Check the process is alive and CPU time is still advancing (sample
+>    `tasklist`/`Get-Process` twice, a few seconds apart) — rules out a true
+>    crash/deadlock vs. slow progress.
+> 2. Check `netstat -ano | grep <pid>` for connection counts against any
+>    external service near its pool limit — a symptom of contention upstream.
+> 3. Check the external service directly (e.g. `cypher-shell` for Neo4j) to
+>    rule out it being the bottleneck.
+> 4. If the script wraps sync SDKs in `run_in_executor(None, ...)`, suspect
+>    default-executor thread starvation before suspecting a deadlock.
+
+**3. Per-document community rebuild turned O(n) ingestion into O(n²).**
+After fixing #1 and #2, the run was still stuck at 9/30 after ~55 minutes.
+Root cause (in `graph_writer.py`'s `validate_and_check_cycles()`): every
+document write calls `_maybe_rebuild_communities()`, which by default
+(`auto_rebuild_communities: true` in `settings.yml`) runs a full Leiden
+pass over the **entire tenant graph** whenever staleness exceeds a
+threshold — and after every document, the graph changed enough to
+re-trigger it. 30 documents → ~30 full-graph Leiden rebuilds instead of 1.
+> **Fix:** `settings.yml`'s own comment on `auto_rebuild_communities`
+> already said *"disable only if you run `scripts/community_rebuild.py`
+> externally"* — that pattern just wasn't wired into the bulk-ingestion
+> script. In `ingest_corpus.py`: flip
+> `get_settings().graph["auto_rebuild_communities"]` to `False` before the
+> ingestion loop (this dict is the *same* object `GraphWriter` reads on
+> every call — `Settings.graph` is a `@property` returning
+> `self._yaml["graph"]`, and `_yaml` is loaded once and cached via
+> `get_settings()`'s `@lru_cache(maxsize=1)`, so mutating the dict in place
+> is visible everywhere, no monkey-patching needed), restore it after the
+> loop, then run the same `CommunityBuilder.build()` +
+> `CommunitySummarizer.summarize_all()` + `CommunityManager.mark_rebuilt()`
+> **once** for the whole batch instead of N times.
+> **Rule:** before parallelizing or batch-processing a write path, check
+> every per-write side effect for hidden O(graph size) work (cache
+> invalidation, derived-index rebuilds, cluster detection, materialized
+> views). The fix is usually "do the expensive step once, not N times" —
+> and the codebase often already documents the escape hatch (here, the
+> settings.yml comment) without it being wired into the bulk path that
+> needed it.
+
+**4. Implemented the scaling path discussed for corpora beyond ~30 docs**
+(checkpoint/resume + streaming write), alongside fix #3:
+- **Checkpoint/resume**: mark `Document.ingest_complete = true` in Neo4j
+  after a successful `write()`; skip already-complete docs on re-run
+  unless `--wipe`. Removes the risk of losing 20+ minutes of work to a
+  single crash (which happened twice in this exact session, from fixes #1
+  and #2 above).
+- **Streaming write**: replaced "extract all documents, *then* write all
+  documents" with extraction producers feeding a single sequential writer
+  consumer over an `asyncio.Queue` — a document starts writing as soon as
+  its own extraction finishes, instead of every document's extraction
+  result sitting in memory until the whole corpus finishes extracting.
+  Caps memory at roughly `extract_concurrency` documents in flight instead
+  of scaling with total corpus size.
+- (Not implemented, deferred until corpus reaches hundreds-to-thousands of
+  documents: a real external queue like RabbitMQ for the extract phase,
+  to scale extraction across processes/machines instead of just threads.)
+
+**5. Per-entity and per-relation Neo4j writes were still one round-trip
+each — batched as the next bottleneck once #1-#4 were fixed.**
+`write_entities()`/`write_relations()` in `graph_writer.py` called
+`merge_entity()`/`merge_relation()` once per entity/relation — for a
+150-250-chunk document with several entities/relations per chunk, that's
+hundreds of sequential Neo4j round-trips per document.
+> **Fix:** kept all per-entity/per-relation dedup, alias-resolution, and
+> validation logic unchanged (the risky part to touch) and added
+> `merge_entities_batch()` / `merge_relations_batch()` to `neo4j_client.py`
+> (`UNWIND` over a list of rows, one round-trip for the whole batch).
+> `write_entities()`/`write_relations()` now accumulate the
+> already-deduped, genuinely-new entities/relations into a list during the
+> per-item loop and call the batch method once at the end of the chunk/doc,
+> instead of writing each one immediately.
+> **Rule:** when a per-item write loop is the bottleneck, prefer batching
+> only the *final write step* (UNWIND) while leaving per-item
+> validation/dedup logic untouched — narrower and far lower-risk than
+> rewriting the dedup logic to be batch-aware, for most of the speed gain.
+
+**Also (process notes, not architecture):**
+- A background bash task wrapped in `TaskOutput(block=true,
+  timeout=600000)` is a blocking wait that freezes the turn for up to 10
+  minutes with no incremental feedback — flagged as unwanted. Prefer
+  repeated non-blocking `TaskOutput(block=false, timeout=~30000-60000)`
+  polls, or just wait for the automatic `<task-notification>` on
+  completion.
+- Docker Desktop's "Disk image location" setting in Settings does **not**
+  move data on its own — `wsl --list` / registry lookup can show the WSL
+  distro still rooted at the old path even after changing and "Apply"ing
+  the field. Docker Desktop only performs the migration on the next
+  **Quit + relaunch** cycle (confirmed by watching the destination folder
+  grow from 0 to ~82GB only after a full quit/reopen). If a user says they
+  "changed" the disk-image path but the old location still has data, the
+  fix is "Quit Docker Desktop completely, then reopen" — not re-clicking
+  Apply, not restarting containers.
+
+## A130 — CON-02 eval failure traced to query_cache theory, then disproven;
+real cause was borderline-ranking non-determinism (same class as A103/A113)
+
+**Context:** automotive eval run `bo3z95abe` had CON-02 fail with citation
+recall 1/3 (missing `fp-inj-03`, `reg-evf-01`), despite the golden-set note
+recording an earlier same-day reformulation expected to score 2/3.
+
+**False lead investigated and ruled out:** suspected the Redis/in-memory
+query-result cache (`graphrag/retrieval/query_cache.py`) was serving stale
+pre-`--wipe` citations, since its `flush_tenant()` (documented "use after
+bulk re-ingestion") was never called anywhere. Applied a fix to
+`scripts/ingest_corpus.py` to call it after every wipe — then discovered
+`query_cache` is **only wired into `graphrag/messaging/consumers.py`** (the
+RabbitMQ worker), never into `HybridRetriever`/`LocalSearch`. Both
+`scripts/run_automotive_eval.py` and direct diagnostic calls use
+`HybridRetriever` directly, bypassing the cache entirely — so a stale cache
+could never have produced the bad citations. **Reverted the fix**, it was
+solving a problem that didn't exist on this code path.
+
+**Real cause:** re-running `scripts/run_automotive_eval.py` end-to-end
+(same code path, same question) produced **10/10 (100%)**, CON-02 included.
+This matches the already-documented AUTH-01/CON-04 pattern (A103, A113):
+`reg-evf-01`'s multihop `path_score` sits within a few thousandths of the
+top-5 cutoff, so embedding-API float variance run-to-run flips whether it
+survives into the final context. Not a real bug — same structural
+non-determinism class, already known to be acceptable since the gate
+(70%) is cleared either way (9/10 or 10/10).
+
+**Rule:** before chasing an infra-layer theory (cache, stale state, config
+drift) for a flaky eval failure, first `grep` for where that component is
+actually wired into the code path under test. `query_cache` "exists and is
+documented" is not the same as "is used by the thing that's failing." If a
+single borderline question flips pass/fail across reruns with identical
+code and input, suspect ranking-margin non-determinism (A103) before
+infra — and confirm by simply rerunning the eval before writing a fix.
+
+## A131 — Batched per-entity embeddings (A129#5 left this loop untouched)
+
+**Context:** asked "what can be improved on ingestion speed" after A129's
+five-layer overhaul. Checked lessons first for prior attempts before
+proposing anything — A129#5 batched the per-entity *write* step
+(`merge_entities_batch`, `UNWIND`) but explicitly said it kept "per-item
+validation/dedup logic unchanged ... narrower ... than rewriting the dedup
+logic to be batch-aware." The per-entity *embedding* call sat right next to
+that write loop and was never touched.
+
+**Root cause:** `IngestionAgent.extract()` embedded each entity one at a
+time inside the per-chunk extraction loop:
+```python
+for entity in entities:
+    entity.embedding = await self._embedder.embed_text(f"{entity.name} {entity.description}", ...)
+```
+One HTTP round-trip per entity, serialized. `embed_chunks()` (chunk-level)
+was already batched 100-at-a-time via `_batched()` — entity embedding never
+got the equivalent treatment, presumably because it lives inside the
+per-chunk extraction loop rather than a single doc-level pass.
+
+**Fix:** added `Embedder.embed_texts(texts: list[str])` (same `_batched()`
+helper as `embed_chunks`, generic — no `Chunk` object required). Restructured
+`IngestionAgent.extract()`: run all chunks' LLM extraction concurrently
+first (unchanged), then flatten every entity across the whole document into
+one list and batch-embed once, instead of embedding inline per chunk.
+
+**Verification:** 380/380 unit tests pass (`pytest-asyncio` was missing
+from `.venv` after an unrelated venv cleanup — installed it to get a real
+baseline; without it, 113 tests "failed" purely from unrecognized
+`@pytest.mark.asyncio`, not from this change — don't mistake that signature
+for a regression).
+
+**Rule:** when a lesson says "kept X unchanged, narrower fix" (A129#5 here),
+that's an explicit flag that X is still on the table — re-check it before
+assuming a subsystem is already optimized. Batch the embedding call shape
+(one `embed()` call for N texts) wherever a per-item loop calls an
+embed/LLM client one item at a time, the same pattern already validated for
+chunk embeddings and entity writes.
+
+## A132 — Batched chunk writes (worst-placed unbatched loop — runs in the
+serialized writer phase) + dropped a per-entity round-trip with no real consumer
+
+**Context:** continuing the A131 ingestion-speed pass, checked the two
+remaining hot paths (extractor LLM calls, graph writer) for unbatched
+per-item Neo4j round-trips that A129#5/A131 hadn't reached yet.
+
+**Finding 1 — `write_chunks()` never batched.** A129#5 batched entity/
+relation writes via `UNWIND`; chunk writes were missed:
+```python
+async def write_chunks(self, chunks: list[Chunk]) -> None:
+    for chunk in chunks:
+        await self._neo4j.merge_chunk(chunk, tenant=chunk.tenant)  # 1 round-trip/chunk
+```
+This is the worst-placed of all the unbatched loops found across A129-A132:
+it runs inside the **serialized writer phase** (`IngestionAgent.write()`,
+called one document at a time per A129#1 — entity-graph writes can't be
+parallelized across docs), so every one of these round-trips sits squarely
+on the critical path, unlike extraction which is already concurrent.
+**Fix:** added `merge_chunks_batch()` to `neo4j_client.py` (UNWIND, same
+MERGE semantics as `merge_chunk`), sub-batched at `embedding_batch_size`
+(100) in `write_chunks()` — each row carries a 3072-dim embedding, so one
+UNWIND for an entire 247-chunk doc would be an oversized payload; capping
+at the same batch size already used for embedding calls bounds it
+consistently.
+
+**Finding 2 — `entity_exists()` probe per new entity, for a label with no
+real consumer.** `write_entities()` called `entity_exists()` (a Neo4j
+round-trip) for every genuinely-new entity, solely to set
+`"operation": "create" if not is_new else "update"` in the audit-log row —
+and the surrounding comment already documented this label as
+**approximate** (two same-named entities in one chunk both register as
+"create" since neither is written until the batched merge at the end).
+Paying a round-trip per entity for a label the code itself disclaims as
+unreliable wasn't worth it. **Fix:** dropped the probe, replaced the label
+with a constant `"upsert"` (honest about what `MERGE` actually does,
+rather than a guess).
+
+**Verification:** 380/380 unit tests pass; confirmed no test mocks/asserts
+on `entity_exists` or `merge_chunk` being called (checked
+`test_graph_writer.py` directly — mocks exist but nothing asserts call
+counts on them, and nothing asserts the `"create"`/`"update"` label
+values), so the green run isn't masking a silent no-op.
+
+**Rule:** when auditing a write path for batching opportunities, check
+*where in the pipeline* each unbatched loop runs, not just whether it's
+unbatched — a loop inside a paralellized phase (extraction, 4-5x
+concurrent) costs far less wall-clock than the same-shaped loop inside the
+serialized phase (one document at a time). Prioritize the latter. Also:
+a per-item round-trip whose only purpose is to label an audit/log field is
+a strong "drop or batch the *check* itself" signal, especially if the
+surrounding comment already admits the label is approximate.

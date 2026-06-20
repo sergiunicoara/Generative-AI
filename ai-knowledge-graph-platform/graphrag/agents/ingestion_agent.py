@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import asyncio
+
 import structlog
 
 from graphrag.agents.base_agent import BaseGraphRAGAgent
@@ -44,37 +46,83 @@ class IngestionAgent(BaseGraphRAGAgent):
 
     async def run(self, message: IngestMessage) -> dict:
         """Full ingestion pipeline: document → chunks → entities → Neo4j."""
+        extracted = await self.extract(message)
+        return await self.write(extracted)
+
+    async def extract(self, message: IngestMessage) -> dict:
+        """Phase 1 — pure compute, no Neo4j writes.
+
+        Safe to run concurrently across documents: chunking, embedding, and
+        LLM entity/relation extraction touch only this document's own data,
+        never the shared Entity/alias graph. Call `write()` afterwards,
+        serialized across documents, to commit the result.
+        """
         doc = message.document
         job_id = message.job_id
 
         log.info("ingestion_agent.start", job_id=job_id, filename=doc.filename)
 
-        # 1. Write document node
-        await self._writer.write_document(doc)
-
-        # 2. Chunk
+        # 1. Chunk
         chunks = chunk_document(doc)
         log.info("ingestion_agent.chunked", job_id=job_id, chunks=len(chunks))
 
-        # 3. Embed chunks
+        # 2. Embed chunks
         chunks = await self._embedder.embed_chunks(chunks)
 
-        # 4. Write chunks to Neo4j
+        # 3. Extract entities + relations from each chunk, concurrently
+        # bounded by a semaphore (LLM calls only — entity embedding is
+        # batched separately below instead of one round-trip per entity).
+        concurrency = get_settings().ingestion.get("extraction_concurrency", 5)
+        semaphore = asyncio.Semaphore(concurrency)
+
+        async def _extract_one(chunk):
+            async with semaphore:
+                return await self._extractor.extract(chunk)
+
+        extraction_results = await asyncio.gather(
+            *(_extract_one(chunk) for chunk in chunks)
+        )
+
+        # 4. Embed all entities across the whole document in one batched call
+        # (was: one embed_text() round-trip per entity, serialized). See
+        # lesson A131 — mirrors the chunk-embedding batching already in
+        # place, applied to the per-entity loop A129#5 left untouched.
+        all_entities_flat = [e for entities, _ in extraction_results for e in entities]
+        if all_entities_flat:
+            entity_embeddings = await self._embedder.embed_texts(
+                [f"{e.name} {e.description}" for e in all_entities_flat]
+            )
+            for entity, emb in zip(all_entities_flat, entity_embeddings):
+                entity.embedding = emb
+
+        return {
+            "job_id": job_id,
+            "doc": doc,
+            "chunks": chunks,
+            "extraction_results": extraction_results,
+        }
+
+    async def write(self, extracted: dict) -> dict:
+        """Phase 2 — Neo4j writes. Must run sequentially across documents:
+        entity/alias dedup and contradiction detection need a consistent
+        view of the shared graph as each document lands.
+        """
+        job_id = extracted["job_id"]
+        doc    = extracted["doc"]
+        chunks = extracted["chunks"]
+
+        # 1. Write document node
+        await self._writer.write_document(doc)
+
+        # 2. Write chunks to Neo4j
         await self._writer.write_chunks(chunks)
 
-        # 5. Extract entities + relations from each chunk
+        # 3. Write entities + relations, in chunk order, so AliasRegistry /
+        # OntologyRegistry / contradiction-detection see chunks in document order.
         all_entities = []
         all_relations = []
-        for chunk in chunks:
-            entities, relations = await self._extractor.extract(chunk)
+        for chunk, (entities, relations) in zip(chunks, extracted["extraction_results"]):
             entity_map = {e.id: e for e in entities}
-
-            # Embed entities
-            for entity in entities:
-                entity.embedding = await self._embedder.embed_text(
-                    f"{entity.name} {entity.description}",
-                    task_type="retrieval_document",
-                )
 
             await self._writer.write_entities(entities, chunk)
             await self._writer.write_relations(

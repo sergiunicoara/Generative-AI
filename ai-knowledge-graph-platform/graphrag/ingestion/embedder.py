@@ -48,3 +48,16 @@ class Embedder:
     async def embed_text(self, text: str, task_type: str = "retrieval_query") -> list[float]:
         embeddings = await get_embedder().embed([text])
         return embeddings[0]
+
+    async def embed_texts(self, texts: list[str]) -> list[list[float]]:
+        """Batch-embed arbitrary texts (entity name+description, etc.) in one
+        or more `embedding_batch_size`-sized calls, instead of one round-trip
+        per text. Mirrors `embed_chunks` for callers that don't have `Chunk`
+        objects (e.g. per-document entity embedding in `IngestionAgent`)."""
+        if not texts:
+            return []
+        embedder = get_embedder()
+        embeddings: list[list[float]] = []
+        for batch_texts in _batched(texts, self._batch_size):
+            embeddings.extend(await embedder.embed(batch_texts))
+        return embeddings

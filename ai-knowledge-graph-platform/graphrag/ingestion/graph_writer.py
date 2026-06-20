@@ -12,11 +12,17 @@ Enhanced with:
 
 from __future__ import annotations
 
+import uuid
+
 import structlog
 
 from graphrag.core.config import get_settings
 from graphrag.core.models import Chunk, Document, Entity, Relation
-from graphrag.graph.alias_registry import get_alias_registry, _normalize as _alias_normalize
+from graphrag.graph.alias_registry import (
+    get_alias_registry,
+    _normalize as _alias_normalize,
+    _normalize_ro as _alias_normalize_ro,
+)
 from graphrag.graph.audit_trail import AuditTrail
 from graphrag.graph.community_builder import CommunityBuilder
 from graphrag.graph.community_manager import CommunityManager
@@ -94,8 +100,15 @@ class GraphWriter:
     # ── Chunks ─────────────────────────────────────────────────────────────────
 
     async def write_chunks(self, chunks: list[Chunk]) -> None:
-        for chunk in chunks:
-            await self._neo4j.merge_chunk(chunk, tenant=chunk.tenant)
+        """Batched (UNWIND) instead of one merge_chunk() round-trip per
+        chunk — sub-batched at embedding_batch_size to bound payload size
+        (each row carries a 3072-dim embedding)."""
+        if not chunks:
+            return
+        batch_size = get_settings().ingestion.get("embedding_batch_size", 100)
+        tenant = chunks[0].tenant
+        for i in range(0, len(chunks), batch_size):
+            await self._neo4j.merge_chunks_batch(chunks[i:i + batch_size], tenant=tenant)
         log.info("graph_writer.chunks_merged", count=len(chunks))
 
     # ── Entities ───────────────────────────────────────────────────────────────
@@ -113,6 +126,18 @@ class GraphWriter:
         await self._ensure_registry(tenant)
         registry = self._get_registry(tenant)
         written: list[Entity] = []
+        # Genuinely-new entities are merged in one batched round-trip at the
+        # end instead of per-entity, to cut Neo4j round-trips under bulk
+        # ingestion. Dedup/alias-resolution logic above stays per-entity
+        # (unchanged) — only the final write step is batched. Edge case: two
+        # same-named entities within the *same* chunk both see
+        # entity_exists()=False here (neither is written yet at check time),
+        # so the audit log may mislabel the second as "create" instead of
+        # "update" — harmless (audit metadata only), and rare (duplicate
+        # entities within one chunk).
+        to_merge: list[Entity] = []
+        to_mention: list[tuple[str, str]] = []
+        to_audit: list[dict] = []
 
         for entity in entities:
             # Propagate tenant onto the entity so merge_entity stores it correctly
@@ -120,7 +145,7 @@ class GraphWriter:
 
             # 1. Alias resolution — name-based
             canonical = registry.resolve(entity.name)
-            if canonical and canonical[0] != entity.name:
+            if canonical and (canonical[0] != entity.name or canonical[1] != entity.type):
                 log.info(
                     "graph_writer.alias_resolved",
                     raw=entity.name,
@@ -168,30 +193,40 @@ class GraphWriter:
                     )
                     continue
 
-            # 3. Genuinely new entity — write it and record in audit trail
-            is_new = await self._neo4j.entity_exists(
-                entity.name, entity.type, tenant=tenant
-            )
-            await self._neo4j.merge_entity(entity, tenant=tenant)
-            await self._neo4j.merge_mentions(
-                chunk.id, entity.name, entity.type, tenant=tenant
-            )
+            # 3. Genuinely new entity — queue for batched write below.
+            # No entity_exists() probe here: it was a Neo4j round-trip per
+            # new entity whose only consumer was the "create"/"update" audit
+            # label below, already documented as approximate (two same-named
+            # entities within one chunk both see this as "create" since
+            # neither is written until the batched merge at the end) — not
+            # worth a round-trip per entity for a best-effort label.
+            to_merge.append(entity)
+            to_mention.append((entity.name, entity.type))
 
             # Register canonical name in alias registry in-memory cache.
             # Must use the same _normalize() the registry uses for lookups —
             # a partial inline normalization (missing whitespace-collapse) would
             # write under a key resolve() never queries, silently breaking dedup.
             registry._exact[_alias_normalize(entity.name)] = (entity.name, entity.type)
-
-            await self._audit.log_entity_change(
-                entity_name=entity.name,
-                entity_type=entity.type,
-                operation="create" if not is_new else "update",
-                new_values={"description": entity.description, "type": entity.type},
-                changed_by=self._changed_by,
-                source_doc_id=chunk.document_id,
+            registry._stemmed.setdefault(
+                _alias_normalize_ro(entity.name), (entity.name, entity.type)
             )
+
+            to_audit.append({
+                "name": entity.name,
+                "type": entity.type,
+                "log_id": str(uuid.uuid4()),
+                "operation": "upsert",
+                "old_values": "{}",
+                "new_values": str({"description": entity.description, "type": entity.type}),
+                "changed_by": self._changed_by,
+                "source_doc_id": chunk.document_id,
+            })
             written.append(entity)
+
+        await self._neo4j.merge_entities_batch(to_merge, tenant=tenant)
+        await self._neo4j.merge_mentions_batch(chunk.id, to_mention, tenant=tenant)
+        await self._audit.log_entities_batch(to_audit)
 
         log.info(
             "graph_writer.entities_merged",
@@ -214,6 +249,12 @@ class GraphWriter:
         await self._ensure_registry(tenant)
         registry = self._get_registry(tenant)
         merged_count = 0
+        # Relations are merged in one batched round-trip at the end (see
+        # merge_relations_batch) instead of per-relation, mirroring the
+        # entity-write batching above — same rationale, same risk profile
+        # (dedup/validation logic above stays per-relation, unchanged).
+        to_merge_rows: list[dict] = []
+        to_audit_rows: list[dict] = []
         for rel in relations:
             src = entity_map.get(rel.source_entity_id)
             tgt = entity_map.get(rel.target_entity_id)
@@ -257,26 +298,47 @@ class GraphWriter:
             # Inject provenance
             rel.source_doc_id = doc_id
 
-            await self._neo4j.merge_relation(
-                rel, src_name, src_type, tgt_name, tgt_type, tenant=tenant
-            )
+            to_merge_rows.append({
+                "src_name": src_name,
+                "src_type": src_type,
+                "tgt_name": tgt_name,
+                "tgt_type": tgt_type,
+                "relation": rel.relation,
+                "weight": rel.weight,
+                "confidence": rel.confidence,
+                "extracted_at": rel.extracted_at.isoformat(),
+                "source_doc_id": rel.source_doc_id,
+                "source_type": rel.source_type if isinstance(rel.source_type, str) else rel.source_type.value,
+                "constraint_type": rel.constraint_type if isinstance(rel.constraint_type, str) else rel.constraint_type.value,
+                "valid_from": rel.valid_from.isoformat() if rel.valid_from else None,
+                "valid_to": rel.valid_to.isoformat() if rel.valid_to else None,
+                "span_start": rel.chunk_span_start,
+                "span_end": rel.chunk_span_end,
+                "extraction_model": rel.extraction_model,
+                "prompt_version": rel.prompt_version,
+            })
             merged_count += 1
 
-            await self._audit.log_relation_change(
-                src_name=src_name,
-                tgt_name=tgt_name,
-                relation=rel.relation,
-                operation="upsert",
-                new_values={
+            to_audit_rows.append({
+                "src": src_name,
+                "tgt": tgt_name,
+                "relation": rel.relation,
+                "log_id": str(uuid.uuid4()),
+                "operation": "upsert",
+                "old_values": "{}",
+                "new_values": str({
                     "confidence":      rel.confidence,
                     "constraint_type": rel.constraint_type,
                     "source_type":     rel.source_type,
                     "valid_from":      str(rel.valid_from) if rel.valid_from else None,
                     "valid_to":        str(rel.valid_to) if rel.valid_to else None,
-                },
-                changed_by=self._changed_by,
-                source_doc_id=doc_id,
-            )
+                }),
+                "changed_by": self._changed_by,
+                "source_doc_id": doc_id,
+            })
+
+        await self._neo4j.merge_relations_batch(to_merge_rows, tenant=tenant)
+        await self._audit.log_relations_batch(to_audit_rows)
 
         log.info("graph_writer.relations_merged", count=merged_count, tenant=tenant)
 
@@ -294,7 +356,16 @@ class GraphWriter:
         """
         validation_report = await self._validator.validate(doc_id=doc_id)
         await self._validator.remove_self_loops()
-        cycles = await self._cycle_detector.run()
+
+        # Cycle detection scans the WHOLE graph (no doc-scoping in
+        # CycleDetector.detect()), so running it after every document during
+        # bulk ingestion is the same O(n) per-doc -> O(n^2) total pattern as
+        # the community rebuild fixed in A129 #3. Gate it on
+        # ingestion.detect_cycles_after_ingestion (set False during bulk
+        # ingestion, run once at the end instead — see ingest_corpus.py).
+        cycles: list = []
+        if self._cfg.ingestion.get("detect_cycles_after_ingestion", True):
+            cycles = await self._cycle_detector.run()
 
         # Auto-quarantine entities flagged as degree anomalies
         quarantined = await self._quarantine.auto_quarantine_anomalies(
@@ -302,9 +373,15 @@ class GraphWriter:
             validation_report=validation_report,
         )
 
-        # Detect and persist new contradictions introduced by this document,
-        # scoped to the tenant so cross-tenant edges are never compared.
-        new_conflicts = await self._contradiction.scan(doc_id=doc_id, tenant=tenant)
+        # Detect and persist new contradictions introduced by this document.
+        # ContradictionDetector.scan()'s directional-reversal/multi-source
+        # strategies scan all entity pairs in the tenant (doc_id narrows the
+        # *intent*, not the underlying query cost), so this has the same
+        # per-doc O(graph) cost as cycle detection above — same gate/defer
+        # pattern.
+        new_conflicts: list = []
+        if self._cfg.ingestion.get("scan_contradictions_after_ingestion", True):
+            new_conflicts = await self._contradiction.scan(doc_id=doc_id, tenant=tenant)
 
         community_report = await self._maybe_rebuild_communities(tenant)
 

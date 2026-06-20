@@ -118,6 +118,40 @@ class Neo4jClient:
             tenant=tenant,
         )
 
+    async def merge_chunks_batch(self, chunks: list[Chunk], tenant: str = "default") -> None:
+        """Same MERGE semantics as merge_chunk(), one round-trip for the batch.
+
+        Caller (GraphWriter.write_chunks) sub-batches this — a single UNWIND
+        carrying hundreds of 3072-dim chunk embeddings in one payload is the
+        wrong tradeoff; keep payload size bounded like embedding_batch_size."""
+        if not chunks:
+            return
+        rows = [
+            {
+                "id": c.id,
+                "text": c.text,
+                "chunk_index": c.chunk_index,
+                "embedding": c.embedding,
+                "doc_id": c.document_id,
+            }
+            for c in chunks
+        ]
+        await self.run(
+            """
+            UNWIND $rows AS row
+            MERGE (c:Chunk {id: row.id})
+            SET c.text        = row.text,
+                c.chunk_index = row.chunk_index,
+                c.embedding   = row.embedding,
+                c.tenant      = $tenant
+            WITH c, row
+            MATCH (d:Document {id: row.doc_id})
+            MERGE (c)-[:PART_OF]->(d)
+            """,
+            rows=rows,
+            tenant=tenant,
+        )
+
     async def merge_entity(self, entity: Entity, tenant: str = "default"):
         """Merge entity scoped to tenant — same (name, type) in different tenants are distinct nodes."""
         await self.run(
@@ -158,6 +192,64 @@ class Neo4jClient:
             chunk_id=chunk_id,
             entity_name=entity_name,
             entity_type=entity_type,
+            tenant=tenant,
+        )
+
+    async def merge_entities_batch(self, entities: list[Entity], tenant: str = "default") -> None:
+        """Same MERGE semantics as merge_entity(), one round-trip for the batch."""
+        if not entities:
+            return
+        rows = [
+            {
+                "id": e.id,
+                "name": e.name,
+                "type": e.type,
+                "description": e.description,
+                "embedding": e.embedding,
+                "source_type": e.source_type if isinstance(e.source_type, str) else e.source_type.value,
+                "source_doc_id": e.source_doc_id,
+                "extraction_model": e.extraction_model,
+                "prompt_version": e.prompt_version,
+            }
+            for e in entities
+        ]
+        await self.run(
+            """
+            UNWIND $rows AS row
+            MERGE (e:Entity {name: row.name, type: row.type, tenant: $tenant})
+            ON CREATE SET e.id               = row.id,
+                          e.description      = row.description,
+                          e.embedding        = row.embedding,
+                          e.source_type      = row.source_type,
+                          e.source_doc_id    = row.source_doc_id,
+                          e.extraction_model = row.extraction_model,
+                          e.prompt_version   = row.prompt_version,
+                          e.created_at       = datetime(),
+                          e.recorded_at      = datetime()
+            ON MATCH SET  e.description = CASE WHEN e.description = '' THEN row.description ELSE e.description END,
+                          e.embedding   = CASE WHEN row.embedding IS NOT NULL AND size(row.embedding) > 0 THEN row.embedding ELSE e.embedding END,
+                          e.updated_at  = datetime()
+            """,
+            rows=rows,
+            tenant=tenant,
+        )
+
+    async def merge_mentions_batch(
+        self, chunk_id: str, entity_refs: list[tuple[str, str]], tenant: str = "default"
+    ) -> None:
+        """Same MERGE semantics as merge_mentions(), one round-trip for the batch."""
+        if not entity_refs:
+            return
+        rows = [{"name": name, "type": etype} for name, etype in entity_refs]
+        await self.run(
+            """
+            MATCH (c:Chunk {id: $chunk_id})
+            UNWIND $rows AS row
+            MATCH (e:Entity {name: row.name, type: row.type, tenant: $tenant})
+            MERGE (c)-[:MENTIONS]->(e)
+            """,
+            chunk_id=chunk_id,
+            rows=rows,
             tenant=tenant,
         )
 
@@ -242,6 +334,51 @@ class Neo4jClient:
                 prompt_version=rel.prompt_version,
             )
 
+    async def merge_relations_batch(self, rows: list[dict], tenant: str = "default") -> None:
+        """Batched equivalent of merge_relation() — one round-trip for the
+        whole batch, combining both of merge_relation()'s queries (main edge
+        properties + provenance) into a single UNWIND pass since they target
+        the same edge. Each row needs the same keys merge_relation() takes as
+        kwargs (src_name, src_type, tgt_name, tgt_type, relation, weight,
+        confidence, extracted_at, source_doc_id, source_type, constraint_type,
+        valid_from, valid_to, span_start, span_end, extraction_model,
+        prompt_version).
+        """
+        if not rows:
+            return
+        await self.run(
+            """
+            UNWIND $rows AS row
+            MATCH (s:Entity {name: row.src_name, type: row.src_type, tenant: $tenant})
+            MATCH (t:Entity {name: row.tgt_name, type: row.tgt_type, tenant: $tenant})
+            MERGE (s)-[r:RELATES_TO {relation: row.relation}]->(t)
+            ON CREATE SET r.recorded_at = datetime()
+            SET r.weight           = row.weight,
+                r.extracted_at     = row.extracted_at,
+                r.source_doc_id    = row.source_doc_id,
+                r.source_type      = row.source_type,
+                r.constraint_type  = row.constraint_type,
+                r.valid_from       = row.valid_from,
+                r.valid_to         = row.valid_to,
+                r.tenant           = $tenant,
+                r.source_doc_ids   = CASE
+                    WHEN r.source_doc_ids IS NULL            THEN [row.source_doc_id]
+                    WHEN row.source_doc_id IN r.source_doc_ids THEN r.source_doc_ids
+                    ELSE r.source_doc_ids + [row.source_doc_id]
+                END,
+                r.confidence       = CASE
+                    WHEN r.confidence IS NULL THEN row.confidence
+                    ELSE 1.0 - (1.0 - r.confidence) * (1.0 - row.confidence)
+                END,
+                r.chunk_span_start = row.span_start,
+                r.chunk_span_end   = row.span_end,
+                r.extraction_model = row.extraction_model,
+                r.prompt_version   = row.prompt_version
+            """,
+            rows=rows,
+            tenant=tenant,
+        )
+
     async def merge_community(self, community: Community):
         await self.run(
             """
@@ -304,6 +441,64 @@ class Neo4jClient:
             embedding=embedding,
             tenant=tenant,
         )
+
+    async def get_document_filenames(self, tenant: str = "default") -> list[str]:
+        """List distinct document filenames for a tenant (for named-document
+        matching against question text — see local_search's named-doc boost).
+        """
+        rows = await self.run(
+            "MATCH (d:Document) WHERE ($tenant = 'default' OR d.tenant = $tenant) "
+            "RETURN DISTINCT d.filename AS filename",
+            tenant=tenant,
+        )
+        return [r["filename"] for r in rows if r.get("filename")]
+
+    async def get_chunk_filenames(
+        self, chunk_ids: list[str], tenant: str = "default"
+    ) -> dict[str, str]:
+        """Map chunk_id -> source document filename for a set of chunks.
+
+        Used by the named-document boost to check whether any already-fused
+        candidate belongs to the named document before falling back to a
+        fresh cosine search.
+        """
+        if not chunk_ids:
+            return {}
+        rows = await self.run(
+            """
+            MATCH (c:Chunk)-[:PART_OF]->(d:Document)
+            WHERE c.id IN $chunk_ids
+              AND ($tenant = 'default' OR c.tenant = $tenant)
+            RETURN c.id AS chunk_id, d.filename AS filename
+            """,
+            chunk_ids=chunk_ids,
+            tenant=tenant,
+        )
+        return {r["chunk_id"]: r["filename"] for r in rows if r.get("filename")}
+
+    async def get_best_chunk_for_document(
+        self, filename: str, embedding: list[float], tenant: str = "default"
+    ) -> dict | None:
+        """Best chunk (by cosine similarity to `embedding`) belonging to the
+        document with this exact filename. Used by the named-document boost:
+        when the question explicitly names a document, guarantee its most
+        relevant chunk a seed slot even if it didn't survive fused-ranking.
+        """
+        rows = await self.run(
+            """
+            MATCH (c:Chunk)-[:PART_OF]->(d:Document {filename: $filename})
+            WHERE ($tenant = 'default' OR c.tenant = $tenant)
+              AND c.embedding IS NOT NULL
+            RETURN c.id AS chunk_id, c.text AS text,
+                   vector.similarity.cosine(c.embedding, $embedding) AS score
+            ORDER BY score DESC
+            LIMIT 1
+            """,
+            filename=filename,
+            embedding=embedding,
+            tenant=tenant,
+        )
+        return rows[0] if rows else None
 
     async def vector_search_communities(
         self,
@@ -414,31 +609,40 @@ class Neo4jClient:
         results = await self.run(
             f"""
             UNWIND $chunk_ids AS cid
-            MATCH (c:Chunk {{id: cid}})-[:MENTIONS]->(e:Entity)
-            WHERE coalesce(e.quarantined, false) = false
-            MATCH path = (e)-[:RELATES_TO*1..{hops}]-(neighbor:Entity)
-            WHERE coalesce(neighbor.quarantined, false) = false {temporal_filter} {tenant_filter}
-              AND ALL(n IN nodes(path) WHERE coalesce(n.quarantined, false) = false)
-            MATCH (neighbor_chunk:Chunk)-[:MENTIONS]->(neighbor)
-            WHERE NOT neighbor_chunk.id IN $chunk_ids
-              AND ($tenant = 'default' OR neighbor_chunk.tenant = $tenant)
-            WITH DISTINCT
-                neighbor_chunk.id   AS chunk_id,
-                neighbor_chunk.text AS text,
-                neighbor.name       AS via_entity,
-                length(path)        AS path_length,
-                reduce(conf = 1.0, r IN relationships(path) |
-                    conf * coalesce(r.confidence, 1.0)) AS path_confidence,
-                {sem_sim_expr} AS sem_sim
+            CALL {{
+                WITH cid
+                MATCH (c:Chunk {{id: cid}})-[:MENTIONS]->(e:Entity)
+                WHERE coalesce(e.quarantined, false) = false
+                MATCH path = (e)-[:RELATES_TO*1..{hops}]-(neighbor:Entity)
+                WHERE coalesce(neighbor.quarantined, false) = false {temporal_filter} {tenant_filter}
+                  AND ALL(n IN nodes(path) WHERE coalesce(n.quarantined, false) = false)
+                MATCH (neighbor_chunk:Chunk)-[:MENTIONS]->(neighbor)
+                WHERE NOT neighbor_chunk.id IN $chunk_ids
+                  AND ($tenant = 'default' OR neighbor_chunk.tenant = $tenant)
+                RETURN DISTINCT
+                    neighbor_chunk.id   AS chunk_id,
+                    neighbor_chunk.text AS text,
+                    neighbor.name       AS via_entity,
+                    length(path)        AS path_length,
+                    reduce(conf = 1.0, r IN relationships(path) |
+                        conf * coalesce(r.confidence, 1.0)) AS path_confidence,
+                    {sem_sim_expr} AS sem_sim
+                // unordered cap: bounds traversal per seed chunk so a single
+                // high-degree hub entity can't blow up the path enumeration
+                LIMIT $per_seed_cap
+            }}
             // path score: penalise longer paths, reward high-confidence paths
             WITH chunk_id, text, via_entity, path_length, path_confidence, sem_sim,
                  (path_confidence / toFloat(path_length)) AS base_score
             RETURN chunk_id, text, via_entity, path_length, path_confidence,
                    sem_sim, {score_expr} AS path_score
             ORDER BY path_score DESC
+            LIMIT $total_cap
             """,
             chunk_ids=chunk_ids,
             tenant=tenant,
+            per_seed_cap=200,
+            total_cap=500,
             **({"as_of": as_of} if as_of else {}),
             **({"query_emb": query_embedding, "sem_w": float(semantic_weight)}
                if use_semantic else {}),

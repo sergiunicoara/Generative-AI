@@ -19,6 +19,7 @@ Additional features
 from __future__ import annotations
 
 import asyncio
+import re
 
 import structlog
 
@@ -46,6 +47,44 @@ def _adaptive_weights(question: str, alpha_default: float, beta_default: float):
     if any(s in q for s in _RELATIONAL_SIGNALS):
         return 0.5, 0.5
     return alpha_default, beta_default
+
+
+# ── Named-document boost ────────────────────────────────────────────────────
+# Matches document-code-like tokens, e.g. "CSR-CLIENT-2023", "RFA-REG-01",
+# "IL-INS-03" — uppercase letters followed by 1-4 dash-separated alphanumeric
+# groups.
+_DOC_CODE_RE = re.compile(r"\b[A-Z]{2,}(?:-[A-Z0-9]+){1,4}\b")
+
+# ── Source-document labeling trigger ────────────────────────────────────────
+# Matches revision/version vocabulary (Romanian + English), e.g. "revizia",
+# "rev.", "versiune", "current revision". Source labels help the LLM compare
+# *which* document a chunk's content belongs to for cross-document revision
+# questions, but for plain single-document lookups they can backfire: a model
+# sees "Source: OTHER-DOC.txt" on the chunk holding the answer and concludes
+# that fact isn't "conform <document named in the question>" even though the
+# question didn't actually ask to restrict to that document's own text. Only
+# attach source labels when the question is about revisions/versions, where
+# that attribution is actually load-bearing.
+_REVISION_QUERY_RE = re.compile(
+    r"rev(?:izi[ae]|ision)?[.\s]|versiune|version|actual[ăa]|current",
+    re.IGNORECASE,
+)
+
+
+def _needs_source_labels(question: str) -> bool:
+    """True if source/provenance labels help more than they hurt here.
+
+    Two cases where a chunk's `Source: <filename>` is load-bearing:
+    - Revision/version comparison questions (_REVISION_QUERY_RE).
+    - Questions that explicitly name 2+ documents (_DOC_CODE_RE) — the LLM
+      needs to know which named document each chunk actually belongs to in
+      order to scope its answer to the documents the question asked about,
+      rather than picking up a same-topic fact from an unrelated document
+      that happens to outrank the correct chunk.
+    """
+    if _REVISION_QUERY_RE.search(question):
+        return True
+    return len(set(_DOC_CODE_RE.findall(question))) >= 2
 
 
 class LocalSearch:
@@ -134,8 +173,104 @@ class LocalSearch:
         # Step 3 — cross-encoder reranking
         if use_rerank and fused_chunks:
             seed_chunks = await self._reranker.rerank(enriched_question, fused_chunks)
+
+            # RRF floor: the cross-encoder (English-trained MS MARCO) can
+            # drop the #1 RRF-fused chunk entirely on non-English text even
+            # when it's a lexically-perfect match. If so, trust RRF fusion
+            # and treat it as the top seed (rank 0 -> _text_score=1.0 in the
+            # GNN blend), dropping the weakest reranked seed to keep the
+            # seed count at rerank_top_k.
+            top_fused_id = fused_chunks[0]["chunk_id"]
+            if seed_chunks and not any(c["chunk_id"] == top_fused_id for c in seed_chunks):
+                top_fused = dict(fused_chunks[0])
+                top_fused["rerank_score"] = top_fused.get("score", 0.0)
+                seed_chunks = [top_fused] + seed_chunks[:-1]
+
+            # Preserve lexical evidence from distinct source documents. The
+            # MS MARCO cross-encoder is English-trained and can demote strong
+            # Romanian BM25 matches; repeated chunks from one long document
+            # can then occupy nearly every seed slot. Keep the best RRF-fused
+            # chunk from the configured number of distinct documents, then
+            # fill remaining slots from the cross-encoder ranking.
+            min_seed_docs = self._cfg.get("lexical_seed_min_documents", 0)
+            if min_seed_docs > 1 and len(seed_chunks) > 1:
+                fused_filenames = await self._neo4j.get_chunk_filenames(
+                    [c["chunk_id"] for c in fused_chunks], tenant=tenant
+                )
+                lexical_diverse: list[dict] = []
+                seen_docs: set[str] = set()
+                for chunk in fused_chunks:
+                    filename = fused_filenames.get(chunk["chunk_id"])
+                    if not filename or filename in seen_docs:
+                        continue
+                    lexical_diverse.append(chunk)
+                    seen_docs.add(filename)
+                    if len(lexical_diverse) >= min_seed_docs:
+                        break
+
+                if len(lexical_diverse) > 1:
+                    selected_ids = {c["chunk_id"] for c in lexical_diverse}
+                    remaining = [
+                        c for c in seed_chunks if c["chunk_id"] not in selected_ids
+                    ]
+                    seed_chunks = (lexical_diverse + remaining)[:len(seed_chunks)]
         else:
             seed_chunks = fused_chunks
+
+        # Named-document boost: if the question explicitly names a document
+        # code (e.g. "RFA-REG-01"), guarantee that document's best-matching
+        # chunk a seed slot. The cross-encoder can score a topically-correct
+        # but lexically-dissimilar chunk as irrelevant even when the question
+        # names its source document directly — trust the explicit reference
+        # over the reranker in that case.
+        if embedding is not None and seed_chunks:
+            doc_codes = _DOC_CODE_RE.findall(enriched_question)
+            if doc_codes:
+                seed_id_set = {c["chunk_id"] for c in seed_chunks}
+                filenames = await self._neo4j.get_document_filenames(tenant=tenant)
+
+                # Prefer a chunk already proven relevant by BM25/RRF fusion
+                # (fused_chunks) over a fresh whole-document cosine search:
+                # the cross-encoder may have dropped it, but it was lexically
+                # matched against the actual question, unlike a generic
+                # "most similar chunk in this document" pick.
+                non_seed_fused = [
+                    c for c in fused_chunks if c["chunk_id"] not in seed_id_set
+                ]
+                fused_filenames = await self._neo4j.get_chunk_filenames(
+                    [c["chunk_id"] for c in non_seed_fused], tenant=tenant
+                )
+
+                for code in doc_codes:
+                    matched_filenames = [
+                        f for f in filenames if f.upper().startswith(code)
+                    ]
+                    if not matched_filenames:
+                        continue
+
+                    best = None
+                    for c in non_seed_fused:
+                        if fused_filenames.get(c["chunk_id"]) in matched_filenames:
+                            best = c
+                            break
+
+                    if best is None:
+                        for filename in matched_filenames:
+                            best = await self._neo4j.get_best_chunk_for_document(
+                                filename, embedding, tenant=tenant
+                            )
+                            if best:
+                                break
+
+                    if best and best["chunk_id"] not in seed_id_set:
+                        best = dict(best)
+                        best["rerank_score"] = best.get("score", 0.0)
+                        # Prepend (not append): _text_score is rank-based —
+                        # appending puts it at the worst seed rank
+                        # (text_score ≈ 0.2), which an explicit document
+                        # reference shouldn't suffer.
+                        seed_chunks = [best] + seed_chunks[:-1]
+                        seed_id_set.add(best["chunk_id"])
 
         seed_ids = [c["chunk_id"] for c in seed_chunks]
 
@@ -195,6 +330,19 @@ class LocalSearch:
                     beta           = beta,
                 ),
             )
+
+        # Attach source document filenames so the LLM can attribute claims to
+        # a specific document/revision — needed for cross-document questions
+        # (e.g. "which revision of X is referenced in Y, and is it current?")
+        # where the answer hinges on knowing which chunk came from which doc.
+        chunk_filenames = await self._neo4j.get_chunk_filenames(all_ids, tenant=tenant)
+        needs_source_labels = _needs_source_labels(enriched_question)
+        for chunk in all_chunks:
+            filename = chunk_filenames.get(chunk["chunk_id"])
+            if filename:
+                chunk["_doc_name"] = filename.replace(".txt", "")
+                if needs_source_labels:
+                    chunk["source"] = filename
 
         # Step 6 — entity context
         entities = await self._neo4j.get_entity_neighbors(all_ids, tenant=tenant)

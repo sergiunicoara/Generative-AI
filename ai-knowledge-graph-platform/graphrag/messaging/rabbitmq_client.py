@@ -189,7 +189,7 @@ class RabbitMQClient:
                                 "message_id":       str(message.message_id or ""),
                                 "payload_summary":  payload_summary,
                             }
-                            log.error("rabbitmq.dlq_sent", queue=dlq_name, **dlq_envelope)
+                            log.error("rabbitmq.dlq_sent", dlq=dlq_name, **dlq_envelope)
                             dlq_msg = Message(
                                 json.dumps(dlq_envelope).encode(),
                                 delivery_mode=DeliveryMode.PERSISTENT,
@@ -199,7 +199,7 @@ class RabbitMQClient:
                                     "x-retry-count":     retries,
                                 },
                             )
-                            await dlq.default_exchange.publish(dlq_msg, routing_key=dlq_name)
+                            await channel.default_exchange.publish(dlq_msg, routing_key=dlq_name)
                             await message.ack()  # ack original so it leaves the main queue
 
 

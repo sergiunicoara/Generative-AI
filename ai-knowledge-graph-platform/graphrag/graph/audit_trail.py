@@ -86,6 +86,73 @@ class AuditTrail:
             log.warning("audit_trail.entity_log_failed",
                         entity=entity_name, operation=operation, error=str(exc)[:120])
 
+    async def log_entities_batch(self, rows: list[dict]) -> None:
+        """Batched equivalent of log_entity_change() — one round-trip for the
+        whole batch. Each row needs: name, type, operation, old_values,
+        new_values, changed_by, source_doc_id (old_values/new_values already
+        stringified, matching log_entity_change()'s str(...) conversion).
+        """
+        if not rows:
+            return
+        try:
+            await self._neo4j.run(
+                """
+                UNWIND $rows AS row
+                CALL {
+                    WITH row
+                    MATCH (e:Entity {name: row.name, type: row.type})
+                    WITH e, row LIMIT 1
+                    CREATE (e)-[:HAS_CHANGE]->(cl:ChangeLog {
+                        id:            row.log_id,
+                        target_label: 'Entity',
+                        target_id:    e.id,
+                        operation:    row.operation,
+                        changed_by:   row.changed_by,
+                        changed_at:   datetime(),
+                        old_values:   row.old_values,
+                        new_values:   row.new_values,
+                        source_doc_id: row.source_doc_id
+                    })
+                }
+                """,
+                rows=rows,
+            )
+        except Exception as exc:
+            log.warning("audit_trail.entities_batch_failed", count=len(rows), error=str(exc)[:120])
+
+    async def log_relations_batch(self, rows: list[dict]) -> None:
+        """Batched equivalent of log_relation_change() — one round-trip for
+        the whole batch. Each row needs: src, tgt, relation, operation,
+        old_values, new_values, changed_by, source_doc_id.
+        """
+        if not rows:
+            return
+        try:
+            await self._neo4j.run(
+                """
+                UNWIND $rows AS row
+                CALL {
+                    WITH row
+                    MATCH (s:Entity {name: row.src})-[r:RELATES_TO {relation: row.relation}]->(t:Entity {name: row.tgt})
+                    WITH r, row LIMIT 1
+                    CREATE (cl:ChangeLog {
+                        id:            row.log_id,
+                        target_label:  'Relation',
+                        target_id:     row.src + '->' + row.tgt + ':' + row.relation,
+                        operation:     row.operation,
+                        changed_by:    row.changed_by,
+                        changed_at:    datetime(),
+                        old_values:    row.old_values,
+                        new_values:    row.new_values,
+                        source_doc_id: row.source_doc_id
+                    })
+                }
+                """,
+                rows=rows,
+            )
+        except Exception as exc:
+            log.warning("audit_trail.relations_batch_failed", count=len(rows), error=str(exc)[:120])
+
     async def log_relation_change(
         self,
         src_name: str,

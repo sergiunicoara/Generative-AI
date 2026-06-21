@@ -42,7 +42,18 @@ For each chunk c, the GNN score is:
 where q_gnn is the query vector and e_gnn is the post-propagation entity vector.
 
 Final blend:
-    final_score = α · sigmoid(cross_encoder_score / 5) + β · gnn_score
+    final_score = α · text_score + β · gnn_score
+
+text_score is computed differently depending on chunk provenance, since the
+two populations live on very different raw scales:
+  - Reranked seed chunks (have ``rerank_score``): rank-based —
+    text_score = 1 - (rank / n_seed), where rank is the chunk's 0-indexed
+    position in the cross-encoder's ranking (n_seed = number of reranked
+    chunks). This keeps the cross-encoder's top picks on the same [0, 1]
+    scale as multi-hop path scores regardless of the cross-encoder's raw
+    logit magnitude, which varies ~20x across queries.
+  - Multi-hop chunks (no ``rerank_score``): text_score = chunk["score"]
+    (the multi-hop path_score, already in [0, 1]).
 """
 
 from __future__ import annotations
@@ -179,10 +190,12 @@ class GNNScorer:
         alpha = alpha if alpha is not None else self._alpha
         beta  = beta  if beta  is not None else self._beta
 
+        seed_rank, n_seed = self._seed_ranks(chunks)
+
         if not chunk_entities:
             log.info("gnn_scorer.skip", reason="no_entity_embeddings")
             for c in chunks:
-                text_score       = self._text_score(c)
+                text_score       = self._text_score(c, seed_rank, n_seed)
                 c["gnn_score"]   = 0.0
                 # No graph evidence — weight falls entirely on text score.
                 # Applying alpha preserves the documented formula when gnn=0:
@@ -309,7 +322,7 @@ class GNNScorer:
                 gnn_score   = 0.0
                 explanation = f"No linked entities (rerank={chunk.get('rerank_score', 0):.2f})"
 
-            text_score           = self._text_score(chunk)
+            text_score           = self._text_score(chunk, seed_rank, n_seed)
             chunk["gnn_score"]   = gnn_score
             chunk["text_score"]  = text_score
             chunk["explanation"] = explanation
@@ -349,19 +362,32 @@ class GNNScorer:
         return H
 
     @staticmethod
-    def _text_score(chunk: dict) -> float:
+    def _seed_ranks(chunks: list[dict]) -> tuple[dict[str, int], int]:
+        """Map reranked seed-chunk ids to their 0-indexed cross-encoder rank.
+
+        ``chunks`` is ``seed_chunks + extra_chunks`` (see LocalSearch), so the
+        reranked chunks (those carrying ``rerank_score``) appear first and in
+        the cross-encoder's descending-score order — their position in that
+        subsequence is their rank.
+        """
+        seed_ids = [c["chunk_id"] for c in chunks if "rerank_score" in c]
+        return {cid: i for i, cid in enumerate(seed_ids)}, len(seed_ids)
+
+    @staticmethod
+    def _text_score(chunk: dict, seed_rank: dict[str, int], n_seed: int) -> float:
         """Normalise the text-based score to [0, 1] for blending.
 
-        Cross-encoder logits are unbounded; apply sigmoid(x/5) to bring
-        them into a range comparable to cosine similarity scores.
-        Vector scores are already in [0, 1] and are returned as-is.
+        Reranked seed chunks use a rank-based score spanning the full
+        [0, 1] range (1.0 for the cross-encoder's #1 pick, descending for
+        lower ranks). Multi-hop chunks (no ``rerank_score``) use their
+        path_score as-is.
 
         This is the *text* component of the final blend formula:
             final = α · text_score + β · gnn_score
         """
-        if "rerank_score" in chunk:
-            x = float(chunk["rerank_score"])
-            return float(1.0 / (1.0 + np.exp(-x / 5.0)))   # sigmoid
+        if n_seed and chunk["chunk_id"] in seed_rank:
+            rank = seed_rank[chunk["chunk_id"]]
+            return float(1.0 - (rank / n_seed))
         return float(chunk.get("score", 0.0))
 
     # ------------------------------------------------------------------

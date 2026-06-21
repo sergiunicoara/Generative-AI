@@ -6,7 +6,12 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-from graphrag.graph.alias_registry import AliasRegistry, _normalize
+from graphrag.graph.alias_registry import (
+    AliasRegistry,
+    _normalize,
+    _normalize_ro,
+    _stem_ro_token,
+)
 
 
 # ── _normalize ─────────────────────────────────────────────────────────────────
@@ -36,6 +41,33 @@ class TestNormalize:
         """Ensure write-key (graph_writer) equals read-key (registry.resolve)."""
         raw = "Foo  Bar!"
         assert _normalize(raw) == _normalize(_normalize(raw))
+
+
+# ── _normalize_ro / _stem_ro_token ──────────────────────────────────────────────
+
+class TestNormalizeRo:
+    def test_furnizor_variants_converge(self):
+        assert _normalize_ro("furnizor") == "furnizor"
+        assert _normalize_ro("furnizori") == "furnizor"
+        assert _normalize_ro("furnizorul") == "furnizor"
+        assert _normalize_ro("Furnizorii") == "furnizor"
+        assert _normalize_ro("furnizorilor") == "furnizor"
+
+    def test_phrase_variants_converge(self):
+        assert _normalize_ro("furnizori activi") == _normalize_ro("furnizorii activi")
+
+    def test_short_words_not_over_stemmed(self):
+        # "audit" ends in "it", not a stripped suffix -- unchanged either way
+        assert _stem_ro_token("audit") == "audit"
+        # "casa" minus "a" -> "cas" (3 chars, meets _RO_MIN_STEM_LEN) -- allowed
+        assert _stem_ro_token("casa") == "cas"
+        # A 3-letter word ending in a stemmable suffix must not be hollowed out
+        # below _RO_MIN_STEM_LEN (e.g. "lei" minus "i" -> "le", only 2 chars).
+        assert len(_stem_ro_token("lei")) >= 3 or _stem_ro_token("lei") == "lei"
+
+    def test_idempotent(self):
+        key = _normalize_ro("Furnizorii activi!")
+        assert _normalize_ro(key) == key
 
 
 # ── AliasRegistry.resolve ─────────────────────────────────────────────────────
@@ -76,6 +108,14 @@ class TestResolve:
         }
         reg = self._registry(entries)
         assert reg.resolve("Space Exploration Technologies") == ("SpaceX", "ORG")
+
+    def test_romanian_stem_fallback_match(self):
+        """No exact entry for 'furnizorii', but the stem table maps
+        'furnizor' -> ('furnizor', 'ORG') -- resolve() should fall back to it."""
+        reg = self._registry({_normalize("furnizor"): ("furnizor", "ORG")})
+        reg._stemmed = {_normalize_ro("furnizor"): ("furnizor", "ORG")}
+        assert reg.resolve("furnizorii") == ("furnizor", "ORG")
+        assert reg.resolve("Furnizorilor") == ("furnizor", "ORG")
 
 
 # ── AliasRegistry.register_alias ──────────────────────────────────────────────

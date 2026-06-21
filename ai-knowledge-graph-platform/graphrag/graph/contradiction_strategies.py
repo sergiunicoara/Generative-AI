@@ -131,6 +131,11 @@ class _ConflictStrategies:
         """
         Find cases where A-[rel]->B AND B-[rel]->A both exist for the same
         relation type — a topological contradiction.
+
+        RELATED_TO is excluded: it's the generic fallback relation with no
+        domain/range constraints (see ontology_registry.py), so A-RELATED_TO->B
+        and B-RELATED_TO->A are just two entities co-mentioned in both
+        directions — not a directional claim that can be "reversed".
         """
         tenant_filter = "AND a.tenant = $tenant AND b.tenant = $tenant" if tenant else ""
         limit_clause  = f"LIMIT {scan_limit}" if scan_limit > 0 else ""
@@ -143,6 +148,7 @@ class _ConflictStrategies:
             MATCH (a:Entity)-[r1:RELATES_TO]->(b:Entity)
             MATCH (b)-[r2:RELATES_TO]->(a)
             WHERE r1.relation = r2.relation
+              AND r1.relation <> 'RELATED_TO'
               AND id(a) < id(b)
               {tenant_filter}
             OPTIONAL MATCH (c:Conflict {{

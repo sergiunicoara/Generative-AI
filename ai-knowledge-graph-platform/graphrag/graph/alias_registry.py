@@ -11,7 +11,8 @@ Strategy
 --------
 1. Exact match on stored aliases (instant)
 2. Normalized match — strip punctuation, lowercase, collapse whitespace
-3. Embedding similarity against known entity embeddings (cosine > 0.92)
+3. Embedding similarity against known entity embeddings (cosine > 0.97 —
+   see `ingestion.alias_embedding_threshold` in config/settings.yml)
 4. Queue ambiguous cases for human review rather than auto-creating
 
 The registry is loaded once per process and refreshed after every
@@ -28,8 +29,10 @@ from functools import lru_cache
 
 log = structlog.get_logger(__name__)
 
-_EMBEDDING_SIMILARITY_THRESHOLD = 0.92   # cosine similarity for dedup
-_FUZZY_SCORE_THRESHOLD = 85              # rapidfuzz ratio for soft match
+# Defaults — overridden by ingestion.alias_embedding_threshold /
+# ingestion.alias_fuzzy_threshold in config/settings.yml.
+_DEFAULT_EMBEDDING_SIMILARITY_THRESHOLD = 0.97   # cosine similarity for dedup
+_DEFAULT_FUZZY_SCORE_THRESHOLD = 85              # rapidfuzz ratio for soft match
 _REDIS_TTL = 86400                       # 24h — alias table refreshed each ingestion batch
 
 # Redis key pattern:  graphrag:aliases:{tenant}   → Hash { normalized_alias: "canonical|type" }
@@ -64,6 +67,31 @@ def _normalize_regulatory(text: str) -> str:
     return _normalize(stripped)
 
 
+# Conservative Romanian noun-suffix list (longest first) for merging
+# inflectional variants — e.g. "furnizor" / "furnizori" / "furnizorul" /
+# "furnizorii" / "furnizorilor" all stem to "furnizor".
+_RO_NOUN_SUFFIXES = ("ilor", "ului", "urile", "elor", "iilor",
+                     "uri", "ii", "ul", "lor", "le", "i", "a", "e")
+_RO_MIN_STEM_LEN = 3
+
+
+def _stem_ro_token(token: str) -> str:
+    """Strip a single Romanian noun inflection suffix, keeping at least
+    `_RO_MIN_STEM_LEN` characters of the stem to avoid over-stemming short words."""
+    for suf in _RO_NOUN_SUFFIXES:
+        if token.endswith(suf) and len(token) - len(suf) >= _RO_MIN_STEM_LEN:
+            return token[: -len(suf)]
+    return token
+
+
+def _normalize_ro(text: str) -> str:
+    """Like _normalize, but additionally stems each token's Romanian noun
+    inflection — used as a fallback dedup key so "furnizor" / "furnizori" /
+    "furnizorul" / "furnizorii" / "furnizorilor" resolve to the same entity.
+    """
+    return " ".join(_stem_ro_token(t) for t in _normalize(text).split(" ") if t)
+
+
 async def _get_redis():
     """Return an async Redis client or None if unavailable."""
     try:
@@ -95,7 +123,19 @@ class AliasRegistry:
         # Keyed per-tenant so the registry is safe for single-tenant usage
         # (multi-tenant deployments should use one registry instance per tenant)
         self._exact: dict[str, tuple[str, str]] = {}
+        # Romanian-noun-stem fallback table — see _normalize_ro(). First-wins
+        # (setdefault) so the earliest-seen canonical for a given stem wins.
+        self._stemmed: dict[str, tuple[str, str]] = {}
         self._loaded = False
+
+        from graphrag.core.config import get_settings
+        ingestion_cfg = get_settings().ingestion
+        self._embedding_threshold = ingestion_cfg.get(
+            "alias_embedding_threshold", _DEFAULT_EMBEDDING_SIMILARITY_THRESHOLD
+        )
+        self._fuzzy_threshold = ingestion_cfg.get(
+            "alias_fuzzy_threshold", _DEFAULT_FUZZY_SCORE_THRESHOLD
+        )
 
     async def load(self) -> None:
         """Refresh alias table from Neo4j and push to Redis for cross-worker sharing."""
@@ -113,10 +153,12 @@ class AliasRegistry:
                               "SUPPLEMENTAL_TYPE_CERTIFICATE", "AIRWORTHINESS_APPROVAL"}
 
         self._exact.clear()
+        self._stemmed.clear()
         for row in rows:
             cname = row["canonical_name"]
             ctype = row["canonical_type"]
             self._exact[_normalize(cname)] = (cname, ctype)
+            self._stemmed.setdefault(_normalize_ro(cname), (cname, ctype))
             # Also index under prefix-stripped key for regulatory entities so
             # "EASA AD 2022-0201" and "AD 2022-0201" resolve to the same node.
             if ctype in _REGULATION_TYPES:
@@ -124,6 +166,7 @@ class AliasRegistry:
             for alias in row.get("aliases") or []:
                 if alias:
                     self._exact[_normalize(alias)] = (cname, ctype)
+                    self._stemmed.setdefault(_normalize_ro(alias), (cname, ctype))
                     if ctype in _REGULATION_TYPES:
                         self._exact[_normalize_regulatory(alias)] = (cname, ctype)
         self._loaded = True
@@ -171,6 +214,14 @@ class AliasRegistry:
                       canonical=self._exact[reg_key][0])
             return self._exact[reg_key]
 
+        # 1c. Romanian noun-stem fallback match
+        # "furnizori" / "furnizorul" / "furnizorii" / "furnizorilor" → "furnizor"
+        stem_key = _normalize_ro(raw_name)
+        if stem_key in self._stemmed:
+            log.debug("alias_registry.stem_match", raw=raw_name,
+                      canonical=self._stemmed[stem_key][0])
+            return self._stemmed[stem_key]
+
         # 2. Fuzzy match (optional, requires rapidfuzz)
         try:
             from rapidfuzz import fuzz
@@ -181,7 +232,7 @@ class AliasRegistry:
                 if score > best_score:
                     best_score = score
                     best_match = canonical
-            if best_score >= _FUZZY_SCORE_THRESHOLD and best_match:
+            if best_score >= self._fuzzy_threshold and best_match:
                 log.debug(
                     "alias_registry.fuzzy_match",
                     raw=raw_name,
@@ -225,6 +276,7 @@ class AliasRegistry:
             confidence=confidence,
         )
         self._exact[_normalize(raw_value)] = (canonical_name, canonical_type)
+        self._stemmed.setdefault(_normalize_ro(raw_value), (canonical_name, canonical_type))
         log.info(
             "alias_registry.alias_added",
             raw=raw_value,
@@ -257,7 +309,7 @@ class AliasRegistry:
             entity_type=entity_type,
             exclude_name=exclude_name,
             tenant=self._tenant,
-            threshold=_EMBEDDING_SIMILARITY_THRESHOLD,
+            threshold=self._embedding_threshold,
         )
         if rows:
             r = rows[0]
@@ -304,6 +356,9 @@ async def load_alias_registry(neo4j_client=None, tenant: str = "default") -> Ali
                     k: tuple(v.split("|", 1))   # type: ignore[assignment]
                     for k, v in mapping.items()
                 }
+                registry._stemmed = {}
+                for k, v in registry._exact.items():
+                    registry._stemmed.setdefault(_normalize_ro(k), v)
                 registry._loaded = True
                 log.info("alias_registry.redis_warm_load", tenant=tenant,
                          entries=len(registry._exact))

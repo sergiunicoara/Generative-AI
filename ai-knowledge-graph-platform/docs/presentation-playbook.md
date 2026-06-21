@@ -284,3 +284,17 @@ The live demo writes to the `aerospace` tenant; it self-clears on the next
 1. Open deck. 2. Run `python scripts/demo_regulatory.py` — narrate the
 contradiction being caught. 3. Open `http://localhost:8001/admin/` (demo mode) —
 point at the green gauges. 4. "It's all in the repo — grep it, run it." Done.
+
+---
+
+## 10. Alternative targets beyond PwC
+
+**IBM CIC Timișoara** (agentic AI / Graph RAG engineer role):
+- **Hiring contact:** George Silviu Cațer (Application Architect | First Line Manager)
+- **How to find:** LinkedIn → search `IBM People` + filter keywords `engineer manager timisoara` → click George's profile → send DM
+- **Pitch angle:** Lead with agentic IRCoT fallback (8B routing + 70B synthesis), tool invocation capability, multi-hop graph traversal
+- **Demo focus:** Show the graph-based reasoning (Step 3) + contradiction detection (Step 4) + Neo4j Browser queries — same flow, same impact
+- **Opening:** "Hi George — I noticed IBM Timișoara is hiring for an agentic chatbot + Graph RAG role. I built exactly that stack…"
+- See `docs/hiring-and-presentation-strategy.md` Part 2 for full message template
+
+Both PwC and IBM need the same core story: **production-grade, observable, domain-agnostic GraphRAG platform**. The domain swap (aerospace → automotive → banking) proves agnosticism. The agentic fallback + contradiction detection + citation audit trail all apply to both consulting and internal IBM product roles.

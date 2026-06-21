@@ -65,6 +65,34 @@ class TestWriteEntities:
         writer._neo4j.merge_entity.assert_not_called()
         assert result == []   # alias-resolved entities are not in the written list
 
+    async def test_same_name_different_type_redirected_to_canonical(self):
+        """Same name re-extracted under a different type must redirect to the
+        first-registered (name, type) canonical, not create a duplicate node."""
+        writer = _build_writer()
+        chunk = _make_chunk()
+
+        # "furnizor" was already canonicalized as ORG; this extraction
+        # comes back as the same name but type=PERSON.
+        mock_registry = MagicMock()
+        mock_registry.resolve = MagicMock(return_value=("furnizor", "ORG"))
+        mock_registry.register_alias = AsyncMock()
+        writer._neo4j.merge_mentions = AsyncMock()
+
+        with patch.object(writer, "_get_registry", return_value=mock_registry), \
+             patch.object(writer, "_ensure_registry", AsyncMock()):
+            entity = _make_entity("furnizor", "PERSON")
+            result = await writer.write_entities([entity], chunk)
+
+        writer._neo4j.merge_entity.assert_not_called()
+        mock_registry.register_alias.assert_called_once()
+        _, kwargs = mock_registry.register_alias.call_args
+        assert kwargs["canonical_name"] == "furnizor"
+        assert kwargs["canonical_type"] == "ORG"
+        writer._neo4j.merge_mentions.assert_called_once_with(
+            chunk.id, "furnizor", "ORG", tenant=chunk.tenant
+        )
+        assert result == []
+
     async def test_new_entity_is_written(self):
         """An entity with no alias and no embedding duplicate is written to Neo4j."""
         writer = _build_writer()
@@ -78,6 +106,8 @@ class TestWriteEntities:
         writer._neo4j.entity_exists = AsyncMock(return_value=False)
         writer._neo4j.merge_entity = AsyncMock()
         writer._neo4j.merge_mentions = AsyncMock()
+        writer._neo4j.merge_entities_batch = AsyncMock()
+        writer._neo4j.merge_mentions_batch = AsyncMock()
         writer._audit.log_entity_change = AsyncMock()
 
         with patch.object(writer, "_get_registry", return_value=mock_registry), \
@@ -85,7 +115,12 @@ class TestWriteEntities:
             entity = _make_entity("SpaceX")
             result = await writer.write_entities([entity], chunk)
 
-        writer._neo4j.merge_entity.assert_called_once()
+        # New entities are merged in one batched round-trip (not per-entity
+        # merge_entity/merge_mentions calls — see graph_writer.write_entities).
+        writer._neo4j.merge_entities_batch.assert_called_once()
+        writer._neo4j.merge_mentions_batch.assert_called_once()
+        batched_entities = writer._neo4j.merge_entities_batch.call_args.args[0]
+        assert [e.name for e in batched_entities] == ["SpaceX"]
         assert len(result) == 1
         assert result[0].name == "SpaceX"
 
@@ -177,6 +212,7 @@ class TestWriteRelations:
         writer._ontology = mock_ontology
 
         writer._neo4j.merge_relation = AsyncMock()
+        writer._neo4j.merge_relations_batch = AsyncMock()
         writer._audit.log_relation_change = AsyncMock()
 
         src = _make_entity("Alice", "PERSON")
@@ -192,7 +228,13 @@ class TestWriteRelations:
              patch.object(writer, "_ensure_registry", AsyncMock()):
             await writer.write_relations([rel], entity_map, doc_id="doc1", tenant="default")
 
-        writer._neo4j.merge_relation.assert_called_once()
+        # Relations are merged in one batched round-trip (see
+        # graph_writer.write_relations / merge_relations_batch), not via
+        # per-relation merge_relation calls.
+        writer._neo4j.merge_relations_batch.assert_called_once()
+        batched_rows = writer._neo4j.merge_relations_batch.call_args.args[0]
+        assert len(batched_rows) == 1
+        assert batched_rows[0]["relation"] == "WORKS_AT"
 
     async def test_missing_entity_in_map_skips_relation(self):
         """Relations whose src or tgt is not in entity_map are silently skipped."""

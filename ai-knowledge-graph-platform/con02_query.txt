@@ -1,0 +1,18 @@
+{
+  "id": "CON-02",
+  "type": "contradiction",
+  "question": "Este obligatoriu ca furnizorii noi să fie auditați la sediul lor înainte de aprobare?",
+  "expected_citations": [
+    "csr-client-2023",
+    "fp-inj-03",
+    "reg-evf-01"
+  ],
+  "required_answer_terms": [
+    "audit",
+    "on-site"
+  ],
+  "forbidden_terms": [],
+  "min_context_precision": 0.6,
+  "min_citation_recall": 0.4,
+  "note": "C02 — CSR-CLIENT-2023 sectiunea 4.1 declara auditul on-site OBLIGATORIU si finalizat inainte de aprobare; PQ-07/PQ-rezultatele de calificare interne nu mentioneaza aceasta cerinta explicit. Reformulated 2026-06-19 — previous phrasing 'audit on-site la sediul furnizorului înainte de aprobarea oricărui furnizor nou' scored FP-INJ-03 absent and REG-EVF-01 at rank 34 (below top_k=5); new phrasing lifts REG-EVF-01 to rank 1 and keeps CSR-CLIENT-2023 at rank 0. Citation recall: 2/3 = 0.667 ≥ 0.4 threshold. FP-INJ-03 chunk is a short bullet inside a reference list (low keyword density, not lexically retrievable without corpus-specific boost) — deferred per A113-style structural limitation."
+}

@@ -11,6 +11,8 @@ Usage:
     python scripts/run_golden_eval.py --type multi_hop         # subset by type
     python scripts/run_golden_eval.py --ids MH-01 MH-02 SH-03  # specific IDs
     python scripts/run_golden_eval.py --dry-run                 # print plan only
+    python scripts/run_golden_eval.py --tenant automotive      # data/eval_golden/queries_automotive.json
+    python scripts/run_golden_eval.py --golden-set path/to.json --tenant foo  # explicit override
 
 Requires:
     - API running on GRAPHRAG_API_URL (default http://localhost:8000)
@@ -25,7 +27,9 @@ Exit codes:
 from __future__ import annotations
 
 import argparse
+import io
 import json
+import re
 import sys
 import time
 from pathlib import Path
@@ -33,27 +37,35 @@ from pathlib import Path
 import httpx
 import structlog
 
+# Windows consoles default to cp1252, which can't encode the ⚠/✓/✗ markers
+# printed below.
+sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")
+sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding="utf-8", errors="replace")
+
 # Make project root importable
 sys.path.insert(0, str(Path(__file__).parents[1]))
 
 log = structlog.get_logger("golden_eval")
 
-GOLDEN_SET  = Path(__file__).parents[1] / "evals" / "golden_set.json"
+GOLDEN_SET       = Path(__file__).parents[1] / "evals" / "golden_set.json"
+GOLDEN_SETS_DIR  = Path(__file__).parents[1] / "data" / "eval_golden"
 API_BASE    = __import__("os").getenv("GRAPHRAG_API_URL", "http://localhost:8000")
+API_TOKEN   = __import__("os").getenv("GRAPHRAG_API_TOKEN", "")
+API_HEADERS = {"Authorization": f"Bearer {API_TOKEN}"} if API_TOKEN else {}
 API_TIMEOUT = 60
 
 
 def _submit_query(client: httpx.Client, question: str, tenant: str) -> dict:
     """Submit a query and poll until complete. Returns the result dict."""
     resp = client.post(f"{API_BASE}/query", json={"question": question, "tenant": tenant},
-                       timeout=API_TIMEOUT)
+                       headers=API_HEADERS, timeout=API_TIMEOUT)
     resp.raise_for_status()
     data = resp.json()
     query_id = data.get("query_id", "")
 
     # Poll for result
     for _ in range(60):
-        r = client.get(f"{API_BASE}/query/{query_id}", timeout=10)
+        r = client.get(f"{API_BASE}/query/{query_id}", headers=API_HEADERS, timeout=10)
         r.raise_for_status()
         result = r.json()
         if result.get("status") == "completed":
@@ -80,10 +92,15 @@ def _check(question_spec: dict, result: dict) -> tuple[bool, list[str]]:
             failures.append(f"answer missing required term: {phrase!r}")
 
     # Forbidden terms (supports both v2 and v1 field names)
+    # Word-boundary match — a plain substring check would flag correct
+    # refusals that echo the question's own wording (e.g. "nord-american"
+    # is a substring of the Romanian inflection "nord-americană"). \w is
+    # Unicode-aware for str patterns, so \b does not match between "american"
+    # and "ă".
     forbidden = (question_spec.get("forbidden_terms")
                  or question_spec.get("answer_must_not_contain", []))
     for phrase in forbidden:
-        if phrase.lower() in answer:
+        if re.search(r"\b" + re.escape(phrase.lower()) + r"\b", answer):
             failures.append(f"answer contains forbidden term: {phrase!r}")
 
     # Citation recall
@@ -206,10 +223,20 @@ def main() -> None:
     parser.add_argument("--type",    help="Filter by question type (e.g. multi_hop)")
     parser.add_argument("--ids",     nargs="+", help="Run specific question IDs only")
     parser.add_argument("--tenant",  default=None, help="Tenant override (default: from golden set)")
+    parser.add_argument("--golden-set", default=None,
+                        help="Path to a golden set JSON file. Default: evals/golden_set.json, "
+                             "or data/eval_golden/queries_<tenant>.json if --tenant matches one.")
     parser.add_argument("--dry-run", action="store_true", help="Print plan without calling API")
     args = parser.parse_args()
 
-    gs      = json.loads(GOLDEN_SET.read_text())
+    if args.golden_set:
+        golden_set_path = Path(args.golden_set)
+    elif args.tenant and (GOLDEN_SETS_DIR / f"queries_{args.tenant}.json").exists():
+        golden_set_path = GOLDEN_SETS_DIR / f"queries_{args.tenant}.json"
+    else:
+        golden_set_path = GOLDEN_SET
+
+    gs      = json.loads(golden_set_path.read_text(encoding="utf-8"))
     tenant  = args.tenant or gs.get("tenant", "aerospace")
     all_qs  = gs["questions"]
     thresholds = gs.get("thresholds", {})

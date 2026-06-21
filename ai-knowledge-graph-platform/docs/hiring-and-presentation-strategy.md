@@ -73,7 +73,13 @@ python scripts/demo_regulatory.py --live   # real Neo4j, no mocks
 
 ### What to say in the outreach message
 
+**PwC Czech (primary target):**
 > "I saw PwC has been building GraphRAG capabilities in the region. I built a production-grade GraphRAG + knowledge graph platform from scratch over the past few months — it runs a regulatory compliance demo live, has 364 passing tests, and the codebase is public. I'm not asking for a job offer — just 15 minutes to show you what it can do. Would that be useful?"
+
+**IBM CIC Timișoara (agentic AI / Graph RAG role):**
+> "Hi [Name] — I noticed IBM Timișoara is hiring for an agentic chatbot + Graph RAG role. I've built exactly that stack: GraphRAG on Neo4j, 6-stage retrieval pipeline (vector + BM25 → cross-encoder → multi-hop GNN → LLM synthesis), agentic IRCoT fallback, 0.937 faithfulness on corpus real, domain-agnostic (currently running on aerospace and automotive regulatory docs). 364 passing tests, fully Dockerised, repo public. Would 15 minutes to walk through the architecture and a live demo be useful?"
+
+**Contact:** George Silviu Cațer (Application Architect | First Line Manager at IBM CIC Timișoara) — find via LinkedIn: search `IBM People` + filter keywords `engineer manager timisoara`, click George's profile
 
 ### Pre-empting the AI-authorship question
 

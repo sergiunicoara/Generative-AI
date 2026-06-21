@@ -76,6 +76,7 @@ def _make_local_search(cfg_overrides: dict | None = None) -> LocalSearch:
         ls = LocalSearch.__new__(LocalSearch)
         ls._cfg = base_cfg
         ls._neo4j = AsyncMock()
+        ls._neo4j.get_chunk_filenames = AsyncMock(return_value={})
         ls._embedder = AsyncMock()
         ls._bm25 = AsyncMock()
         ls._reranker = AsyncMock()
@@ -182,3 +183,25 @@ class TestLocalSearchPipelineFlags:
         result = await ls.search("test")
         assert result["chunks"] == []
         assert result["referenced_chunks"] == []
+
+    async def test_lexical_seed_floor_preserves_distinct_documents(self):
+        ls = _make_local_search({
+            "gnn_enabled": False,
+            "rerank_top_k": 3,
+            "lexical_seed_min_documents": 3,
+        })
+        c1, c2, c3, c4 = (_chunk(cid) for cid in ("c1", "c2", "c3", "c4"))
+        ls._embedder.embed_text = AsyncMock(return_value=[0.1] * 768)
+        ls._neo4j.vector_search_chunks = AsyncMock(return_value=[c1, c2, c3, c4])
+        ls._bm25.search = AsyncMock(return_value=[c1, c2, c3, c4])
+        # The reranker crowds out document B with a second chunk from A.
+        ls._reranker.rerank = AsyncMock(return_value=[c1, c2, c4])
+        ls._neo4j.get_chunk_filenames = AsyncMock(return_value={
+            "c1": "A.txt", "c2": "A.txt", "c3": "B.txt", "c4": "C.txt",
+        })
+        ls._neo4j.get_multihop_chunks = AsyncMock(return_value=[])
+        ls._neo4j.get_entity_neighbors = AsyncMock(return_value=[])
+
+        result = await ls.search("test")
+
+        assert [c["chunk_id"] for c in result["chunks"]] == ["c1", "c3", "c4"]

@@ -47,6 +47,8 @@ LENGTH_PROFILES = {
     "fi":   {"target_words": 600,   "min_words": 400},
 }
 
+SMALL_DOC_THRESHOLD = 1000
+
 LONG_APPENDICES = """Appendix A – Example Forms
 Appendix B – KPI Scorecards
 Appendix C – Audit Checklists
@@ -230,12 +232,57 @@ def detect_provider(model):
         return "claude"
 
 
+def get_recent_content(text, word_limit=1200):
+    words = text.split()
+    if len(words) <= word_limit:
+        return text.strip()
+    return " ".join(words[-word_limit:]).strip()
+
+
+def build_continuation_prompt(full_text, current_word_count, target_words, allow_metadata=False):
+    remaining = target_words - current_word_count
+    recent_content = get_recent_content(full_text)
+
+    if remaining < 1500:
+        instructions = (
+            "Complete only the remaining unfinished sections.\n\n"
+            f"Write approximately {max(remaining, 0)} additional words.\n\n"
+            "Do not start new major sections.\n"
+            "Do not repeat content.\n"
+            "Do not summarize.\n"
+            "Finish appendices if needed."
+        )
+    else:
+        instructions = (
+            "Continue the document from the exact point where it stopped.\n\n"
+            f"Current length: {current_word_count}\n"
+            f"Target length: {target_words}\n\n"
+            "Do not summarize.\n"
+            "Do not conclude.\n"
+            "Do not repeat previous content.\n"
+            "Continue with the next unfinished sections.\n"
+            "Add substantial new content."
+        )
+
+    if allow_metadata:
+        instructions += "\nDo not add metadata."
+
+    return (
+        f"{instructions}\n\n"
+        f"Current length: {current_word_count} words\n"
+        f"Target length: {target_words} words\n\n"
+        f"Last generated content:\n{recent_content}\n\n"
+        "Continue from this point.\n"
+        "Do not repeat content."
+    )
+
+
 def call_once(provider, model, messages):
     if provider == "openai":
         from openai import OpenAI
         oa = OpenAI(api_key=os.environ.get("OPENAI_API_KEY"))
         r = oa.chat.completions.create(
-            model=model, max_tokens=4096, messages=messages
+            model=model, max_tokens=8192, messages=messages
         )
         return r.choices[0].message.content, r.choices[0].finish_reason
 
@@ -246,7 +293,7 @@ def call_once(provider, model, messages):
         combined = "\n".join(m["content"] for m in messages)
         r = gm.generate_content(
             combined,
-            generation_config={"max_output_tokens": 4096, "temperature": 0.7}
+            generation_config={"max_output_tokens": 8192, "temperature": 0.7}
         )
         return r.text, "stop"
 
@@ -258,14 +305,14 @@ def call_once(provider, model, messages):
             import sys; sys.exit(1)
         client = Groq(api_key=os.environ.get("GROQ_API_KEY"))
         r = client.chat.completions.create(
-            model=model, max_tokens=4096, messages=messages
+            model=model, max_tokens=8192, messages=messages
         )
         return r.choices[0].message.content, r.choices[0].finish_reason
 
     else:
         client = anthropic.Anthropic(api_key=os.environ.get("ANTHROPIC_API_KEY"))
         r = client.messages.create(
-            model=model, max_tokens=4096, messages=messages
+            model=model, max_tokens=8192, messages=messages
         )
         return r.content[0].text, r.stop_reason
 
@@ -276,7 +323,13 @@ def generate_with_continuation(prompt, provider, model, target_words, min_words,
     current_word_count = 0
     rnd = 0
 
-    while current_word_count < min_words and rnd < 20:
+    if target_words <= SMALL_DOC_THRESHOLD:
+        chunk, finish = call_once(provider, model, messages)
+        if "=== METADATA ===" in chunk:
+            chunk = chunk[:chunk.index("=== METADATA ===")].rstrip()
+        return f"{chunk.rstrip()}\n\n{metadata}\n"
+
+    while current_word_count < target_words and rnd < 20:
         print(f"  Round {rnd + 1}...", end=" ", flush=True)
         chunk, finish = call_once(provider, model, messages)
         full_text += chunk
@@ -286,42 +339,17 @@ def generate_with_continuation(prompt, provider, model, target_words, min_words,
         print(f"  Current words: {current_word_count}")
         print(f"  Remaining words: {max(target_words - current_word_count, 0)}")
 
-        has_metadata = "=== METADATA ===" in full_text
-
-        if has_metadata and current_word_count >= min_words:
-            print("  Document complet.")
-            break
-
-        if has_metadata and current_word_count < min_words:
-            print(f"  Prea scurt ({current_word_count}/{min_words} cuv) - sterg metadata si continua...")
-            full_text = full_text[:full_text.index("=== METADATA ===")].rstrip()
-            current_word_count = len(full_text.split())
-            messages.append({"role": "assistant", "content": chunk})
-            messages.append({"role": "user", "content": (
-                "Continue the document from the exact point where it stopped.\n\n"
-                f"Current length: {current_word_count}\n"
-                f"Target length: {target_words}\n\n"
-                "Do not summarize.\n"
-                "Do not conclude.\n"
-                "Do not repeat previous content.\n"
-                "Continue with the next unfinished sections.\n"
-                "Add substantial new content.\n"
-                "Do not add metadata."
-            )})
-            rnd += 1
-            continue
-
-        messages.append({"role": "assistant", "content": chunk})
-        messages.append({"role": "user", "content": (
-            "Continue the document from the exact point where it stopped.\n\n"
-            f"Current length: {current_word_count}\n"
-            f"Target length: {target_words}\n\n"
-            "Do not summarize.\n"
-            "Do not conclude.\n"
-            "Do not repeat previous content.\n"
-            "Continue with the next unfinished sections.\n"
-            "Add substantial new content."
-        )})
+        messages = [
+            {"role": "user", "content": prompt},
+            {
+                "role": "user",
+                "content": build_continuation_prompt(
+                    full_text,
+                    current_word_count,
+                    target_words,
+                ),
+            },
+        ]
         rnd += 1
 
     if "=== METADATA ===" in full_text:

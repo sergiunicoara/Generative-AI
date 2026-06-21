@@ -27,7 +27,6 @@ python-jose[cryptography]>=3.3.0
 python-multipart>=0.0.9
 dash>=2.17.0
 plotly>=5.22.0
-prometheus-fastapi-instrumentator>=2.3.0
 httpx>=0.27.0
 
 # ── Storage ────────────────────────────────────────────────────────────────────

@@ -1,0 +1,63 @@
+=== VECTOR TOP 30 ===
+ 1. score=0.8690 doc=CSR-CLIENT-2023.txt <<<<
+ 2. score=0.8339 doc=REG-EVF-01.txt <<<<
+ 3. score=0.8320 doc=CSR-CLIENT-2023.txt <<<<
+ 4. score=0.8307 doc=PPAP-PROC-01.txt
+ 5. score=0.8297 doc=CSR-CLIENT-2023.txt <<<<
+ 6. score=0.8195 doc=PQ-07-rev3.txt
+ 7. score=0.8122 doc=IL-MEN-08.txt
+ 8. score=0.8114 doc=PFMEA-01.txt
+ 9. score=0.8099 doc=SPEC-PROD-01.txt
+10. score=0.8077 doc=PPAP-PROC-01.txt
+11. score=0.8075 doc=PQ-07-rev3.txt
+12. score=0.8061 doc=REG-ETA-01.txt
+13. score=0.8059 doc=MC-01-S8-rev6.txt
+14. score=0.8051 doc=PQ-07-rev3.txt
+15. score=0.7986 doc=PPAP-PROC-01.txt
+16. score=0.7983 doc=CSR-CLIENT-2023.txt <<<<
+17. score=0.7983 doc=PPAP-PROC-01.txt
+18. score=0.7944 doc=IL-NC-06-rev2.txt
+19. score=0.7932 doc=PQ-07-rev3.txt
+20. score=0.7932 doc=PQ-07-rev3.txt
+21. score=0.7930 doc=PTRN-PROC-13.txt
+22. score=0.7915 doc=PTRN-PROC-13.txt
+23. score=0.7906 doc=SPEC-PROD-01.txt
+24. score=0.7905 doc=PFMEA-01.txt
+25. score=0.7904 doc=CSR-CLIENT-2023.txt <<<<
+26. score=0.7903 doc=PTRN-PROC-13.txt
+27. score=0.7900 doc=PTRN-PROC-13.txt
+28. score=0.7893 doc=PPAP-PROC-01.txt
+29. score=0.7891 doc=IL-PROC-12-rev1.txt
+30. score=0.7891 doc=IL-EXP-07.txt
+
+=== BM25 TOP 30 ===
+ 1. score=11.791189193725586 doc=CSR-CLIENT-2023.txt <<<<
+ 2. score=7.464132308959961 doc=CSR-CLIENT-2023.txt <<<<
+ 3. score=7.348473072052002 doc=CSR-CLIENT-2023.txt <<<<
+ 4. score=7.097903251647949 doc=PTRN-PROC-13.txt
+ 5. score=6.707109451293945 doc=CSR-CLIENT-2023.txt <<<<
+ 6. score=6.704051971435547 doc=PTRN-PROC-13.txt
+ 7. score=6.699861526489258 doc=CSR-CLIENT-2023.txt <<<<
+ 8. score=6.059165000915527 doc=IL-MEN-08.txt
+ 9. score=5.8745341300964355 doc=FP-INJ-03.txt <<<<
+10. score=5.66559362411499 doc=IL-INS-03-rev2.txt
+11. score=5.5100626945495605 doc=PTRN-PROC-13.txt
+12. score=5.183004379272461 doc=PAI-PROC-04.txt
+13. score=5.119617938995361 doc=PPAP-PROC-01.txt
+14. score=5.076816082000732 doc=REG-EVF-01.txt <<<<
+15. score=4.980974197387695 doc=IL-NC-06-rev2.txt
+16. score=4.976076126098633 doc=IL-EXP-07.txt
+17. score=4.739412307739258 doc=CSR-CLIENT-2023.txt <<<<
+18. score=4.625261306762695 doc=SPEC-PROD-01.txt
+19. score=4.59901762008667 doc=SPEC-PROD-01.txt
+20. score=4.380922317504883 doc=SPEC-PROD-01.txt
+21. score=4.293237209320068 doc=CSR-CLIENT-2023.txt <<<<
+22. score=4.280899524688721 doc=SPEC-PROD-01.txt
+23. score=4.143335819244385 doc=PPAP-PROC-01.txt
+24. score=4.096828937530518 doc=PPAP-PROC-01.txt
+25. score=4.083283424377441 doc=CSR-CLIENT-2023.txt <<<<
+26. score=4.056061744689941 doc=SPEC-PROD-01.txt
+27. score=4.049283504486084 doc=PAI-PROC-04.txt
+28. score=3.956308603286743 doc=CSR-CLIENT-2023.txt <<<<
+29. score=3.925983428955078 doc=IL-MEN-08.txt
+30. score=3.874772548675537 doc=PN-PROC-05-rev3.txt

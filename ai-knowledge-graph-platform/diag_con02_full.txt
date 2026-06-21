@@ -1,0 +1,23 @@
+2026-06-19 21:03:01 [info     ] session_store.redis_configured url=redis://localhost:6379/0
+2026-06-19 21:03:03 [info     ] hybrid_bm25.done               bm25=19 fused=10 vector=10
+2026-06-19 21:03:03 [info     ] reranker.loading               model=cross-encoder/ms-marco-MiniLM-L-6-v2
+2026-06-19 21:03:06 [info     ] reranker.done                  input_chunks=10 output_chunks=5 top_score=7.0753
+2026-06-19 21:03:12 [info     ] gnn_scorer.edges_filtered      skipped=40 threshold=0.7
+2026-06-19 21:03:12 [info     ] gnn_scorer.done                alpha=0.9 beta=0.1 chunks=55 edges=350 entities=145 gnn_type=gat layers=2 top_final=0.9727 top_gnn=0.7266
+2026-06-19 21:03:12 [info     ] local_search.done              bm25=True entities=145 fused_chunks=10 gnn=True hop_chunks=50 hops=2 reranked_chunks=5 reranker=True session_ctx=True session_id=none total_chunks=55 vector_chunks=10
+Total final chunks: 55
+ 1. final_score=0.9726606249809265 doc=CSR-CLIENT-2023.txt <<<<
+ 2. final_score=0.8884468604326249 doc=REG-EVF-01.txt <<<<
+ 3. final_score=0.8788219619989396 doc=REG-ETA-01.txt
+ 4. final_score=0.8783494849205018 doc=IL-PROC-12-rev1.txt
+ 5. final_score=0.873138495206833 doc=IL-EXP-07.txt
+ 6. final_score=0.8706678409576416 doc=IL-NC-06-rev2.txt
+ 7. final_score=0.870033230304718 doc=PTRN-PROC-13.txt
+ 8. final_score=0.8693630267381668 doc=PTRN-PROC-13.txt
+ 9. final_score=0.8688261528015138 doc=PTRN-PROC-13.txt
+10. final_score=0.8670718604326249 doc=REG-EVF-01.txt <<<<
+11. final_score=0.8670718604326249 doc=REG-EVF-01.txt <<<<
+12. final_score=0.864576460838318 doc=PQ-07-rev3.txt
+13. final_score=0.864102848291397 doc=PTRN-PROC-13.txt
+14. final_score=0.8636706907749176 doc=IL-NC-06-rev2.txt
+15. final_score=0.86346011698246 doc=PQ-07-rev3.txt

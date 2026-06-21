@@ -27,6 +27,29 @@ import structlog
 log = structlog.get_logger(__name__)
 
 
+def get_ontology_path_for_tenant(
+    tenant: str,
+    ontologies_dir: str | Path = "config/ontologies",
+) -> Path | None:
+    """
+    Resolve a tenant name to a domain ontology file by naming convention.
+
+    Looks for ``{ontologies_dir}/{tenant}*.yml`` (e.g. tenant "automotive"
+    matches "automotive_iatf.yml", tenant "aerospace" matches
+    "aerospace_regulatory.yml"). Returns ``None`` if no match exists — callers
+    should treat this the same as a missing ontology (built-in rules only).
+
+    This lets each tenant ship its own ontology file without any code change:
+    add ``config/ontologies/<tenant>_<name>.yml`` and it is picked up
+    automatically.
+    """
+    d = Path(ontologies_dir)
+    if not d.is_dir():
+        return None
+    matches = sorted(d.glob(f"{tenant.lower()}*.yml"))
+    return matches[0] if matches else None
+
+
 def load_domain_ontology(path: str | Path) -> dict:
     """
     Load a domain ontology YAML file and return the parsed dict.

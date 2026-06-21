@@ -3,12 +3,24 @@
 import asyncio
 import os
 import signal
+import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
 import structlog
 
 from graphrag.messaging.consumers import QueryConsumer
+from graphrag.retrieval.reranker import _get_cross_encoder
 from graphrag.workers.health_server import HealthServer
 
 log = structlog.get_logger(__name__)
+
+
+def _warmup_reranker():
+    _get_cross_encoder()
+    log.info("reranker.warmed")
+
 
 HEALTH_PORT = int(os.getenv("WORKER_HEALTH_PORT", "8082"))
 
@@ -52,6 +64,11 @@ async def main():
     await health.start()
 
     await _ensure_schema()
+
+    # Warm the cross-encoder so the first real query doesn't pay the load penalty
+    loop = asyncio.get_running_loop()
+    await loop.run_in_executor(None, _warmup_reranker)
+
     consumer = QueryConsumer()
     task = asyncio.create_task(consumer.start())
 

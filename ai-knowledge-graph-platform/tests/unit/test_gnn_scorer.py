@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import math
-
 import numpy as np
 import pytest
 
@@ -166,8 +164,8 @@ class TestGNNScorerNoEntities:
         scorer = GNNScorer(alpha=0.9, beta=0.1)
         chunks = [{"chunk_id": "c0", "rerank_score": 5.0}]
         result = scorer.score([0.1] * 768, chunks, [], [])
-        expected_text = 1.0 / (1.0 + math.exp(-5.0 / 5.0))
-        assert result[0]["final_score"] == pytest.approx(0.9 * expected_text, abs=1e-5)
+        # Sole seed chunk -> rank 0 of 1 -> text_score = 1 - 0/1 = 1.0
+        assert result[0]["final_score"] == pytest.approx(0.9 * 1.0, abs=1e-5)
 
 
 class TestGNNScorerEdgeFiltering:
@@ -195,19 +193,36 @@ class TestGNNScorerEdgeFiltering:
 
 
 class TestGNNScorerTextScore:
-    """_text_score static method should handle both rerank_score and score fields."""
+    """_text_score should rank-normalise seed chunks and pass through path scores."""
 
-    def test_rerank_score_applies_sigmoid(self):
-        chunk = {"rerank_score": 0.0}
-        ts = GNNScorer._text_score(chunk)
-        assert ts == pytest.approx(0.5, abs=1e-6)   # sigmoid(0) = 0.5
+    def test_seed_ranks_assigns_position_in_order(self):
+        chunks = [
+            {"chunk_id": "c0", "rerank_score": 8.0},
+            {"chunk_id": "c1", "rerank_score": 0.34},
+            {"chunk_id": "c2", "score": 0.9},   # multi-hop, no rerank_score
+        ]
+        seed_rank, n_seed = GNNScorer._seed_ranks(chunks)
+        assert seed_rank == {"c0": 0, "c1": 1}
+        assert n_seed == 2
 
-    def test_fallback_to_score_field(self):
-        chunk = {"score": 0.75}
-        assert GNNScorer._text_score(chunk) == pytest.approx(0.75)
+    def test_top_ranked_seed_chunk_gets_text_score_one(self):
+        seed_rank, n_seed = {"c0": 0, "c1": 1, "c2": 2}, 3
+        assert GNNScorer._text_score({"chunk_id": "c0", "rerank_score": 8.0}, seed_rank, n_seed) == pytest.approx(1.0)
+        assert GNNScorer._text_score({"chunk_id": "c1", "rerank_score": 0.5}, seed_rank, n_seed) == pytest.approx(2 / 3)
+        assert GNNScorer._text_score({"chunk_id": "c2", "rerank_score": 0.1}, seed_rank, n_seed) == pytest.approx(1 / 3)
+
+    def test_seed_rank_independent_of_raw_rerank_magnitude(self):
+        """A weak-query top pick (rerank_score=0.34) scores the same as a strong-query top pick (8.0)."""
+        weak  = GNNScorer._text_score({"chunk_id": "c0", "rerank_score": 0.34}, {"c0": 0}, 1)
+        strong = GNNScorer._text_score({"chunk_id": "c0", "rerank_score": 8.0}, {"c0": 0}, 1)
+        assert weak == pytest.approx(strong) == pytest.approx(1.0)
+
+    def test_fallback_to_score_field_for_multihop_chunks(self):
+        chunk = {"chunk_id": "x", "score": 0.75}
+        assert GNNScorer._text_score(chunk, {}, 0) == pytest.approx(0.75)
 
     def test_missing_score_returns_zero(self):
-        assert GNNScorer._text_score({}) == pytest.approx(0.0)
+        assert GNNScorer._text_score({"chunk_id": "x"}, {}, 0) == pytest.approx(0.0)
 
 
 class TestPropagateConfidence:

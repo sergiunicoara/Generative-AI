@@ -9,9 +9,15 @@ Usage:
 
 Provider strategy
 -----------------
-Primary:  Groq (llama-3.3-70b-versatile) — lowest latency (~150 tok/s).
-Fallback: DeepSeek-V3 (deepseek-chat) — kicks in immediately on Groq rate-limit;
-          no sleep, no queuing, same OpenAI-compatible API.
+Primary:  DeepSeek-V3 (deepseek-chat) — single provider for the full ingestion
+          run. At corpus-scale chunk volumes, Groq's free-tier rate limit is
+          hit on nearly every call anyway, so routing extraction through one
+          model gives a consistent extraction "voice" (entity/relation style,
+          confidence calibration) across the whole graph — important for
+          reproducibility — and avoids ~1 wasted Groq round-trip per call.
+Opt-in:   Groq (llama-3.3-70b-versatile) — set ``LLM_INGEST_PROVIDER=groq`` to
+          use Groq-primary with instant DeepSeek fallback on rate-limit
+          (``FallbackLLM``), e.g. for quick low-volume/dev runs.
 Embeddings: OpenAI text-embedding-3-large (3072d) — replaced Gemini; same
           dimensions, same Neo4j schema, no re-indexing required.
 
@@ -79,9 +85,12 @@ class GroqLLM(BaseLLM):
         first 429 immediately propagates to the fallback without sleeping.
     """
 
+    _TIMEOUT = 60.0  # seconds — without this a stalled Groq response hangs forever
+                      # and FallbackLLM never gets a chance to fall back.
+
     def __init__(self, api_key: str, default_model: str, max_retries: int = _MAX_RETRIES):
         from groq import Groq
-        self._client = Groq(api_key=api_key)
+        self._client = Groq(api_key=api_key, timeout=self._TIMEOUT)
         self._default_model = default_model
         self._max_retries = max_retries
 
@@ -92,7 +101,7 @@ class GroqLLM(BaseLLM):
         json_mode: bool = False,
         temperature: float = 0.0,
     ) -> str:
-        from groq import RateLimitError
+        from groq import RateLimitError, APITimeoutError, APIConnectionError
 
         model = model or self._default_model
         kwargs: dict[str, Any] = {
@@ -126,6 +135,19 @@ class GroqLLM(BaseLLM):
                 last_exc = exc
                 if attempt < self._max_retries:
                     await asyncio.sleep(wait)
+                # else fall through to re-raise
+
+            except (APITimeoutError, APIConnectionError) as exc:
+                log.warning(
+                    "llm_client.groq_timeout",
+                    attempt=attempt,
+                    max_retries=self._max_retries,
+                    model=model,
+                    error=type(exc).__name__,
+                )
+                last_exc = exc
+                if attempt < self._max_retries:
+                    await asyncio.sleep(_MIN_RETRY_WAIT)
                 # else fall through to re-raise
 
         raise last_exc  # type: ignore[misc]
@@ -226,11 +248,13 @@ class DeepSeekLLM(BaseLLM):
     _BASE_URL     = "https://api.deepseek.com"
     _DEFAULT_MODEL = "deepseek-chat"   # DeepSeek-V3
     _MAX_RETRIES  = 3
-    _RETRY_WAIT   = 10.0  # seconds between retries on 429/503
+    _RETRY_WAIT   = 10.0  # seconds between retries on 429/503/timeout
+    _TIMEOUT      = 60.0  # seconds — DeepSeek's API can stall under load with
+                           # no error; without this the call hangs forever.
 
     def __init__(self, api_key: str, default_model: str = _DEFAULT_MODEL):
         from openai import OpenAI
-        self._client = OpenAI(api_key=api_key, base_url=self._BASE_URL)
+        self._client = OpenAI(api_key=api_key, base_url=self._BASE_URL, timeout=self._TIMEOUT)
         self._default_model = default_model
 
     async def generate(
@@ -240,7 +264,7 @@ class DeepSeekLLM(BaseLLM):
         json_mode: bool = False,
         temperature: float = 0.0,
     ) -> str:
-        from openai import RateLimitError, APIStatusError
+        from openai import RateLimitError, APIStatusError, APITimeoutError, APIConnectionError
 
         model = model or self._default_model
         kwargs: dict[str, Any] = {
@@ -262,13 +286,14 @@ class DeepSeekLLM(BaseLLM):
                 )
                 return response.choices[0].message.content or ""
 
-            except (RateLimitError, APIStatusError) as exc:
+            except (RateLimitError, APIStatusError, APITimeoutError, APIConnectionError) as exc:
                 log.warning(
-                    "llm_client.deepseek_rate_limit",
+                    "llm_client.deepseek_retry",
                     attempt=attempt,
                     max_retries=self._MAX_RETRIES,
                     wait_seconds=self._RETRY_WAIT,
                     model=model,
+                    error=type(exc).__name__,
                 )
                 last_exc = exc
                 if attempt < self._MAX_RETRIES:
@@ -308,16 +333,16 @@ class FallbackLLM(BaseLLM):
         json_mode: bool = False,
         temperature: float = 0.0,
     ) -> str:
-        from groq import RateLimitError
+        from groq import RateLimitError, APITimeoutError, APIConnectionError
 
         try:
             return await self._groq.generate(
                 prompt, model=model, json_mode=json_mode, temperature=temperature
             )
-        except RateLimitError:
+        except (RateLimitError, APITimeoutError, APIConnectionError) as exc:
             log.warning(
                 "llm_client.fallback_to_deepseek",
-                reason="groq_rate_limit",
+                reason="groq_rate_limit" if isinstance(exc, RateLimitError) else "groq_timeout",
             )
             return await self._deepseek.generate(
                 prompt, json_mode=json_mode, temperature=temperature
@@ -334,9 +359,13 @@ class OpenAIEmbedder:
     Cost: ~$0.13/1M tokens (~$0.001 for the full 12-doc corpus).
     """
 
+    _TIMEOUT = 60.0  # seconds — without this an embedding call can hang for
+                      # 30+ minutes on a stalled connection (SDK default is
+                      # 600s x retries with backoff). Mirrors GroqLLM/DeepSeekLLM.
+
     def __init__(self, api_key: str, model: str = "text-embedding-3-large"):
         from openai import OpenAI
-        self._client = OpenAI(api_key=api_key)
+        self._client = OpenAI(api_key=api_key, timeout=self._TIMEOUT)
         self._model = model
 
     async def embed(self, texts: list[str]) -> list[list[float]]:
@@ -388,35 +417,35 @@ _embedder: OpenAIEmbedder | None = None
 
 
 def get_llm() -> BaseLLM:
-    """Return the primary (large) LLM — llama-3.3-70b via Groq, DeepSeek-V3 fallback.
+    """Return the primary (large) LLM — DeepSeek-V3, single provider by default.
 
-    Normal path:   Groq llama-3.3-70b (~280 tok/s, lowest latency).
-    Fallback path: DeepSeek-V3 on first Groq 429 — no sleep, generous limits.
+    Normal path: bare ``DeepSeekLLM`` (deepseek-chat) — one provider's
+    extraction "voice" for the whole corpus, generous rate limits,
+    ~$0.07/1M input tokens. No Groq round-trip, no mixed-model calibration
+    across a single ingestion run.
 
-    One-shot override — ``LLM_INGEST_PROVIDER=deepseek``:
-        Bypasses Groq/FallbackLLM entirely and returns a bare ``DeepSeekLLM``.
-        For populating the deterministic-ingestion cache (``LLM_CACHE_ENABLED=1``)
-        in a single clean pass: one provider's extraction "voice" for the whole
-        corpus, no Groq daily-cap stalls, ~$0.07/1M input tokens. Unset this
-        env var afterwards — it's a one-shot knob, not a permanent switch.
+    Opt-in override — ``LLM_INGEST_PROVIDER=groq``:
+        Uses Groq llama-3.3-70b as primary (~280 tok/s) with instant
+        DeepSeek-V3 fallback on rate-limit (``FallbackLLM``). Useful for
+        quick/low-volume dev runs where Groq's free tier won't be exhausted.
     """
     global _llm
     if _llm is None:
         from graphrag.core.config import get_settings
         cfg = get_settings()
-        if cfg.llm_ingest_provider == "deepseek":
+        if cfg.llm_ingest_provider == "groq":
             log.warning(
                 "llm_client.single_provider_override",
-                provider="deepseek",
-                reason="LLM_INGEST_PROVIDER=deepseek — Groq bypassed for this run",
+                provider="groq",
+                reason="LLM_INGEST_PROVIDER=groq — Groq-primary with DeepSeek fallback for this run",
             )
-            _llm = DeepSeekLLM(api_key=cfg.deepseek_api_key)
-        else:
             _llm = FallbackLLM(
                 api_key_groq=cfg.groq_api_key,
                 default_model_groq=cfg.groq_model,
                 api_key_deepseek=cfg.deepseek_api_key,
             )
+        else:
+            _llm = DeepSeekLLM(api_key=cfg.deepseek_api_key)
     return _llm
 
 

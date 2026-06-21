@@ -1,0 +1,35 @@
+2026-06-19 21:06:00 [info     ] session_store.redis_configured url=redis://localhost:6379/0
+2026-06-19 21:06:02 [info     ] hybrid_bm25.done               bm25=19 fused=10 vector=10
+2026-06-19 21:06:02 [info     ] reranker.loading               model=cross-encoder/ms-marco-MiniLM-L-6-v2
+2026-06-19 21:06:05 [info     ] reranker.done                  input_chunks=10 output_chunks=5 top_score=7.0753
+2026-06-19 21:06:11 [info     ] gnn_scorer.edges_filtered      skipped=40 threshold=0.7
+2026-06-19 21:06:11 [info     ] gnn_scorer.done                alpha=0.9 beta=0.1 chunks=55 edges=350 entities=145 gnn_type=gat layers=2 top_final=0.9727 top_gnn=0.7266
+2026-06-19 21:06:11 [info     ] local_search.done              bm25=True entities=145 fused_chunks=10 gnn=True hop_chunks=50 hops=2 reranked_chunks=5 reranker=True session_ctx=True session_id=none total_chunks=55 vector_chunks=10
+2026-06-19 21:06:15 [info     ] global_search.done             communities=5 partial_answers=1
+2026-06-19 21:06:16 [info     ] hybrid_retriever.done          latency_ms=16766.0 mode=hybrid
+RUN 1
+citations: ['CSR-CLIENT-2023', 'REG-EVF-01', 'REG-ETA-01', 'IL-PROC-12-rev1', 'IL-EXP-07']
+answer: Da. Conform secțiunii 4.1, auditul on-site la sediul furnizorului este OBLIGATORIU și trebuie finalizat înainte de orice aprobare a unui furnizor nou.
+
+2026-06-19 21:06:17 [info     ] hybrid_bm25.done               bm25=19 fused=10 vector=10
+2026-06-19 21:06:17 [info     ] reranker.done                  input_chunks=10 output_chunks=5 top_score=7.0753
+2026-06-19 21:06:23 [info     ] gnn_scorer.edges_filtered      skipped=40 threshold=0.7
+2026-06-19 21:06:23 [info     ] gnn_scorer.done                alpha=0.9 beta=0.1 chunks=55 edges=350 entities=145 gnn_type=gat layers=2 top_final=0.9727 top_gnn=0.7266
+2026-06-19 21:06:23 [info     ] local_search.done              bm25=True entities=145 fused_chunks=10 gnn=True hop_chunks=50 hops=2 reranked_chunks=5 reranker=True session_ctx=True session_id=none total_chunks=55 vector_chunks=10
+2026-06-19 21:06:27 [info     ] global_search.done             communities=5 partial_answers=1
+2026-06-19 21:06:28 [info     ] hybrid_retriever.done          latency_ms=11844.0 mode=hybrid
+RUN 2
+citations: ['CSR-CLIENT-2023', 'REG-EVF-01', 'REG-ETA-01', 'IL-PROC-12-rev1', 'IL-EXP-07']
+answer: Da, conform contextului, auditul on-site la sediul furnizorului este OBLIGATORIU și trebuie finalizat înainte de orice aprobare a unui furnizor nou.
+
+2026-06-19 21:06:29 [info     ] hybrid_bm25.done               bm25=19 fused=10 vector=10
+2026-06-19 21:06:29 [info     ] reranker.done                  input_chunks=10 output_chunks=5 top_score=7.0753
+2026-06-19 21:06:34 [info     ] gnn_scorer.edges_filtered      skipped=40 threshold=0.7
+2026-06-19 21:06:34 [info     ] gnn_scorer.done                alpha=0.9 beta=0.1 chunks=55 edges=350 entities=145 gnn_type=gat layers=2 top_final=0.9727 top_gnn=0.7266
+2026-06-19 21:06:34 [info     ] local_search.done              bm25=True entities=145 fused_chunks=10 gnn=True hop_chunks=50 hops=2 reranked_chunks=5 reranker=True session_ctx=True session_id=none total_chunks=55 vector_chunks=10
+2026-06-19 21:06:38 [info     ] global_search.done             communities=5 partial_answers=1
+2026-06-19 21:06:40 [info     ] hybrid_retriever.done          latency_ms=11562.0 mode=hybrid
+RUN 3
+citations: ['CSR-CLIENT-2023', 'REG-EVF-01', 'REG-ETA-01', 'IL-PROC-12-rev1', 'IL-EXP-07']
+answer: Da. Conform contextului, auditul on-site la sediul furnizorului este OBLIGATORIU și trebuie finalizat înainte de orice aprobare a unui furnizor nou.
+

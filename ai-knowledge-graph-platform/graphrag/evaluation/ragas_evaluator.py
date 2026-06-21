@@ -93,7 +93,56 @@ class RagasEvaluator:
 
         return None
 
+    @staticmethod
+    def _patch_langchain_vertexai_stub():
+        """Stub out langchain_community's VertexAI classes.
+
+        ragas==0.4.x unconditionally imports ChatVertexAI/VertexAI from
+        langchain_community, but langchain-community>=0.4 dropped that
+        submodule entirely. This project never configures VertexAI, so a
+        minimal stub satisfies ragas's import without pulling in a
+        conflicting langchain-community version.
+        """
+        import sys
+        import types
+
+        try:
+            import langchain_community.chat_models.vertexai  # noqa: F401
+
+            return
+        except ModuleNotFoundError:
+            pass
+
+        from langchain_core.language_models.chat_models import BaseChatModel
+        from langchain_core.language_models.llms import LLM
+
+        class ChatVertexAI(BaseChatModel):
+            @property
+            def _llm_type(self) -> str:
+                return "vertexai-stub"
+
+            def _generate(self, *args, **kwargs):
+                raise NotImplementedError("VertexAI is not configured for this project")
+
+        class VertexAI(LLM):
+            @property
+            def _llm_type(self) -> str:
+                return "vertexai-stub"
+
+            def _call(self, *args, **kwargs):
+                raise NotImplementedError("VertexAI is not configured for this project")
+
+        vertexai_module = types.ModuleType("langchain_community.chat_models.vertexai")
+        vertexai_module.ChatVertexAI = ChatVertexAI
+        sys.modules["langchain_community.chat_models.vertexai"] = vertexai_module
+
+        import langchain_community.llms as llms_module
+
+        if not hasattr(llms_module, "VertexAI"):
+            llms_module.VertexAI = VertexAI
+
     def _build_metrics(self):
+        self._patch_langchain_vertexai_stub()
         from ragas.metrics import (
             faithfulness,
             answer_relevancy,

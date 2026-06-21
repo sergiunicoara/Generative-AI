@@ -51,6 +51,7 @@ class QueryAgent(BaseGraphRAGAgent):
             mode=message.mode,
             tenant=message.tenant,
             session_id=message.session_id,
+            query_id=message.query_id,
         )
         result.query_id = message.query_id
         log.info(

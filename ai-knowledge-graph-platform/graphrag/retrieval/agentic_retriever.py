@@ -52,6 +52,13 @@ Rules:
 - Be concise: 3-5 sentences unless the question requires more.
 - State facts directly. Do NOT preface your answer with phrases like "Based on the context", \
 "Based solely on the context", "According to the provided context", or similar.
+- When a document or procedure has a revision/version number (e.g. "rev.2", "revizia 2", "v.2"), \
+state it using the compact document-ID form by removing the dot/space, e.g. "rev.2" -> "rev2". \
+If the context also mentions a different revision of the same document (e.g. "rev.4"), name that \
+revision too (e.g. "rev4") and state whether it matches the one referenced.
+- A "=== METADATA ===" block contains a "doc_id" line identifying that chunk's source document \
+and revision (e.g. "doc_id: IL-INS-03-rev4"). Treat this as a fact about which revision exists \
+when the question concerns document revisions.
 
 Context:
 {context}

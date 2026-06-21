@@ -21,9 +21,17 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import io
 import sys
 import uuid
 from pathlib import Path
+
+# On Windows, stdout defaults to the ANSI codepage (cp1252) when redirected to
+# a file, which raises UnicodeEncodeError on Romanian diacritics (ț/ş) logged
+# during extraction/contradiction-detection — silently failing every document
+# inside ingest's per-doc except-handler. Force UTF-8 regardless of platform.
+sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")
+sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding="utf-8", errors="replace")
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
@@ -31,47 +39,90 @@ sys.path.insert(0, str(ROOT))
 import structlog
 log = structlog.get_logger("ingest_corpus")
 
-CORPUS_DIR = ROOT / "data" / "sample_docs"
-TENANT = "aerospace"
-
-# Authority levels by filename prefix (lower = higher authority)
-# AuthorityLevel enum: REGULATORY=1, MANUFACTURER_SPEC=2, INTERNAL_PROCEDURE=3, INFORMAL=4
-_AUTHORITY_MAP = {
-    "FAA-AD":            1,   # regulatory
-    "EASA-AD":           1,   # regulatory
-    "14CFR":             1,   # regulatory
-    "Boeing_MCAS":       2,   # manufacturer spec
-    "737MAX_CMM":        2,   # manufacturer spec
-    "Airbus_A320neo":    2,   # manufacturer spec
-    "G-ABCD":            3,   # internal procedure
-    "SWA_fleet":         3,   # internal procedure
-    "Boeing_company":    4,   # informal
+# Per-tenant corpus configuration. Predecessors must sort before successors
+# (alphabetically, by full path) so they are always ingested first and their
+# doc IDs are known by the time the superseding document is written.
+# graph_writer registers supersession via DocumentAuthorityService
+# (SUPERSEDES edges + superseded_by property), which retrieval's authority
+# weighting reads.
+# AuthorityLevel enum: REGULATORY/CLIENT_REQUIREMENT=1, MANUFACTURER_SPEC/QUALITY_MANUAL=2,
+#                      INTERNAL_PROCEDURE=3, INFORMAL/FORM_RECORD=4
+_CORPUS_CONFIGS = {
+    "aerospace": {
+        "corpus_dir": ROOT / "data" / "sample_docs",
+        "recursive": False,
+        "authority_map": {
+            "FAA-AD":            1,   # regulatory
+            "EASA-AD":           1,   # regulatory
+            "14CFR":             1,   # regulatory
+            "Boeing_MCAS":       2,   # manufacturer spec
+            "737MAX_CMM":        2,   # manufacturer spec
+            "Airbus_A320neo":    2,   # manufacturer spec
+            "G-ABCD":            3,   # internal procedure
+            "SWA_fleet":         3,   # internal procedure
+            "Boeing_company":    4,   # informal
+        },
+        "supersession_map": {
+            "FAA-AD-2022-03-07.txt": ["FAA-AD-2020-05-11.txt"],
+            "FAA-AD-2024-01-02.txt": ["FAA-AD-2022-03-07.txt"],
+        },
+    },
 }
 
 
-def _authority_level(filename: str) -> int:
-    for prefix, level in _AUTHORITY_MAP.items():
+def _automotive_corpus_config() -> dict:
+    """
+    Derive the automotive corpus config from its domain ontology.
+
+    config/ontologies/automotive_iatf.yml's `document_prefixes` and
+    `supersession_chains` sections are the source of truth, so the ingestion
+    script and the ontology never drift apart.
+    """
+    from graphrag.graph.domain_ontology import (
+        get_ontology_path_for_tenant,
+        load_domain_ontology,
+    )
+
+    ontology_path = get_ontology_path_for_tenant("automotive")
+    ontology = load_domain_ontology(ontology_path) if ontology_path else {}
+
+    prefixes = ontology.get("document_prefixes", {}) or {}
+    # Longest prefix first so e.g. "PCAL" matches before "PC".
+    authority_map = {
+        prefix: spec["authority"]
+        for prefix, spec in sorted(prefixes.items(), key=lambda kv: -len(kv[0]))
+    }
+
+    supersession_map: dict[str, list[str]] = {}
+    for chain in ontology.get("supersession_chains", []) or []:
+        supersession_map.setdefault(chain["successor"], []).append(chain["predecessor"])
+
+    return {
+        "corpus_dir": ROOT / "data" / "automotive",
+        "recursive": True,
+        "authority_map": authority_map,
+        "supersession_map": supersession_map,
+    }
+
+
+def _corpus_config(tenant: str) -> dict:
+    if tenant == "automotive":
+        return _automotive_corpus_config()
+    return _CORPUS_CONFIGS.get(tenant, _CORPUS_CONFIGS["aerospace"])
+
+
+def _authority_level(filename: str, authority_map: dict[str, int]) -> int:
+    for prefix, level in authority_map.items():
         if filename.startswith(prefix):
             return level
     return 4
-
-
-# Document-level supersession chains, as declared in the corpus text
-# ("This AD supersedes AD 2022-03-07"). Predecessors sort before successors
-# alphabetically, so they are always ingested first and their doc IDs are
-# known by the time the superseding document is written. graph_writer
-# registers these via DocumentAuthorityService (SUPERSEDES edges +
-# superseded_by property), which retrieval's authority weighting reads.
-_SUPERSESSION_MAP = {
-    "FAA-AD-2022-03-07.txt": ["FAA-AD-2020-05-11.txt"],
-    "FAA-AD-2024-01-02.txt": ["FAA-AD-2022-03-07.txt"],
-}
 
 
 async def ingest_all(
     doc_filter: str | None,
     commit: bool,
     wipe: bool,
+    tenant: str = "aerospace",
 ) -> int:
     from graphrag.core.models import Document, IngestMessage
     from graphrag.graph.neo4j_client import get_neo4j
@@ -79,16 +130,35 @@ async def ingest_all(
     from graphrag.graph.graph_snapshots import GraphSnapshotService
     from graphrag.ingestion.document_loader import load_document
 
-    paths = sorted(CORPUS_DIR.glob("*.txt"))
+    # Groq/OpenAI SDK calls run synchronously inside loop.run_in_executor(),
+    # sharing the loop's default ThreadPoolExecutor (sized min(32, cpu_count+4)
+    # — only ~12 workers on an 8-core box). Concurrent doc-level extraction
+    # (below) multiplies concurrent blocking calls past that default size,
+    # causing severe queueing that looks like a hang. These are network-I/O
+    # waits, not CPU work, so a larger pool is safe.
+    import concurrent.futures
+    asyncio.get_running_loop().set_default_executor(
+        concurrent.futures.ThreadPoolExecutor(max_workers=64)
+    )
+
+    config = _corpus_config(tenant)
+    corpus_dir       = config["corpus_dir"]
+    authority_map    = config["authority_map"]
+    supersession_map = config["supersession_map"]
+
+    paths = sorted(
+        corpus_dir.rglob("*.txt") if config["recursive"] else corpus_dir.glob("*.txt")
+    )
     if doc_filter:
-        paths = [p for p in paths if doc_filter.lower() in p.name.lower()]
+        filters = [f.strip().lower() for f in doc_filter.split(",") if f.strip()]
+        paths = [p for p in paths if any(f in p.name.lower() for f in filters)]
     if not paths:
-        print(f"No documents found in {CORPUS_DIR}")
+        print(f"No documents found in {corpus_dir}")
         return 1
 
     print(f"\n{'='*60}")
     print(f"  Corpus ingestion  —  {len(paths)} document(s)")
-    print(f"  Tenant: {TENANT}   commit={commit}   wipe={wipe}")
+    print(f"  Tenant: {tenant}   commit={commit}   wipe={wipe}")
     print(f"{'='*60}\n")
 
     neo4j = get_neo4j()
@@ -115,25 +185,66 @@ async def ingest_all(
         print(f"  [schema] {applied} constraint/index statements ensured\n")
 
     if wipe and commit:
-        log.info("ingest_corpus.wipe_tenant", tenant=TENANT)
+        log.info("ingest_corpus.wipe_tenant", tenant=tenant)
         await neo4j.run(
             "MATCH (n) WHERE n.tenant = $tenant DETACH DELETE n",
-            tenant=TENANT,
+            tenant=tenant,
         )
-        print(f"  [wipe] Cleared all nodes for tenant '{TENANT}'\n")
+        print(f"  [wipe] Cleared all nodes for tenant '{tenant}'\n")
 
     if not commit:
         print("  DRY RUN — documents that would be ingested:\n")
         for p in paths:
-            level = _authority_level(p.name)
-            print(f"    {p.name:50s}  authority={level}")
+            level = _authority_level(p.name, authority_map)
+            print(f"    {p.relative_to(corpus_dir)!s:50s}  authority={level}")
         print(f"\n  Pass --commit to write to Neo4j.\n")
         await neo4j.close()
         return 0
 
-    # ── Full ingestion loop ────────────────────────────────────────────────────
+    # ── Checkpoint — skip documents already fully ingested ─────────────────────
+    # (only meaningful when not --wipe, since --wipe just cleared everything).
+    # A document is "complete" once write() finished without raising — marked
+    # by ingest_complete=true on its Document node (set further below).
+    if not wipe:
+        done_rows = await neo4j.run(
+            "MATCH (d:Document {tenant: $tenant, ingest_complete: true}) "
+            "RETURN d.filename AS filename",
+            tenant=tenant,
+        )
+        already_done = {r["filename"] for r in done_rows}
+        if already_done:
+            skipped = [p for p in paths if p.name in already_done]
+            paths = [p for p in paths if p.name not in already_done]
+            print(f"  [checkpoint] Skipping {len(skipped)} already-ingested document(s)\n")
+        if not paths:
+            print("  Nothing left to ingest — all documents already complete.\n")
+            await neo4j.close()
+            return 0
+
+    # ── Streaming ingestion ──────────────────────────────────────────────────────
     from graphrag.agents.ingestion_agent import IngestionAgent
-    agent = IngestionAgent()
+    from graphrag.core.config import get_settings as _get_settings_for_rebuild_toggle
+
+    # Disable per-document community rebuild during bulk ingestion — it's an
+    # O(graph size) Leiden run, and re-running it after every single document
+    # (the default, meant for one-off/low-volume ingestion) turns an O(n)
+    # ingestion job into O(n^2) wall-clock time. Rebuild once at the end
+    # instead (matches settings.yml's own comment: "disable only if you run
+    # scripts/community_rebuild.py externally" — which is what we do below).
+    _graph_cfg = _get_settings_for_rebuild_toggle().graph
+    _prior_auto_rebuild = _graph_cfg.get("auto_rebuild_communities", True)
+    _graph_cfg["auto_rebuild_communities"] = False
+
+    # Same rationale, two more per-document checks that scan the whole graph
+    # regardless of how many documents actually changed: cycle detection
+    # (no doc-scoping at all) and contradiction scanning (doc_id narrows
+    # intent but not the underlying all-pairs query cost). Disable during
+    # the bulk loop, run each once at the end.
+    _ingestion_cfg = _get_settings_for_rebuild_toggle().ingestion
+    _prior_detect_cycles = _ingestion_cfg.get("detect_cycles_after_ingestion", True)
+    _prior_scan_contradictions = _ingestion_cfg.get("scan_contradictions_after_ingestion", True)
+    _ingestion_cfg["detect_cycles_after_ingestion"] = False
+    _ingestion_cfg["scan_contradictions_after_ingestion"] = False
 
     total_chunks    = 0
     total_entities  = 0
@@ -142,49 +253,137 @@ async def ingest_all(
     results: list[dict] = []
     doc_ids_by_filename: dict[str, str] = {}
 
-    for i, path in enumerate(paths, 1):
-        print(f"[{i}/{len(paths)}] {path.name}")
-
-        # Load + configure document
+    # Extraction (chunking, embedding, LLM entity/relation extraction) touches
+    # only each document's own data, never the shared Entity/alias graph, so
+    # it's safe to run concurrently across documents (this is also the slow,
+    # LLM-bound part). Writes race on that shared graph (EntityNotFound errors
+    # observed when parallelized — see lesson A129), so a single writer
+    # consumes a queue and writes one document at a time, as soon as its
+    # extraction is ready — instead of holding every document's extraction
+    # result in memory until the whole corpus finishes extracting (the prior
+    # design's memory footprint scaled with corpus size; this caps it at
+    # roughly extract_concurrency documents in flight).
+    docs_by_path: dict = {}
+    for path in paths:
         doc = load_document(path)
-        doc.tenant          = TENANT
-        doc.authority_level = _authority_level(path.name)
+        doc.tenant          = tenant
+        doc.authority_level = _authority_level(path.name, authority_map)
         doc.supersedes = [
             doc_ids_by_filename[f]
-            for f in _SUPERSESSION_MAP.get(path.name, [])
+            for f in supersession_map.get(path.name, [])
             if f in doc_ids_by_filename
         ]
         doc_ids_by_filename[path.name] = doc.id
+        docs_by_path[path] = doc
 
-        msg = IngestMessage(
-            job_id=str(uuid.uuid4()),
-            document=doc,
-        )
+    from graphrag.core.config import get_settings
+    extract_concurrency = get_settings().ingestion.get("doc_extract_concurrency", 4)
+    sem = asyncio.Semaphore(extract_concurrency)
+    agent = IngestionAgent()
+    write_queue: asyncio.Queue = asyncio.Queue()
 
-        try:
-            result = await agent.run(msg)
-            total_chunks    += result["chunks"]
-            total_entities  += result["entities"]
-            total_relations += result["relations"]
-            total_conflicts += result["maintenance"]["new_conflicts"]
-            results.append(result)
-            print(
-                f"       chunks={result['chunks']}  "
-                f"entities={result['entities']}  "
-                f"relations={result['relations']}  "
-                f"conflicts={result['maintenance']['new_conflicts']}"
-            )
-        except Exception as exc:
-            log.error("ingest_corpus.doc_failed", doc=path.name, error=str(exc))
-            print(f"       ERROR: {exc}")
+    async def _extract_one(i: int, path) -> None:
+        async with sem:
+            print(f"[extract {i}/{len(paths)}] {path.name}")
+            msg = IngestMessage(job_id=str(uuid.uuid4()), document=docs_by_path[path])
+            try:
+                payload = await agent.extract(msg)
+            except Exception as exc:
+                payload = exc
+            await write_queue.put((i, path, payload))
+
+    async def _writer() -> None:
+        for _ in range(len(paths)):
+            i, path, payload = await write_queue.get()
+            print(f"[write {i}/{len(paths)}] {path.name}")
+            if isinstance(payload, Exception):
+                log.error("ingest_corpus.doc_extract_failed", doc=path.name, error=str(payload))
+                print(f"       ERROR (extract): {payload}")
+                continue
+            try:
+                result = await agent.write(payload)
+                await neo4j.run(
+                    "MATCH (d:Document {id: $doc_id, tenant: $tenant}) "
+                    "SET d.ingest_complete = true",
+                    doc_id=payload["doc"].id, tenant=tenant,
+                )
+                results.append(result)
+                print(
+                    f"       chunks={result['chunks']}  "
+                    f"entities={result['entities']}  "
+                    f"relations={result['relations']}  "
+                    f"conflicts={result['maintenance']['new_conflicts']}"
+                )
+            except Exception as exc:
+                log.error("ingest_corpus.doc_write_failed", doc=path.name, error=str(exc))
+                print(f"       ERROR (write): {exc}")
+
+    await asyncio.gather(
+        _writer(),
+        *(_extract_one(i, p) for i, p in enumerate(paths, 1)),
+    )
+
+    _graph_cfg["auto_rebuild_communities"] = _prior_auto_rebuild
+    _ingestion_cfg["detect_cycles_after_ingestion"] = _prior_detect_cycles
+    _ingestion_cfg["scan_contradictions_after_ingestion"] = _prior_scan_contradictions
+
+    for r in results:
+        total_chunks    += r["chunks"]
+        total_entities  += r["entities"]
+        total_relations += r["relations"]
+        total_conflicts += r["maintenance"]["new_conflicts"]
+
+    # ── Cycle detection (once, for the whole batch) ─────────────────────────────
+    print(f"\n[*] Checking for cycles on '{tenant}' tenant...")
+    try:
+        from graphrag.graph.cycle_detector import CycleDetector
+        _cycles = await CycleDetector(neo4j).run()
+        print(f"       Cycles found: {len(_cycles)}")
+    except Exception as exc:
+        log.warning("ingest_corpus.cycle_check_failed", error=str(exc))
+        print(f"       WARNING: cycle check failed — {exc}")
+
+    # ── Contradiction scan (once, for the whole batch) ──────────────────────────
+    print(f"\n[*] Scanning contradictions on '{tenant}' tenant...")
+    try:
+        from graphrag.graph.contradiction_detector import ContradictionDetector
+        _conflicts = await ContradictionDetector(neo4j).scan(doc_id=None, tenant=tenant)
+        total_conflicts = len(_conflicts)
+        print(f"       New conflicts: {total_conflicts}")
+    except Exception as exc:
+        log.warning("ingest_corpus.contradiction_scan_failed", error=str(exc))
+        print(f"       WARNING: contradiction scan failed — {exc}")
+
+    # ── Community rebuild (once, for the whole batch) ───────────────────────────
+    print(f"\n[*] Rebuilding communities on '{tenant}' tenant...")
+    try:
+        from graphrag.graph.community_builder import CommunityBuilder
+        from graphrag.graph.community_manager import CommunityManager
+        from graphrag.graph.community_summarizer import CommunitySummarizer
+        _manager = CommunityManager(neo4j)
+        _builder = CommunityBuilder(tenant=tenant)
+        _communities = await _builder.build()
+        if _communities:
+            _summarizer = CommunitySummarizer()
+            _communities = await _summarizer.summarize_all(_communities)
+            for _community in _communities:
+                await neo4j.merge_community(_community)
+        await _manager.mark_rebuilt(tenant=tenant)
+        print(f"       Communities rebuilt: {len(_communities)}")
+    except Exception as exc:
+        log.warning("ingest_corpus.community_rebuild_failed", error=str(exc))
+        print(f"       WARNING: community rebuild failed — {exc}")
 
     # ── Forward-chaining inference ────────────────────────────────────────────
-    print(f"\n[*] Running forward-chaining inference on '{TENANT}' tenant...")
+    print(f"\n[*] Running forward-chaining inference on '{tenant}' tenant...")
     try:
-        from graphrag.graph.domain_ontology import load_domain_ontology
+        from graphrag.graph.domain_ontology import (
+            get_ontology_path_for_tenant,
+            load_domain_ontology,
+        )
         from graphrag.graph.inference_engine import InferenceRule
-        from pathlib import Path as _Path
-        _ontology = load_domain_ontology(_Path("config/ontologies/aerospace_regulatory.yml"))
+        _ontology_path = get_ontology_path_for_tenant(tenant)
+        _ontology = load_domain_ontology(_ontology_path) if _ontology_path else {}
         engine = ForwardChainingEngine(neo4j)
         for rule_cfg in _ontology.get("inference_rules", []):
             engine.add_rule(InferenceRule(
@@ -196,7 +395,7 @@ async def ingest_all(
                 max_depth=rule_cfg.get("max_depth", 3),
                 confidence_decay=rule_cfg.get("confidence_decay", 0.9),
             ))
-        fc_report = await engine.run(tenant=TENANT)
+        fc_report = await engine.run(tenant=tenant)
         inferred_edges = fc_report.get("total_inferred", 0)
         print(f"       Derived edges written: {inferred_edges}")
     except Exception as exc:
@@ -216,7 +415,7 @@ async def ingest_all(
             OPTIONAL MATCH (c:Conflict {tenant: $tenant}) WHERE c.status = 'open'
             RETURN entity_count, edge_count, count(c) AS conflict_count
             """,
-            tenant=TENANT,
+            tenant=tenant,
         )
         row = rows[0] if rows else {}
         neo4j_entities  = row.get("entity_count", 0)
@@ -240,7 +439,7 @@ async def ingest_all(
         snap_svc = GraphSnapshotService(neo4j)
         snap_id = await snap_svc.create_snapshot(
             label="corpus-ingest-v1",
-            tenant=TENANT,
+            tenant=tenant,
             include_health=True,
         )
         print(f"       Snapshot: {snap_id}")
@@ -252,7 +451,7 @@ async def ingest_all(
 
     # ── Summary ───────────────────────────────────────────────────────────────
     print(f"\n{'='*60}")
-    print(f"  INGESTION COMPLETE  —  tenant: {TENANT}")
+    print(f"  INGESTION COMPLETE  —  tenant: {tenant}")
     print(f"{'='*60}")
     print(f"  Documents ingested  : {len(results)} / {len(paths)}")
     print(f"  Chunks processed    : {total_chunks}")
@@ -277,15 +476,19 @@ def main() -> None:
     parser.add_argument("--commit", action="store_true",
                         help="Write to Neo4j (default: dry-run)")
     parser.add_argument("--wipe",   action="store_true",
-                        help="Delete all aerospace tenant nodes before ingesting")
+                        help="Delete all nodes for the selected tenant before ingesting")
     parser.add_argument("--doc",    default=None,
-                        help="Filter to a single document filename substring")
+                        help="Filter to document filename substring(s), comma-separated")
+    parser.add_argument("--tenant", default="aerospace",
+                        choices=sorted(set(_CORPUS_CONFIGS) | {"automotive"}),
+                        help="Tenant corpus to ingest (default: aerospace)")
     args = parser.parse_args()
 
     raise SystemExit(asyncio.run(ingest_all(
         doc_filter=args.doc,
         commit=args.commit,
         wipe=args.wipe,
+        tenant=args.tenant,
     )))
 
 

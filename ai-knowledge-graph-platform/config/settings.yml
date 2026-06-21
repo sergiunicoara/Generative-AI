@@ -1,7 +1,8 @@
 ingestion:
   chunk_size: 512
-  chunk_overlap: 64
+  chunk_overlap: 64  # Phase 5 Fix C (64->128) reverted — regressed automotive 10/13->9/13 (below 70% gate) without fixing MH-02, see tasks/lessons.md A109
   embedding_batch_size: 100
+  extraction_concurrency: 5         # max concurrent LLM extract+embed calls per document
   entity_types:
     - PERSON
     - ORG
@@ -10,12 +11,16 @@ ingestion:
     - LOCATION
     - EVENT
   # ── Alias registry ──────────────────────────────────────────────────────────
-  alias_embedding_threshold: 0.92   # cosine similarity to treat as duplicate entity
+  alias_embedding_threshold: 0.92   # cosine similarity to treat as duplicate entity — reverted from
+                                     # an uncommitted 0.97 that fragmented automotive into 278 Leiden
+                                     # communities (vs ~55 baseline) and caused a contradiction
+                                     # false-positive explosion (500-cap conflicts), see A111
   alias_fuzzy_threshold: 85         # rapidfuzz ratio for soft name matching
   # ── Ingestion validation (graph poisoning prevention) ───────────────────────
   validate_after_ingestion: true    # run graph health check after every doc
   auto_remove_self_loops: true      # delete self-referencing edges automatically
   detect_cycles_after_ingestion: true
+  scan_contradictions_after_ingestion: true   # disable + scan once for bulk ingest (see ingest_corpus.py) — per-doc scan is O(whole tenant graph), not doc-scoped despite the doc_id param
 
 graph:
   community_levels: 3
@@ -39,9 +44,10 @@ retrieval:
   local_top_k: 10          # validated baseline — precision 0.907 measured at this value
   multihop_depth: 2        # validated baseline — depth 3 diluted retrieval and caused refusals on answerable questions
   multihop_top_k: 50       # max hop chunks fed to GNN — prevents full-corpus scoring on dense graphs (bug fix: 21min→30s)
-  multihop_semantic_weight: 0.5  # blend hop ranking: (1-w)·path_score + w·cos(chunk,query), cosine computed in Neo4j. 0 = pure path score (pre-2026-06 behavior). Gated on retrieval eval — see scripts/eval_hop_ranking.py
+  multihop_semantic_weight: 0.5  # blend hop ranking: (1-w)·path_score + w·cos(chunk,query), cosine computed in Neo4j. 0 = pure path score (pre-2026-06 behavior). Gated on retrieval eval — see scripts/eval_hop_ranking.py. Phase 5 Fix B tried 0.8 (no effect on CON-04/AUTH-01, reverted — see tasks/lessons.md A105)
   global_top_communities: 5
-  rerank_top_k: 5          # validated baseline — precision 0.907 measured at this value
+  rerank_top_k: 5  # validated baseline — precision 0.907 measured at this value. A124: 7+_text_score floor fixed automotive 12/13 but broke aerospace (4/39), reverted. A125: 6 alone (no _text_score change) regressed automotive to 9/13 (below 70% gate, CON-02 newly failed) — also reverted.
+  lexical_seed_min_documents: 3  # preserve distinct BM25 evidence before multilingual GNN scoring
   hybrid_weight_local: 0.6
   hybrid_weight_global: 0.4
   bm25_enabled: true       # BM25 fulltext + RRF fusion with vector results

@@ -1,4 +1,10 @@
-version: "3.9"
+# Pin the Compose project name to match the current default (derived from this
+# directory's current name). Without this, renaming/moving this directory (or
+# running `docker-compose up` from a different cwd) changes the project name,
+# which changes the named-volume names Compose looks for — Compose then
+# creates fresh empty volumes instead of reattaching to neo4j_data/neo4j_logs.
+# This is what orphaned the aerospace tenant data on 2026-06-10.
+name: ai-knowledge-graph-platform
 
 services:
   neo4j:

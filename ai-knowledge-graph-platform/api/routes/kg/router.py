@@ -12,6 +12,7 @@ from api.routes.kg import (
     health,
     inference,
     knowledge,
+    pagerank,
 )
 
 router = APIRouter()
@@ -23,3 +24,4 @@ router.include_router(embeddings.router)
 router.include_router(health.router)
 router.include_router(inference.router)
 router.include_router(knowledge.router)
+router.include_router(pagerank.router)

@@ -105,16 +105,18 @@ class CommunityBuilder:
             log.error(
                 "community_builder.graspologic_missing",
                 impact=(
-                    "Falling back to connected-components — hierarchical "
-                    "community structure lost. Global-search quality will be "
-                    "materially lower. Install graspologic to restore full Leiden."
+                    "Falling back to multi-resolution Louvain (networkx) — "
+                    "Leiden's connectivity guarantee is lost, but the same "
+                    "resolution hierarchy is preserved. "
+                    "Install graspologic to restore full Leiden."
                 ),
                 fix="pip install graspologic",
             )
-            communities = self._fallback_components(G)
-            # Tag communities so downstream code can see they are low-quality
+            communities = self._fallback_louvain(G)
+            # Tag communities so downstream code can see they are lower-quality
+            # than Leiden (Louvain doesn't guarantee well-connected communities)
             for c in communities:
-                c.summary = "[fallback: connected_components — graspologic missing]"
+                c.summary = "[fallback: louvain — graspologic missing]"
             return communities
 
         nodes = list(G.nodes())
@@ -149,8 +151,62 @@ class CommunityBuilder:
 
         return communities
 
+    def _fallback_louvain(self, G: nx.Graph) -> list[Community]:
+        """Fallback when graspologic is missing: Louvain via networkx's
+        built-in community module (no extra dependency — networkx>=2.8
+        ships louvain_communities). Multi-resolution, same pattern as
+        _run_leiden — coarser partitions at lower resolution, finer-grained
+        at higher — so downstream global search still gets a hierarchy, not
+        a single flat partition. Louvain's own quality is slightly below
+        Leiden's (Leiden guarantees well-connected communities; Louvain can
+        occasionally produce disconnected ones), but it's a large step up
+        from raw connected-components, which ignores modularity entirely.
+        """
+        from networkx.algorithms.community import louvain_communities
+
+        nodes = list(G.nodes())
+        if len(nodes) < 2:
+            return []
+
+        resolutions = [
+            self._cfg.get("leiden_resolution", 1.0) * (0.5**level)
+            for level in range(self._cfg.get("community_levels", 3))
+        ]
+        min_size = self._cfg.get("min_community_size", 3)
+        communities: list[Community] = []
+
+        for level, resolution in enumerate(resolutions):
+            try:
+                partition = louvain_communities(
+                    G, weight="weight", resolution=resolution, seed=42
+                )
+            except Exception as exc:  # pragma: no cover — degenerate/empty graphs
+                log.error(
+                    "community_builder.louvain_failed",
+                    level=level,
+                    error=str(exc),
+                    impact="Falling back further to connected-components for this level.",
+                )
+                if level == 0:
+                    return self._fallback_components(G)
+                continue
+
+            for members_set in partition:
+                members = list(members_set)
+                if len(members) >= min_size:
+                    communities.append(
+                        Community(
+                            id=str(uuid4()),
+                            level=level,
+                            member_entity_ids=members,
+                            member_count=len(members),
+                        )
+                    )
+
+        return communities
+
     def _fallback_components(self, G: nx.Graph) -> list[Community]:
-        """Fallback: use connected components as communities (level 0 only)."""
+        """Last-resort fallback: connected components (used only if Louvain itself errors)."""
         communities = []
         for component in nx.connected_components(G):
             members = list(component)

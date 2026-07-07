@@ -36,6 +36,10 @@ graph:
   community_staleness_threshold: 0.15   # 0.0-1.0 — rebuild when drift exceeds this
   community_staleness_check_on_ingest: true  # check staleness on every ingestion batch
   require_leiden: true              # fail hard if graspologic is missing — silent fallback to connected-components degrades global search quality undetectably
+  # ── PageRank centrality (GDS) ────────────────────────────────────────────────
+  pagerank_damping_factor: 0.85     # standard PageRank default
+  pagerank_iterations: 20           # GDS default max iterations
+  pagerank_min_score_threshold: 0.0000001  # GDS convergence tolerance
   # ── Document authority ───────────────────────────────────────────────────────
   default_authority_level: 4        # INFORMAL — override per document on ingestion
   superseded_confidence_penalty: 0.5  # confidence multiplier for superseded doc edges

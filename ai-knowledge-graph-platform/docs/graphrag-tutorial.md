@@ -33,11 +33,17 @@ Automotive tenant: 3,013 entities, 9,364 edges from 14 IATF documents.
 
 | | Standard RAG | GraphRAG |
 |---|---|---|
-| Retrieval | vector similarity only | vector + BM25 + graph traversal + inference |
+| Retrieval | vector similarity (optionally + BM25 hybrid) | vector + BM25 hybrid **+ graph traversal + inference** |
 | Multi-hop questions | fails (no single chunk has the answer) | traverses entity relations across documents |
 | Contradictions | invisible | detected and stored as `(:Conflict)` nodes |
 | Provenance | chunk-level at best | per-edge: source doc, model, timestamp |
 | Answer grounding | "trust me" | cited chunks + traceable graph paths |
+
+Note: BM25/hybrid search is not exclusive to GraphRAG — many standard RAG
+systems combine vector + BM25 too. The actual differentiator is the
+**graph traversal + inference** layer, which lets the system chain facts
+across documents and derive facts that were never explicitly written down
+(see §4.5, Forward-chaining inference).
 
 ### 1.3 Property graph vs. triple store
 
@@ -122,7 +128,7 @@ vector database. Results fused with Reciprocal Rank Fusion in Python.
 
 ## Part 4 — Graph Algorithms
 
-### 4.1 PageRank (and where this project's equivalent lives)
+### 4.1 PageRank
 
 **The algorithm:** a node is important if important nodes point to it.
 Iteratively: `PR(n) = (1-d)/N + d · Σ PR(m)/outdegree(m)` over incoming
@@ -136,15 +142,31 @@ RETURN gds.util.asNode(nodeId).name AS entity, score
 ORDER BY score DESC LIMIT 10
 ```
 
-**In this project:** not called explicitly — the **GNN scorer**
-(`graphrag/graph/gnn_scorer.py`, GCN/GAT) plays the same structural-
-importance role, but *query-conditioned*: instead of one global importance
-score, each chunk is re-scored by its position in the entity subgraph
-relative to the query's entities. Message passing in a GCN is a learned
+**In this project:** implemented via GDS directly —
+`graphrag/graph/neo4j_client.py: run_pagerank()` projects the tenant's
+`Entity`/`RELATES_TO` subgraph in-memory (`gds.graph.project.cypher`,
+weighted by edge confidence, dropped after use) and calls
+`gds.pageRank.stream`. `graphrag/graph/pagerank.py: PageRankComputer`
+orchestrates compute + persist (`e.pagerank`, `e.pagerank_computed_at` on
+each `Entity` node). Exposed via:
+- `POST /kg/pagerank/compute?tenant=<t>` — run and persist
+- `GET /kg/pagerank/top-entities?tenant=<t>&top_k=<n>` — read results
+- `python scripts/pagerank_compute.py --tenant automotive` — standalone runner
+
+Real output on the automotive tenant (3,013 entities): top-ranked is
+`furnizorii` ("the suppliers", ORG, score 43.87), then `PlastiAuto SRL`
+(22.32), `ISO/IATF` (13.74), `AutoCorp GmbH` (12.13) — the entities most
+referenced across the supplier-quality corpus. On aerospace (156 entities):
+`airworthiness directive` (1.77) tops the list, matching the corpus's
+AD-supersession-chain structure.
+
+This is a **global, query-independent** signal — complementary to, not a
+replacement for, the **GNN scorer** (`graphrag/graph/gnn_scorer.py`,
+GCN/GAT), which re-scores chunks by their position in the entity subgraph
+*relative to a specific query*. Message passing in a GCN is a learned
 generalization of the PageRank power iteration (both propagate scores along
-edges with normalization). If a global static importance ranking were
-needed (e.g., "which regulations are most central?"), GDS PageRank over the
-`RELATES_TO` projection is the one-call answer.
+edges with normalization) — PageRank answers "what's important overall,"
+the GNN scorer answers "what's important for this question."
 
 ### 4.2 Community detection (Louvain → Leiden)
 
@@ -315,7 +337,7 @@ volumes, service discovery, secrets) map one-to-one."
 | Neo4j | core store: graph + vector + full-text in one engine, multi-tenant |
 | Python | entire platform (~30k LOC, 380 tests) |
 | Graph data modeling | property-graph schema, ontology-validated, bitemporal, multi-tenant |
-| PageRank | GNN scorer = query-conditioned structural importance (§4.1); GDS PageRank one call away |
+| PageRank | GDS `gds.pageRank.stream`, live: `POST/GET /kg/pagerank/*` + `scripts/pagerank_compute.py` (§4.1) |
 | Community detection | multi-resolution Leiden + LLM summaries, coherence tracked (§4.2) |
 | ML integration | GNN re-scoring, TransE, embeddings, RAGAS LLM-judge, cross-encoder (§6) |
 | ETL pipelines | 8-step async ingestion with DLQs, checkpointing, batching (§5) |
@@ -323,5 +345,4 @@ volumes, service discovery, secrets) map one-to-one."
 | Cloud (GCP/AWS) | Fly.io production deploy; one-to-one GCP mapping (§9) |
 
 Gaps to state honestly: no hands-on GCP console time (concepts transfer,
-services table above); PageRank known and reachable via GDS but the
-platform's structural scoring is GNN-based by design.
+services table above).

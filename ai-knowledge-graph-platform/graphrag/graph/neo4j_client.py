@@ -800,6 +800,84 @@ class Neo4jClient:
             tenant=tenant,
         )
 
+    # ── PageRank centrality (GDS) ────────────────────────────────────────────────
+
+    async def run_pagerank(
+        self,
+        tenant: str = "default",
+        damping_factor: float = 0.85,
+        max_iterations: int = 20,
+    ) -> list[dict]:
+        """Project the tenant's Entity/RELATES_TO subgraph in-memory via GDS,
+        run PageRank, drop the projection, return entities sorted by score desc.
+
+        Uses a Cypher projection (not native gds.graph.project) so relationship
+        weight can fall back to 1.0 when confidence is null — same null-handling
+        as CommunityBuilder._build_networkx_graph's weight resolution.
+        """
+        graph_name = f"pagerank_{tenant}"
+        await self.run("CALL gds.graph.drop($name, false)", name=graph_name)  # idempotent cleanup
+        await self.run(
+            """
+            CALL gds.graph.project.cypher(
+              $name,
+              'MATCH (e:Entity {tenant: $tenant}) WHERE coalesce(e.quarantined,false)=false RETURN id(e) AS id',
+              'MATCH (a:Entity {tenant: $tenant})-[r:RELATES_TO {tenant: $tenant}]->(b:Entity {tenant: $tenant})
+               RETURN id(a) AS source, id(b) AS target, coalesce(r.weight, r.confidence, 1.0) AS weight',
+              {parameters: {tenant: $tenant}}
+            )
+            """,
+            name=graph_name,
+            tenant=tenant,
+        )
+        try:
+            rows = await self.run(
+                """
+                CALL gds.pageRank.stream($name, {
+                  dampingFactor: $damping, maxIterations: $iters,
+                  relationshipWeightProperty: 'weight'
+                })
+                YIELD nodeId, score
+                RETURN gds.util.asNode(nodeId).id AS entity_id,
+                       gds.util.asNode(nodeId).name AS name,
+                       gds.util.asNode(nodeId).type AS type,
+                       score
+                ORDER BY score DESC
+                """,
+                name=graph_name,
+                damping=damping_factor,
+                iters=max_iterations,
+            )
+        finally:
+            await self.run("CALL gds.graph.drop($name, false)", name=graph_name)
+        return rows
+
+    async def write_pagerank_scores(self, tenant: str, scores: list[dict]) -> None:
+        """Persist score onto each Entity node (UNWIND-batched, per A131-A132 pattern)."""
+        await self.run(
+            """
+            UNWIND $rows AS row
+            MATCH (e:Entity {id: row.entity_id, tenant: $tenant})
+            SET e.pagerank = row.score, e.pagerank_computed_at = datetime()
+            """,
+            tenant=tenant,
+            rows=scores,
+        )
+
+    async def get_top_entities_by_pagerank(
+        self, tenant: str = "default", top_k: int = 20
+    ) -> list[dict]:
+        return await self.run(
+            """
+            MATCH (e:Entity {tenant: $tenant})
+            WHERE e.pagerank IS NOT NULL
+            RETURN e.id AS entity_id, e.name AS name, e.type AS type, e.pagerank AS score
+            ORDER BY e.pagerank DESC LIMIT $top_k
+            """,
+            tenant=tenant,
+            top_k=top_k,
+        )
+
 
 _client: Neo4jClient | None = None
 

@@ -125,6 +125,18 @@ main::before {
   border-radius: 999px;
 }
 
+.book-title {
+  text-align: center;
+  font-family: system-ui, sans-serif;
+  font-size: 1.1rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  color: #fff;
+  text-shadow: 0 1px 4px rgba(0,0,0,0.35);
+  margin: 0 auto;
+  padding: 4px 0 2px;
+}
+
 .verses-container {
   display: flex;
   flex-direction: column;

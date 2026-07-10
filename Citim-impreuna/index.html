@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="ro">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <meta name="theme-color" content="#4c3aa3" />
+  <title>Citim împreună</title>
+  <link rel="manifest" href="manifest.webmanifest" />
+  <link rel="icon" href="icons/icon.svg" type="image/svg+xml" />
+  <link rel="apple-touch-icon" href="icons/icon.svg" />
+  <link rel="stylesheet" href="css/style.css?v=7" />
+</head>
+<body>
+  <canvas id="scene-canvas"></canvas>
+
+  <header>
+    <div class="header-top">
+      <h1>📖 Citim împreună</h1>
+      <div class="score-chip" id="score-chip" title="Punctajul tău">⭐ <span id="score">0</span></div>
+    </div>
+    <div class="header-sub">
+      <button class="user-chip" id="user-chip" title="Schimbă utilizatorul">👤 <span id="user-name"></span></button>
+      <button class="icon-btn" id="stats-btn" title="Statistici">📊 Statistici</button>
+    </div>
+  </header>
+
+  <main>
+    <div class="progress" id="progress"></div>
+    <div class="book-title" id="book-title"></div>
+
+    <div id="verses-container"></div>
+    <div class="cheer" id="cheer" hidden></div>
+
+    <div class="actions">
+      <button class="btn primary" id="check-btn">Verifică</button>
+      <button class="btn primary" id="next-btn" hidden>Pagina următoare →</button>
+    </div>
+  </main>
+
+  <footer class="copyright-footer">
+    <p>
+      Copyrightul Bibliei Cornilescu © 1924 aparține British and Foreign Bible Society
+      (Societatea Biblică pentru răspândirea Bibliei în Anglia și străinătate).
+      Copyrightul © 2023 ediției revizuite în limba română aparține Societății Biblice
+      Interconfesionale din România, cu aprobarea British and Foreign Bible Society.
+    </p>
+    <p>
+      Ediția de față (2023), „Ediția Revizuită Cornilescu 2023” a Bibliei în traducerea lui
+      Dumitru Cornilescu, reprezintă o nouă culegere a textului cu următoarele intervenții
+      editoriale: îndreptări ortografice, gramaticale, stilistice și de punctuație, în acord cu
+      normele actuale ale limbii române. Comitetul editorial a respectat caracterul traducerii
+      biblice publicate de Dumitru Cornilescu în 1924, conservând amprenta lexicală, stilistică
+      și teologică a acestei versiuni.
+    </p>
+    <p>
+      Această ediție este rezultatul colaborării dintre Societatea Biblică Interconfesională din
+      România (SBIR) și Universitatea „Emanuel” între 2022 și 2023 și are la bază prima
+      revizuire ortografică, gramaticală și de punctuație, realizată de SBIR în colaborare cu
+      Asociația Biblică Română „Casa Bibliei”, între 2006 și 2010.
+    </p>
+    <p>Text: Ediția Revizuită Cornilescu 2023. Toate drepturile sunt rezervate.</p>
+  </footer>
+
+  <div class="modal-backdrop" id="name-modal" hidden>
+    <div class="modal">
+      <h2>Cum te cheamă?</h2>
+      <input id="name-input" type="text" maxlength="20" placeholder="Numele tău" autocomplete="off" />
+      <p class="name-warning" id="name-warning" hidden>
+        Acest nume este deja folosit de altcineva — scorul s-ar putea amesteca. Încearcă un nume mai specific (ex. „Ana P.”) sau apasă din nou ca să continui oricum.
+      </p>
+      <button class="btn primary" id="name-save">Începe</button>
+    </div>
+  </div>
+
+  <canvas id="confetti"></canvas>
+
+  <script src="js/config.js?v=7"></script>
+  <script src="js/scenes.js?v=7"></script>
+  <script src="js/verses-1samuel.js?v=7"></script>
+  <script src="js/verses-2samuel.js?v=7"></script>
+  <script src="js/verses.js?v=7"></script>
+  <script src="js/tracker.js?v=7"></script>
+  <script src="js/app.js?v=7"></script>
+</body>
+</html>

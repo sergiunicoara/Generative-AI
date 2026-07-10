@@ -107,7 +107,7 @@ main {
 main::before {
   content: "";
   display: block;
-  height: clamp(120px, 24vh, 260px);
+  height: clamp(84px, 16.8vh, 182px);
 }
 
 .progress {
@@ -133,8 +133,7 @@ main::before {
   letter-spacing: 1px;
   color: #fff;
   text-shadow: 0 3px 10px rgba(0, 0, 0, 0.5);
-  margin: 0 auto;
-  padding: 0 0 6px;
+  margin: -3rem auto 6px;
 }
 
 .verses-container {

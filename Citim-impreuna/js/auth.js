@@ -27,9 +27,11 @@ const Auth = (() => {
 
   function extractUsername(user) {
     if (!user) return null;
-    return user.user_metadata?.username ||
-           (user.email || '').replace(DOMAIN, '') ||
-           null;
+    const raw = user.user_metadata?.username ||
+                (user.email || '').replace(DOMAIN, '') ||
+                null;
+    if (!raw) return null;
+    return raw.replace(/\b\w/g, c => c.toUpperCase());
   }
 
   function translateError(msg) {

@@ -1,4 +1,4 @@
-const CACHE = "citim-impreuna-v10";
+const CACHE = "citim-impreuna-v11";
 const ASSETS = [
   ".",
   "index.html",

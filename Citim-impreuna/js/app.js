@@ -349,11 +349,16 @@ function computePointsForUser(userEvents) {
   return points;
 }
 
+function normName(n) {
+  return (n || '').replace(/\b\w/g, c => c.toUpperCase());
+}
+
 function groupByUser(events) {
   const byUser = new Map();
   for (const e of events) {
-    if (!byUser.has(e.user_name)) byUser.set(e.user_name, []);
-    byUser.get(e.user_name).push(e);
+    const name = normName(e.user_name);
+    if (!byUser.has(name)) byUser.set(name, []);
+    byUser.get(name).push(e);
   }
   return byUser;
 }

@@ -25,23 +25,13 @@ const el = {
   bookTitle: document.getElementById("book-title"),
   // auth modal
   authModal: document.getElementById("auth-modal"),
-  authForm: document.getElementById("auth-form"),
   authLogged: document.getElementById("auth-logged"),
   authUsernameDisplay: document.getElementById("auth-username-display"),
-  tabLogin: document.getElementById("tab-login"),
-  tabRegister: document.getElementById("tab-register"),
-  loginPanel: document.getElementById("auth-login-panel"),
-  registerPanel: document.getElementById("auth-register-panel"),
   loginUsername: document.getElementById("login-username"),
   loginPassword: document.getElementById("login-password"),
   loginError: document.getElementById("login-error"),
   loginBtn: document.getElementById("login-btn"),
-  regUsername: document.getElementById("reg-username"),
-  regPassword: document.getElementById("reg-password"),
-  regError: document.getElementById("reg-error"),
-  regBtn: document.getElementById("reg-btn"),
   authLogoutBtn: document.getElementById("auth-logout-btn"),
-  authCloseBtn: document.getElementById("auth-close-btn"),
 };
 
 let score = parseInt(localStorage.getItem(STORAGE_SCORE), 10) || 0;
@@ -258,29 +248,20 @@ function updateUserChip() {
 function showAuthModal() {
   el.authModal.hidden = false;
   if (Auth.isLoggedIn()) {
-    el.authForm.hidden = true;
     el.authLogged.hidden = false;
+    document.getElementById("auth-login-panel").hidden = true;
     el.authUsernameDisplay.textContent = Auth.currentUser();
   } else {
-    el.authForm.hidden = false;
     el.authLogged.hidden = true;
-    switchAuthTab("login");
+    document.getElementById("auth-login-panel").hidden = false;
+    el.loginError.hidden = true;
     el.loginUsername.focus();
   }
 }
 
 function hideAuthModal() {
+  if (!Auth.isLoggedIn()) return;
   el.authModal.hidden = true;
-}
-
-function switchAuthTab(tab) {
-  const isLogin = tab === "login";
-  el.loginPanel.hidden = !isLogin;
-  el.registerPanel.hidden = isLogin;
-  el.tabLogin.classList.toggle("active", isLogin);
-  el.tabRegister.classList.toggle("active", !isLogin);
-  el.loginError.hidden = true;
-  el.regError.hidden = true;
 }
 
 function setAuthError(el2, msg) {
@@ -307,23 +288,6 @@ async function handleLogin() {
   }
 }
 
-async function handleRegister() {
-  const username = el.regUsername.value.trim();
-  const password = el.regPassword.value;
-  el.regBtn.disabled = true;
-  el.regBtn.textContent = "Se creează…";
-  try {
-    userName = await Auth.signUp(username, password);
-    hideAuthModal();
-    updateUserChip();
-    el.regPassword.value = "";
-  } catch (err) {
-    setAuthError(el.regError, err.message);
-  } finally {
-    el.regBtn.disabled = false;
-    el.regBtn.textContent = "Creează cont";
-  }
-}
 
 async function handleLogout() {
   await Auth.signOut();
@@ -511,33 +475,31 @@ el.checkBtn.addEventListener("click", checkAnswers);
 el.nextBtn.addEventListener("click", nextPage);
 el.statsBtn.addEventListener("click", renderStats);
 
-// auth modal events
+// auth modal events (optional chaining = rezistență la SW care servește HTML vechi)
 el.userChip.addEventListener("click", showAuthModal);
-el.logoutBtn.addEventListener("click", handleLogout);
-el.tabLogin.addEventListener("click", () => switchAuthTab("login"));
-el.tabRegister.addEventListener("click", () => switchAuthTab("register"));
-el.loginBtn.addEventListener("click", handleLogin);
-el.regBtn.addEventListener("click", handleRegister);
-el.authLogoutBtn.addEventListener("click", handleLogout);
-el.authCloseBtn.addEventListener("click", hideAuthModal);
-el.loginPassword.addEventListener("keydown", (e) => { if (e.key === "Enter") handleLogin(); });
-el.regPassword.addEventListener("keydown", (e) => { if (e.key === "Enter") handleRegister(); });
-// close modal on backdrop click
-el.authModal.addEventListener("click", (e) => { if (e.target === el.authModal && Auth.isLoggedIn()) hideAuthModal(); });
+el.logoutBtn?.addEventListener("click", handleLogout);
+el.loginBtn?.addEventListener("click", handleLogin);
+el.authLogoutBtn?.addEventListener("click", handleLogout);
+el.loginPassword?.addEventListener("keydown", (e) => { if (e.key === "Enter") handleLogin(); });
+el.authModal?.addEventListener("click", (e) => { if (e.target === el.authModal && Auth.isLoggedIn()) hideAuthModal(); });
 
 el.score.textContent = score;
 if (page >= totalPages) page = 0;
 renderPage();
 Tracker.flush();
 
-// inițializare autentificare
+// Arătăm modalul imediat — nu așteptăm Supabase (poate fi lent/offline).
+// Dacă sesiunea se restaurează, onAuthStateChange ascunde modalul automat.
+showAuthModal();
+
 Auth.init((user) => {
   userName = user || "";
   updateUserChip();
+  if (user) hideAuthModal();
 }).then((user) => {
   userName = user || "";
   updateUserChip();
-  if (!user) showAuthModal();
+  if (user) hideAuthModal();
 });
 
 if ("serviceWorker" in navigator) {

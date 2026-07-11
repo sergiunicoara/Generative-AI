@@ -377,6 +377,12 @@ select.blank.wrong {
   padding: 22px 22px 26px;
 }
 
+#auth-login-panel[hidden],
+#auth-register-panel[hidden],
+#auth-logged[hidden] {
+  display: none;
+}
+
 .auth-error {
   margin: 0;
   font-size: 0.85rem;

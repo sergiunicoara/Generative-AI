@@ -20,17 +20,33 @@ const el = {
   nextBtn: document.getElementById("next-btn"),
   userChip: document.getElementById("user-chip"),
   userName: document.getElementById("user-name"),
+  logoutBtn: document.getElementById("logout-btn"),
   statsBtn: document.getElementById("stats-btn"),
-  nameModal: document.getElementById("name-modal"),
-  nameInput: document.getElementById("name-input"),
-  nameSave: document.getElementById("name-save"),
-  nameWarning: document.getElementById("name-warning"),
   bookTitle: document.getElementById("book-title"),
+  // auth modal
+  authModal: document.getElementById("auth-modal"),
+  authForm: document.getElementById("auth-form"),
+  authLogged: document.getElementById("auth-logged"),
+  authUsernameDisplay: document.getElementById("auth-username-display"),
+  tabLogin: document.getElementById("tab-login"),
+  tabRegister: document.getElementById("tab-register"),
+  loginPanel: document.getElementById("auth-login-panel"),
+  registerPanel: document.getElementById("auth-register-panel"),
+  loginUsername: document.getElementById("login-username"),
+  loginPassword: document.getElementById("login-password"),
+  loginError: document.getElementById("login-error"),
+  loginBtn: document.getElementById("login-btn"),
+  regUsername: document.getElementById("reg-username"),
+  regPassword: document.getElementById("reg-password"),
+  regError: document.getElementById("reg-error"),
+  regBtn: document.getElementById("reg-btn"),
+  authLogoutBtn: document.getElementById("auth-logout-btn"),
+  authCloseBtn: document.getElementById("auth-close-btn"),
 };
 
 let score = parseInt(localStorage.getItem(STORAGE_SCORE), 10) || 0;
 let page = parseInt(localStorage.getItem(STORAGE_PROGRESS), 10) || 0;
-let userName = localStorage.getItem(STORAGE_USER) || "";
+let userName = "";
 let hadMistake = false;
 
 function save() {
@@ -232,44 +248,89 @@ function showFinal() {
   el.container.appendChild(div);
 }
 
-/* --- Utilizator: nume salvat local, schimbabil prin tap pe chip --- */
+/* --- Utilizator: autentificare prin Supabase Auth --- */
 function updateUserChip() {
-  el.userName.textContent = userName || "…";
+  const name = Auth.currentUser();
+  el.userName.textContent = name || "Conectează-te";
+  el.logoutBtn.hidden = !name;
 }
 
-function showNameModal() {
-  el.nameInput.value = userName;
-  el.nameModal.hidden = false;
-  el.nameWarning.hidden = true;
-  el.nameInput.focus();
+function showAuthModal() {
+  el.authModal.hidden = false;
+  if (Auth.isLoggedIn()) {
+    el.authForm.hidden = true;
+    el.authLogged.hidden = false;
+    el.authUsernameDisplay.textContent = Auth.currentUser();
+  } else {
+    el.authForm.hidden = false;
+    el.authLogged.hidden = true;
+    switchAuthTab("login");
+    el.loginUsername.focus();
+  }
 }
 
-async function nameTakenByOther(name) {
-  if (!Tracker.enabled) return false;
+function hideAuthModal() {
+  el.authModal.hidden = true;
+}
+
+function switchAuthTab(tab) {
+  const isLogin = tab === "login";
+  el.loginPanel.hidden = !isLogin;
+  el.registerPanel.hidden = isLogin;
+  el.tabLogin.classList.toggle("active", isLogin);
+  el.tabRegister.classList.toggle("active", !isLogin);
+  el.loginError.hidden = true;
+  el.regError.hidden = true;
+}
+
+function setAuthError(el2, msg) {
+  el2.textContent = msg;
+  el2.hidden = false;
+}
+
+async function handleLogin() {
+  const username = el.loginUsername.value.trim();
+  const password = el.loginPassword.value;
+  if (!username || !password) { setAuthError(el.loginError, "Completează ambele câmpuri."); return; }
+  el.loginBtn.disabled = true;
+  el.loginBtn.textContent = "Se verifică…";
   try {
-    const events = await Tracker.fetchAll();
-    const lower = name.toLowerCase();
-    return events.some((e) => (e.user_name || "").toLowerCase() === lower) && lower !== userName.toLowerCase();
-  } catch {
-    return false; // fără internet — nu blocăm jocul pentru o verificare opțională
+    userName = await Auth.signIn(username, password);
+    hideAuthModal();
+    updateUserChip();
+    el.loginPassword.value = "";
+  } catch (err) {
+    setAuthError(el.loginError, err.message);
+  } finally {
+    el.loginBtn.disabled = false;
+    el.loginBtn.textContent = "Intră";
   }
 }
 
-async function saveName() {
-  const name = el.nameInput.value.trim();
-  if (!name) return;
-
-  const warningAlreadyShown = !el.nameWarning.hidden;
-  if (!warningAlreadyShown && (await nameTakenByOther(name))) {
-    el.nameWarning.hidden = false;
-    return;
+async function handleRegister() {
+  const username = el.regUsername.value.trim();
+  const password = el.regPassword.value;
+  el.regBtn.disabled = true;
+  el.regBtn.textContent = "Se creează…";
+  try {
+    userName = await Auth.signUp(username, password);
+    hideAuthModal();
+    updateUserChip();
+    el.regPassword.value = "";
+  } catch (err) {
+    setAuthError(el.regError, err.message);
+  } finally {
+    el.regBtn.disabled = false;
+    el.regBtn.textContent = "Creează cont";
   }
+}
 
-  userName = name;
-  localStorage.setItem(STORAGE_USER, userName);
-  el.nameModal.hidden = true;
-  el.nameWarning.hidden = true;
+async function handleLogout() {
+  await Auth.signOut();
+  userName = "";
   updateUserChip();
+  hideAuthModal();
+  showAuthModal();
 }
 
 /* --- Ecran de statistici (agregate din evenimentele Supabase) --- */
@@ -448,19 +509,36 @@ function launchConfetti() {
 /* --- Inițializare --- */
 el.checkBtn.addEventListener("click", checkAnswers);
 el.nextBtn.addEventListener("click", nextPage);
-el.userChip.addEventListener("click", showNameModal);
-el.nameSave.addEventListener("click", saveName);
-el.nameInput.addEventListener("keydown", (e) => {
-  if (e.key === "Enter") saveName();
-});
 el.statsBtn.addEventListener("click", renderStats);
 
+// auth modal events
+el.userChip.addEventListener("click", showAuthModal);
+el.logoutBtn.addEventListener("click", handleLogout);
+el.tabLogin.addEventListener("click", () => switchAuthTab("login"));
+el.tabRegister.addEventListener("click", () => switchAuthTab("register"));
+el.loginBtn.addEventListener("click", handleLogin);
+el.regBtn.addEventListener("click", handleRegister);
+el.authLogoutBtn.addEventListener("click", handleLogout);
+el.authCloseBtn.addEventListener("click", hideAuthModal);
+el.loginPassword.addEventListener("keydown", (e) => { if (e.key === "Enter") handleLogin(); });
+el.regPassword.addEventListener("keydown", (e) => { if (e.key === "Enter") handleRegister(); });
+// close modal on backdrop click
+el.authModal.addEventListener("click", (e) => { if (e.target === el.authModal && Auth.isLoggedIn()) hideAuthModal(); });
+
 el.score.textContent = score;
-updateUserChip();
-if (!userName) showNameModal();
 if (page >= totalPages) page = 0;
 renderPage();
 Tracker.flush();
+
+// inițializare autentificare
+Auth.init((user) => {
+  userName = user || "";
+  updateUserChip();
+}).then((user) => {
+  userName = user || "";
+  updateUserChip();
+  if (!user) showAuthModal();
+});
 
 if ("serviceWorker" in navigator) {
   navigator.serviceWorker.register("sw.js").catch(() => {});

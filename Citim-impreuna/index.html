@@ -8,7 +8,7 @@
   <link rel="manifest" href="manifest.webmanifest" />
   <link rel="icon" href="icons/icon.svg" type="image/svg+xml" />
   <link rel="apple-touch-icon" href="icons/icon.svg" />
-  <link rel="stylesheet" href="css/style.css?v=7" />
+  <link rel="stylesheet" href="css/style.css?v=8" />
 </head>
 <body>
   <canvas id="scene-canvas"></canvas>
@@ -19,7 +19,8 @@
       <div class="score-chip" id="score-chip" title="Punctajul tău">⭐ <span id="score">0</span></div>
     </div>
     <div class="header-sub">
-      <button class="user-chip" id="user-chip" title="Schimbă utilizatorul">👤 <span id="user-name"></span></button>
+      <button class="user-chip" id="user-chip" title="Contul tău">👤 <span id="user-name">…</span></button>
+      <button class="icon-btn" id="logout-btn" title="Ieși din cont" hidden>↩</button>
       <button class="icon-btn" id="stats-btn" title="Statistici">📊 Statistici</button>
     </div>
   </header>
@@ -61,25 +62,52 @@
     <p>Text: Ediția Revizuită Cornilescu 2023. Toate drepturile sunt rezervate.</p>
   </footer>
 
-  <div class="modal-backdrop" id="name-modal" hidden>
-    <div class="modal">
-      <h2>Cum te cheamă?</h2>
-      <input id="name-input" type="text" maxlength="20" placeholder="Numele tău" autocomplete="off" />
-      <p class="name-warning" id="name-warning" hidden>
-        Acest nume este deja folosit de altcineva — scorul s-ar putea amesteca. Încearcă un nume mai specific (ex. „Ana P.”) sau apasă din nou ca să continui oricum.
-      </p>
-      <button class="btn primary" id="name-save">Începe</button>
+  <div class=”modal-backdrop” id=”auth-modal” hidden>
+    <div class=”modal auth-modal”>
+
+      <!-- Stare: neconectat — tabs login / register -->
+      <div id=”auth-form”>
+        <div class=”auth-tabs”>
+          <button class=”auth-tab active” id=”tab-login”>Intră în cont</button>
+          <button class=”auth-tab” id=”tab-register”>Cont nou</button>
+        </div>
+
+        <div id=”auth-login-panel”>
+          <input id=”login-username” type=”text” maxlength=”30” placeholder=”Nume utilizator” autocomplete=”username” />
+          <input id=”login-password” type=”password” maxlength=”50” placeholder=”Parolă” autocomplete=”current-password” />
+          <p class=”auth-error” id=”login-error” hidden></p>
+          <button class=”btn primary” id=”login-btn”>Intră</button>
+        </div>
+
+        <div id=”auth-register-panel” hidden>
+          <input id=”reg-username” type=”text” maxlength=”30” placeholder=”Alege un nume utilizator” autocomplete=”username” />
+          <input id=”reg-password” type=”password” maxlength=”50” placeholder=”Parolă (min. 6 caractere)” autocomplete=”new-password” />
+          <p class=”auth-error” id=”reg-error” hidden></p>
+          <button class=”btn primary” id=”reg-btn”>Creează cont</button>
+        </div>
+      </div>
+
+      <!-- Stare: conectat -->
+      <div id=”auth-logged” hidden>
+        <div class=”auth-avatar”>👤</div>
+        <p class=”auth-welcome”>Conectat ca<br><strong id=”auth-username-display”></strong></p>
+        <button class=”btn secondary” id=”auth-logout-btn”>Ieși din cont</button>
+        <button class=”btn primary” id=”auth-close-btn”>Continuă</button>
+      </div>
+
     </div>
   </div>
 
   <canvas id="confetti"></canvas>
 
-  <script src="js/config.js?v=7"></script>
-  <script src="js/scenes.js?v=7"></script>
-  <script src="js/verses-1samuel.js?v=7"></script>
-  <script src="js/verses-2samuel.js?v=7"></script>
-  <script src="js/verses.js?v=7"></script>
-  <script src="js/tracker.js?v=7"></script>
-  <script src="js/app.js?v=7"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+  <script src="js/config.js?v=8"></script>
+  <script src="js/auth.js?v=8"></script>
+  <script src="js/scenes.js?v=8"></script>
+  <script src="js/verses-1samuel.js?v=8"></script>
+  <script src="js/verses-2samuel.js?v=8"></script>
+  <script src="js/verses.js?v=8"></script>
+  <script src="js/tracker.js?v=8"></script>
+  <script src="js/app.js?v=8"></script>
 </body>
 </html>

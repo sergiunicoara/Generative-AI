@@ -337,6 +337,85 @@ select.blank.wrong {
   text-align: center;
 }
 
+/* Auth modal */
+.auth-modal {
+  gap: 0;
+  padding: 0;
+  overflow: hidden;
+}
+
+.auth-tabs {
+  display: flex;
+  border-bottom: 2px solid #f0ebe0;
+}
+
+.auth-tab {
+  flex: 1;
+  padding: 14px 8px;
+  background: none;
+  border: none;
+  font-family: system-ui, sans-serif;
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: var(--muted);
+  cursor: pointer;
+  transition: color 0.15s, border-bottom 0.15s;
+  border-bottom: 3px solid transparent;
+  margin-bottom: -2px;
+}
+
+.auth-tab.active {
+  color: var(--accent);
+  border-bottom-color: var(--accent);
+}
+
+#auth-login-panel,
+#auth-register-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 22px 22px 26px;
+}
+
+.auth-error {
+  margin: 0;
+  font-size: 0.85rem;
+  line-height: 1.4;
+  color: var(--bad);
+  text-align: center;
+  background: var(--bad-bg);
+  border-radius: 8px;
+  padding: 8px 12px;
+}
+
+/* Logged-in state */
+#auth-logged {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+  padding: 28px 22px;
+}
+
+.auth-avatar {
+  font-size: 2.6rem;
+  line-height: 1;
+}
+
+.auth-welcome {
+  margin: 0;
+  text-align: center;
+  font-family: system-ui, sans-serif;
+  font-size: 1rem;
+  color: var(--muted);
+  line-height: 1.6;
+}
+
+.auth-welcome strong {
+  color: var(--ink);
+  font-size: 1.15rem;
+}
+
 /* Ecran statistici */
 .stats {
   font-family: system-ui, sans-serif;

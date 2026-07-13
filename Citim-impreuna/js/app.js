@@ -10,6 +10,10 @@ const STORAGE_USER = "ci_user";
 
 const totalPages = Math.ceil(VERSES.length / PAGE_SIZE);
 
+// Verset → indexul paginii pe care se află (pentru sincronizarea progresului
+// între dispozitive, calculată din evenimentele stocate în Supabase).
+const REF_PAGE = new Map(VERSES.map((v, i) => [v.ref, Math.floor(i / PAGE_SIZE)]));
+
 const el = {
   score: document.getElementById("score"),
   scoreChip: document.getElementById("score-chip"),
@@ -280,6 +284,8 @@ async function handleLogin() {
     hideAuthModal();
     updateUserChip();
     el.loginPassword.value = "";
+    progressSynced = false;
+    syncProgressFromCloud();
   } catch (err) {
     setAuthError(el.loginError, err.message);
   } finally {
@@ -295,6 +301,43 @@ async function handleLogout() {
   updateUserChip();
   hideAuthModal();
   showAuthModal();
+}
+
+// Calculează unde a rămas utilizatorul, din evenimentele lui din Supabase:
+// cea mai avansată pagină atinsă; dacă acea pagină e complet rezolvată,
+// continuă la următoarea. Întoarce -1 dacă nu are nicio activitate.
+function resumePageFromEvents(events) {
+  let far = -1;
+  const correct = new Set();
+  for (const e of events) {
+    const p = REF_PAGE.get(e.verse_ref);
+    if (p != null && p > far) far = p;
+    if (e.correct) correct.add(e.verse_ref);
+  }
+  if (far < 0) return -1;
+  const pageRefs = VERSES.slice(far * PAGE_SIZE, far * PAGE_SIZE + PAGE_SIZE).map((v) => v.ref);
+  const pageDone = pageRefs.every((ref) => correct.has(ref));
+  if (pageDone && far + 1 < totalPages) return far + 1;
+  return far;
+}
+
+// Rulează o singură dată la logare — aduce progresul de pe orice dispozitiv.
+let progressSynced = false;
+async function syncProgressFromCloud() {
+  if (progressSynced || !Tracker.enabled || !userName) return;
+  progressSynced = true;
+  try {
+    const events = await Tracker.fetchUserEvents(userName);
+    const resume = resumePageFromEvents(events);
+    if (resume >= 0 && resume !== page) {
+      page = resume;
+      save();
+      renderPage();
+    }
+  } catch {
+    // offline sau eroare — rămâne progresul local, se reîncearcă la următorul login
+    progressSynced = false;
+  }
 }
 
 /* --- Ecran de statistici (agregate din evenimentele Supabase) --- */
@@ -524,7 +567,10 @@ Auth.init((user) => {
 }).then((user) => {
   userName = user || "";
   updateUserChip();
-  if (user) hideAuthModal();
+  if (user) {
+    hideAuthModal();
+    syncProgressFromCloud();
+  }
 });
 
 if ("serviceWorker" in navigator) {

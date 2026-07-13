@@ -76,7 +76,7 @@ const Tracker = (() => {
     for (let offset = 0; offset < 100000; offset += PAGE) {
       const url =
         `${SUPABASE_URL}/rest/v1/events` +
-        `?select=user_name,verse_ref,answer,chosen,correct,created_at` +
+        `?select=user_name,verse_ref,answer,chosen,correct,created_at,cycle` +
         `&order=created_at.desc&limit=${PAGE}&offset=${offset}`;
       const res = await fetch(url, {
         headers: {
@@ -103,7 +103,7 @@ const Tracker = (() => {
     for (let offset = 0; offset < 100000; offset += PAGE) {
       const url =
         `${SUPABASE_URL}/rest/v1/events` +
-        `?select=verse_ref,correct,created_at` +
+        `?select=verse_ref,correct,created_at,cycle` +
         `&user_name=ilike.${encodeURIComponent(userName)}` +
         `&order=created_at.desc&limit=${PAGE}&offset=${offset}`;
       const res = await fetch(url, {

@@ -7,6 +7,7 @@ const CHEERS = ["Bravo!", "Excelent!", "Minunat!", "Felicitări!", "Super!"];
 const STORAGE_SCORE = "ci_score";
 const STORAGE_PROGRESS = "ci_progress";
 const STORAGE_USER = "ci_user";
+const STORAGE_CYCLE = "ci_cycle";
 
 const totalPages = Math.ceil(VERSES.length / PAGE_SIZE);
 
@@ -40,12 +41,35 @@ const el = {
 
 let score = parseInt(localStorage.getItem(STORAGE_SCORE), 10) || 0;
 let page = parseInt(localStorage.getItem(STORAGE_PROGRESS), 10) || 0;
+// Ciclul curent = de câte ori a parcurs toată cartea (1+2 Samuel). Crește doar
+// la terminarea completă. Fiecare verset aduce puncte o dată PER CICLU, deci
+// reluarea unei pagini în același ciclu nu mai adaugă puncte.
+let cycle = parseInt(localStorage.getItem(STORAGE_CYCLE), 10) || 0;
 let userName = "";
 let hadMistake = false;
 
 function save() {
   localStorage.setItem(STORAGE_SCORE, String(score));
   localStorage.setItem(STORAGE_PROGRESS, String(page));
+  localStorage.setItem(STORAGE_CYCLE, String(cycle));
+}
+
+// Pagini deja terminate complet (corect) în ciclul curent — interzice reluarea
+// lor (din reload de browser sau din „← Înapoi la citire"), ca să nu se poată
+// da aceeași pagină de mai multe ori consecutiv fără să înceapă un ciclu nou.
+const STORAGE_SOLVED = "ci_solved_pages";
+function loadSolvedThisCycle() {
+  try {
+    const raw = JSON.parse(localStorage.getItem(STORAGE_SOLVED) || "null");
+    if (raw && raw.cycle === cycle) return new Set(raw.pages);
+  } catch {
+    // ignorăm date corupte, pornim de la un set gol
+  }
+  return new Set();
+}
+let solvedThisCycle = loadSolvedThisCycle();
+function saveSolvedThisCycle() {
+  localStorage.setItem(STORAGE_SOLVED, JSON.stringify({ cycle, pages: [...solvedThisCycle] }));
 }
 
 function shuffle(arr) {
@@ -110,8 +134,47 @@ function buildVerseCard(v) {
   return card;
 }
 
+// Card de citire pentru o pagină deja terminată în acest ciclu — arată cuvintele
+// corecte direct, fără select-uri, ca utilizatorul să nu poată răspunde din nou.
+function buildSolvedVerseCard(v) {
+  const card = document.createElement("section");
+  card.className = "card";
+
+  const ref = document.createElement("div");
+  ref.className = "ref";
+  ref.textContent = v.ref;
+  card.appendChild(ref);
+
+  const verse = document.createElement("p");
+  verse.className = "verse";
+
+  const parts = v.text.split(/(\{\d+\})/);
+  for (const part of parts) {
+    const m = part.match(/^\{(\d+)\}$/);
+    if (!m) {
+      verse.appendChild(document.createTextNode(part));
+      continue;
+    }
+    const blank = v.blanks[Number(m[1])];
+    const span = document.createElement("span");
+    span.className = "locked";
+    span.textContent = blank.answer;
+    verse.appendChild(span);
+  }
+  card.appendChild(verse);
+  return card;
+}
+
 function renderPage() {
   hadMistake = false;
+
+  // Pagină deja terminată corect în acest ciclu, ultima din carte — se
+  // consideră ciclul încheiat (poate fi cazul unui reload chiar înainte ca
+  // temporizatorul de celebrare să apuce să declanșeze showFinal()).
+  if (solvedThisCycle.has(page) && page + 1 >= totalPages) {
+    showFinal();
+    return;
+  }
 
   const start = page * PAGE_SIZE;
   const pageVerses = VERSES.slice(start, start + PAGE_SIZE);
@@ -121,12 +184,22 @@ function renderPage() {
   el.bookTitle.textContent = firstRef.includes("2 Samuel") ? "Cartea 2 Samuel" : "Cartea 1 Samuel";
   el.cheer.hidden = true;
   el.cheer.innerHTML = "";
-  el.checkBtn.hidden = false;
-  el.nextBtn.hidden = true;
-
   el.container.innerHTML = "";
-  for (const v of pageVerses) {
-    el.container.appendChild(buildVerseCard(v));
+
+  if (solvedThisCycle.has(page)) {
+    // Deja rezolvată — arătăm versetele complete, fără posibilitatea de a
+    // răspunde din nou (blochează reluarea consecutivă a aceleiași pagini).
+    el.checkBtn.hidden = true;
+    el.nextBtn.hidden = false;
+    for (const v of pageVerses) {
+      el.container.appendChild(buildSolvedVerseCard(v));
+    }
+  } else {
+    el.checkBtn.hidden = false;
+    el.nextBtn.hidden = true;
+    for (const v of pageVerses) {
+      el.container.appendChild(buildVerseCard(v));
+    }
   }
 
   updateSceneBackground(pageVerses);
@@ -157,6 +230,7 @@ function checkAnswers() {
       answer: s.dataset.answer,
       chosen: s.value,
       correct: s.value === s.dataset.answer,
+      cycle,
     });
     if (s.value === s.dataset.answer) {
       const span = document.createElement("span");
@@ -178,6 +252,8 @@ function checkAnswers() {
       bonus = PAGE_CLEAN_BONUS;
       updateScore(bonus);
     }
+    solvedThisCycle.add(page);
+    saveSolvedThisCycle();
     celebrate(bonus);
   }
 }
@@ -213,8 +289,13 @@ function nextPage() {
 }
 
 function showFinal() {
+  // A terminat toată cartea → ciclu nou. De acum versetele reluate aduc din nou
+  // puncte (alt ciclu), dar în cadrul aceluiași ciclu reluarea nu adaugă nimic.
+  cycle += 1;
+  solvedThisCycle = new Set();
   page = 0;
   save();
+  saveSolvedThisCycle();
 
   el.progress.textContent = "";
   el.cheer.hidden = true;
@@ -303,13 +384,15 @@ async function handleLogout() {
   showAuthModal();
 }
 
-// Calculează unde a rămas utilizatorul, din evenimentele lui din Supabase:
-// cea mai avansată pagină atinsă; dacă acea pagină e complet rezolvată,
-// continuă la următoarea. Întoarce -1 dacă nu are nicio activitate.
-function resumePageFromEvents(events) {
+// Calculează unde a rămas utilizatorul, din evenimentele lui din Supabase, DOAR
+// pentru ciclul curent (evenimentele din cicluri anterioare nu contează la
+// progres): cea mai avansată pagină atinsă în ciclul curent; dacă acea pagină e
+// complet rezolvată, continuă la următoarea. Întoarce -1 dacă nu are activitate.
+function resumePageFromEvents(events, curCycle) {
   let far = -1;
   const correct = new Set();
   for (const e of events) {
+    if ((e.cycle == null ? 0 : e.cycle) !== curCycle) continue;
     const p = REF_PAGE.get(e.verse_ref);
     if (p != null && p > far) far = p;
     if (e.correct) correct.add(e.verse_ref);
@@ -321,6 +404,27 @@ function resumePageFromEvents(events) {
   return far;
 }
 
+// Pagini complet rezolvate corect în ciclul dat, calculate din evenimentele
+// cloud — sincronizează restricția „nu poți relua o pagină" și pe alt
+// dispozitiv, nu doar pe cel pe care a rezolvat-o inițial.
+function computeSolvedPagesForCycle(events, curCycle) {
+  const correctByPage = new Map();
+  for (const e of events) {
+    if (!e.correct) continue;
+    if ((e.cycle == null ? 0 : e.cycle) !== curCycle) continue;
+    const p = REF_PAGE.get(e.verse_ref);
+    if (p == null) continue;
+    if (!correctByPage.has(p)) correctByPage.set(p, new Set());
+    correctByPage.get(p).add(e.verse_ref);
+  }
+  const solved = new Set();
+  for (const [p, refs] of correctByPage) {
+    const pageRefs = VERSES.slice(p * PAGE_SIZE, p * PAGE_SIZE + PAGE_SIZE).map((v) => v.ref);
+    if (pageRefs.every((ref) => refs.has(ref))) solved.add(p);
+  }
+  return solved;
+}
+
 // Rulează o singură dată la logare — aduce progresul de pe orice dispozitiv.
 let progressSynced = false;
 async function syncProgressFromCloud() {
@@ -329,12 +433,26 @@ async function syncProgressFromCloud() {
   try {
     const events = await Tracker.fetchUserEvents(userName);
 
+    // Sincronizează ciclul curent de pe orice dispozitiv: cel puțin cel mai mare
+    // ciclu întâlnit în evenimente (și nu coborî sub ciclul local).
+    let cloudCycle = 0;
+    for (const e of events) {
+      const c = e.cycle == null ? 0 : e.cycle;
+      if (c > cloudCycle) cloudCycle = c;
+    }
+    cycle = Math.max(cycle, cloudCycle);
+
     // Scorul canonic din baza de date — aceeași valoare ca în clasament,
     // ca ⭐ din antet să nu mai difere de 📊.
     score = computePointsForUser(events);
     el.score.textContent = score;
 
-    const resume = resumePageFromEvents(events);
+    // Paginile deja terminate în ciclul curent, calculate din cloud — astfel
+    // restricția „nu poți relua o pagină" ține și dacă schimbă dispozitivul.
+    solvedThisCycle = computeSolvedPagesForCycle(events, cycle);
+    saveSolvedThisCycle();
+
+    const resume = resumePageFromEvents(events, cycle);
     if (resume >= 0 && resume !== page) {
       page = resume;
     }
@@ -385,30 +503,35 @@ async function renderStats() {
 // Reface exact regulile de punctaj din joc (checkAnswers/celebrate), pornind
 // doar din evenimentele brute — nu există un tabel separat de scor.
 function computePointsForUser(userEvents) {
-  // Punct de bază: fiecare verset rezolvat corect vreodată contează o dată.
-  const correctVerses = new Set(userEvents.filter((e) => e.correct).map((e) => e.verse_ref));
-  let points = correctVerses.size * POINTS_PER_VERSE;
+  const cycleOf = (e) => (e.cycle == null ? 0 : e.cycle);
 
-  // Bonus de pagină curată — COMPLET MONOTON: se acordă dacă a existat cel puțin
-  // o zi în care pagina a fost terminată complet fără nicio greșeală ÎNAINTE de
-  // finalizare (prima terminare curată din acea zi). Greșelile de mai târziu —
-  // fie în aceeași zi după ce ai terminat, fie în alte zile — nu mai pot anula
-  // niciodată un bonus câștigat cinstit. Deci punctele pot doar să crească.
+  // Punct de bază: fiecare verset corect contează o dată PER CICLU. Reluarea
+  // aceleiași pagini în același ciclu nu mai adaugă puncte; abia după ce termină
+  // toată cartea (ciclu nou) versetele reluate aduc din nou puncte.
+  const seen = new Set(); // "ciclu|verset"
+  for (const e of userEvents) {
+    if (e.correct) seen.add(cycleOf(e) + "|" + e.verse_ref);
+  }
+  let points = seen.size * POINTS_PER_VERSE;
+
+  // Bonus de pagină curată — o dată PER (pagină, ciclu), pe baza primei terminări
+  // curate din acel ciclu (fără nicio greșeală înainte de finalizare). Complet
+  // monoton: o greșeală de mai târziu nu mai poate anula bonusul.
   for (let i = 0; i < VERSES.length; i += PAGE_SIZE) {
     const pageRefs = VERSES.slice(i, i + PAGE_SIZE).map((v) => v.ref);
     const pageRefSet = new Set(pageRefs);
     const pageEvents = userEvents.filter((e) => pageRefSet.has(e.verse_ref));
     if (pageEvents.length === 0) continue;
 
-    const byDay = new Map();
+    const byCycle = new Map();
     for (const e of pageEvents) {
-      const day = (e.created_at || "").slice(0, 10);
-      if (!byDay.has(day)) byDay.set(day, []);
-      byDay.get(day).push(e);
+      const c = cycleOf(e);
+      if (!byCycle.has(c)) byCycle.set(c, []);
+      byCycle.get(c).push(e);
     }
 
-    const anyCleanClearing = [...byDay.values()].some((dayEvents) => {
-      const sorted = [...dayEvents].sort((a, b) =>
+    for (const cycleEvents of byCycle.values()) {
+      const sorted = [...cycleEvents].sort((a, b) =>
         (a.created_at || "").localeCompare(b.created_at || "")
       );
       const solved = new Set();
@@ -419,10 +542,8 @@ function computePointsForUser(userEvents) {
         else if (!done) mistakeBeforeDone = true;
         if (pageRefs.every((ref) => solved.has(ref))) { done = true; break; }
       }
-      return done && !mistakeBeforeDone;
-    });
-
-    if (anyCleanClearing) points += PAGE_CLEAN_BONUS;
+      if (done && !mistakeBeforeDone) points += PAGE_CLEAN_BONUS;
+    }
   }
   return points;
 }

@@ -96,19 +96,28 @@ const Tracker = (() => {
     if (!enabled || !userName) return [];
     // ilike fără wildcards = egalitate case-insensitive (prinde și numele
     // vechi salvate cu literă mică, ex. "sergiu" vs "Sergiu").
-    const url =
-      `${SUPABASE_URL}/rest/v1/events` +
-      `?select=verse_ref,correct,created_at` +
-      `&user_name=ilike.${encodeURIComponent(userName)}` +
-      `&order=created_at.desc&limit=5000`;
-    const res = await fetch(url, {
-      headers: {
-        apikey: SUPABASE_ANON_KEY,
-        Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
-      },
-    });
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    return res.json();
+    // Paginat (cap Supabase = 1000/cerere) ca scorul să fie corect chiar și
+    // pentru cine depășește 1000 de evenimente.
+    const PAGE = 1000;
+    let all = [];
+    for (let offset = 0; offset < 100000; offset += PAGE) {
+      const url =
+        `${SUPABASE_URL}/rest/v1/events` +
+        `?select=verse_ref,correct,created_at` +
+        `&user_name=ilike.${encodeURIComponent(userName)}` +
+        `&order=created_at.desc&limit=${PAGE}&offset=${offset}`;
+      const res = await fetch(url, {
+        headers: {
+          apikey: SUPABASE_ANON_KEY,
+          Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
+        },
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const rows = await res.json();
+      all = all.concat(rows);
+      if (rows.length < PAGE) break;
+    }
+    return all;
   }
 
   const DEFAULT_LEADERBOARD_SIZE = 5;

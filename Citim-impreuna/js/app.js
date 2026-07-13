@@ -328,14 +328,20 @@ async function syncProgressFromCloud() {
   progressSynced = true;
   try {
     const events = await Tracker.fetchUserEvents(userName);
+
+    // Scorul canonic din baza de date — aceeași valoare ca în clasament,
+    // ca ⭐ din antet să nu mai difere de 📊.
+    score = computePointsForUser(events);
+    el.score.textContent = score;
+
     const resume = resumePageFromEvents(events);
     if (resume >= 0 && resume !== page) {
       page = resume;
-      save();
-      renderPage();
     }
+    save();
+    if (resume >= 0) renderPage();
   } catch {
-    // offline sau eroare — rămâne progresul local, se reîncearcă la următorul login
+    // offline sau eroare — rămâne scorul/progresul local, se reîncearcă la login
     progressSynced = false;
   }
 }

@@ -574,5 +574,24 @@ Auth.init((user) => {
 });
 
 if ("serviceWorker" in navigator) {
-  navigator.serviceWorker.register("sw.js").catch(() => {});
+  let refreshing = false;
+  // Când un service worker NOU preia controlul (doar la o actualizare, nu la
+  // prima instalare), reîncărcăm o singură dată — utilizatorul primește
+  // automat ultima versiune, fără să șteargă manual cache-ul.
+  if (navigator.serviceWorker.controller) {
+    navigator.serviceWorker.addEventListener("controllerchange", () => {
+      if (refreshing) return;
+      refreshing = true;
+      window.location.reload();
+    });
+  }
+  navigator.serviceWorker
+    .register("sw.js")
+    .then((reg) => {
+      reg.update();
+      // verifică periodic dacă a apărut o versiune nouă (aplicația poate sta
+      // deschisă zile întregi ca PWA instalat)
+      setInterval(() => reg.update(), 30 * 60 * 1000);
+    })
+    .catch(() => {});
 }

@@ -68,18 +68,28 @@ const Tracker = (() => {
 
   async function fetchAll() {
     if (!enabled) return [];
-    const url =
-      `${SUPABASE_URL}/rest/v1/events` +
-      `?select=user_name,verse_ref,answer,chosen,correct,created_at` +
-      `&order=created_at.desc&limit=5000`;
-    const res = await fetch(url, {
-      headers: {
-        apikey: SUPABASE_ANON_KEY,
-        Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
-      },
-    });
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    return res.json();
+    // Supabase plafonează serverul la 1000 de rânduri per cerere, indiferent de
+    // `limit`. Paginăm cu offset până se golește, ca să prindem TOȚI utilizatorii
+    // (altfel cei cu evenimente mai vechi dispar din clasament).
+    const PAGE = 1000;
+    let all = [];
+    for (let offset = 0; offset < 100000; offset += PAGE) {
+      const url =
+        `${SUPABASE_URL}/rest/v1/events` +
+        `?select=user_name,verse_ref,answer,chosen,correct,created_at` +
+        `&order=created_at.desc&limit=${PAGE}&offset=${offset}`;
+      const res = await fetch(url, {
+        headers: {
+          apikey: SUPABASE_ANON_KEY,
+          Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
+        },
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const rows = await res.json();
+      all = all.concat(rows);
+      if (rows.length < PAGE) break;
+    }
+    return all;
   }
 
   async function fetchUserEvents(userName) {

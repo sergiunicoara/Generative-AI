@@ -336,25 +336,13 @@ async function renderStats() {
 // Reface exact regulile de punctaj din joc (checkAnswers/celebrate), pornind
 // doar din evenimentele brute — nu există un tabel separat de scor.
 function computePointsForUser(userEvents) {
-  // Versete: per zi — același verset contează o dată pe zi
-  const byDay = new Map();
-  for (const e of userEvents) {
-    const day = (e.created_at || '').slice(0, 10);
-    if (!byDay.has(day)) byDay.set(day, []);
-    byDay.get(day).push(e);
-  }
-  let points = 0;
-  for (const dayEvents of byDay.values()) {
-    const correct = new Set(dayEvents.filter((e) => e.correct).map((e) => e.verse_ref));
-    points += correct.size * POINTS_PER_VERSE;
-  }
+  const correctVerses = new Set(userEvents.filter((e) => e.correct).map((e) => e.verse_ref));
+  let points = correctVerses.size * POINTS_PER_VERSE;
 
-  // Bonusuri pagină: all-time — toată pagina corectă, fără greșeli niciodată
-  const allCorrect = new Set(userEvents.filter((e) => e.correct).map((e) => e.verse_ref));
   for (let i = 0; i < VERSES.length; i += PAGE_SIZE) {
     const pageRefs = VERSES.slice(i, i + PAGE_SIZE).map((v) => v.ref);
     const pageEvents = userEvents.filter((e) => pageRefs.includes(e.verse_ref));
-    const allSolved = pageRefs.every((ref) => allCorrect.has(ref));
+    const allSolved = pageRefs.every((ref) => correctVerses.has(ref));
     const anyMistake = pageEvents.some((e) => !e.correct);
     if (allSolved && !anyMistake) points += PAGE_CLEAN_BONUS;
   }

@@ -383,10 +383,11 @@ function computePointsForUser(userEvents) {
   const correctVerses = new Set(userEvents.filter((e) => e.correct).map((e) => e.verse_ref));
   let points = correctVerses.size * POINTS_PER_VERSE;
 
-  // Bonus de pagină curată — MONOTON: se acordă dacă a existat cel puțin o ZI
-  // în care pagina a fost terminată complet, fără nicio greșeală în acea zi
-  // (adică o ședință curată). O greșeală făcută altă dată nu mai poate anula
-  // un bonus câștigat cinstit înainte, deci punctele nu mai scad niciodată.
+  // Bonus de pagină curată — COMPLET MONOTON: se acordă dacă a existat cel puțin
+  // o zi în care pagina a fost terminată complet fără nicio greșeală ÎNAINTE de
+  // finalizare (prima terminare curată din acea zi). Greșelile de mai târziu —
+  // fie în aceeași zi după ce ai terminat, fie în alte zile — nu mai pot anula
+  // niciodată un bonus câștigat cinstit. Deci punctele pot doar să crească.
   for (let i = 0; i < VERSES.length; i += PAGE_SIZE) {
     const pageRefs = VERSES.slice(i, i + PAGE_SIZE).map((v) => v.ref);
     const pageRefSet = new Set(pageRefs);
@@ -400,14 +401,22 @@ function computePointsForUser(userEvents) {
       byDay.get(day).push(e);
     }
 
-    const anyCleanDay = [...byDay.values()].some((dayEvents) => {
-      const noMistake = dayEvents.every((e) => e.correct);
-      const solvedRefs = new Set(dayEvents.filter((e) => e.correct).map((e) => e.verse_ref));
-      const allSolved = pageRefs.every((ref) => solvedRefs.has(ref));
-      return noMistake && allSolved;
+    const anyCleanClearing = [...byDay.values()].some((dayEvents) => {
+      const sorted = [...dayEvents].sort((a, b) =>
+        (a.created_at || "").localeCompare(b.created_at || "")
+      );
+      const solved = new Set();
+      let mistakeBeforeDone = false;
+      let done = false;
+      for (const e of sorted) {
+        if (e.correct) solved.add(e.verse_ref);
+        else if (!done) mistakeBeforeDone = true;
+        if (pageRefs.every((ref) => solved.has(ref))) { done = true; break; }
+      }
+      return done && !mistakeBeforeDone;
     });
 
-    if (anyCleanDay) points += PAGE_CLEAN_BONUS;
+    if (anyCleanClearing) points += PAGE_CLEAN_BONUS;
   }
   return points;
 }

@@ -336,15 +336,35 @@ async function renderStats() {
 // Reface exact regulile de punctaj din joc (checkAnswers/celebrate), pornind
 // doar din evenimentele brute — nu există un tabel separat de scor.
 function computePointsForUser(userEvents) {
+  // Punct de bază: fiecare verset rezolvat corect vreodată contează o dată.
   const correctVerses = new Set(userEvents.filter((e) => e.correct).map((e) => e.verse_ref));
   let points = correctVerses.size * POINTS_PER_VERSE;
 
+  // Bonus de pagină curată — MONOTON: se acordă dacă a existat cel puțin o ZI
+  // în care pagina a fost terminată complet, fără nicio greșeală în acea zi
+  // (adică o ședință curată). O greșeală făcută altă dată nu mai poate anula
+  // un bonus câștigat cinstit înainte, deci punctele nu mai scad niciodată.
   for (let i = 0; i < VERSES.length; i += PAGE_SIZE) {
     const pageRefs = VERSES.slice(i, i + PAGE_SIZE).map((v) => v.ref);
-    const pageEvents = userEvents.filter((e) => pageRefs.includes(e.verse_ref));
-    const allSolved = pageRefs.every((ref) => correctVerses.has(ref));
-    const anyMistake = pageEvents.some((e) => !e.correct);
-    if (allSolved && !anyMistake) points += PAGE_CLEAN_BONUS;
+    const pageRefSet = new Set(pageRefs);
+    const pageEvents = userEvents.filter((e) => pageRefSet.has(e.verse_ref));
+    if (pageEvents.length === 0) continue;
+
+    const byDay = new Map();
+    for (const e of pageEvents) {
+      const day = (e.created_at || "").slice(0, 10);
+      if (!byDay.has(day)) byDay.set(day, []);
+      byDay.get(day).push(e);
+    }
+
+    const anyCleanDay = [...byDay.values()].some((dayEvents) => {
+      const noMistake = dayEvents.every((e) => e.correct);
+      const solvedRefs = new Set(dayEvents.filter((e) => e.correct).map((e) => e.verse_ref));
+      const allSolved = pageRefs.every((ref) => solvedRefs.has(ref));
+      return noMistake && allSolved;
+    });
+
+    if (anyCleanDay) points += PAGE_CLEAN_BONUS;
   }
   return points;
 }

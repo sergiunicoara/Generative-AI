@@ -69,13 +69,16 @@ async def main(args: argparse.Namespace) -> int:
     log.info("pagerank_compute.run_start", tenants=tenants)
 
     exit_code = 0
-    for tenant in tenants:
-        try:
-            await compute_tenant(tenant)
-        except Exception as exc:
-            log.error("pagerank_compute.tenant_failed", tenant=tenant, error=str(exc))
-            print(f"[error] tenant={tenant}: {exc}")
-            exit_code = 1
+    try:
+        for tenant in tenants:
+            try:
+                await compute_tenant(tenant)
+            except Exception as exc:
+                log.error("pagerank_compute.tenant_failed", tenant=tenant, error=str(exc))
+                print(f"[error] tenant={tenant}: {exc}")
+                exit_code = 1
+    finally:
+        await neo4j_client.close()
 
     return exit_code
 
@@ -90,4 +93,17 @@ if __name__ == "__main__":
         help="Tenant to compute (default: 'default'; use 'all' for every tenant with entities)",
     )
     parsed = parser.parse_args()
-    sys.exit(asyncio.run(main(parsed)))
+
+    # Suppress neo4j driver deprecation notifications (GDS Cypher projection API)
+    import warnings
+    warnings.filterwarnings("ignore", category=DeprecationWarning)
+    import logging
+    logging.getLogger("neo4j").setLevel(logging.ERROR)
+
+    loop = asyncio.new_event_loop()
+    try:
+        exit_code = loop.run_until_complete(main(parsed))
+    finally:
+        loop.run_until_complete(loop.shutdown_asyncgens())
+        loop.close()
+    sys.exit(exit_code)

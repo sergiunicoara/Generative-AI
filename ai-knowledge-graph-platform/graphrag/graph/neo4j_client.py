@@ -28,6 +28,7 @@ class Neo4jClient:
             cfg.neo4j_uri,
             auth=(cfg.neo4j_user, cfg.neo4j_password),
             max_connection_pool_size=50,
+            notifications_min_severity="OFF",
         )
 
     async def close(self):

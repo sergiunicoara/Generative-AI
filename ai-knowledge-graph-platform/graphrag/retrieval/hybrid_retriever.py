@@ -96,21 +96,21 @@ class HybridRetriever:
         global_results = {}
 
         if mode in ("local", "hybrid"):
-            await _step("🔍 Căutare BM25 + vector în graf...")
-            await _step("🕸️ Scorare GNN — traversare 2 hop-uri...")
+            await _step("🔍 BM25 + vector search in graph...")
+            await _step("🕸️ GNN scoring — 2-hop traversal...")
             local_results = await self._local.search(
                 question,
                 session_id=session_id,
                 tenant=tenant,
             )
             n_reranked = self._cfg.get("rerank_top_k", 5)
-            await _step(f"📊 Reranking cross-encoder → top {n_reranked} fragmente")
+            await _step(f"📊 Cross-encoder reranking → top {n_reranked} chunks")
 
         if mode in ("global", "hybrid"):
-            await _step("🕸️ Expansiune graf (comunități Leiden)...")
+            await _step("🕸️ Graph expansion (Leiden communities)...")
             global_results = await self._global.search(question, tenant=tenant)
 
-        await _step("✍️ Sinteză răspuns cu LLM...")
+        await _step("✍️ Synthesising answer with LLM...")
         context, citations = self._context_builder.build(
             local_results=local_results,
             global_results=global_results,

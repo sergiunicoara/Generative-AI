@@ -30,10 +30,16 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
 import structlog
+
+# Windows console defaults to cp1252, which can't encode the emoji used in
+# status output below — reconfigure stdout to UTF-8.
+if sys.stdout.encoding and sys.stdout.encoding.lower() != "utf-8":
+    sys.stdout.reconfigure(encoding="utf-8")
 from rdflib import Graph, Literal, Namespace, URIRef
 from rdflib.namespace import OWL, RDF, RDFS, XSD
 
@@ -102,7 +108,7 @@ def _init_graph() -> Graph:
     return g
 
 
-async def export(tenant: str, output: Path, limit: int, infer: bool = False) -> None:
+async def export(tenant: str, output: Path, limit: int, infer: bool = False, validate: bool = False) -> None:
     from graphrag.graph.neo4j_client import get_neo4j
 
     neo4j = get_neo4j()
@@ -260,6 +266,16 @@ async def export(tenant: str, output: Path, limit: int, infer: bool = False) -> 
     output.parent.mkdir(parents=True, exist_ok=True)
     g.serialize(destination=str(output), format="turtle")
 
+    # ── Optional SHACL shape validation ────────────────────────────────────────
+    if validate:
+        from graphrag.graph.shacl_validator import SHACLValidator
+        conforms, report = SHACLValidator(g).validate()
+        log.info("export_rdf.shacl", conforms=conforms)
+        print(f"\n{'✅' if conforms else '❌'}  SHACL validation: "
+              f"{'conforms' if conforms else 'violations found'}")
+        if not conforms:
+            print(report)
+
     entity_count = len(ent_rows)
     edge_count   = len(edge_rows)
     triple_count = len(g)
@@ -288,6 +304,10 @@ def main():
     parser.add_argument("--infer", action="store_true",
                         help="Apply OWL-RL closure after export (materialises "
                              "subClass propagation, symmetric/inverse properties)")
+    parser.add_argument("--validate", action="store_true",
+                        help="Validate the exported graph against SHACL shapes "
+                             "after export (entity labels/types, axiom completeness, "
+                             "confidence range)")
     args = parser.parse_args()
 
     asyncio.run(export(
@@ -295,6 +315,7 @@ def main():
         output=Path(args.output),
         limit=args.limit,
         infer=args.infer,
+        validate=args.validate,
     ))
 
 

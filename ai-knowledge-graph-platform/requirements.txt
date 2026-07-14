@@ -58,3 +58,4 @@ slowapi>=0.1.9
 # ── RDF / Ontology interoperability ───────────────────────────────────────────
 rdflib>=7.0.0
 owlrl>=6.0.0
+pyshacl>=0.29.0

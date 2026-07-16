@@ -10,6 +10,25 @@ const Tracker = (() => {
     SUPABASE_ANON_KEY.length > 0;
   let flushing = false;
 
+  // Antetele pentru Supabase. `apikey` rămâne mereu cheia anon (identifică
+  // proiectul), dar `Authorization` poartă JWT-ul utilizatorului logat — așa
+  // cererea ajunge la Postgres ca rol `authenticated`, cu identitatea dovedită
+  // criptografic, nu ca `anon` (cheie publică, oricine o poate copia din
+  // js/config.js). Politicile RLS pot astfel impune „doar rândul tău".
+  // Fără sesiune se cade înapoi pe cheia anon: scrierile vor fi respinse de
+  // RLS și rămân în coadă până la relogare (vezi flush()).
+  async function authHeaders(extra) {
+    let token = null;
+    if (typeof Auth !== "undefined" && Auth.getAccessToken) {
+      token = await Auth.getAccessToken();
+    }
+    return {
+      apikey: SUPABASE_ANON_KEY,
+      Authorization: `Bearer ${token || SUPABASE_ANON_KEY}`,
+      ...(extra || {}),
+    };
+  }
+
   function readQueue() {
     try {
       return JSON.parse(localStorage.getItem(QUEUE_KEY)) || [];
@@ -44,12 +63,10 @@ const Tracker = (() => {
     try {
       const res = await fetch(`${SUPABASE_URL}/rest/v1/events`, {
         method: "POST",
-        headers: {
+        headers: await authHeaders({
           "Content-Type": "application/json",
-          apikey: SUPABASE_ANON_KEY,
-          Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
           Prefer: "return=minimal",
-        },
+        }),
         body: JSON.stringify(batch),
       });
       if (res.ok) {
@@ -78,12 +95,7 @@ const Tracker = (() => {
         `${SUPABASE_URL}/rest/v1/events` +
         `?select=user_name,verse_ref,answer,chosen,correct,created_at,cycle` +
         `&order=created_at.desc&limit=${PAGE}&offset=${offset}`;
-      const res = await fetch(url, {
-        headers: {
-          apikey: SUPABASE_ANON_KEY,
-          Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
-        },
-      });
+      const res = await fetch(url, { headers: await authHeaders() });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const rows = await res.json();
       all = all.concat(rows);
@@ -106,12 +118,7 @@ const Tracker = (() => {
         `?select=verse_ref,correct,created_at,cycle,answer,chosen` +
         `&user_name=ilike.${encodeURIComponent(userName)}` +
         `&order=created_at.desc&limit=${PAGE}&offset=${offset}`;
-      const res = await fetch(url, {
-        headers: {
-          apikey: SUPABASE_ANON_KEY,
-          Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
-        },
-      });
+      const res = await fetch(url, { headers: await authHeaders() });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const rows = await res.json();
       all = all.concat(rows);
@@ -129,12 +136,7 @@ const Tracker = (() => {
     try {
       const res = await fetch(
         `${SUPABASE_URL}/rest/v1/scores?select=user_name,points&order=points.desc`,
-        {
-          headers: {
-            apikey: SUPABASE_ANON_KEY,
-            Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
-          },
-        }
+        { headers: await authHeaders() }
       );
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       return await res.json();
@@ -152,12 +154,10 @@ const Tracker = (() => {
     try {
       await fetch(`${SUPABASE_URL}/rest/v1/scores`, {
         method: "POST",
-        headers: {
+        headers: await authHeaders({
           "Content-Type": "application/json",
-          apikey: SUPABASE_ANON_KEY,
-          Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
           Prefer: "resolution=merge-duplicates,return=minimal",
-        },
+        }),
         body: JSON.stringify([
           { user_name: userName, points, updated_at: new Date().toISOString() },
         ]),
@@ -174,12 +174,7 @@ const Tracker = (() => {
     try {
       const res = await fetch(
         `${SUPABASE_URL}/rest/v1/app_config?select=leaderboard_size&limit=1`,
-        {
-          headers: {
-            apikey: SUPABASE_ANON_KEY,
-            Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
-          },
-        }
+        { headers: await authHeaders() }
       );
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const rows = await res.json();

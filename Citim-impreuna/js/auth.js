@@ -98,5 +98,19 @@ const Auth = (() => {
 
   function isLoggedIn() { return !!_session; }
 
-  return { init, signIn, signUp, signOut, currentUser, isLoggedIn };
+  // Tokenul de sesiune (JWT) al utilizatorului logat, pentru cererile către
+  // Supabase. getSession() îl reîmprospătează singur dacă a expirat, deci se
+  // cere de fiecare dată, niciodată memorat. null = neautentificat.
+  async function getAccessToken() {
+    const c = client();
+    if (!c) return null;
+    try {
+      const { data } = await c.auth.getSession();
+      return data.session?.access_token || null;
+    } catch {
+      return null;
+    }
+  }
+
+  return { init, signIn, signUp, signOut, currentUser, isLoggedIn, getAccessToken };
 })();

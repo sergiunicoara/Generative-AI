@@ -103,7 +103,7 @@ const Tracker = (() => {
     for (let offset = 0; offset < 100000; offset += PAGE) {
       const url =
         `${SUPABASE_URL}/rest/v1/events` +
-        `?select=verse_ref,correct,created_at,cycle` +
+        `?select=verse_ref,correct,created_at,cycle,answer,chosen` +
         `&user_name=ilike.${encodeURIComponent(userName)}` +
         `&order=created_at.desc&limit=${PAGE}&offset=${offset}`;
       const res = await fetch(url, {
@@ -118,6 +118,53 @@ const Tracker = (() => {
       if (rows.length < PAGE) break;
     }
     return all;
+  }
+
+  // Clasamentul agregat: un singur rând per utilizator (user_name, points),
+  // menținut de client prin upsertScore(). Înlocuiește descărcarea tuturor
+  // evenimentelor la fiecare deschidere de statistici (vezi fetchAll), ca
+  // banda să nu crească odată cu numărul de utilizatori.
+  async function fetchScores() {
+    if (!enabled) return [];
+    try {
+      const res = await fetch(
+        `${SUPABASE_URL}/rest/v1/scores?select=user_name,points&order=points.desc`,
+        {
+          headers: {
+            apikey: SUPABASE_ANON_KEY,
+            Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
+          },
+        }
+      );
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      return await res.json();
+    } catch {
+      // tabel lipsă/offline — apelantul recurge la calculul din evenimente
+      return [];
+    }
+  }
+
+  // Scrie scorul canonic al utilizatorului (calculat de client cu
+  // computePointsForUser) în tabelul `scores`. Upsert pe cheia user_name.
+  // Fire-and-forget: eșecul nu blochează jocul.
+  async function upsertScore(userName, points) {
+    if (!enabled || !userName) return;
+    try {
+      await fetch(`${SUPABASE_URL}/rest/v1/scores`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          apikey: SUPABASE_ANON_KEY,
+          Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
+          Prefer: "resolution=merge-duplicates,return=minimal",
+        },
+        body: JSON.stringify([
+          { user_name: userName, points, updated_at: new Date().toISOString() },
+        ]),
+      });
+    } catch {
+      // offline sau tabel lipsă — se reîncearcă la următoarea schimbare de scor
+    }
   }
 
   const DEFAULT_LEADERBOARD_SIZE = 5;
@@ -145,5 +192,5 @@ const Tracker = (() => {
 
   window.addEventListener("online", flush);
 
-  return { enabled, log, flush, fetchAll, fetchUserEvents, fetchConfig };
+  return { enabled, log, flush, fetchAll, fetchUserEvents, fetchScores, upsertScore, fetchConfig };
 })();

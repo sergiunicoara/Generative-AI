@@ -89,6 +89,13 @@ function updateScore(points) {
   save();
 }
 
+// Publică scorul curent în tabelul agregat `scores` (un rând per utilizator),
+// ca 📊 să nu mai descarce toate evenimentele. Fire-and-forget.
+function pushScore() {
+  if (!Tracker.enabled || !userName) return;
+  Tracker.upsertScore(userName, score);
+}
+
 function buildVerseCard(v) {
   const card = document.createElement("section");
   card.className = "card";
@@ -254,6 +261,7 @@ function checkAnswers() {
     }
     solvedThisCycle.add(page);
     saveSolvedThisCycle();
+    pushScore();
     celebrate(bonus);
   }
 }
@@ -446,6 +454,9 @@ async function syncProgressFromCloud() {
     // ca ⭐ din antet să nu mai difere de 📊.
     score = computePointsForUser(events);
     el.score.textContent = score;
+    // Împrospătează rândul din clasament cu scorul canonic (și auto-populează
+    // tabelul `scores` la prima logare a fiecărui utilizator după migrare).
+    pushScore();
 
     // Paginile deja terminate în ciclul curent, calculate din cloud — astfel
     // restricția „nu poți relua o pagină" ține și dacă schimbă dispozitivul.
@@ -489,11 +500,25 @@ async function renderStats() {
 
   wrap.innerHTML = "<p>Se încarcă…</p>";
   try {
-    const [events, config] = await Promise.all([Tracker.fetchAll(), Tracker.fetchConfig()]);
-    if (events.length === 0) {
-      wrap.innerHTML = "<p>Nicio activitate înregistrată încă.</p>";
+    // Clasamentul vine din tabelul agregat `scores` (un rând/utilizator),
+    // iar panoul personal doar din evenimentele utilizatorului curent — nu
+    // se mai descarcă tot istoricul la fiecare deschidere.
+    const [scores, myEvents, config] = await Promise.all([
+      Tracker.fetchScores(),
+      Tracker.fetchUserEvents(userName),
+      Tracker.fetchConfig(),
+    ]);
+    if (scores.length > 0) {
+      renderStatsFromScores(wrap, scores, myEvents, config.leaderboard_size);
     } else {
-      renderStatsContent(wrap, events, config.leaderboard_size);
+      // Tabelul `scores` încă nu există sau nu e populat — recurge la calculul
+      // clasic din toate evenimentele, ca statisticile să funcționeze oricum.
+      const events = await Tracker.fetchAll();
+      if (events.length === 0) {
+        wrap.innerHTML = "<p>Nicio activitate înregistrată încă.</p>";
+      } else {
+        renderStatsContent(wrap, events, config.leaderboard_size);
+      }
     }
   } catch {
     wrap.innerHTML = "<p>Statisticile au nevoie de internet. Încearcă din nou mai târziu.</p>";
@@ -517,18 +542,23 @@ function computePointsForUser(userEvents) {
   // Bonus de pagină curată — o dată PER (pagină, ciclu), pe baza primei terminări
   // curate din acel ciclu (fără nicio greșeală înainte de finalizare). Complet
   // monoton: o greșeală de mai târziu nu mai poate anula bonusul.
-  for (let i = 0; i < VERSES.length; i += PAGE_SIZE) {
-    const pageRefs = VERSES.slice(i, i + PAGE_SIZE).map((v) => v.ref);
-    const pageRefSet = new Set(pageRefs);
-    const pageEvents = userEvents.filter((e) => pageRefSet.has(e.verse_ref));
-    if (pageEvents.length === 0) continue;
+  //
+  // O singură trecere prin evenimente ca să le grupăm pe (pagină → ciclu),
+  // în loc să reparcurgem toate paginile cărții pentru fiecare utilizator
+  // (altfel devine O(utilizatori × pagini × evenimente) la corpusul complet).
+  const byPage = new Map(); // pagină → (ciclu → evenimente)
+  for (const e of userEvents) {
+    const p = REF_PAGE.get(e.verse_ref);
+    if (p == null) continue;
+    if (!byPage.has(p)) byPage.set(p, new Map());
+    const byCycle = byPage.get(p);
+    const c = cycleOf(e);
+    if (!byCycle.has(c)) byCycle.set(c, []);
+    byCycle.get(c).push(e);
+  }
 
-    const byCycle = new Map();
-    for (const e of pageEvents) {
-      const c = cycleOf(e);
-      if (!byCycle.has(c)) byCycle.set(c, []);
-      byCycle.get(c).push(e);
-    }
+  for (const [p, byCycle] of byPage) {
+    const pageRefs = VERSES.slice(p * PAGE_SIZE, p * PAGE_SIZE + PAGE_SIZE).map((v) => v.ref);
 
     for (const cycleEvents of byCycle.values()) {
       const sorted = [...cycleEvents].sort((a, b) =>
@@ -580,54 +610,84 @@ function renderStatsContent(wrap, events, leaderboardSize) {
     board.appendChild(row);
   });
   wrap.appendChild(board);
+  wrap.appendChild(buildMyStatsPanel(byUser.get(userName)));
+}
 
-  // Statisticile proprii — doar greșelile utilizatorului curent, nu ale altora.
+// Clasament din tabelul agregat `scores` (un rând/utilizator) + panoul personal
+// din evenimentele proprii. Calea implicită; renderStatsContent rămâne fallback.
+function renderStatsFromScores(wrap, scores, myEvents, leaderboardSize) {
+  // Normalizează și fuzionează eventualele duplicate de nume (litere mari/mici).
+  const byName = new Map();
+  for (const s of scores) {
+    const name = normName(s.user_name);
+    byName.set(name, Math.max(byName.get(name) || 0, s.points || 0));
+  }
+  const ranking = [...byName.entries()]
+    .map(([name, points]) => ({ name, points }))
+    .sort((a, b) => b.points - a.points);
+
+  wrap.innerHTML = "";
+
+  const board = document.createElement("div");
+  board.className = "leaderboard";
+  board.innerHTML = "<h3>🏆 Clasament</h3>";
+  ranking.slice(0, leaderboardSize).forEach((entry, i) => {
+    const row = document.createElement("div");
+    row.className = "leaderboard-row" + (entry.name === userName ? " me" : "");
+    row.innerHTML = `<span class="rank">${i + 1}</span><span class="who">${entry.name}</span><span class="pts">${entry.points} pct</span>`;
+    board.appendChild(row);
+  });
+  wrap.appendChild(board);
+  wrap.appendChild(buildMyStatsPanel(myEvents && myEvents.length ? myEvents : null));
+}
+
+// Panoul „Statisticile mele" — doar evenimentele utilizatorului curent.
+function buildMyStatsPanel(myEvents) {
   const mine = document.createElement("div");
   mine.className = "stat-user";
-  const myEvents = byUser.get(userName);
   if (!myEvents) {
     mine.innerHTML = `<h3>👤 Statisticile mele</h3><p>Nu ai încă activitate înregistrată.</p>`;
-  } else {
-    const total = myEvents.length;
-    const correct = myEvents.filter((e) => e.correct).length;
-    const accuracy = Math.round((correct / total) * 100);
-    const distinctVerses = new Set(myEvents.filter((e) => e.correct).map((e) => e.verse_ref)).size;
-    const lastDay = new Date(myEvents[0].created_at).toLocaleDateString("ro-RO", {
-      day: "numeric",
-      month: "short",
-    });
-
-    const mistakes = new Map();
-    for (const e of myEvents) {
-      if (e.correct) continue;
-      if (!mistakes.has(e.verse_ref)) {
-        mistakes.set(e.verse_ref, { count: 0, wrong: new Set(), answer: e.answer });
-      }
-      const m = mistakes.get(e.verse_ref);
-      m.count += 1;
-      m.wrong.add(e.chosen);
-    }
-    const topMistakes = [...mistakes.entries()].sort((a, b) => b[1].count - a[1].count).slice(0, 5);
-
-    let html = `
-      <h3>👤 Statisticile mele</h3>
-      <p>Răspunsuri: <strong>${total}</strong> · Corecte: <strong>${correct}</strong> (${accuracy}%)</p>
-      <p>Versete completate: <strong>${distinctVerses}</strong> · Ultima activitate: ${lastDay}</p>
-    `;
-    if (topMistakes.length > 0) {
-      html += `<p class="stat-label">Unde am greșit:</p><ul>`;
-      for (const [ref, m] of topMistakes) {
-        const wrongList = [...m.wrong].map((w) => `„${w}”`).join(", ");
-        const label = m.count === 1 ? "greșeală" : "greșeli";
-        html += `<li><strong>${ref}</strong> — ${m.count} ${label}: ${wrongList} → corect: „${m.answer}”</li>`;
-      }
-      html += `</ul>`;
-    } else {
-      html += `<p class="stat-label">Nicio greșeală — felicitări! 🎉</p>`;
-    }
-    mine.innerHTML = html;
+    return mine;
   }
-  wrap.appendChild(mine);
+  const total = myEvents.length;
+  const correct = myEvents.filter((e) => e.correct).length;
+  const accuracy = Math.round((correct / total) * 100);
+  const distinctVerses = new Set(myEvents.filter((e) => e.correct).map((e) => e.verse_ref)).size;
+  const lastDay = new Date(myEvents[0].created_at).toLocaleDateString("ro-RO", {
+    day: "numeric",
+    month: "short",
+  });
+
+  const mistakes = new Map();
+  for (const e of myEvents) {
+    if (e.correct) continue;
+    if (!mistakes.has(e.verse_ref)) {
+      mistakes.set(e.verse_ref, { count: 0, wrong: new Set(), answer: e.answer });
+    }
+    const m = mistakes.get(e.verse_ref);
+    m.count += 1;
+    m.wrong.add(e.chosen);
+  }
+  const topMistakes = [...mistakes.entries()].sort((a, b) => b[1].count - a[1].count).slice(0, 5);
+
+  let html = `
+    <h3>👤 Statisticile mele</h3>
+    <p>Răspunsuri: <strong>${total}</strong> · Corecte: <strong>${correct}</strong> (${accuracy}%)</p>
+    <p>Versete completate: <strong>${distinctVerses}</strong> · Ultima activitate: ${lastDay}</p>
+  `;
+  if (topMistakes.length > 0) {
+    html += `<p class="stat-label">Unde am greșit:</p><ul>`;
+    for (const [ref, m] of topMistakes) {
+      const wrongList = [...m.wrong].map((w) => `„${w}”`).join(", ");
+      const label = m.count === 1 ? "greșeală" : "greșeli";
+      html += `<li><strong>${ref}</strong> — ${m.count} ${label}: ${wrongList} → corect: „${m.answer}”</li>`;
+    }
+    html += `</ul>`;
+  } else {
+    html += `<p class="stat-label">Nicio greșeală — felicitări! 🎉</p>`;
+  }
+  mine.innerHTML = html;
+  return mine;
 }
 
 /* --- Confetti simplu pe canvas, fără dependențe --- */

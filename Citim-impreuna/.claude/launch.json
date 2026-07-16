@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "citim-impreuna",
+      "runtimeExecutable": "python",
+      "runtimeArgs": ["scripts/dev-server.py", "8321"],
+      "port": 8321
+    }
+  ]
+}

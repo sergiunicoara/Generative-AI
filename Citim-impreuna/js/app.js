@@ -123,6 +123,13 @@ function showMilestone(m) {
   const verse = MILESTONE_VERSES[(m - 1) % MILESTONE_VERSES.length];
   const overlay = document.createElement("div");
   overlay.className = "milestone-overlay";
+  // stele care urcă plutind din carte, ca în fotografia de referință
+  const sparks = Array.from({ length: 20 }, () =>
+    `<span class="m-spark" style="left:${(30 + Math.random() * 40).toFixed(1)}%;` +
+    `animation-delay:${(0.9 + Math.random() * 3).toFixed(2)}s;` +
+    `animation-duration:${(2.2 + Math.random() * 2).toFixed(2)}s;` +
+    `font-size:${(8 + Math.random() * 12).toFixed(0)}px"></span>`
+  ).join("");
   // Foi late, pline (nu linii subțiri), generate ca pene suprapuse ușor —
   // fiecare e un contur închis cu muchie vizibilă, ca să se distingă clar
   // paginile individuale, exact ca într-o carte reală fotografiată din față.
@@ -175,6 +182,7 @@ function showMilestone(m) {
       <div class="m-stage">
         <div class="m-beam"></div>
         <div class="m-glow"></div>
+        ${sparks}
         <svg class="m-book" viewBox="0 0 400 230" xmlns="http://www.w3.org/2000/svg">
           <defs>
             <radialGradient id="mb-light" cx="50%" cy="40%" r="58%">

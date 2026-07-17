@@ -667,6 +667,24 @@ footer {
   pointer-events: none;
 }
 
+/* stelele care urcă plutind din carte */
+.m-spark {
+  position: absolute;
+  bottom: 90px;
+  z-index: 2;
+  opacity: 0;
+  animation-name: m-spark-rise;
+  animation-timing-function: ease-out;
+  animation-iteration-count: infinite;
+  pointer-events: none;
+}
+
+.m-spark::before {
+  content: "✦";
+  color: #fff2c8;
+  text-shadow: 0 0 10px rgba(255, 230, 150, 0.95), 0 0 22px rgba(255, 210, 100, 0.6);
+}
+
 @keyframes milestone-fade {
   from { opacity: 0; }
   to { opacity: 1; }
@@ -700,4 +718,10 @@ footer {
 @keyframes m-verse-in {
   from { opacity: 0; transform: translateY(24px); }
   to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes m-spark-rise {
+  0% { opacity: 0; transform: translateY(0) scale(0.6); }
+  15% { opacity: 1; }
+  100% { opacity: 0; transform: translateY(-52vh) scale(1.15); }
 }

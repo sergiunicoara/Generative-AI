@@ -586,6 +586,21 @@ footer {
   animation: m-verse-in 1s ease 1.5s forwards;
 }
 
+/* halou care se întinde în spatele întregului text, ca lumina din fascicul
+   să pară că îl cuprinde, nu doar cartea de dedesubt */
+.m-verse::before {
+  content: "";
+  position: absolute;
+  inset: -30px -10% -10px;
+  z-index: -1;
+  background: radial-gradient(ellipse at 50% 55%,
+    rgba(255, 240, 190, 0.5) 0%,
+    rgba(255, 220, 130, 0.22) 45%,
+    transparent 75%);
+  filter: blur(4px);
+  pointer-events: none;
+}
+
 .m-verse h2 {
   margin: 0 0 14px;
   color: #ffd76a;
@@ -612,7 +627,7 @@ footer {
 /* scena cărții: fascicul + halou + scântei + cartea SVG */
 .m-stage {
   position: relative;
-  width: min(360px, 82vw);
+  width: min(680px, 92vw);
   display: flex;
   justify-content: center;
 }
@@ -629,9 +644,9 @@ footer {
 /* fasciculul de lumină care urcă din carte spre cer */
 .m-beam {
   position: absolute;
-  bottom: 55px;
+  bottom: 95px;
   left: 50%;
-  width: 240px;
+  width: 460px;
   height: 68vh;
   transform: translateX(-50%);
   background: linear-gradient(to top,
@@ -650,10 +665,10 @@ footer {
 /* haloul din mijlocul cărții */
 .m-glow {
   position: absolute;
-  bottom: -40px;
+  bottom: -80px;
   left: 50%;
-  width: 340px;
-  height: 300px;
+  width: 640px;
+  height: 560px;
   transform: translateX(-50%);
   background: radial-gradient(circle at 50% 60%,
     rgba(255, 250, 225, 0.95) 0%,

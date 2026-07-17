@@ -633,7 +633,7 @@ footer {
   position: absolute;
   bottom: 95px;
   left: 50%;
-  width: min(900px, 130vw);
+  width: min(720px, 100vw);
   height: 68vh;
   transform: translateX(-50%);
   background: linear-gradient(to top,
@@ -641,7 +641,7 @@ footer {
     rgba(255, 224, 140, 0.4) 40%,
     rgba(255, 224, 140, 0.12) 75%,
     transparent 100%);
-  clip-path: polygon(47% 100%, 53% 100%, 100% 0, 0 0);
+  clip-path: polygon(47% 100%, 53% 100%, 94% 0, 6% 0);
   filter: blur(6px);
   transform-origin: bottom center;
   opacity: 0;

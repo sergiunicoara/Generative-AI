@@ -130,6 +130,31 @@ function showMilestone(m) {
     `animation-duration:${(2.2 + Math.random() * 2).toFixed(2)}s;` +
     `font-size:${(8 + Math.random() * 12).toFixed(0)}px"></span>`
   ).join("");
+  // Zeci de foi subțiri, curbate, în evantai (ca într-o carte reală deschisă
+  // și fotografiată din față) — generate, nu desenate manual una câte una,
+  // ca varietatea de unghi/lungime/nuanță să pară naturală, nu simetric-rigidă.
+  const bookPages = (side) => {
+    const baseX = 200, baseY = 185;
+    let out = "";
+    const count = 22;
+    for (let i = 0; i < count; i++) {
+      const tt = i / (count - 1); // 0 = lângă cotor, 1 = cea mai exterioară
+      const angle = side * (10 + tt * 78); // grade față de verticală
+      const len = 118 + Math.sin(tt * Math.PI) * 30 + (i % 3) * 4;
+      const rad = (angle * Math.PI) / 180;
+      const tipX = baseX + Math.sin(rad) * len;
+      const tipY = baseY - Math.cos(rad) * len * 0.92;
+      // curbura fiecărei foi înspre exterior, ca petalele unei flori
+      const curveRad = ((angle * 0.55) * Math.PI) / 180;
+      const cx = baseX + Math.sin(curveRad) * len * 0.62;
+      const cy = baseY - Math.cos(curveRad) * len * 0.7;
+      const hue = tt < 0.5 ? "#e8b25a" : tt < 0.8 ? "#f7ddaa" : "#fffbf0";
+      const width = 2.6 - tt * 1.4;
+      const glow = tt > 0.75 ? ` filter="url(#mb-tipglow)"` : "";
+      out += `<path d="M${baseX},${baseY} Q${cx.toFixed(1)},${cy.toFixed(1)} ${tipX.toFixed(1)},${tipY.toFixed(1)}" stroke="${hue}" stroke-width="${width.toFixed(2)}" stroke-linecap="round" fill="none" opacity="${(0.55 + tt * 0.45).toFixed(2)}"${glow}/>`;
+    }
+    return out;
+  };
   overlay.innerHTML = `
     <div class="milestone-scene">
       <div class="m-verse">
@@ -157,31 +182,16 @@ function showMilestone(m) {
               <stop offset="0%" stop-color="#d8c69a"/>
               <stop offset="100%" stop-color="#fdf8e8"/>
             </linearGradient>
-            <linearGradient id="mb-pageR" x1="1" y1="0" x2="0" y2="0">
-              <stop offset="0%" stop-color="#d8c69a"/>
-              <stop offset="100%" stop-color="#fdf8e8"/>
-            </linearGradient>
+            <filter id="mb-tipglow" x="-60%" y="-60%" width="220%" height="220%">
+              <feGaussianBlur stdDeviation="1.1"/>
+            </filter>
           </defs>
           <!-- coperta de piele, deschisă în formă de V, sub pagini -->
           <path d="M14,196 Q200,150 386,196 L386,214 Q200,178 14,214 Z" fill="url(#mb-leather)"/>
           <path d="M20,190 Q200,146 380,190 L380,198 Q200,158 20,198 Z" fill="#8a6339" opacity="0.55"/>
-          <!-- evantaiul de pagini, stânga: câteva foi curbate, cu nuanțe alternante pentru adâncime -->
-          <g opacity="0.98">
-            <path d="M198,188 Q150,150 30,150 Q120,182 198,192 Z" fill="url(#mb-pageL)"/>
-            <path d="M198,184 Q156,124 55,92 Q136,160 198,188 Z" fill="#f5ead0"/>
-            <path d="M198,180 Q164,96 92,44 Q150,136 198,184 Z" fill="#fdf9ec"/>
-            <path d="M198,177 Q172,74 138,14 Q162,114 198,180 Z" fill="#fffefb"/>
-          </g>
-          <!-- evantaiul de pagini, dreapta — oglindit -->
-          <g opacity="0.98">
-            <path d="M202,188 Q250,150 370,150 Q280,182 202,192 Z" fill="url(#mb-pageR)"/>
-            <path d="M202,184 Q244,124 345,92 Q264,160 202,188 Z" fill="#f5ead0"/>
-            <path d="M202,180 Q236,96 308,44 Q250,136 202,184 Z" fill="#fdf9ec"/>
-            <path d="M202,177 Q228,74 262,14 Q238,114 202,180 Z" fill="#fffefb"/>
-          </g>
-          <!-- cotorul cărții, ca despărțire vizuală între cele două jumătăți -->
-          <path d="M200,190 Q198,110 200,20 Q202,110 200,190 Z" fill="#6b4526" opacity="0.6"/>
-          <ellipse cx="200" cy="130" rx="115" ry="98" fill="url(#mb-light)"/>
+          <!-- zeci de foi subțiri, curbate ca petalele, generate pentru varietate naturală -->
+          <g>${bookPages(-1)}${bookPages(1)}</g>
+          <ellipse cx="200" cy="150" rx="120" ry="95" fill="url(#mb-light)"/>
         </svg>
       </div>
     </div>`;

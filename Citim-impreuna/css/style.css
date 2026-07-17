@@ -587,18 +587,34 @@ footer {
 }
 
 /* halou care se întinde în spatele întregului text, ca lumina din fascicul
-   să pară că îl cuprinde, nu doar cartea de dedesubt */
-.m-verse::before {
+   să pară că îl cuprinde în întregime, până la margini — două straturi:
+   unul larg și difuz care acoperă colțurile, unul strâns care intensifică
+   centrul. */
+.m-verse::before,
+.m-verse::after {
   content: "";
   position: absolute;
-  inset: -30px -10% -10px;
   z-index: -1;
-  background: radial-gradient(ellipse at 50% 55%,
-    rgba(255, 240, 190, 0.5) 0%,
-    rgba(255, 220, 130, 0.22) 45%,
-    transparent 75%);
-  filter: blur(4px);
   pointer-events: none;
+}
+
+.m-verse::before {
+  inset: -60px -18% -40px;
+  background: radial-gradient(ellipse at 50% 50%,
+    rgba(255, 244, 200, 0.45) 0%,
+    rgba(255, 228, 150, 0.28) 40%,
+    rgba(255, 220, 130, 0.14) 65%,
+    transparent 92%);
+  filter: blur(10px);
+}
+
+.m-verse::after {
+  inset: -20px -6% -6px;
+  background: radial-gradient(ellipse at 50% 50%,
+    rgba(255, 250, 220, 0.55) 0%,
+    rgba(255, 230, 160, 0.25) 55%,
+    transparent 88%);
+  filter: blur(2px);
 }
 
 .m-verse h2 {

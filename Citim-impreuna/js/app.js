@@ -142,25 +142,63 @@ function showMilestone(m) {
         <div class="m-beam"></div>
         <div class="m-glow"></div>
         ${sparks}
-        <svg class="m-book" viewBox="0 0 340 195" xmlns="http://www.w3.org/2000/svg">
+        <svg class="m-book" viewBox="0 0 400 230" xmlns="http://www.w3.org/2000/svg">
           <defs>
-            <radialGradient id="mb-light" cx="50%" cy="45%" r="55%">
-              <stop offset="0%" stop-color="#fffbe8"/>
-              <stop offset="35%" stop-color="#ffe9a8" stop-opacity="0.9"/>
+            <radialGradient id="mb-light" cx="50%" cy="42%" r="58%">
+              <stop offset="0%" stop-color="#fffdf3"/>
+              <stop offset="30%" stop-color="#ffefb8" stop-opacity="0.95"/>
               <stop offset="100%" stop-color="#ffce54" stop-opacity="0"/>
             </radialGradient>
+            <linearGradient id="mb-leather" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stop-color="#6b4526"/>
+              <stop offset="100%" stop-color="#3a2412"/>
+            </linearGradient>
+            <linearGradient id="mb-pageL" x1="0" y1="0" x2="1" y2="0">
+              <stop offset="0%" stop-color="#d8c69a"/>
+              <stop offset="100%" stop-color="#fdf8e8"/>
+            </linearGradient>
+            <linearGradient id="mb-pageR" x1="1" y1="0" x2="0" y2="0">
+              <stop offset="0%" stop-color="#d8c69a"/>
+              <stop offset="100%" stop-color="#fdf8e8"/>
+            </linearGradient>
           </defs>
-          <path d="M20,168 Q170,148 320,168 L320,184 Q170,198 20,184 Z" fill="#4a2f1a"/>
-          <path d="M30,160 Q170,142 310,160 L310,174 Q170,188 30,174 Z" fill="#e9d9b0"/>
-          <path d="M168,158 Q120,120 38,66 Q96,140 168,162 Z" fill="#e9d9b6"/>
-          <path d="M168,158 Q128,105 66,42 Q112,130 168,162 Z" fill="#f2e7ca"/>
-          <path d="M168,158 Q140,95 102,26 Q130,122 168,162 Z" fill="#f9f1dc"/>
-          <path d="M168,158 Q152,90 138,16 Q146,116 168,162 Z" fill="#fdf8ea"/>
-          <path d="M172,158 Q220,120 302,66 Q244,140 172,162 Z" fill="#e9d9b6"/>
-          <path d="M172,158 Q212,105 274,42 Q228,130 172,162 Z" fill="#f2e7ca"/>
-          <path d="M172,158 Q200,95 238,26 Q210,122 172,162 Z" fill="#f9f1dc"/>
-          <path d="M172,158 Q188,90 202,16 Q194,116 172,162 Z" fill="#fdf8ea"/>
-          <ellipse cx="170" cy="115" rx="95" ry="85" fill="url(#mb-light)"/>
+          <!-- coperta de piele, deschisă în formă de V, sub pagini -->
+          <path d="M14,196 Q200,150 386,196 L386,214 Q200,178 14,214 Z" fill="url(#mb-leather)"/>
+          <path d="M20,190 Q200,146 380,190 L380,198 Q200,158 20,198 Z" fill="#8a6339" opacity="0.55"/>
+          <!-- evantaiul de pagini, stânga: multe foi curbate, cu nuanțe alternante pentru adâncime -->
+          <g opacity="0.98">
+            <path d="M198,188 Q150,150 30,150 Q120,182 198,192 Z" fill="url(#mb-pageL)"/>
+            <path d="M198,186 Q152,138 40,120 Q128,172 198,190 Z" fill="#eee0bd"/>
+            <path d="M198,184 Q156,124 55,92 Q136,160 198,188 Z" fill="#f5ead0"/>
+            <path d="M198,182 Q160,110 72,66 Q144,148 198,186 Z" fill="#faf3de"/>
+            <path d="M198,180 Q164,96 92,44 Q150,136 198,184 Z" fill="#fdf9ec"/>
+            <path d="M198,178 Q168,84 114,26 Q156,124 198,182 Z" fill="#fffcf4"/>
+            <path d="M198,177 Q172,74 138,14 Q162,114 198,180 Z" fill="#fffefb"/>
+            <!-- linii subțiri de text pe câteva foi, ca hârtia tipărită -->
+            <g stroke="#b9a06a" stroke-width="0.7" opacity="0.5" fill="none">
+              <path d="M170,158 Q140,120 70,90"/>
+              <path d="M175,150 Q148,112 86,80"/>
+              <path d="M180,142 Q156,104 104,70"/>
+            </g>
+          </g>
+          <!-- evantaiul de pagini, dreapta — oglindit -->
+          <g opacity="0.98">
+            <path d="M202,188 Q250,150 370,150 Q280,182 202,192 Z" fill="url(#mb-pageR)"/>
+            <path d="M202,186 Q248,138 360,120 Q272,172 202,190 Z" fill="#eee0bd"/>
+            <path d="M202,184 Q244,124 345,92 Q264,160 202,188 Z" fill="#f5ead0"/>
+            <path d="M202,182 Q240,110 328,66 Q256,148 202,186 Z" fill="#faf3de"/>
+            <path d="M202,180 Q236,96 308,44 Q250,136 202,184 Z" fill="#fdf9ec"/>
+            <path d="M202,178 Q232,84 286,26 Q244,124 202,182 Z" fill="#fffcf4"/>
+            <path d="M202,177 Q228,74 262,14 Q238,114 202,180 Z" fill="#fffefb"/>
+            <g stroke="#b9a06a" stroke-width="0.7" opacity="0.5" fill="none">
+              <path d="M230,158 Q260,120 330,90"/>
+              <path d="M225,150 Q252,112 314,80"/>
+              <path d="M220,142 Q244,104 296,70"/>
+            </g>
+          </g>
+          <!-- cotorul cărții, ca despărțire vizuală între cele două jumătăți -->
+          <path d="M200,190 Q198,110 200,20 Q202,110 200,190 Z" fill="#6b4526" opacity="0.6"/>
+          <ellipse cx="200" cy="130" rx="115" ry="98" fill="url(#mb-light)"/>
         </svg>
       </div>
     </div>`;

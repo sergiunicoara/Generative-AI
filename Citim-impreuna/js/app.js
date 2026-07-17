@@ -165,36 +165,19 @@ function showMilestone(m) {
           <!-- coperta de piele, deschisă în formă de V, sub pagini -->
           <path d="M14,196 Q200,150 386,196 L386,214 Q200,178 14,214 Z" fill="url(#mb-leather)"/>
           <path d="M20,190 Q200,146 380,190 L380,198 Q200,158 20,198 Z" fill="#8a6339" opacity="0.55"/>
-          <!-- evantaiul de pagini, stânga: multe foi curbate, cu nuanțe alternante pentru adâncime -->
+          <!-- evantaiul de pagini, stânga: câteva foi curbate, cu nuanțe alternante pentru adâncime -->
           <g opacity="0.98">
             <path d="M198,188 Q150,150 30,150 Q120,182 198,192 Z" fill="url(#mb-pageL)"/>
-            <path d="M198,186 Q152,138 40,120 Q128,172 198,190 Z" fill="#eee0bd"/>
             <path d="M198,184 Q156,124 55,92 Q136,160 198,188 Z" fill="#f5ead0"/>
-            <path d="M198,182 Q160,110 72,66 Q144,148 198,186 Z" fill="#faf3de"/>
             <path d="M198,180 Q164,96 92,44 Q150,136 198,184 Z" fill="#fdf9ec"/>
-            <path d="M198,178 Q168,84 114,26 Q156,124 198,182 Z" fill="#fffcf4"/>
             <path d="M198,177 Q172,74 138,14 Q162,114 198,180 Z" fill="#fffefb"/>
-            <!-- linii subțiri de text pe câteva foi, ca hârtia tipărită -->
-            <g stroke="#b9a06a" stroke-width="0.7" opacity="0.5" fill="none">
-              <path d="M170,158 Q140,120 70,90"/>
-              <path d="M175,150 Q148,112 86,80"/>
-              <path d="M180,142 Q156,104 104,70"/>
-            </g>
           </g>
           <!-- evantaiul de pagini, dreapta — oglindit -->
           <g opacity="0.98">
             <path d="M202,188 Q250,150 370,150 Q280,182 202,192 Z" fill="url(#mb-pageR)"/>
-            <path d="M202,186 Q248,138 360,120 Q272,172 202,190 Z" fill="#eee0bd"/>
             <path d="M202,184 Q244,124 345,92 Q264,160 202,188 Z" fill="#f5ead0"/>
-            <path d="M202,182 Q240,110 328,66 Q256,148 202,186 Z" fill="#faf3de"/>
             <path d="M202,180 Q236,96 308,44 Q250,136 202,184 Z" fill="#fdf9ec"/>
-            <path d="M202,178 Q232,84 286,26 Q244,124 202,182 Z" fill="#fffcf4"/>
             <path d="M202,177 Q228,74 262,14 Q238,114 202,180 Z" fill="#fffefb"/>
-            <g stroke="#b9a06a" stroke-width="0.7" opacity="0.5" fill="none">
-              <path d="M230,158 Q260,120 330,90"/>
-              <path d="M225,150 Q252,112 314,80"/>
-              <path d="M220,142 Q244,104 296,70"/>
-            </g>
           </g>
           <!-- cotorul cărții, ca despărțire vizuală între cele două jumătăți -->
           <path d="M200,190 Q198,110 200,20 Q202,110 200,190 Z" fill="#6b4526" opacity="0.6"/>

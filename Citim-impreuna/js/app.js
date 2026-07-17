@@ -117,43 +117,52 @@ function updateScore(points) {
 
 // Ecran special la pragul de m×1000 puncte — scenă cinematică: o Biblie
 // deschisă cu foile în evantai, lumină care izbucnește în sus din mijlocul
-// ei, scântei care plutesc, iar versetul apare deasupra, plutind în lumină.
-// Cartea e SVG inline; restul e CSS (keyframes „m-*” în style.css).
+// ei, iar versetul apare deasupra, plutind în lumină. Cartea e SVG inline;
+// restul e CSS (keyframes „m-*” în style.css).
 function showMilestone(m) {
   const verse = MILESTONE_VERSES[(m - 1) % MILESTONE_VERSES.length];
   const overlay = document.createElement("div");
   overlay.className = "milestone-overlay";
-  // scântei cu poziții/ritmuri aleatoare, urcând din carte
-  const sparks = Array.from({ length: 20 }, () =>
-    `<span class="m-spark" style="left:${(30 + Math.random() * 40).toFixed(1)}%;` +
-    `animation-delay:${(0.9 + Math.random() * 3).toFixed(2)}s;` +
-    `animation-duration:${(2.2 + Math.random() * 2).toFixed(2)}s;` +
-    `font-size:${(8 + Math.random() * 12).toFixed(0)}px"></span>`
-  ).join("");
-  // Zeci de foi subțiri, curbate, în evantai (ca într-o carte reală deschisă
-  // și fotografiată din față) — generate, nu desenate manual una câte una,
-  // ca varietatea de unghi/lungime/nuanță să pară naturală, nu simetric-rigidă.
+  // Foi late, pline (nu linii subțiri), generate ca pene suprapuse ușor —
+  // fiecare e un contur închis cu muchie vizibilă, ca să se distingă clar
+  // paginile individuale, exact ca într-o carte reală fotografiată din față.
   const bookPages = (side) => {
-    const baseX = 200, baseY = 185;
+    const baseX = 200, baseY = 182;
+    const count = 11;
     let out = "";
-    const count = 22;
     for (let i = 0; i < count; i++) {
-      const tt = i / (count - 1); // 0 = lângă cotor, 1 = cea mai exterioară
-      const angle = side * (10 + tt * 78); // grade față de verticală
-      const len = 118 + Math.sin(tt * Math.PI) * 30 + (i % 3) * 4;
-      const rad = (angle * Math.PI) / 180;
-      const tipX = baseX + Math.sin(rad) * len;
-      const tipY = baseY - Math.cos(rad) * len * 0.92;
-      // curbura fiecărei foi înspre exterior, ca petalele unei flori
-      const curveRad = ((angle * 0.55) * Math.PI) / 180;
-      const cx = baseX + Math.sin(curveRad) * len * 0.62;
-      const cy = baseY - Math.cos(curveRad) * len * 0.7;
-      const hue = tt < 0.5 ? "#e8b25a" : tt < 0.8 ? "#f7ddaa" : "#fffbf0";
-      const width = 2.6 - tt * 1.4;
-      const glow = tt > 0.75 ? ` filter="url(#mb-tipglow)"` : "";
-      out += `<path d="M${baseX},${baseY} Q${cx.toFixed(1)},${cy.toFixed(1)} ${tipX.toFixed(1)},${tipY.toFixed(1)}" stroke="${hue}" stroke-width="${width.toFixed(2)}" stroke-linecap="round" fill="none" opacity="${(0.55 + tt * 0.45).toFixed(2)}"${glow}/>`;
+      const t0 = i / count;
+      const t1 = (i + 1) / count;
+      const tt = (t0 + t1) / 2;
+      const a0 = side * (6 + t0 * 80);
+      const a1 = side * (6 + t1 * 80);
+      const len = 112 + Math.sin(tt * Math.PI) * 28;
+      const rad0 = (a0 * Math.PI) / 180;
+      const rad1 = (a1 * Math.PI) / 180;
+      const tip0x = baseX + Math.sin(rad0) * len;
+      const tip0y = baseY - Math.cos(rad0) * len * 0.92;
+      const tip1x = baseX + Math.sin(rad1) * len * 0.88;
+      const tip1y = baseY - Math.cos(rad1) * len * 0.88 * 0.92;
+      const midRad = (((a0 + a1) / 2) * Math.PI) / 180;
+      const cx = baseX + Math.sin(midRad) * len * 1.05;
+      const cy = baseY - Math.cos(midRad) * len * 0.98;
+      const shade = tt < 0.3 ? "#c7a26c" : tt < 0.55 ? "#e3c286" : tt < 0.78 ? "#f6e2b4" : "#fff8e4";
+      out += `<path d="M${baseX},${baseY} L${tip0x.toFixed(1)},${tip0y.toFixed(1)} Q${cx.toFixed(1)},${cy.toFixed(1)} ${tip1x.toFixed(1)},${tip1y.toFixed(1)} Z" fill="${shade}" stroke="#8a6339" stroke-width="0.5" opacity="0.97"/>`;
     }
     return out;
+  };
+  // blocul gros de pagini de la baza cărții (foile strânse, văzute din față,
+  // înainte să se deschidă în evantai) — cu linii subțiri de separare, ca
+  // să se vadă imediat că e o carte, nu doar o explozie de raze.
+  const pageStack = () => {
+    let lines = "";
+    for (let i = 0; i < 7; i++) {
+      const y = 176 - i * 2.6;
+      lines += `<path d="M${34 + i * 2},${y} Q200,${y - 20} ${366 - i * 2},${y}" fill="none" stroke="#c9ac78" stroke-width="0.6" opacity="0.5"/>`;
+    }
+    return `
+      <path d="M20,178 Q200,150 380,178 L380,196 Q200,168 20,196 Z" fill="#e9d6a8"/>
+      ${lines}`;
   };
   overlay.innerHTML = `
     <div class="milestone-scene">
@@ -166,32 +175,26 @@ function showMilestone(m) {
       <div class="m-stage">
         <div class="m-beam"></div>
         <div class="m-glow"></div>
-        ${sparks}
         <svg class="m-book" viewBox="0 0 400 230" xmlns="http://www.w3.org/2000/svg">
           <defs>
-            <radialGradient id="mb-light" cx="50%" cy="42%" r="58%">
+            <radialGradient id="mb-light" cx="50%" cy="40%" r="58%">
               <stop offset="0%" stop-color="#fffdf3"/>
               <stop offset="30%" stop-color="#ffefb8" stop-opacity="0.95"/>
               <stop offset="100%" stop-color="#ffce54" stop-opacity="0"/>
             </radialGradient>
             <linearGradient id="mb-leather" x1="0" y1="0" x2="0" y2="1">
               <stop offset="0%" stop-color="#6b4526"/>
-              <stop offset="100%" stop-color="#3a2412"/>
+              <stop offset="100%" stop-color="#2e1b0d"/>
             </linearGradient>
-            <linearGradient id="mb-pageL" x1="0" y1="0" x2="1" y2="0">
-              <stop offset="0%" stop-color="#d8c69a"/>
-              <stop offset="100%" stop-color="#fdf8e8"/>
-            </linearGradient>
-            <filter id="mb-tipglow" x="-60%" y="-60%" width="220%" height="220%">
-              <feGaussianBlur stdDeviation="1.1"/>
-            </filter>
           </defs>
-          <!-- coperta de piele, deschisă în formă de V, sub pagini -->
-          <path d="M14,196 Q200,150 386,196 L386,214 Q200,178 14,214 Z" fill="url(#mb-leather)"/>
-          <path d="M20,190 Q200,146 380,190 L380,198 Q200,158 20,198 Z" fill="#8a6339" opacity="0.55"/>
-          <!-- zeci de foi subțiri, curbate ca petalele, generate pentru varietate naturală -->
+          <!-- coperta de piele, deschisă în formă de V, groasă și vizibilă sub pagini -->
+          <path d="M8,196 Q200,146 392,196 L392,222 Q200,182 8,222 Z" fill="url(#mb-leather)"/>
+          <path d="M14,192 Q200,144 386,192 L386,202 Q200,160 14,202 Z" fill="#8a6339" opacity="0.6"/>
+          <!-- blocul de pagini strânse, la baza cărții — arată clar că e o carte -->
+          ${pageStack()}
+          <!-- evantaiul de foi late, pline, cu muchii vizibile -->
           <g>${bookPages(-1)}${bookPages(1)}</g>
-          <ellipse cx="200" cy="150" rx="120" ry="95" fill="url(#mb-light)"/>
+          <ellipse cx="200" cy="145" rx="120" ry="92" fill="url(#mb-light)"/>
         </svg>
       </div>
     </div>`;

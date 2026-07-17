@@ -115,22 +115,35 @@ function updateScore(points) {
   }
 }
 
-// Ecran special la pragul de m×1000 puncte: verset + artificii.
+// Ecran special la pragul de m×1000 puncte — o mică scenă cinematică:
+// Biblia apare și se deschide, lumina izbucnește din ea (raze rotitoare),
+// apoi versetul se desfășoară pe un pergament. Totul e CSS (vezi keyframes
+// „m-*” în style.css); artificiile pornesc sincron cu explozia de lumină.
 function showMilestone(m) {
   const verse = MILESTONE_VERSES[(m - 1) % MILESTONE_VERSES.length];
   const overlay = document.createElement("div");
   overlay.className = "milestone-overlay";
   overlay.innerHTML = `
-    <div class="milestone-card">
-      <div class="milestone-stars">⭐</div>
-      <h2>${m * MILESTONE_STEP} de puncte!</h2>
-      <p class="milestone-verse">„${verse.text}”</p>
-      <p class="milestone-ref">${verse.ref}</p>
-      <button class="btn primary">Continuă →</button>
+    <div class="milestone-scene">
+      <div class="m-glow"></div>
+      <div class="m-rays"></div>
+      <div class="m-book">
+        <div class="m-pages"></div>
+        <div class="m-cover"><span class="m-cross">✝</span></div>
+      </div>
+      <div class="m-scroll">
+        <div class="m-scroll-content">
+          <h2>⭐ ${m * MILESTONE_STEP} de puncte!</h2>
+          <p class="milestone-verse">„${verse.text}”</p>
+          <p class="milestone-ref">${verse.ref}</p>
+          <button class="btn primary">Continuă →</button>
+        </div>
+      </div>
     </div>`;
   overlay.querySelector("button").addEventListener("click", () => overlay.remove());
   document.body.appendChild(overlay);
-  launchCelebration("fireworks");
+  // artificiile explodează exact când lumina iese din Biblie
+  setTimeout(() => launchCelebration("fireworks"), 1100);
 }
 
 // Publică scorul curent în tabelul agregat `scores` (un rând per utilizator),

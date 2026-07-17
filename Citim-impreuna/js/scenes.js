@@ -742,7 +742,13 @@ const SCENES = [
     id: 'victorie',
     keywords: ['biruință','slavă','laudă','izbăvit','izbăvire','triumf','Goliat','înfrânt','bucurie','cântat'],
     init() {
-      return { confetti: Array.from({length:30},()=>({x:rnd(0,1),period:rnd(3000,6000),off:rnd(0,6000),r:rnd(3,6),col:pick(['#FFD54F','#FF7043','#4FC3F7','#AED581','#F06292','#CE93D8'])})) };
+      return {
+        confetti: Array.from({length:30},()=>({x:rnd(0,1),period:rnd(3000,6000),off:rnd(0,6000),r:rnd(3,6),col:pick(['#FFD54F','#FF7043','#4FC3F7','#AED581','#F06292','#CE93D8'])})),
+        // culorile florilor se aleg o singură dată aici, nu în draw() (care rulează
+        // la 60fps) — altfel fiecare cadru re-alegea culoarea și florile păreau
+        // că clipesc/își schimbă culoarea.
+        flowerCols: Array.from({length:6},()=>pick(['#FF6B9D','#FFCA28','#7C4DFF','#FF7043'])),
+      };
     },
     draw(ctx, w, h, age, s) {
       const t = age / 1000;
@@ -759,7 +765,7 @@ const SCENES = [
       hillBand(ctx,w,h,h*.7,h*.05,1.6,1,'#A5D6A7');
       hillBand(ctx,w,h,h*.84,h*.04,2.2,3,'#81C784');
       // flori
-      for(let i=0;i<6;i++) flower(ctx,w*(.06+i*.18),h*.88,16,pick(['#FF6B9D','#FFCA28','#7C4DFF','#FF7043']));
+      for(let i=0;i<6;i++) flower(ctx,w*(.06+i*.18),h*.88,16,s.flowerCols[i]);
       // învingătorul
       const vx=w/2, vy=h*.72;
       figure(ctx,vx,vy,90,'#1565C0','#FFCC80');

@@ -764,39 +764,59 @@ function launchCelebration(kind) {
   let pieces = [];
 
   if (kind === "confetti") {
-    pieces = Array.from({ length: 90 }, () => ({
+    // ploaie de sus + două „tunuri" din colțurile de jos, trase în arc
+    pieces = Array.from({ length: 110 }, () => ({
       x: Math.random() * W,
       y: -20 - Math.random() * H * 0.4,
-      w: 6 + Math.random() * 6,
-      h: 8 + Math.random() * 8,
+      w: 7 + Math.random() * 7,
+      h: 9 + Math.random() * 9,
       color: fxColor(),
-      vy: 2.5 + Math.random() * 3,
+      vy: 2.5 + Math.random() * 3.5,
       vx: -1.5 + Math.random() * 3,
       rot: Math.random() * Math.PI,
-      vrot: -0.1 + Math.random() * 0.2,
+      vrot: -0.12 + Math.random() * 0.24,
     }));
+    for (const side of [-1, 1]) {
+      for (let i = 0; i < 45; i++) {
+        pieces.push({
+          x: side < 0 ? -10 : W + 10,
+          y: H * (0.75 + Math.random() * 0.2),
+          w: 7 + Math.random() * 7,
+          h: 9 + Math.random() * 9,
+          color: fxColor(),
+          // spre interior și în sus, cu gravitație → arc de tun de confetti
+          vx: -side * (4 + Math.random() * 7),
+          vy: -(7 + Math.random() * 6),
+          rot: Math.random() * Math.PI,
+          vrot: -0.2 + Math.random() * 0.4,
+          gravity: 0.22,
+        });
+      }
+    }
   } else if (kind === "fireworks") {
-    // 4-5 explozii, decalate în timp, fiecare cu scânteile ei radiale
-    const bursts = 4 + Math.floor(Math.random() * 2);
+    // 6-7 explozii mari, decalate, cu dâre luminoase și licărire
+    const bursts = 6 + Math.floor(Math.random() * 2);
     for (let b = 0; b < bursts; b++) {
-      const cx = W * (0.15 + Math.random() * 0.7);
-      const cy = H * (0.15 + Math.random() * 0.45);
+      const cx = W * (0.12 + Math.random() * 0.76);
+      const cy = H * (0.12 + Math.random() * 0.5);
       const color = fxColor();
-      const delay = b * 380;
-      for (let i = 0; i < 36; i++) {
-        const a = (Math.PI * 2 * i) / 36 + Math.random() * 0.15;
-        const speed = 2 + Math.random() * 3.5;
+      const delay = b * 340;
+      const sparks = 48;
+      for (let i = 0; i < sparks; i++) {
+        const a = (Math.PI * 2 * i) / sparks + Math.random() * 0.12;
+        const speed = 2.5 + Math.random() * 4.5;
         pieces.push({
           x: cx, y: cy, color, delay,
           vx: Math.cos(a) * speed,
           vy: Math.sin(a) * speed,
-          r: 2 + Math.random() * 2,
-          life: 900 + Math.random() * 500,
+          r: 2.2 + Math.random() * 2.4,
+          life: 1100 + Math.random() * 600,
+          tw: Math.random() * Math.PI * 2,
         });
       }
     }
   } else if (kind === "bubbles") {
-    pieces = Array.from({ length: 45 }, () => ({
+    pieces = Array.from({ length: 60 }, () => ({
       x: Math.random() * W,
       y: H + 20 + Math.random() * H * 0.5,
       r: 8 + Math.random() * 18,
@@ -819,10 +839,10 @@ function launchCelebration(kind) {
     }));
   } else {
     // stars: stele aurii care cad rotindu-se, cu licărire
-    pieces = Array.from({ length: 50 }, () => ({
+    pieces = Array.from({ length: 70 }, () => ({
       x: Math.random() * W,
       y: -20 - Math.random() * H * 0.5,
-      r: 6 + Math.random() * 8,
+      r: 7 + Math.random() * 9,
       color: Math.random() < 0.7 ? "#f0b429" : fxColor(),
       vy: 1.5 + Math.random() * 2.5,
       vx: -0.8 + Math.random() * 1.6,
@@ -832,13 +852,28 @@ function launchCelebration(kind) {
     }));
   }
 
+  // Dâre luminoase: în loc de curățare completă, cadrul vechi doar pălește —
+  // scânteile lasă urme, ca artificiile adevărate. Baloanele nu (s-ar mânji).
+  const FADE = { confetti: 0.32, fireworks: 0.14, bubbles: 0.3, stars: 0.22, balloons: 1 }[kind];
+  function fadeFrame() {
+    if (FADE >= 1) {
+      ctx.clearRect(0, 0, W, H);
+    } else {
+      ctx.globalCompositeOperation = "destination-out";
+      ctx.fillStyle = `rgba(0,0,0,${FADE})`;
+      ctx.fillRect(0, 0, W, H);
+      ctx.globalCompositeOperation = "source-over";
+    }
+  }
+
   const start = performance.now();
   function frame(now) {
     const t = now - start;
-    ctx.clearRect(0, 0, W, H);
+    fadeFrame();
     for (const p of pieces) {
       if (kind === "confetti") {
         p.x += p.vx; p.y += p.vy; p.rot += p.vrot;
+        if (p.gravity) p.vy += p.gravity;
         ctx.save();
         ctx.translate(p.x, p.y);
         ctx.rotate(p.rot);
@@ -848,23 +883,31 @@ function launchCelebration(kind) {
       } else if (kind === "fireworks") {
         const age = t - p.delay;
         if (age < 0 || age > p.life) continue;
-        p.x += p.vx; p.y += p.vy; p.vy += 0.045;
-        ctx.globalAlpha = 1 - age / p.life;
+        p.x += p.vx; p.y += p.vy; p.vy += 0.05;
+        p.tw += 0.35;
+        // licărire + halou luminos în jurul fiecărei scântei
+        ctx.globalAlpha = (1 - age / p.life) * (0.7 + Math.sin(p.tw) * 0.3);
+        ctx.shadowBlur = 14;
+        ctx.shadowColor = p.color;
         ctx.fillStyle = p.color;
         ctx.beginPath();
         ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
         ctx.fill();
+        ctx.shadowBlur = 0;
         ctx.globalAlpha = 1;
       } else if (kind === "bubbles") {
         p.y += p.vy;
         p.wob += p.wobSpeed;
         const x = p.x + Math.sin(p.wob) * 12;
-        ctx.globalAlpha = 0.55;
+        ctx.globalAlpha = 0.65;
+        ctx.shadowBlur = 10;
+        ctx.shadowColor = p.color;
         ctx.strokeStyle = p.color;
-        ctx.lineWidth = 2.5;
+        ctx.lineWidth = 3;
         ctx.beginPath();
         ctx.arc(x, p.y, p.r, 0, Math.PI * 2);
         ctx.stroke();
+        ctx.shadowBlur = 0;
         // mic reflex de lumină, ca o bulă adevărată
         ctx.beginPath();
         ctx.arc(x - p.r * 0.35, p.y - p.r * 0.35, p.r * 0.2, 0, Math.PI * 2);
@@ -910,6 +953,8 @@ function launchCelebration(kind) {
         ctx.translate(p.x, p.y);
         ctx.rotate(p.rot);
         ctx.globalAlpha = 0.65 + Math.sin(p.tw) * 0.35;
+        ctx.shadowBlur = 12;
+        ctx.shadowColor = p.color;
         ctx.fillStyle = p.color;
         drawStar(ctx, p.r);
         ctx.restore();
@@ -917,7 +962,7 @@ function launchCelebration(kind) {
       }
     }
     // baloanele urcă lin, au nevoie de mai mult timp să traverseze ecranul
-    if (t < (kind === "balloons" ? 6000 : 2600)) {
+    if (t < (kind === "balloons" ? 6000 : 3200)) {
       requestAnimationFrame(frame);
     } else {
       ctx.clearRect(0, 0, W, H);

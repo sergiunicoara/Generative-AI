@@ -743,7 +743,9 @@ const SCENES = [
     keywords: ['biruință','slavă','laudă','izbăvit','izbăvire','triumf','Goliat','înfrânt','bucurie','cântat'],
     init() {
       return {
-        confetti: Array.from({length:30},()=>({x:rnd(0,1),period:rnd(3000,6000),off:rnd(0,6000),r:rnd(3,6),col:pick(['#FFD54F','#FF7043','#4FC3F7','#AED581','#F06292','#CE93D8'])})),
+        // câțiva fluturași care plutesc lin prin scenă, nu stele care cad
+        // (o scenă de zi senină, cu soare, nu are ce căuta cu stele căzătoare)
+        bflies: Array.from({length:4},()=>({x:rnd(.1,.9),y:rnd(.15,.5),ph:rnd(0,6),sp:rnd(.15,.3),col:pick(['#FFD54F','#FF7043','#4FC3F7','#AED581','#F06292','#CE93D8'])})),
         // culorile florilor se aleg o singură dată aici, nu în draw() (care rulează
         // la 60fps) — altfel fiecare cadru re-alegea culoarea și florile păreau
         // că clipesc/își schimbă culoarea.
@@ -760,8 +762,12 @@ const SCENES = [
       ctx.save(); ctx.translate(w/2,h*.4); ctx.rotate(t*.1);
       for(let i=0;i<12;i++){ ctx.rotate(Math.PI/6); ctx.globalAlpha=.12; ctx.fillStyle='#FFF59D'; ctx.beginPath(); ctx.moveTo(0,0); ctx.lineTo(-w*.06,-h); ctx.lineTo(w*.06,-h); ctx.closePath(); ctx.fill(); }
       ctx.restore();
-      // confetti / stele căzând
-      s.confetti.forEach(c=>{ const p=((age+c.off)%c.period)/c.period; star5(ctx,w*c.x+Math.sin(p*7)*20,h*p,c.r,c.col,.85*(1-Math.abs(p-.5)*.8)); });
+      // fluturași care plutesc lin, cu traiectorie ondulată, lentă
+      s.bflies.forEach(b=>{
+        const bx=w*b.x+Math.sin(t*b.sp+b.ph)*w*.12;
+        const by=h*b.y+Math.cos(t*b.sp*.8+b.ph)*h*.06;
+        butterfly(ctx,bx,by,9,b.col,t,b.ph);
+      });
       hillBand(ctx,w,h,h*.7,h*.05,1.6,1,'#A5D6A7');
       hillBand(ctx,w,h,h*.84,h*.04,2.2,3,'#81C784');
       // flori

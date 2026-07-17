@@ -115,29 +115,53 @@ function updateScore(points) {
   }
 }
 
-// Ecran special la pragul de m×1000 puncte — o mică scenă cinematică:
-// Biblia apare și se deschide, lumina izbucnește din ea (raze rotitoare),
-// apoi versetul se desfășoară pe un pergament. Totul e CSS (vezi keyframes
-// „m-*” în style.css); artificiile pornesc sincron cu explozia de lumină.
+// Ecran special la pragul de m×1000 puncte — scenă cinematică: o Biblie
+// deschisă cu foile în evantai, lumină care izbucnește în sus din mijlocul
+// ei, scântei care plutesc, iar versetul apare deasupra, plutind în lumină.
+// Cartea e SVG inline; restul e CSS (keyframes „m-*” în style.css).
 function showMilestone(m) {
   const verse = MILESTONE_VERSES[(m - 1) % MILESTONE_VERSES.length];
   const overlay = document.createElement("div");
   overlay.className = "milestone-overlay";
+  // scântei cu poziții/ritmuri aleatoare, urcând din carte
+  const sparks = Array.from({ length: 20 }, () =>
+    `<span class="m-spark" style="left:${(30 + Math.random() * 40).toFixed(1)}%;` +
+    `animation-delay:${(0.9 + Math.random() * 3).toFixed(2)}s;` +
+    `animation-duration:${(2.2 + Math.random() * 2).toFixed(2)}s;` +
+    `font-size:${(8 + Math.random() * 12).toFixed(0)}px"></span>`
+  ).join("");
   overlay.innerHTML = `
     <div class="milestone-scene">
-      <div class="m-glow"></div>
-      <div class="m-rays"></div>
-      <div class="m-book">
-        <div class="m-pages"></div>
-        <div class="m-cover"><span class="m-cross">✝</span></div>
+      <div class="m-verse">
+        <h2>⭐ ${m * MILESTONE_STEP} de puncte!</h2>
+        <p class="milestone-verse">„${verse.text}”</p>
+        <p class="milestone-ref">${verse.ref}</p>
+        <button class="btn primary">Continuă →</button>
       </div>
-      <div class="m-scroll">
-        <div class="m-scroll-content">
-          <h2>⭐ ${m * MILESTONE_STEP} de puncte!</h2>
-          <p class="milestone-verse">„${verse.text}”</p>
-          <p class="milestone-ref">${verse.ref}</p>
-          <button class="btn primary">Continuă →</button>
-        </div>
+      <div class="m-stage">
+        <div class="m-beam"></div>
+        <div class="m-glow"></div>
+        ${sparks}
+        <svg class="m-book" viewBox="0 0 340 195" xmlns="http://www.w3.org/2000/svg">
+          <defs>
+            <radialGradient id="mb-light" cx="50%" cy="45%" r="55%">
+              <stop offset="0%" stop-color="#fffbe8"/>
+              <stop offset="35%" stop-color="#ffe9a8" stop-opacity="0.9"/>
+              <stop offset="100%" stop-color="#ffce54" stop-opacity="0"/>
+            </radialGradient>
+          </defs>
+          <path d="M20,168 Q170,148 320,168 L320,184 Q170,198 20,184 Z" fill="#4a2f1a"/>
+          <path d="M30,160 Q170,142 310,160 L310,174 Q170,188 30,174 Z" fill="#e9d9b0"/>
+          <path d="M168,158 Q120,120 38,66 Q96,140 168,162 Z" fill="#e9d9b6"/>
+          <path d="M168,158 Q128,105 66,42 Q112,130 168,162 Z" fill="#f2e7ca"/>
+          <path d="M168,158 Q140,95 102,26 Q130,122 168,162 Z" fill="#f9f1dc"/>
+          <path d="M168,158 Q152,90 138,16 Q146,116 168,162 Z" fill="#fdf8ea"/>
+          <path d="M172,158 Q220,120 302,66 Q244,140 172,162 Z" fill="#e9d9b6"/>
+          <path d="M172,158 Q212,105 274,42 Q228,130 172,162 Z" fill="#f2e7ca"/>
+          <path d="M172,158 Q200,95 238,26 Q210,122 172,162 Z" fill="#f9f1dc"/>
+          <path d="M172,158 Q188,90 202,16 Q194,116 172,162 Z" fill="#fdf8ea"/>
+          <ellipse cx="170" cy="115" rx="95" ry="85" fill="url(#mb-light)"/>
+        </svg>
       </div>
     </div>`;
   overlay.querySelector("button").addEventListener("click", () => overlay.remove());

@@ -736,7 +736,7 @@ function buildMyStatsPanel(myEvents) {
 
 /* --- Sărbători pe canvas, fără dependențe: confetti, artificii, bule, stele --- */
 const FX_COLORS = ["#f0b429", "#4c3aa3", "#2e9e5b", "#d64545", "#3e9be0", "#e07be0"];
-const FX_KINDS = ["confetti", "fireworks", "bubbles", "stars"];
+const FX_KINDS = ["confetti", "fireworks", "bubbles", "stars", "balloons"];
 
 function fxColor() {
   return FX_COLORS[Math.floor(Math.random() * FX_COLORS.length)];
@@ -805,6 +805,18 @@ function launchCelebration(kind) {
       wob: Math.random() * Math.PI * 2,
       wobSpeed: 0.03 + Math.random() * 0.05,
     }));
+  } else if (kind === "balloons") {
+    // baloane cu aer cald: urcă lin de jos, legănându-se, cu coș și sfori
+    pieces = Array.from({ length: 12 }, () => ({
+      x: Math.random() * W,
+      y: H + 60 + Math.random() * H * 0.35,
+      r: 22 + Math.random() * 18,
+      color: fxColor(),
+      stripe: fxColor(),
+      vy: -(1.2 + Math.random() * 1.6),
+      wob: Math.random() * Math.PI * 2,
+      wobSpeed: 0.015 + Math.random() * 0.02,
+    }));
   } else {
     // stars: stele aurii care cad rotindu-se, cu licărire
     pieces = Array.from({ length: 50 }, () => ({
@@ -859,6 +871,39 @@ function launchCelebration(kind) {
         ctx.fillStyle = "#ffffff";
         ctx.fill();
         ctx.globalAlpha = 1;
+      } else if (kind === "balloons") {
+        p.y += p.vy;
+        p.wob += p.wobSpeed;
+        const x = p.x + Math.sin(p.wob) * 18;
+        const r = p.r;
+        // anvelopa (formă de picătură) cu o dungă verticală colorată
+        ctx.fillStyle = p.color;
+        ctx.beginPath();
+        ctx.arc(x, p.y, r, Math.PI * 0.85, Math.PI * 0.15, false);
+        ctx.quadraticCurveTo(x + r * 0.5, p.y + r * 0.9, x + r * 0.28, p.y + r * 1.15);
+        ctx.lineTo(x - r * 0.28, p.y + r * 1.15);
+        ctx.quadraticCurveTo(x - r * 0.5, p.y + r * 0.9, x - Math.cos(Math.PI * 0.15) * r, p.y + Math.sin(Math.PI * 0.15) * r);
+        ctx.closePath();
+        ctx.fill();
+        ctx.fillStyle = p.stripe;
+        ctx.beginPath();
+        ctx.ellipse(x, p.y, r * 0.3, r, 0, Math.PI, 0, false);
+        ctx.quadraticCurveTo(x + r * 0.15, p.y + r * 1.05, x + r * 0.1, p.y + r * 1.15);
+        ctx.lineTo(x - r * 0.1, p.y + r * 1.15);
+        ctx.quadraticCurveTo(x - r * 0.15, p.y + r * 1.05, x - r * 0.3, p.y);
+        ctx.closePath();
+        ctx.fill();
+        // sforile și coșul
+        ctx.strokeStyle = "#8a6b3f";
+        ctx.lineWidth = 1.5;
+        ctx.beginPath();
+        ctx.moveTo(x - r * 0.24, p.y + r * 1.15);
+        ctx.lineTo(x - r * 0.16, p.y + r * 1.5);
+        ctx.moveTo(x + r * 0.24, p.y + r * 1.15);
+        ctx.lineTo(x + r * 0.16, p.y + r * 1.5);
+        ctx.stroke();
+        ctx.fillStyle = "#a9793f";
+        ctx.fillRect(x - r * 0.2, p.y + r * 1.5, r * 0.4, r * 0.32);
       } else {
         p.x += p.vx; p.y += p.vy; p.rot += p.vrot; p.tw += 0.15;
         ctx.save();
@@ -871,7 +916,8 @@ function launchCelebration(kind) {
         ctx.globalAlpha = 1;
       }
     }
-    if (t < 2600) {
+    // baloanele urcă lin, au nevoie de mai mult timp să traverseze ecranul
+    if (t < (kind === "balloons" ? 6000 : 2600)) {
       requestAnimationFrame(frame);
     } else {
       ctx.clearRect(0, 0, W, H);

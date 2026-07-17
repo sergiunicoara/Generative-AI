@@ -9,6 +9,24 @@ const STORAGE_PROGRESS = "ci_progress";
 const STORAGE_USER = "ci_user";
 const STORAGE_CYCLE = "ci_cycle";
 
+// La fiecare prag de 1000 de puncte, un verset despre Cuvânt apare pe ecran.
+// Se arată în ordine (pragul N → versetul N), iar când lista se termină se
+// reia de la început. Indexul vine din scor, deci e identic pe orice dispozitiv.
+const MILESTONE_STEP = 1000;
+const MILESTONE_VERSES = [
+  { text: "Strâng Cuvântul Tău în inima mea, ca să nu păcătuiesc împotriva Ta!", ref: "Psalmul 119:11" },
+  { text: "Cuvântul Tău este o candelă pentru picioarele mele și o lumină pe cărarea mea.", ref: "Psalmul 119:105" },
+  { text: "Cartea aceasta a legii să nu se depărteze de gura ta; cugetă asupra ei zi și noapte, căutând să faci tot ce este scris în ea, căci atunci vei izbândi în toate lucrările tale și atunci vei lucra cu înțelepciune.", ref: "Iosua 1:8" },
+  { text: "Fiți împlinitori ai Cuvântului, nu numai ascultători, înșelându-vă singuri.", ref: "Iacov 1:22" },
+  { text: "Frica de Domnul este curată și ține pe vecie; judecățile Domnului sunt adevărate, toate sunt drepte. Ele sunt mai de preț decât aurul, decât mult aur curat.", ref: "Psalmul 19:9-10a" },
+  { text: "Căci sfatul este o candelă, învățătura este o lumină, iar îndemnul și mustrarea sunt calea vieții.", ref: "Proverbele 6:23" },
+  { text: "Ține sfaturile mele și vei trăi.", ref: "Proverbele 7:2" },
+  { text: "Cerul și pământul vor trece, dar cuvintele Mele nu vor trece.", ref: "Matei 24:35" },
+  { text: "Dacă rămâneți în Cuvântul Meu, atunci sunteți într-adevăr ucenicii Mei. Veți cunoaște adevărul, iar adevărul vă va face liberi.", ref: "Ioan 8:31b-32" },
+  { text: "Tu ești adăpostul și scutul meu; îmi pun speranța în Cuvântul Tău.", ref: "Psalmul 119:114" },
+  { text: "Căci Domnul dă înțelepciune; din gura Lui iese cunoștință și pricepere.", ref: "Proverbele 2:6" },
+];
+
 const totalPages = Math.ceil(VERSES.length / PAGE_SIZE);
 
 // Verset → indexul paginii pe care se află (pentru sincronizarea progresului
@@ -82,11 +100,37 @@ function shuffle(arr) {
 }
 
 function updateScore(points) {
+  const before = score;
   score += points;
   el.score.textContent = score;
   el.scoreChip.classList.add("bump");
   setTimeout(() => el.scoreChip.classList.remove("bump"), 200);
   save();
+  // Doar creșterile din joc declanșează pragul (nu sincronizarea din cloud,
+  // care setează scorul direct și ar putea sări peste mai multe praguri odată).
+  const m = Math.floor(score / MILESTONE_STEP);
+  if (m > Math.floor(before / MILESTONE_STEP)) {
+    // mică pauză, ca mesajul de pagină completată să apuce să se vadă întâi
+    setTimeout(() => showMilestone(m), 900);
+  }
+}
+
+// Ecran special la pragul de m×1000 puncte: verset + artificii.
+function showMilestone(m) {
+  const verse = MILESTONE_VERSES[(m - 1) % MILESTONE_VERSES.length];
+  const overlay = document.createElement("div");
+  overlay.className = "milestone-overlay";
+  overlay.innerHTML = `
+    <div class="milestone-card">
+      <div class="milestone-stars">⭐</div>
+      <h2>${m * MILESTONE_STEP} de puncte!</h2>
+      <p class="milestone-verse">„${verse.text}”</p>
+      <p class="milestone-ref">${verse.ref}</p>
+      <button class="btn primary">Continuă →</button>
+    </div>`;
+  overlay.querySelector("button").addEventListener("click", () => overlay.remove());
+  document.body.appendChild(overlay);
+  launchCelebration("fireworks");
 }
 
 // Publică scorul curent în tabelul agregat `scores` (un rând per utilizator),
@@ -287,7 +331,7 @@ function celebrate(bonus) {
     el.nextBtn.hidden = true;
     setTimeout(showFinal, 1600);
   }
-  launchConfetti();
+  launchCelebration();
 }
 
 function nextPage() {
@@ -690,45 +734,147 @@ function buildMyStatsPanel(myEvents) {
   return mine;
 }
 
-/* --- Confetti simplu pe canvas, fără dependențe --- */
-function launchConfetti() {
+/* --- Sărbători pe canvas, fără dependențe: confetti, artificii, bule, stele --- */
+const FX_COLORS = ["#f0b429", "#4c3aa3", "#2e9e5b", "#d64545", "#3e9be0", "#e07be0"];
+const FX_KINDS = ["confetti", "fireworks", "bubbles", "stars"];
+
+function fxColor() {
+  return FX_COLORS[Math.floor(Math.random() * FX_COLORS.length)];
+}
+
+function drawStar(ctx, r) {
+  ctx.beginPath();
+  for (let i = 0; i < 10; i++) {
+    const rad = i % 2 === 0 ? r : r * 0.45;
+    const a = (Math.PI / 5) * i - Math.PI / 2;
+    ctx.lineTo(Math.cos(a) * rad, Math.sin(a) * rad);
+  }
+  ctx.closePath();
+  ctx.fill();
+}
+
+// kind: unul din FX_KINDS sau omis = ales aleator, ca sărbătoarea să fie
+// mereu o mică surpriză. Durata ~2.5s, apoi canvas-ul se curăță singur.
+function launchCelebration(kind) {
+  kind = kind || FX_KINDS[Math.floor(Math.random() * FX_KINDS.length)];
   const canvas = document.getElementById("confetti");
   const ctx = canvas.getContext("2d");
-  canvas.width = window.innerWidth;
-  canvas.height = window.innerHeight;
+  const W = (canvas.width = window.innerWidth);
+  const H = (canvas.height = window.innerHeight);
+  let pieces = [];
 
-  const colors = ["#f0b429", "#4c3aa3", "#2e9e5b", "#d64545", "#3e9be0"];
-  const pieces = Array.from({ length: 90 }, () => ({
-    x: Math.random() * canvas.width,
-    y: -20 - Math.random() * canvas.height * 0.4,
-    w: 6 + Math.random() * 6,
-    h: 8 + Math.random() * 8,
-    color: colors[Math.floor(Math.random() * colors.length)],
-    vy: 2.5 + Math.random() * 3,
-    vx: -1.5 + Math.random() * 3,
-    rot: Math.random() * Math.PI,
-    vrot: -0.1 + Math.random() * 0.2,
-  }));
+  if (kind === "confetti") {
+    pieces = Array.from({ length: 90 }, () => ({
+      x: Math.random() * W,
+      y: -20 - Math.random() * H * 0.4,
+      w: 6 + Math.random() * 6,
+      h: 8 + Math.random() * 8,
+      color: fxColor(),
+      vy: 2.5 + Math.random() * 3,
+      vx: -1.5 + Math.random() * 3,
+      rot: Math.random() * Math.PI,
+      vrot: -0.1 + Math.random() * 0.2,
+    }));
+  } else if (kind === "fireworks") {
+    // 4-5 explozii, decalate în timp, fiecare cu scânteile ei radiale
+    const bursts = 4 + Math.floor(Math.random() * 2);
+    for (let b = 0; b < bursts; b++) {
+      const cx = W * (0.15 + Math.random() * 0.7);
+      const cy = H * (0.15 + Math.random() * 0.45);
+      const color = fxColor();
+      const delay = b * 380;
+      for (let i = 0; i < 36; i++) {
+        const a = (Math.PI * 2 * i) / 36 + Math.random() * 0.15;
+        const speed = 2 + Math.random() * 3.5;
+        pieces.push({
+          x: cx, y: cy, color, delay,
+          vx: Math.cos(a) * speed,
+          vy: Math.sin(a) * speed,
+          r: 2 + Math.random() * 2,
+          life: 900 + Math.random() * 500,
+        });
+      }
+    }
+  } else if (kind === "bubbles") {
+    pieces = Array.from({ length: 45 }, () => ({
+      x: Math.random() * W,
+      y: H + 20 + Math.random() * H * 0.5,
+      r: 8 + Math.random() * 18,
+      color: fxColor(),
+      vy: -(1.5 + Math.random() * 2.5),
+      wob: Math.random() * Math.PI * 2,
+      wobSpeed: 0.03 + Math.random() * 0.05,
+    }));
+  } else {
+    // stars: stele aurii care cad rotindu-se, cu licărire
+    pieces = Array.from({ length: 50 }, () => ({
+      x: Math.random() * W,
+      y: -20 - Math.random() * H * 0.5,
+      r: 6 + Math.random() * 8,
+      color: Math.random() < 0.7 ? "#f0b429" : fxColor(),
+      vy: 1.5 + Math.random() * 2.5,
+      vx: -0.8 + Math.random() * 1.6,
+      rot: Math.random() * Math.PI,
+      vrot: -0.06 + Math.random() * 0.12,
+      tw: Math.random() * Math.PI * 2,
+    }));
+  }
 
   const start = performance.now();
   function frame(now) {
     const t = now - start;
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.clearRect(0, 0, W, H);
     for (const p of pieces) {
-      p.x += p.vx;
-      p.y += p.vy;
-      p.rot += p.vrot;
-      ctx.save();
-      ctx.translate(p.x, p.y);
-      ctx.rotate(p.rot);
-      ctx.fillStyle = p.color;
-      ctx.fillRect(-p.w / 2, -p.h / 2, p.w, p.h);
-      ctx.restore();
+      if (kind === "confetti") {
+        p.x += p.vx; p.y += p.vy; p.rot += p.vrot;
+        ctx.save();
+        ctx.translate(p.x, p.y);
+        ctx.rotate(p.rot);
+        ctx.fillStyle = p.color;
+        ctx.fillRect(-p.w / 2, -p.h / 2, p.w, p.h);
+        ctx.restore();
+      } else if (kind === "fireworks") {
+        const age = t - p.delay;
+        if (age < 0 || age > p.life) continue;
+        p.x += p.vx; p.y += p.vy; p.vy += 0.045;
+        ctx.globalAlpha = 1 - age / p.life;
+        ctx.fillStyle = p.color;
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.globalAlpha = 1;
+      } else if (kind === "bubbles") {
+        p.y += p.vy;
+        p.wob += p.wobSpeed;
+        const x = p.x + Math.sin(p.wob) * 12;
+        ctx.globalAlpha = 0.55;
+        ctx.strokeStyle = p.color;
+        ctx.lineWidth = 2.5;
+        ctx.beginPath();
+        ctx.arc(x, p.y, p.r, 0, Math.PI * 2);
+        ctx.stroke();
+        // mic reflex de lumină, ca o bulă adevărată
+        ctx.beginPath();
+        ctx.arc(x - p.r * 0.35, p.y - p.r * 0.35, p.r * 0.2, 0, Math.PI * 2);
+        ctx.fillStyle = "#ffffff";
+        ctx.fill();
+        ctx.globalAlpha = 1;
+      } else {
+        p.x += p.vx; p.y += p.vy; p.rot += p.vrot; p.tw += 0.15;
+        ctx.save();
+        ctx.translate(p.x, p.y);
+        ctx.rotate(p.rot);
+        ctx.globalAlpha = 0.65 + Math.sin(p.tw) * 0.35;
+        ctx.fillStyle = p.color;
+        drawStar(ctx, p.r);
+        ctx.restore();
+        ctx.globalAlpha = 1;
+      }
     }
-    if (t < 2500) {
+    if (t < 2600) {
       requestAnimationFrame(frame);
     } else {
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      ctx.clearRect(0, 0, W, H);
     }
   }
   requestAnimationFrame(frame);

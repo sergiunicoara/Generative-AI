@@ -548,3 +548,63 @@ footer {
 .scene-bg.visible {
   opacity: 1;
 }
+
+/* --- Prag de 1000 de puncte: verset pe ecran --- */
+/* z-index 9: sub canvas-ul de artificii (10), ca scânteile să cadă peste card */
+.milestone-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(43, 36, 55, 0.72);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 9;
+  padding: 24px;
+  animation: milestone-fade 0.4s ease;
+}
+
+.milestone-card {
+  background: var(--card);
+  border-radius: 18px;
+  padding: 28px 24px;
+  max-width: 460px;
+  text-align: center;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.35);
+  border: 3px solid var(--gold);
+  animation: milestone-pop 0.5s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.milestone-stars {
+  font-size: 2.6rem;
+  line-height: 1;
+}
+
+.milestone-card h2 {
+  margin: 10px 0 14px;
+  color: var(--accent);
+  font-size: 1.4rem;
+}
+
+.milestone-verse {
+  font-size: 1.05rem;
+  line-height: 1.55;
+  font-style: italic;
+  color: var(--ink);
+  margin: 0 0 8px;
+}
+
+.milestone-ref {
+  font-weight: 700;
+  color: var(--gold);
+  margin: 0 0 18px;
+}
+
+@keyframes milestone-fade {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes milestone-pop {
+  from { transform: scale(0.7); opacity: 0; }
+  to { transform: scale(1); opacity: 1; }
+}

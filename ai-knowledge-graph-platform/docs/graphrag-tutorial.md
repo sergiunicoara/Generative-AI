@@ -295,6 +295,34 @@ methodology are reusable: the likely next step is **type-aware
 routing** — expand only for `multi_hop`/`contradiction` query types,
 skip it for `single_hop` — rather than an unconditional Stage 0.
 
+### 6.2 Post-synthesis claim verification (CoVe-style, disabled by default)
+
+`graphrag/retrieval/claim_verifier.py` — a Chain-of-Verification-style pass
+that re-checks each sentence of the synthesized answer against the
+retrieved context and strips claims it can't ground. Gated by
+`retrieval.claim_verification` (default `false`).
+
+**Re-confirmed via A/B** (same automotive golden set, `query_rewrite_enabled`
+held constant at `false`):
+
+| | Pass rate | Faithfulness |
+|---|---|---|
+| OFF (baseline) | 9/10 (90%) | **0.917** |
+| ON (claim verification) | 9/10 (90%) | **0.800** |
+
+Pass rate was unaffected, but faithfulness dropped 0.117 — the verifier
+strips correctly-grounded claims, not just hallucinated ones. Per-question:
+CON-03, NEG-01, and NEG-02 each lost ~0.5 faithfulness while only CON-02
+improved, concentrated on negative/contradiction answers where the
+strict `_ANSWER_PROMPT` grounding rules are already doing the real work.
+
+**Conclusion: a CoVe-style post-hoc verification layer is not worth
+building for this system.** This is the second independent measurement
+of the same failure mode (the original disable predates this re-test) —
+grounding belongs at generation time via prompt constraints, not as a
+verify-and-strip pass afterward. Not pursuing CoVe further unless paired
+with a materially more reliable verifier model than the current one.
+
 **Exposing graph features to ML models** (the JD's "AI Integration" line):
 the graph feeds the GNN adjacency + node features, the entity-resolution
 embedding comparisons, TransE link prediction, and the retrieval context

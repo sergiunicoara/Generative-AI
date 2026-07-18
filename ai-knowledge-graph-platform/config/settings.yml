@@ -79,7 +79,7 @@ retrieval:
   # ─────────────────────────────────────────────────────────────────────────
   agentic_fallback: true   # trigger iterative agent when hybrid answer is weak
   agentic_max_steps: 4     # max sub-searches before forced synthesis
-  claim_verification: false # post-synthesis grounding check — DISABLED: per-claim checks produce false negatives that strip valid grounded answers, hurting measured faithfulness. Re-enable only with a more reliable verifier model.
+  claim_verification: false # post-synthesis grounding check — DISABLED: re-confirmed via A/B (automotive golden set) that per-claim checks strip valid grounded claims, dropping faithfulness 0.917->0.800 (pass rate unchanged 9/10) despite a stricter answer prompt. Re-enable only with a more reliable verifier model.
 
 evaluation:
   ragas_metrics:

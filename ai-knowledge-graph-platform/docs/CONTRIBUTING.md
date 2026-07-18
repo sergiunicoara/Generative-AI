@@ -13,6 +13,9 @@ The existing records set the baseline:
 - [ADR-0001](adr/0001-property-graph-over-triple-store.md) — Why Neo4j over RDF triple stores
 - [ADR-0002](adr/0002-forward-chaining-over-backward-chaining.md) — Why materialised inference over query-time
 - [ADR-0003](adr/0003-bayesian-confidence-accumulation.md) — Why `1−(1−c₁)(1−c₂)` over last-write-wins
+- [ADR-0004](adr/0004-groq-over-gemini-for-text-generation.md) — Groq for text generation, OpenAI for embeddings
+- [ADR-0005](adr/0005-redis-as-cross-process-result-store.md) — Redis as cross-process result store
+- [ADR-0006](adr/0006-dual-llm-architecture.md) — Dual-LLM architecture: fast routing + quality synthesis
 
 ### When to write an ADR
 

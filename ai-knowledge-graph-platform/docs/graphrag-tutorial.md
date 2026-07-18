@@ -260,6 +260,41 @@ steps) when confidence is low; **global search** (map-reduce over community
 summaries) for corpus-wide thematic questions; **session context** (Redis)
 for multi-turn follow-ups.
 
+### 6.1 Query rewriting (Stage 0, disabled by default)
+
+`graphrag/retrieval/query_rewriter.py` — a fast 8B-model pass that expands
+the search query (acronym expansion, revision-phrasing normalization,
+1-2 synonym terms) before Stage 1. Wired into
+`HybridRetriever.retrieve_and_answer` immediately before the local/global
+search calls. Critically, it rewrites **only the string used for
+retrieval** — answer synthesis and RAGAS evaluation always use the
+original question, so grading is never against a paraphrase. Fails open:
+any error or malformed output falls back to the raw question.
+
+Gated by `retrieval.query_rewrite_enabled` in `config/settings.yml`
+(default `false`), because it was measured, not assumed:
+
+**A/B on the automotive golden set (10 questions, identical corpus/judge):**
+
+| | Pass rate | Faithfulness |
+|---|---|---|
+| Rewrite OFF (baseline) | **9/10 (90%)** | 0.917 |
+| Rewrite ON | 8/10 (80%) | **0.967** |
+
+Net effect was mixed at the per-question level, not just the aggregate:
+faithfulness rose because the expanded query improved grounding on a
+vague contradiction question (CON-02: 0.67 → 1.00), but pass rate fell
+because it broke an exact single-hop lookup (SH-02: PASS → FAIL) — the
+expanded query retrieved different chunks and missed the one carrying
+the required "1%" figure and its citation. Query expansion trades recall
+for precision, and single-hop factoid questions are precision-sensitive
+in a way multi-hop/contradiction questions aren't.
+
+Shipped disabled rather than reverted, since the module and the A/B
+methodology are reusable: the likely next step is **type-aware
+routing** — expand only for `multi_hop`/`contradiction` query types,
+skip it for `single_hop` — rather than an unconditional Stage 0.
+
 **Exposing graph features to ML models** (the JD's "AI Integration" line):
 the graph feeds the GNN adjacency + node features, the entity-resolution
 embedding comparisons, TransE link prediction, and the retrieval context

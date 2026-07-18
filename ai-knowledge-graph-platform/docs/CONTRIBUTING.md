@@ -10,9 +10,9 @@ extend the platform with new capabilities.
 Every non-trivial architectural decision is captured as an ADR in `docs/adr/`.
 The existing records set the baseline:
 
-- [ADR-0001](docs/adr/0001-property-graph-over-triple-store.md) — Why Neo4j over RDF triple stores
-- [ADR-0002](docs/adr/0002-forward-chaining-over-backward-chaining.md) — Why materialised inference over query-time
-- [ADR-0003](docs/adr/0003-bayesian-confidence-accumulation.md) — Why `1−(1−c₁)(1−c₂)` over last-write-wins
+- [ADR-0001](adr/0001-property-graph-over-triple-store.md) — Why Neo4j over RDF triple stores
+- [ADR-0002](adr/0002-forward-chaining-over-backward-chaining.md) — Why materialised inference over query-time
+- [ADR-0003](adr/0003-bayesian-confidence-accumulation.md) — Why `1−(1−c₁)(1−c₂)` over last-write-wins
 
 ### When to write an ADR
 
@@ -85,9 +85,9 @@ Before marking a PR ready for review:
 | Type | Location |
 |---|---|
 | New graph operation (persist, query, reason) | `graphrag/graph/` |
-| New retrieval stage | `graphrag/retrieval/` |
+| New retrieval stage | `graphrag/retrieval/` — wire in `hybrid_retriever.py`; add config flag to `settings.yml` |
 | New ingestion step | `graphrag/ingestion/` |
-| New API endpoint(s) | `graphrag/api/routes/` |
+| New API endpoint(s) | `api/routes/` |
 | New CLI script | `scripts/` |
 | New unit tests | `tests/unit/test_<feature>.py` |
 

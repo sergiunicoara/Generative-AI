@@ -15,6 +15,7 @@ from graphrag.retrieval.global_search import GlobalSearch
 from graphrag.retrieval.context_builder import ContextBuilder
 from graphrag.retrieval.agentic_retriever import AgenticRetriever, _is_low_confidence
 from graphrag.retrieval.claim_verifier import ClaimVerifier
+from graphrag.retrieval.query_rewriter import QueryRewriter
 from graphrag.retrieval.session_context import get_session_context
 from graphrag.core.llm_utils import safe_response_text
 
@@ -72,6 +73,7 @@ class HybridRetriever:
             max_steps=self._cfg.get("agentic_max_steps", 4)
         )
         self._verifier = ClaimVerifier()
+        self._rewriter = QueryRewriter()
         self._use_session_ctx = self._cfg.get("session_context_enabled", True)
         self._session_ctx = get_session_context() if self._use_session_ctx else None
 
@@ -95,11 +97,21 @@ class HybridRetriever:
         local_results = {}
         global_results = {}
 
+        # ── Stage 1: query rewrite ─────────────────────────────────────────────
+        # Expand/normalize the query for retrieval only. The original `question`
+        # is kept for answer synthesis and evaluation — we rewrite what we search
+        # with, never what we answer or grade against. Fails open to `question`.
+        search_query = question
+        if self._cfg.get("query_rewrite_enabled", True):
+            search_query = await self._rewriter.rewrite(question, tenant=tenant)
+            if search_query != question:
+                await _step(f"📝 Query expanded → {search_query[:60]}")
+
         if mode in ("local", "hybrid"):
             await _step("🔍 BM25 + vector search in graph...")
             await _step("🕸️ GNN scoring — 2-hop traversal...")
             local_results = await self._local.search(
-                question,
+                search_query,
                 session_id=session_id,
                 tenant=tenant,
             )
@@ -108,7 +120,7 @@ class HybridRetriever:
 
         if mode in ("global", "hybrid"):
             await _step("🕸️ Graph expansion (Leiden communities)...")
-            global_results = await self._global.search(question, tenant=tenant)
+            global_results = await self._global.search(search_query, tenant=tenant)
 
         await _step("✍️ Synthesising answer with LLM...")
         context, citations = self._context_builder.build(

@@ -13,6 +13,7 @@ from api.routes.kg import (
     inference,
     knowledge,
     pagerank,
+    review_queue,
 )
 
 router = APIRouter()
@@ -25,3 +26,4 @@ router.include_router(health.router)
 router.include_router(inference.router)
 router.include_router(knowledge.router)
 router.include_router(pagerank.router)
+router.include_router(review_queue.router)

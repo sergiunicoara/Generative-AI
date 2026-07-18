@@ -19,6 +19,7 @@ import structlog
 from graphrag.core.config import get_settings
 from graphrag.core.models import Chunk, Document, Entity, Relation
 from graphrag.graph.alias_registry import (
+    AmbiguousMatch,
     get_alias_registry,
     _normalize as _alias_normalize,
     _normalize_ro as _alias_normalize_ro,
@@ -33,6 +34,7 @@ from graphrag.graph.ingestion_validator import IngestionValidator
 from graphrag.graph.neo4j_client import get_neo4j
 from graphrag.graph.ontology_registry import get_ontology_registry
 from graphrag.graph.quarantine import QuarantineService
+from graphrag.graph.review_queue import ReviewQueueService
 
 log = structlog.get_logger(__name__)
 
@@ -44,12 +46,36 @@ class GraphWriter:
         self._validator              = IngestionValidator(self._neo4j)
         self._cycle_detector         = CycleDetector(self._neo4j)
         self._quarantine             = QuarantineService(self._neo4j)
+        self._review_queue           = ReviewQueueService(self._neo4j)
         self._contradiction          = ContradictionDetector(self._neo4j)
         self._ontology               = get_ontology_registry(self._neo4j)
         self._changed_by             = changed_by
         self._registry_loaded_tenants: set[str] = set()   # per-tenant load tracking
         self._ontology_loaded        = False
         self._cfg                    = get_settings()
+
+    async def _enqueue_safe(
+        self,
+        entity: "Entity",
+        match: "AmbiguousMatch",
+        chunk: "Chunk",
+        tenant: str,
+    ) -> None:
+        """Enqueue an ambiguous match for human review — fails open on any error."""
+        try:
+            await self._review_queue.enqueue(
+                raw_name=entity.name,
+                raw_type=entity.type,
+                candidate_name=match.candidate[0],
+                candidate_type=match.candidate[1],
+                score=match.score,
+                match_type=match.match_type,
+                source_doc=chunk.document_id or "",
+                tenant=tenant,
+            )
+        except Exception as exc:
+            log.warning("graph_writer.review_queue_enqueue_failed", error=str(exc),
+                        raw=entity.name, candidate=match.candidate[0])
 
     def _get_registry(self, tenant: str):
         """Return the tenant-scoped alias registry (cached pool)."""
@@ -145,6 +171,11 @@ class GraphWriter:
 
             # 1. Alias resolution — name-based
             canonical = registry.resolve(entity.name)
+            # Ambiguous band (fuzzy 70-84) — queue for human review, fail open
+            if isinstance(canonical, AmbiguousMatch):
+                if self._cfg.ingestion.get("review_queue_enabled", True):
+                    await self._enqueue_safe(entity, canonical, chunk, tenant)
+                canonical = None
             if canonical and (canonical[0] != entity.name or canonical[1] != entity.type):
                 log.info(
                     "graph_writer.alias_resolved",
@@ -192,6 +223,26 @@ class GraphWriter:
                         chunk.id, dup_name, dup_type, tenant=tenant
                     )
                     continue
+
+            # 2b. Embedding near-miss — ambiguous band, queue for human review
+            if entity.embedding and self._cfg.ingestion.get("review_queue_enabled", True):
+                emb_lower = self._cfg.ingestion.get("review_embedding_min", 0.85)
+                soft_dup = await registry.find_candidate_by_embedding(
+                    embedding=entity.embedding,
+                    entity_type=entity.type,
+                    exclude_name=entity.name,
+                    lower=emb_lower,
+                    upper=registry._embedding_threshold,
+                )
+                if soft_dup:
+                    soft_name, soft_type, soft_sim = soft_dup
+                    await self._enqueue_safe(
+                        entity,
+                        AmbiguousMatch(candidate=(soft_name, soft_type),
+                                       score=soft_sim, match_type="embedding"),
+                        chunk, tenant,
+                    )
+                    # fall through — fail open, create new entity anyway
 
             # 3. Genuinely new entity — queue for batched write below.
             # No entity_exists() probe here: it was a Neo4j round-trip per

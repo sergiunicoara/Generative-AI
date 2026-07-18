@@ -16,6 +16,10 @@ ingestion:
                                      # communities (vs ~55 baseline) and caused a contradiction
                                      # false-positive explosion (500-cap conflicts), see A111
   alias_fuzzy_threshold: 85         # rapidfuzz ratio for soft name matching
+  # ── Human review queue ──────────────────────────────────────────────────────
+  review_queue_enabled: true         # queue ambiguous alias matches for human review
+  review_fuzzy_min: 70               # lower bound of fuzzy "ambiguous" band (70–84 queued)
+  review_embedding_min: 0.85         # lower bound of embedding "ambiguous" band (0.85–0.92 queued)
   # ── Ingestion validation (graph poisoning prevention) ───────────────────────
   validate_after_ingestion: true    # run graph health check after every doc
   auto_remove_self_loops: true      # delete self-referencing edges automatically

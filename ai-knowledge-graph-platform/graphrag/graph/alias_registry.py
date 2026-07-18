@@ -25,9 +25,22 @@ import json
 import os
 import re
 import structlog
+from dataclasses import dataclass
 from functools import lru_cache
 
 log = structlog.get_logger(__name__)
+
+
+@dataclass
+class AmbiguousMatch:
+    """Returned by resolve() when a name is close but below the auto-merge threshold.
+
+    The caller decides whether to enqueue for human review or treat as a new entity.
+    """
+    candidate: tuple[str, str]   # (canonical_name, canonical_type)
+    score: float                 # rapidfuzz ratio (fuzzy) or cosine similarity (embedding)
+    match_type: str              # "fuzzy" | "embedding"
+
 
 # Defaults — overridden by ingestion.alias_embedding_threshold /
 # ingestion.alias_fuzzy_threshold in config/settings.yml.
@@ -193,7 +206,7 @@ class AliasRegistry:
             finally:
                 await redis.aclose()
 
-    def resolve(self, raw_name: str) -> tuple[str, str] | None:
+    def resolve(self, raw_name: str) -> tuple[str, str] | AmbiguousMatch | None:
         """
         Resolve a raw name to (canonical_name, canonical_type).
         Checks in-memory cache first (O(1)), then falls back to None.
@@ -240,6 +253,17 @@ class AliasRegistry:
                     score=best_score,
                 )
                 return best_match
+            # Ambiguous band — close but not confident enough to auto-merge
+            from graphrag.core.config import get_settings
+            _review_min = get_settings().ingestion.get("review_fuzzy_min", 70)
+            if _review_min <= best_score < self._fuzzy_threshold and best_match:
+                log.debug(
+                    "alias_registry.fuzzy_ambiguous",
+                    raw=raw_name,
+                    candidate=best_match[0],
+                    score=best_score,
+                )
+                return AmbiguousMatch(candidate=best_match, score=float(best_score), match_type="fuzzy")
         except ImportError:
             pass  # rapidfuzz not installed — skip fuzzy step
 
@@ -310,6 +334,47 @@ class AliasRegistry:
             exclude_name=exclude_name,
             tenant=self._tenant,
             threshold=self._embedding_threshold,
+        )
+        if rows:
+            r = rows[0]
+            return r["name"], r["type"], float(r["score"])
+        return None
+
+    async def find_candidate_by_embedding(
+        self,
+        embedding: list[float],
+        entity_type: str,
+        exclude_name: str = "",
+        lower: float = 0.85,
+        upper: float | None = None,
+    ) -> tuple[str, str, float] | None:
+        """Search for an entity whose embedding falls in the ambiguous band [lower, upper).
+
+        Used to surface near-duplicate candidates for human review when confidence
+        is too low to auto-merge but high enough to be suspicious. Returns the
+        best match in the band, or None if none found.
+        """
+        if upper is None:
+            upper = self._embedding_threshold
+        rows = await self._neo4j.run(
+            """
+            CALL db.index.vector.queryNodes('entity_embeddings', 10, $embedding)
+            YIELD node AS e, score
+            WHERE e.type = $entity_type
+              AND e.name <> $exclude_name
+              AND e.tenant = $tenant
+              AND score >= $lower
+              AND score < $upper
+            RETURN e.name AS name, e.type AS type, score
+            ORDER BY score DESC
+            LIMIT 1
+            """,
+            embedding=embedding,
+            entity_type=entity_type,
+            exclude_name=exclude_name,
+            tenant=self._tenant,
+            lower=lower,
+            upper=upper,
         )
         if rows:
             r = rows[0]

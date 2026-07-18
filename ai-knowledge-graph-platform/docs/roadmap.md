@@ -23,7 +23,7 @@ deployed workload and monitoring data behind the claim.
 | OWL-RL reasoning over RDF export | ✅ Implemented / demo-ready | owlrl + rdflib |
 | SPARQL bridge (in-process over Turtle export) | ✅ Implemented / demo-ready | SPARQL 1.1 SELECT |
 | TransE link prediction | ✅ Implemented / demo-ready | entity embeddings as input |
-| Entity resolution (4-stage: exact/fuzzy/embedding/queue) | ✅ Implemented / demo-ready | Cosine threshold 0.92 |
+| Entity resolution (4-stage: exact/fuzzy/embedding/human-review queue) | ✅ Implemented / demo-ready | Cosine threshold 0.92; ambiguous-band matches (fuzzy 70–84, embedding 0.85–0.92) queued for human review via `/kg/review-queue` |
 | Contradiction detection (5 types) | ✅ Implemented / demo-ready | |
 | Document authority hierarchy + SUPERSEDES chains | ✅ Implemented / demo-ready | |
 | Multi-tenant isolation | ✅ Implemented / demo-ready | `(name, type, tenant)` key |
@@ -113,6 +113,7 @@ and technical credibility.
 - [x] **Incremental community detection** — `IncrementalCommunityDetector` wired to `/kg/incremental-community/rebuild-affected` and `/kg/incremental-community/summary` API routes; dashboard Communities tab triggers it
 - [x] **Wikidata linking** — wired into `IngestionAgent.run()` as optional post-write step; enabled via `WIKIDATA_LINKING=1` (default off); caps at 20 entities/doc to respect rate limits; `wikidata_links` count in job return dict
 - [x] **Property schema enforcement** — `GET /kg/health/property-violations` endpoint added; admin dashboard Health tab shows violation count and per-type breakdown
+- [x] **Human review queue** — `graphrag/graph/review_queue.py` (`ReviewQueueService`); ambiguous alias matches (fuzzy 70–84, embedding 0.85–0.92) create `ReviewQueueItem` nodes instead of silently forking a duplicate entity; `GET/POST /kg/review-queue` list/approve/reject endpoints; approve registers the alias, reject keeps entities separate; gated by `ingestion.review_queue_enabled`; fails open (closes the documented stage-4 gap in `alias_registry.py`)
 
 ### Operational
 

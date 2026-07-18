@@ -199,6 +199,22 @@ The lock file is committed. CI installs from the lock file.
 
 ---
 
+## Human Review Required
+
+Some changes must not be merged or deployed without a human decision — automation surfaces the signal, but the call belongs to a person.
+
+| Trigger | Why human judgment is needed |
+|---|---|
+| Eval gate failure (`<9/13` automotive, `<28/39` aerospace) | Decide whether to revert, fix, or accept a permanent regression |
+| Config threshold change (`alias_embedding_threshold`, `rerank_top_k`, `chunk_overlap`, etc.) | All have regression history — require an A/B eval result before merging |
+| Contradiction flagged between two documents | Which document supersedes which is a domain/legal call |
+| Assigning `authority_level` above `INFORMAL` (level 4) | Marking a document `AUTHORITATIVE` (level 1) changes confidence weighting across the whole tenant |
+| ADR-level decision (new dependency, data model change, new retrieval stage) | Write the ADR and get a review before implementing |
+| First ingest for a new tenant | Review schema, ontology path, and contradiction baseline before opening to queries |
+| Production secrets / credentials | API keys, Redis URLs, Neo4j passwords — never committed or automated |
+
+---
+
 ## Lessons log
 
 `tasks/lessons.md` captures mistake patterns found during development.

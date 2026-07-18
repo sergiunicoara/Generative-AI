@@ -116,94 +116,31 @@ function updateScore(points) {
 }
 
 // Ecran special la pragul de m×1000 puncte — scenă cinematică: o Biblie
-// deschisă cu foile în evantai, lumină care izbucnește în sus din mijlocul
-// ei, iar versetul apare deasupra, plutind în lumină. Cartea e SVG inline;
-// restul e CSS (keyframes „m-*” în style.css).
+// deschisă (fotografie reală, licență liberă Pixabay), cu fasciculul de
+// lumină CSS și versetul plutind deasupra ei.
 function showMilestone(m) {
   const verse = MILESTONE_VERSES[(m - 1) % MILESTONE_VERSES.length];
   const overlay = document.createElement("div");
   overlay.className = "milestone-overlay";
   // stele care urcă plutind din carte, ca în fotografia de referință
   const sparks = Array.from({ length: 20 }, () =>
-    `<span class="m-spark" style="left:${(30 + Math.random() * 40).toFixed(1)}%;` +
+    `<span class="m-spark" style="left:${(31.3 + Math.random() * 40).toFixed(1)}%;` +
     `animation-delay:${(0.9 + Math.random() * 3).toFixed(2)}s;` +
     `animation-duration:${(2.2 + Math.random() * 2).toFixed(2)}s;` +
     `font-size:${(8 + Math.random() * 12).toFixed(0)}px"></span>`
   ).join("");
-  // Foi late, pline (nu linii subțiri), generate ca pene suprapuse ușor —
-  // fiecare e un contur închis cu muchie vizibilă, ca să se distingă clar
-  // paginile individuale, exact ca într-o carte reală fotografiată din față.
-  const bookPages = (side) => {
-    const baseX = 200, baseY = 182;
-    const count = 11;
-    let out = "";
-    for (let i = 0; i < count; i++) {
-      const t0 = i / count;
-      const t1 = (i + 1) / count;
-      const tt = (t0 + t1) / 2;
-      const a0 = side * (6 + t0 * 80);
-      const a1 = side * (6 + t1 * 80);
-      const len = 112 + Math.sin(tt * Math.PI) * 28;
-      const rad0 = (a0 * Math.PI) / 180;
-      const rad1 = (a1 * Math.PI) / 180;
-      const tip0x = baseX + Math.sin(rad0) * len;
-      const tip0y = baseY - Math.cos(rad0) * len * 0.92;
-      const tip1x = baseX + Math.sin(rad1) * len * 0.88;
-      const tip1y = baseY - Math.cos(rad1) * len * 0.88 * 0.92;
-      const midRad = (((a0 + a1) / 2) * Math.PI) / 180;
-      const cx = baseX + Math.sin(midRad) * len * 1.05;
-      const cy = baseY - Math.cos(midRad) * len * 0.98;
-      const shade = tt < 0.3 ? "#c7a26c" : tt < 0.55 ? "#e3c286" : tt < 0.78 ? "#f6e2b4" : "#fff8e4";
-      out += `<path d="M${baseX},${baseY} L${tip0x.toFixed(1)},${tip0y.toFixed(1)} Q${cx.toFixed(1)},${cy.toFixed(1)} ${tip1x.toFixed(1)},${tip1y.toFixed(1)} Z" fill="${shade}" stroke="#8a6339" stroke-width="0.5" opacity="0.97"/>`;
-    }
-    return out;
-  };
-  // blocul gros de pagini de la baza cărții (foile strânse, văzute din față,
-  // înainte să se deschidă în evantai) — cu linii subțiri de separare, ca
-  // să se vadă imediat că e o carte, nu doar o explozie de raze.
-  const pageStack = () => {
-    let lines = "";
-    for (let i = 0; i < 7; i++) {
-      const y = 176 - i * 2.6;
-      lines += `<path d="M${34 + i * 2},${y} Q200,${y - 20} ${366 - i * 2},${y}" fill="none" stroke="#c9ac78" stroke-width="0.6" opacity="0.5"/>`;
-    }
-    return `
-      <path d="M20,178 Q200,150 380,178 L380,196 Q200,168 20,196 Z" fill="#e9d6a8"/>
-      ${lines}`;
-  };
   overlay.innerHTML = `
     <div class="milestone-scene">
+      <img class="m-book-bg" src="media/bible-book.jpg?v=2" alt="" />
+      <div class="m-shade"></div>
+      <div class="m-beam"></div>
+      <div class="m-glow"></div>
+      ${sparks}
       <div class="m-verse">
         <h2>⭐ ${m * MILESTONE_STEP} de puncte!</h2>
         <p class="milestone-verse">„${verse.text}”</p>
         <p class="milestone-ref">${verse.ref}</p>
         <button class="btn primary">Continuă →</button>
-      </div>
-      <div class="m-stage">
-        <div class="m-beam"></div>
-        <div class="m-glow"></div>
-        ${sparks}
-        <svg class="m-book" viewBox="0 0 400 230" xmlns="http://www.w3.org/2000/svg">
-          <defs>
-            <radialGradient id="mb-light" cx="50%" cy="40%" r="58%">
-              <stop offset="0%" stop-color="#fffdf3"/>
-              <stop offset="30%" stop-color="#ffefb8" stop-opacity="0.95"/>
-              <stop offset="100%" stop-color="#ffce54" stop-opacity="0"/>
-            </radialGradient>
-            <linearGradient id="mb-leather" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stop-color="#6b4526"/>
-              <stop offset="100%" stop-color="#2e1b0d"/>
-            </linearGradient>
-          </defs>
-          <!-- coperta de piele, deschisă în formă de V, groasă și vizibilă sub pagini -->
-          <path d="M8,196 Q200,146 392,196 L392,222 Q200,182 8,222 Z" fill="url(#mb-leather)"/>
-          <path d="M14,192 Q200,144 386,192 L386,202 Q200,160 14,202 Z" fill="#8a6339" opacity="0.6"/>
-          <!-- blocul de pagini strânse, la baza cărții — arată clar că e o carte -->
-          ${pageStack()}
-          <!-- evantaiul de foi late, pline, cu muchii vizibile -->
-          <g>${bookPages(-1)}${bookPages(1)}</g>
-          <ellipse cx="200" cy="145" rx="120" ry="92" fill="url(#mb-light)"/>
-        </svg>
       </div>
     </div>`;
   overlay.querySelector("button").addEventListener("click", () => overlay.remove());

@@ -555,33 +555,56 @@ footer {
   position: fixed;
   inset: 0;
   background: rgba(18, 13, 32, 0.88);
-  display: flex;
-  align-items: center;
-  justify-content: center;
   z-index: 9;
-  padding: 24px;
   animation: milestone-fade 0.4s ease;
 }
 
-/* Scena: cartea apare (0-0.6s), fasciculul de lumină și haloul izbucnesc
-   în sus (0.8s), scânteile urcă plutind (din 0.9s), versetul apare deasupra,
-   plutind în lumină (1.5s). */
+/* Scena: o singură imagine de fundal (cartea) umple tot ecranul, cu
+   fasciculul de lumină, haloul, scânteile și versetul plutind deasupra ei —
+   un singur decor continuu, nu elemente separate lipite unul sub altul. */
 .milestone-scene {
-  position: relative;
+  position: absolute;
+  inset: 0;
   display: flex;
   flex-direction: column;
   align-items: center;
-  justify-content: flex-end;
-  gap: 8px;
-  max-height: 100%;
+  justify-content: flex-start;
+  padding-top: max(24px, env(safe-area-inset-top));
+  overflow: hidden;
+}
+
+.m-book-bg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  z-index: 0;
+  opacity: 0;
+  animation: m-book-in 1.1s ease both;
+}
+
+/* umbrire peste fotografie, ca textul versetului să rămână lizibil oriunde
+   pe ecran, păstrând în același timp lumina din centrul cărții vizibilă */
+.m-shade {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  background: radial-gradient(ellipse 70% 55% at 50% 62%,
+    rgba(10, 6, 18, 0.15) 0%,
+    rgba(10, 6, 18, 0.55) 55%,
+    rgba(10, 6, 18, 0.86) 100%);
+  pointer-events: none;
 }
 
 /* verset plutind în lumină, fără card */
 .m-verse {
   position: relative;
-  z-index: 2;
+  z-index: 4;
   text-align: center;
   max-width: min(560px, 90vw);
+  padding: 0 12px;
+  margin-left: 1.3vw;
   opacity: 0;
   animation: m-verse-in 1s ease 1.5s forwards;
 }
@@ -609,60 +632,44 @@ footer {
   text-shadow: 0 0 12px rgba(240, 180, 41, 0.7);
 }
 
-/* scena cărții: fascicul + halou + scântei + cartea SVG */
-.m-stage {
-  position: relative;
-  width: min(680px, 92vw);
-  display: flex;
-  justify-content: center;
-}
-
-.m-book {
-  position: relative;
-  z-index: 1;
-  width: 100%;
-  height: auto;
-  animation: m-book-in 0.7s cubic-bezier(0.34, 1.56, 0.64, 1) both;
-  filter: drop-shadow(0 10px 26px rgba(0, 0, 0, 0.6));
-}
-
-/* fasciculul de lumină care urcă din carte spre cer — pornește îngust din
-   mijlocul cărții și se lărgește până întrece marginile blocului de verset,
-   ca lumina să-l cuprindă de la un capăt la altul. */
+/* fasciculul de lumină care urcă din mijlocul fotografiei spre marginea de
+   sus a ecranului, contopindu-se cu lumina deja prezentă în imagine. */
 .m-beam {
   position: absolute;
-  bottom: 95px;
-  left: 50%;
+  top: 0;
+  left: 51.3%;
   width: min(720px, 100vw);
-  height: 68vh;
+  height: 55%;
   transform: translateX(-50%);
   background: linear-gradient(to top,
-    rgba(255, 240, 190, 0.85) 0%,
-    rgba(255, 224, 140, 0.4) 40%,
-    rgba(255, 224, 140, 0.12) 75%,
+    rgba(255, 240, 190, 0.55) 0%,
+    rgba(255, 224, 140, 0.3) 40%,
+    rgba(255, 224, 140, 0.1) 75%,
     transparent 100%);
   clip-path: polygon(47% 100%, 53% 100%, 94% 0, 6% 0);
   filter: blur(6px);
   transform-origin: bottom center;
   opacity: 0;
+  z-index: 2;
   animation: m-beam-in 1.1s ease 0.8s forwards, m-beam-flicker 3.5s ease-in-out 1.9s infinite;
   pointer-events: none;
 }
 
-/* haloul din mijlocul cărții */
+/* haloul din mijlocul cărții, aliniat cu strălucirea deja existentă în foto */
 .m-glow {
   position: absolute;
-  bottom: -80px;
-  left: 50%;
+  top: 55%;
+  left: 51.3%;
   width: 640px;
   height: 560px;
-  transform: translateX(-50%);
-  background: radial-gradient(circle at 50% 60%,
-    rgba(255, 250, 225, 0.95) 0%,
-    rgba(255, 220, 120, 0.55) 30%,
-    rgba(255, 200, 80, 0.18) 55%,
+  transform: translate(-50%, -50%);
+  background: radial-gradient(circle at 50% 50%,
+    rgba(255, 250, 225, 0.7) 0%,
+    rgba(255, 220, 120, 0.35) 30%,
+    rgba(255, 200, 80, 0.12) 55%,
     transparent 72%);
   opacity: 0;
+  z-index: 2;
   animation: m-glow-in 0.9s ease 0.8s forwards, m-glow-pulse 2.8s ease-in-out 1.7s infinite;
   pointer-events: none;
 }
@@ -670,8 +677,8 @@ footer {
 /* stelele care urcă plutind din carte */
 .m-spark {
   position: absolute;
-  bottom: 90px;
-  z-index: 2;
+  bottom: 30%;
+  z-index: 3;
   opacity: 0;
   animation-name: m-spark-rise;
   animation-timing-function: ease-out;
@@ -691,8 +698,8 @@ footer {
 }
 
 @keyframes m-book-in {
-  from { transform: scale(0.25) translateY(60px); opacity: 0; }
-  to { transform: scale(1) translateY(0); opacity: 1; }
+  from { opacity: 0; transform: scale(1.08); }
+  to { opacity: 1; transform: scale(1); }
 }
 
 @keyframes m-beam-in {
@@ -706,13 +713,13 @@ footer {
 }
 
 @keyframes m-glow-in {
-  from { opacity: 0; transform: translateX(-50%) scale(0.3); }
-  to { opacity: 1; transform: translateX(-50%) scale(1); }
+  from { opacity: 0; transform: translate(-50%, -50%) scale(0.3); }
+  to { opacity: 1; transform: translate(-50%, -50%) scale(1); }
 }
 
 @keyframes m-glow-pulse {
-  0%, 100% { transform: translateX(-50%) scale(1); }
-  50% { transform: translateX(-50%) scale(1.1); }
+  0%, 100% { transform: translate(-50%, -50%) scale(1); }
+  50% { transform: translate(-50%, -50%) scale(1.1); }
 }
 
 @keyframes m-verse-in {

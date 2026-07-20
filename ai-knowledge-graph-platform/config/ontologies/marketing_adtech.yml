@@ -1,0 +1,305 @@
+# Adtech / Media Planning Knowledge Graph Ontology
+#
+# Domain-specific type hierarchy and relation schema for programmatic /
+# media-planning corpora — governance documents (SOW, brand guideline,
+# campaign brief, privacy policy), campaign/line-item structure, audiences,
+# creatives, and the buy-side/sell-side chain (advertiser -> agency -> DSP
+# -> SSP -> publisher). Modeled after automotive_iatf.yml's structure.
+#
+# Provenance:
+#   Schema written for the 4-document data/wpp_demo/ corpus (Nova Beverages
+#   Global / WPP Open — Team Meridian, tenant "marketing" in
+#   scripts/ingest_corpus.py), tuned around its two planted ground-truth
+#   contradictions:
+#     WPP01 - CampaignBrief-NovaBeverages-EU-Q3 extends targeting into
+#             sports-betting adjacency, citing the Brand Guideline's local-
+#             approval flexibility clause (section 2). But
+#             SOW-NovaBeverages-2024 (section 2) STRICTLY EXCLUDES gambling
+#             and sports-betting placements "without exception" and states
+#             (section 4) it prevails over any Media Plan or Campaign Brief
+#             in case of conflict.
+#     WPP02 - DataPrivacyPolicy-NovaBeverages-2024 (section 2-3) independently
+#             prohibits gambling-adjacent behavioral inference as a sensitive
+#             category regardless of consent status, and states (section 4)
+#             it supersedes any campaign-level or regional targeting
+#             approval — a second, independently-binding authority
+#             conflicting with the same Campaign Brief.
+#   Both contradictions share one root cause: the Campaign Brief's "locally
+#   approved" adjacency extension never checked the two higher-authority
+#   documents (SOW, DPP) that both prohibit the same category for different
+#   reasons (contractual exclusion vs. privacy-sensitive-category inference).
+#
+# Load (mirrors automotive_iatf.yml / aerospace_regulatory.yml):
+#   from graphrag.graph.domain_ontology import load_domain_ontology
+#   ontology = load_domain_ontology("config/ontologies/marketing_adtech.yml")
+#   await taxonomy.load(extra_pairs=get_type_hierarchy_pairs(ontology))
+#   registry.add_domain_range_rules(get_relation_rules(ontology))
+#
+# Tenant-flexible discovery:
+#   graphrag.graph.domain_ontology.get_ontology_path_for_tenant("marketing")
+#   resolves to this file by filename convention ({tenant}_*.yml) — matches
+#   the "marketing" tenant key used for data/wpp_demo/ in ingest_corpus.py.
+
+# ── Entity type extensions ─────────────────────────────────────────────────────
+# Format: [child_type, parent_type]  (parent must exist in base hierarchy or here)
+
+type_hierarchy:
+  # Organizations along the buy-side / sell-side chain
+  - [ADVERTISER,               ORG]           # brand client, e.g. Nova Beverages Global
+  - [AGENCY,                   ORG]           # media agency / holding company, e.g. WPP Open
+  - [DSP,                      ORG]           # demand-side platform
+  - [SSP,                      ORG]           # supply-side platform
+  - [PUBLISHER,                ORG]           # inventory owner (site, app, CTV network)
+  - [AD_EXCHANGE,               ORG]           # marketplace connecting DSP <-> SSP
+
+  # Governance documents (CONCEPT subtree) — mirrors QUALITY_DOCUMENT in automotive
+  - [MARKETING_DOCUMENT,        CONCEPT]       # base type for all governance documents
+  - [STATEMENT_OF_WORK,         MARKETING_DOCUMENT]  # SOW-* — binding contractual authority
+  - [DATA_PRIVACY_POLICY,       MARKETING_DOCUMENT]  # DPP-* — legally binding, highest authority
+  - [BRAND_GUIDELINE,           MARKETING_DOCUMENT]  # BG-* — global creative/targeting standards
+  - [CAMPAIGN_BRIEF,            MARKETING_DOCUMENT]  # CB-* — campaign-level execution detail, lowest authority
+
+  # Campaign hierarchy
+  - [MEDIA_PLAN,                CONCEPT]       # top-level plan across channels
+  - [CAMPAIGN,                  MEDIA_PLAN]    # a flighted, budgeted initiative
+  - [LINE_ITEM,                 CAMPAIGN]      # targeting + budget + creative unit within a campaign
+  - [DEAL,                      CONCEPT]       # PMP / programmatic guaranteed deal (deal ID)
+
+  # Targeting & measurement concepts
+  - [AUDIENCE_SEGMENT,          CONCEPT]       # 1st/3rd-party or contextual audience, e.g. 18-34 urban
+  - [ADJACENCY_VERTICAL,        CONCEPT]       # content category creative may run alongside
+  - [EXCLUDED_CATEGORY,         CONCEPT]       # contractually/legally prohibited placement category
+  - [CREATIVE,                  CONCEPT]       # ad unit (banner, video, native)
+  - [KPI,                       CONCEPT]       # CPM, CTR, CPA, viewability, VCR, ROAS
+  - [BRAND_SAFETY_POLICY,       CONCEPT]       # exclusion lists, category blocks
+  - [FREQUENCY_CAP,             CONCEPT]       # impressions per user per window
+  - [INVENTORY_TYPE,            CONCEPT]       # display / video / CTV / audio / native
+  - [BIDDING_STRATEGY,          CONCEPT]       # CPM / vCPM / CPC / dynamic CPM
+
+  # Data & compliance
+  - [PRIVACY_REGULATION,        CONCEPT]       # GDPR, CCPA, DMA
+  - [CONSENT_SIGNAL,            CONCEPT]       # TCF string, GPP, opt-out status
+  - [SENSITIVE_CATEGORY,        CONCEPT]       # health, financial hardship, gambling behavior inference
+
+# ── Relation schema extensions ─────────────────────────────────────────────────
+# These extend the domain/range rules in graphrag/graph/ontology_registry.py.
+# Loaded via: registry.add_domain_range_rules(get_relation_rules(ontology))
+
+relation_rules:
+  # Document authority chain — central to WPP01/WPP02
+  SUPERSEDES:
+    domain: [MARKETING_DOCUMENT, STATEMENT_OF_WORK, BRAND_GUIDELINE, DATA_PRIVACY_POLICY]
+    target: [MARKETING_DOCUMENT, STATEMENT_OF_WORK, BRAND_GUIDELINE, DATA_PRIVACY_POLICY]
+    note: "SOW-NOVA-2024-Q3 supersedes SOW-NOVA-2023-Q4; BG-NOVA-GLOBAL-v3 supersedes BG-NOVA-GLOBAL-v2"
+
+  PREVAILS_OVER:
+    domain: [STATEMENT_OF_WORK, DATA_PRIVACY_POLICY]
+    target: [MEDIA_PLAN, CAMPAIGN, CAMPAIGN_BRIEF, BRAND_GUIDELINE]
+    note: "SOW section 4: prevails over Media Plan/Campaign Brief in conflict (WPP01). DPP section 4: supersedes any campaign-level or regional targeting approval (WPP02)"
+
+  GOVERNS:
+    domain: [STATEMENT_OF_WORK, DATA_PRIVACY_POLICY, BRAND_GUIDELINE]
+    target: [CAMPAIGN, LINE_ITEM, ADVERTISER, AGENCY]
+    inverse: GOVERNED_BY
+
+  GOVERNED_BY:
+    domain: [CAMPAIGN, LINE_ITEM, ADVERTISER, AGENCY]
+    target: [STATEMENT_OF_WORK, DATA_PRIVACY_POLICY, BRAND_GUIDELINE]
+
+  EXCLUDES_CATEGORY:
+    domain: [STATEMENT_OF_WORK, DATA_PRIVACY_POLICY, BRAND_SAFETY_POLICY]
+    target: [EXCLUDED_CATEGORY, ADJACENCY_VERTICAL]
+    note: "SOW section 2 STRICTLY EXCLUDES gambling/sports-betting, alcohol-adjacent, political content (WPP01)"
+
+  EXTENDS_ADJACENCY:
+    domain: [CAMPAIGN_BRIEF, CAMPAIGN]
+    target: [ADJACENCY_VERTICAL]
+    note: "CampaignBrief-NovaBeverages-EU-Q3 extends into sports-betting adjacency under local approval — conflicts with EXCLUDES_CATEGORY (WPP01)"
+
+  APPROVED_UNDER:
+    domain: [CAMPAIGN_BRIEF]
+    target: [BRAND_GUIDELINE]
+    note: "Local adjacency extension cites Brand Guideline's flexibility clause; does not check SOW/DPP authority"
+
+  PROHIBITS_INFERENCE:
+    domain: [DATA_PRIVACY_POLICY]
+    target: [SENSITIVE_CATEGORY]
+    note: "DPP section 2-3: sensitive category inference (gambling behavior included) prohibited regardless of consent (WPP02)"
+
+  # Buy-side chain
+  MANAGES:
+    domain: [AGENCY]
+    target: [CAMPAIGN, MEDIA_PLAN]
+    inverse: MANAGED_BY
+    note: "WPP Open — Team Meridian MANAGES the campaign on behalf of Nova Beverages Global"
+
+  BUYS_ON_BEHALF_OF:
+    domain: [AGENCY]
+    target: [ADVERTISER]
+    inverse: REPRESENTED_BY
+
+  ACTIVATED_VIA:
+    domain: [CAMPAIGN, LINE_ITEM]
+    target: [DSP]
+
+  SOURCES_INVENTORY_FROM:
+    domain: [DSP]
+    target: [SSP, AD_EXCHANGE]
+    inverse: SUPPLIES_INVENTORY_TO
+
+  SERVES_ON:
+    domain: [LINE_ITEM, CREATIVE]
+    target: [PUBLISHER, INVENTORY_TYPE]
+
+  # Campaign structure
+  BELONGS_TO:
+    domain: [LINE_ITEM]
+    target: [CAMPAIGN]
+    inverse: CONTAINS_LINE_ITEM
+
+  PART_OF:
+    domain: [CAMPAIGN]
+    target: [MEDIA_PLAN]
+    inverse: INCLUDES_CAMPAIGN
+
+  TARGETS:
+    domain: [LINE_ITEM, CAMPAIGN, CAMPAIGN_BRIEF]
+    target: [AUDIENCE_SEGMENT]
+    note: "CampaignBrief-NovaBeverages-EU-Q3 TARGETS 18-34 urban consumers"
+
+  USES_CREATIVE:
+    domain: [LINE_ITEM]
+    target: [CREATIVE]
+    inverse: USED_IN_LINE_ITEM
+
+  GOVERNED_BY_DEAL:
+    domain: [LINE_ITEM]
+    target: [DEAL]
+
+  # Compliance
+  MANDATES:
+    domain: [ADVERTISER, AGENCY, PRIVACY_REGULATION]
+    target: [BRAND_SAFETY_POLICY, FREQUENCY_CAP, CAMPAIGN, LINE_ITEM]
+    inverse: MANDATED_BY
+
+  MANDATED_BY:
+    domain: [BRAND_SAFETY_POLICY, FREQUENCY_CAP, CAMPAIGN, LINE_ITEM]
+    target: [ADVERTISER, AGENCY, PRIVACY_REGULATION]
+
+  COMPLIES_WITH:
+    domain: [CAMPAIGN, LINE_ITEM, DSP, SSP]
+    target: [PRIVACY_REGULATION]
+
+  REQUIRES_CONSENT:
+    domain: [LINE_ITEM, CAMPAIGN]
+    target: [CONSENT_SIGNAL]
+    note: "DPP section 2: EU markets require explicit opt-in consent per GDPR Article 6 before behavioral/interest-based targeting"
+
+  # Measurement
+  MONITORED_BY:
+    domain: [CAMPAIGN, LINE_ITEM]
+    target: [KPI]
+
+  BID_USING:
+    domain: [LINE_ITEM]
+    target: [BIDDING_STRATEGY]
+
+# ── Inference rules (adtech-specific) ────────────────────────────────────────
+# Supplement the built-in rules in graphrag/graph/inference_engine.py.
+
+inference_rules:
+  - name: supersedes_transitivity
+    relation: SUPERSEDES
+    rule_type: transitivity
+    max_depth: 3
+    confidence_decay: 0.95
+    note: >
+      If SOW-NOVA-2024-Q3 supersedes SOW-NOVA-2023-Q4, and a future revision
+      supersedes SOW-NOVA-2024-Q3, retrieval always resolves to the currently
+      binding SOW rather than a stale one.
+
+  - name: belongs_to_transitivity
+    relation: BELONGS_TO
+    rule_type: transitivity
+    max_depth: 2
+    confidence_decay: 0.95
+    note: >
+      LINE_ITEM belongs_to CAMPAIGN, CAMPAIGN part_of MEDIA_PLAN — lets
+      retrieval roll a line item's budget/audience up to the parent plan.
+
+  - name: governs_inverse
+    relation: GOVERNS
+    rule_type: inverse
+    derived_relation: GOVERNED_BY
+
+  - name: manages_inverse
+    relation: MANAGES
+    rule_type: inverse
+    derived_relation: MANAGED_BY
+
+  - name: buys_on_behalf_of_inverse
+    relation: BUYS_ON_BEHALF_OF
+    rule_type: inverse
+    derived_relation: REPRESENTED_BY
+
+  - name: sources_inventory_inverse
+    relation: SOURCES_INVENTORY_FROM
+    rule_type: inverse
+    derived_relation: SUPPLIES_INVENTORY_TO
+
+# ── Exclusive state pairs (contradiction detection) ────────────────────────────
+# Extends the default pairs in contradiction_strategies.py. WPP01/WPP02 map
+# directly to CATEGORY_EXCLUDED vs CATEGORY_LOCALLY_APPROVED below.
+
+exclusive_state_pairs:
+  - [CATEGORY_EXCLUDED,            CATEGORY_LOCALLY_APPROVED]  # WPP01 — SOW exclusion vs Campaign Brief adjacency extension
+  - [INFERENCE_PROHIBITED,          INFERENCE_PERMITTED]        # WPP02 — DPP sensitive-category prohibition vs targeting approval
+  - [BRAND_SAFETY_TIER_STRICT,      BRAND_SAFETY_TIER_STANDARD]
+  - [FREQUENCY_CAP_ENFORCED,        FREQUENCY_CAP_UNCAPPED]
+  - [CONSENT_REQUIRED,              CONSENT_NOT_REQUIRED]
+  - [CAMPAIGN_ACTIVE,               CAMPAIGN_PAUSED]
+  - [DEAL_GUARANTEED,               DEAL_NON_GUARANTEED]
+
+# ── Functional relations (one-to-one per time window) ─────────────────────────
+# Extends functional_relations in contradiction_strategies.py.
+
+functional_relations:
+  - BID_USING                # a line item has exactly one active bidding strategy
+  - GOVERNED_BY_DEAL         # a PMP line item ties to exactly one deal ID
+  - CLASSIFIED_AS            # campaign status (active/paused) is single-valued
+
+# ── Authority levels for this domain ──────────────────────────────────────────
+# Mirrors the AuthorityLevel enum (graphrag/core/models.py) — lower = higher
+# authority. Matches the inline authority_map already used for tenant
+# "marketing" in scripts/ingest_corpus.py (_CORPUS_CONFIGS["marketing"]).
+
+authority_levels:
+  STATEMENT_OF_WORK:      1   # SOW-* — binding contractual authority, prevails over Media Plan/Brief (WPP01)
+  DATA_PRIVACY_POLICY:    1   # DPP-* — legally binding, supersedes campaign-level approvals (WPP02)
+  BRAND_GUIDELINE:        3   # BG-* — global creative/targeting standards, defers to SOW
+  CAMPAIGN_BRIEF:         4   # CB-* — campaign-level execution detail, lowest authority
+
+# ── Document prefix -> type/authority map ──────────────────────────────────────
+# Reference table so the ingestion script's per-document authority assignment
+# and the ontology stay in sync. Mirrors _CORPUS_CONFIGS["marketing"]
+# ["authority_map"] in scripts/ingest_corpus.py — that inline map is currently
+# the source of truth; this section documents it and can replace it via the
+# same ontology-driven pattern _automotive_corpus_config() already uses.
+
+document_prefixes:
+  SOW:             { type: STATEMENT_OF_WORK,   authority: 1 }
+  DPP:             { type: DATA_PRIVACY_POLICY, authority: 1 }
+  BrandGuideline:  { type: BRAND_GUIDELINE,      authority: 3 }
+  CampaignBrief:   { type: CAMPAIGN_BRIEF,        authority: 4 }
+
+# ── Known revision-supersession chains ─────────────────────────────────────────
+# Both SOW-NovaBeverages-2024.txt ("Supersedes: SOW-NOVA-2023-Q4") and
+# BrandGuideline-NovaBeverages-Global.txt ("Supersedes: BG-NOVA-GLOBAL-v2")
+# reference a predecessor version in their header, but that predecessor
+# document is NOT present in data/wpp_demo/ (4-file corpus, current versions
+# only) — so there is no in-corpus supersession edge to wire, same as the
+# empty supersession_map already in ingest_corpus.py's "marketing" config.
+# Left empty intentionally; add entries here (successor/predecessor pairs,
+# by filename) if a prior-version doc is ever added to the corpus.
+
+supersession_chains: []

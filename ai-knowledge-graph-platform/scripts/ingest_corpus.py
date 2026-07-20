@@ -105,9 +105,46 @@ def _automotive_corpus_config() -> dict:
     }
 
 
+def _marketing_corpus_config() -> dict:
+    """
+    Derive the marketing (WPP demo) corpus config from its domain ontology.
+
+    config/ontologies/marketing_adtech.yml's `document_prefixes` and
+    `supersession_chains` sections are the source of truth, so the ingestion
+    script and the ontology never drift apart.
+    """
+    from graphrag.graph.domain_ontology import (
+        get_ontology_path_for_tenant,
+        load_domain_ontology,
+    )
+
+    ontology_path = get_ontology_path_for_tenant("marketing")
+    ontology = load_domain_ontology(ontology_path) if ontology_path else {}
+
+    prefixes = ontology.get("document_prefixes", {}) or {}
+    # Longest prefix first so e.g. "BrandGuideline" matches before any shorter alias.
+    authority_map = {
+        prefix: spec["authority"]
+        for prefix, spec in sorted(prefixes.items(), key=lambda kv: -len(kv[0]))
+    }
+
+    supersession_map: dict[str, list[str]] = {}
+    for chain in ontology.get("supersession_chains", []) or []:
+        supersession_map.setdefault(chain["successor"], []).append(chain["predecessor"])
+
+    return {
+        "corpus_dir": ROOT / "data" / "wpp_demo",
+        "recursive": False,
+        "authority_map": authority_map,
+        "supersession_map": supersession_map,
+    }
+
+
 def _corpus_config(tenant: str) -> dict:
     if tenant == "automotive":
         return _automotive_corpus_config()
+    if tenant == "marketing":
+        return _marketing_corpus_config()
     return _CORPUS_CONFIGS.get(tenant, _CORPUS_CONFIGS["aerospace"])
 
 
@@ -480,7 +517,7 @@ def main() -> None:
     parser.add_argument("--doc",    default=None,
                         help="Filter to document filename substring(s), comma-separated")
     parser.add_argument("--tenant", default="aerospace",
-                        choices=sorted(set(_CORPUS_CONFIGS) | {"automotive"}),
+                        choices=sorted(set(_CORPUS_CONFIGS) | {"automotive", "marketing"}),
                         help="Tenant corpus to ingest (default: aerospace)")
     args = parser.parse_args()
 

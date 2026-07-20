@@ -307,6 +307,34 @@ Snapshots were designed for single-tenant use; tenant was not part of the data m
 
 ---
 
+## L16 — Function-local imports break `unittest.mock.patch`
+
+**What happened:**
+Writing `tests/unit/test_review_queue.py`, `patch("graphrag.graph.alias_registry.get_settings")`
+and `patch("graphrag.graph.review_queue.get_alias_registry")` both raised
+`AttributeError: module ... does not have the attribute ...`. Both functions were imported
+*inside* the calling function body (`from graphrag.core.config import get_settings` inside
+`AliasRegistry.__init__`; `from graphrag.graph.alias_registry import get_alias_registry`
+inside `ReviewQueueService.approve`), not at module level — so the importing module never
+had that name as an attribute for `patch` to find.
+
+**Root cause:**
+`patch()` replaces an attribute on a module object. A name only becomes an attribute of
+`module.py` if it's imported at module scope. A function-local `import` binds the name only
+in that function's local scope — invisible to `patch("module.name")`. This is unrelated to
+whether the import itself was intentional (e.g. to avoid a circular import) — it's a pure
+testability side effect nobody thought about when writing the import.
+
+**Rule:**
+> Before writing a test that needs to mock a dependency, check whether that dependency is
+> imported at module level in the file under test. If it's a function-local import, either
+> move it to module level (preferred, if no circular-import risk) or patch the *true* source
+> module (`graphrag.core.config.get_settings`) instead of the importing module's alias.
+> When adding new service classes, default to module-level imports unless there's a specific
+> circular-import reason not to — it costs nothing and keeps the module mockable.
+
+---
+
 ---
 
 # Knowledge Graph Architecture — Findings & Design Lessons

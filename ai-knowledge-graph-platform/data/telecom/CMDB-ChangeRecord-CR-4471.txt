@@ -1,0 +1,38 @@
+CMDB CHANGE RECORD
+Document Reference: CR-4471
+Change Type: Decommission
+Circuit ID: BRN-2201
+Effective Date: 2024-05-01
+Status: CLOSED — EXECUTED
+
+1. CHANGE SUMMARY
+Circuit BRN-2201 (Metro Ethernet transport, POP-Bucharest-Core-03 <->
+POP-Ploiesti-Edge-07) is DECOMMISSIONED effective 2024-05-01. The
+underlying service SERVICE-INSTANCE-4471 was migrated to replacement
+circuit BRN-2298 during the scheduled Bucharest metro-ring upgrade
+(Change Window CW-2024-018).
+
+2. AUTHORITY
+This CMDB Change Record is the authoritative, current source of truth
+for the operational status of circuit BRN-2201 and its associated
+Configuration Item (CI-BRN-2201). It supersedes the status reflected in
+any prior Network Inventory Record for this circuit, including
+INV-BRN-2201-2024 (snapshot date 2024-04-10, which still shows status
+ACTIVE as of its snapshot date — expected, since the snapshot predates
+this change).
+
+3. NETWORK ELEMENT IMPACT
+  - NE-BUC-CORE-03, port Gi0/1/2: released, available for reassignment
+  - NE-PLO-EDGE-07, port ge-0/0/5: released, available for reassignment
+
+4. GOVERNANCE
+Executed per PROC-OSS-014 section 4 (decommission validation checklist).
+Physical circuit teardown confirmed by NetOps field team on 2024-05-03.
+
+5. REQUIRED ACTION FOR FUTURE PROVISIONING
+Any Service Order or Provisioning Task referencing circuit BRN-2201 after
+2024-05-01 is invalid and MUST be redirected to the replacement circuit
+(BRN-2298) or rejected pending manual review.
+
+Approved by: NetOps Change Advisory Board
+Executed by: NetOps Team

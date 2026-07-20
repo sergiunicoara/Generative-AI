@@ -1,0 +1,35 @@
+SERVICE ORDER
+Document Reference: SO-88291
+Subscriber: Aurora Fintech SRL
+Order Date: 2024-06-14
+Order Type: New Service — Enterprise MPLS Backbone Link
+
+1. SERVICE REQUEST
+Aurora Fintech SRL requests activation of a new enterprise MPLS backbone
+link between its Bucharest headquarters and Ploiesti data center annex.
+
+2. ASSIGNED INFRASTRUCTURE
+Per Network Inventory Record INV-BRN-2201-2024, circuit BRN-2201
+(POP-Bucharest-Core-03 <-> POP-Ploiesti-Edge-07) is available for
+reassignment and is ACTIVE with sufficient headroom for the requested
+1 Gbps profile. This Service Order requests activation of a new Service
+Instance on circuit BRN-2201.
+
+3. PROVISIONING TASKS
+  Task 1: Validate circuit BRN-2201 availability (reference: inventory
+          snapshot INV-BRN-2201-2024)
+  Task 2: Bind new Service Instance to circuit BRN-2201
+  Task 3: Activate and confirm end-to-end connectivity
+
+4. SERVICE LEVEL COMMITMENT
+Committed activation SLA to customer: 2 (two) business days from order
+receipt to service activation, per Aurora Fintech's expedited-tier
+sales agreement. No exception approval reference is recorded on this
+order.
+
+5. BILLING
+Monthly recurring charge: EUR 1,850. Activation fee: EUR 400 (waived
+under expedited-tier promotion).
+
+Raised by: Sales Engineering — Enterprise Accounts
+Status: PENDING PROVISIONING

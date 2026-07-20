@@ -1,0 +1,32 @@
+NETWORK INVENTORY RECORD
+Document Reference: INV-BRN-2201-2024
+Circuit ID: BRN-2201
+Record Type: CMDB Inventory Snapshot
+Snapshot Date: 2024-04-10
+
+1. CIRCUIT DETAILS
+Circuit ID: BRN-2201
+Circuit Type: Metro Ethernet transport, 1 Gbps
+Route: POP-Bucharest-Core-03 <-> POP-Ploiesti-Edge-07
+Terminating Network Elements:
+  - NE-BUC-CORE-03 (Cisco ASR 9K, port Gi0/1/2)
+  - NE-PLO-EDGE-07 (Juniper MX204, port ge-0/0/5)
+
+2. STATUS (as of snapshot date)
+Status: ACTIVE
+Assigned Service: SERVICE-INSTANCE-4471 (enterprise MPLS backbone link)
+Subscriber: Meridian Logistics SRL
+
+3. CONFIGURATION ITEM TRACKING
+CI Reference: CI-BRN-2201
+Tracked in CMDB under Network Transport asset class.
+Last validated against physical audit: 2024-03-28.
+
+4. NOTE
+This snapshot reflects circuit state as of 2024-04-10. Per PROC-OSS-014
+section 3, any provisioning or activation task referencing this circuit
+MUST re-validate current status against the latest CMDB Change Record
+before execution — inventory snapshots are refreshed periodically and may
+not reflect changes recorded after the snapshot date.
+
+Recorded by: NetOps Inventory Team

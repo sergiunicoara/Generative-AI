@@ -1,0 +1,51 @@
+PROVISIONING & ACTIVATION PROCEDURE
+Document Reference: PROC-OSS-014
+Version: 2.1
+Effective Date: 2024-01-10
+Scope: All circuit-dependent service provisioning and activation tasks
+
+1. PURPOSE
+Defines the standard workflow, validation requirements, and service-level
+commitments for provisioning and activating services on operator-managed
+network infrastructure (network elements, circuits, ports).
+
+2. PROVISIONING WORKFLOW
+  a. Service Order received and logged in OSS.
+  b. Provisioning Task created; assigned Configuration Item(s) validated
+     against the current CMDB Change Record (not against a cached
+     Network Inventory Record snapshot — snapshots may be stale; see
+     section 3).
+  c. Activation Task executed once validation passes.
+  d. Service Instance marked ACTIVE in CMDB.
+
+3. CMDB VALIDATION REQUIREMENT
+Before any Activation Task is executed, the assigned circuit or network
+element's status MUST be re-validated against the latest CMDB Change
+Record for that Configuration Item. A Network Inventory Record snapshot
+is informational only and is NOT sufficient validation on its own —
+it may not reflect changes recorded after its snapshot date.
+
+4. DECOMMISSION VALIDATION CHECKLIST
+Any circuit or network element decommission must:
+  - Confirm no active Service Instance remains bound to the CI
+  - Migrate or terminate dependent services before physical teardown
+  - Close the associated CMDB Change Record with effective date and
+    replacement CI reference (if applicable)
+
+5. STANDARD ACTIVATION SLA
+For all circuit-dependent provisioning and activation tasks, the
+standard committed turnaround is 5 (five) business days from Service
+Order receipt to Service Instance activation, measured from the date
+the Provisioning Task passes CMDB validation (section 3). This SLA
+applies uniformly across all subscriber tiers and MUST be reflected in
+any Service Order's SLA commitment to the customer. Deviations require
+written exception approval from the OSS Governance Board and must be
+recorded on the Service Order itself.
+
+6. AUTHORITY
+This procedure is the binding operational standard for provisioning and
+activation SLA commitments across all Service Orders. Where a Service
+Order's stated SLA commitment conflicts with section 5 and no recorded
+exception approval exists, this procedure's standard SLA governs.
+
+Approved by: OSS Governance Board

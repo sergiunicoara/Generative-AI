@@ -1,0 +1,245 @@
+# Telecom OSS/BSS Knowledge Graph Ontology
+#
+# Domain-specific type hierarchy and relation schema for telecom operations-
+# support-system corpora — network inventory (CMDB), service fulfillment
+# (provisioning & activation), circuits/network elements, and the governance
+# chain between OSS procedures, change records, and service orders. Modeled
+# after automotive_iatf.yml / marketing_adtech.yml's structure — conceptually
+# adjacent to EXFO PRONTO-style network inventory/topology ontologies (NE,
+# circuit, port, service, CI relationships) without depending on that
+# specific product schema.
+#
+# Provenance:
+#   Schema written for the 4-document data/telecom/ corpus (BRN-2201 circuit
+#   lifecycle, tenant "telecom" in scripts/ingest_corpus.py), tuned around
+#   two planted ground-truth contradictions:
+#     T01 - Stale CMDB reference: CMDB-ChangeRecord-CR-4471 marks circuit
+#           BRN-2201 DECOMMISSIONED (effective 2024-05-01), but
+#           ServiceOrder-SO-88291 (raised 2024-06-14) requests activation
+#           of a new service ON that same circuit as if it were still
+#           ACTIVE — the order was raised against a stale inventory read
+#           (same pattern as automotive C04: stale revision reference).
+#     T02 - SLA mismatch: ProvisioningActivationProcedure-PROC-OSS-014
+#           mandates a standard activation SLA of 5 business days for
+#           circuit-dependent provisioning, but ServiceOrder-SO-88291
+#           commits the customer to a 2-business-day SLA — a functional-
+#           relation conflict on SLA_COMMITMENT_OF (same pattern as
+#           automotive C03/C05: conflicting frequency/duration commitments).
+#
+# Load (mirrors automotive_iatf.yml / marketing_adtech.yml):
+#   from graphrag.graph.domain_ontology import load_domain_ontology
+#   ontology = load_domain_ontology("config/ontologies/telecom_oss.yml")
+#   await taxonomy.load(extra_pairs=get_type_hierarchy_pairs(ontology))
+#   registry.add_domain_range_rules(get_relation_rules(ontology))
+#
+# Tenant-flexible discovery:
+#   graphrag.graph.domain_ontology.get_ontology_path_for_tenant("telecom")
+#   resolves to this file by filename convention ({tenant}_*.yml).
+
+# ── Entity type extensions ─────────────────────────────────────────────────────
+# Format: [child_type, parent_type]  (parent must exist in base hierarchy or here)
+
+type_hierarchy:
+  # Organizations
+  - [OPERATOR,                  ORG]           # the telecom operator / carrier
+  - [SUBSCRIBER_ORG,            ORG]           # enterprise customer receiving the service
+  - [NETOPS_TEAM,                ORG]           # internal team executing changes/decommissions
+
+  # Governance documents (CONCEPT subtree) — mirrors QUALITY_DOCUMENT / MARKETING_DOCUMENT
+  - [OSS_DOCUMENT,               CONCEPT]       # base type for all OSS/BSS governance documents
+  - [PROVISIONING_PROCEDURE,     OSS_DOCUMENT]  # PROC-OSS-* — activation SLA, validation steps
+  - [SERVICE_ORDER,              OSS_DOCUMENT]  # SO-* — customer-facing fulfillment request
+  - [CMDB_CHANGE_RECORD,          OSS_DOCUMENT]  # CR-* — authoritative network-state change ticket
+  - [NETWORK_INVENTORY_RECORD,    OSS_DOCUMENT]  # INV-* — CMDB inventory snapshot for a CI
+
+  # Network inventory / topology (PRODUCT subtree — physical/logical artifacts)
+  - [NETWORK_ELEMENT,             PRODUCT]       # NE — router, switch, ONT, OLT, etc.
+  - [CIRCUIT,                     PRODUCT]       # transport circuit / connection between NEs
+  - [PORT,                        PRODUCT]       # physical or logical port on a NETWORK_ELEMENT
+  - [CONFIGURATION_ITEM,          PRODUCT]       # CMDB CI — any tracked asset (NE, circuit, port, service)
+  - [SERVICE_INSTANCE,            PRODUCT]       # activated service bound to a circuit/CI
+
+  # OSS/BSS process concepts
+  - [PROVISIONING_TASK,           CONCEPT]       # discrete fulfillment task within a service order
+  - [ACTIVATION_TASK,             CONCEPT]       # final turn-up step of provisioning
+  - [DECOMMISSION_EVENT,          EVENT]         # circuit/CI retirement event
+  - [SLA_COMMITMENT,              CONCEPT]       # committed turnaround time (business days, uptime %)
+  - [CI_STATUS,                   CONCEPT]       # ACTIVE / DECOMMISSIONED / RESERVED / FAULTY
+  - [CHANGE_TICKET,                CONCEPT]       # formal change-management record
+
+# ── Relation schema extensions ─────────────────────────────────────────────────
+# These extend the domain/range rules in graphrag/graph/ontology_registry.py.
+# Loaded via: registry.add_domain_range_rules(get_relation_rules(ontology))
+
+relation_rules:
+  # CMDB / inventory authority chain — central to T01
+  RECORDS_STATUS_OF:
+    domain: [CMDB_CHANGE_RECORD, NETWORK_INVENTORY_RECORD]
+    target: [NETWORK_ELEMENT, CIRCUIT, CONFIGURATION_ITEM]
+    inverse: STATUS_RECORDED_BY
+    note: "CR-4471 RECORDS_STATUS_OF circuit BRN-2201 as DECOMMISSIONED effective 2024-05-01 (T01)"
+
+  DECOMMISSIONS:
+    domain: [CMDB_CHANGE_RECORD, DECOMMISSION_EVENT]
+    target: [NETWORK_ELEMENT, CIRCUIT, CONFIGURATION_ITEM]
+    note: "Authoritative retirement of a CI — supersedes any prior ACTIVE inventory record"
+
+  REQUESTS_ACTIVATION_ON:
+    domain: [SERVICE_ORDER, PROVISIONING_TASK, ACTIVATION_TASK]
+    target: [CIRCUIT, NETWORK_ELEMENT, CONFIGURATION_ITEM]
+    note: "SO-88291 REQUESTS_ACTIVATION_ON circuit BRN-2201 — conflicts with DECOMMISSIONS if the CI is retired (T01)"
+
+  VALIDATES_AGAINST:
+    domain: [SERVICE_ORDER, PROVISIONING_TASK]
+    target: [NETWORK_INVENTORY_RECORD, CMDB_CHANGE_RECORD]
+    note: "PROC-OSS-014 requires provisioning tasks to VALIDATES_AGAINST current CMDB state before activation — the gap that lets T01 happen when skipped"
+
+  # Governance / authority
+  GOVERNS:
+    domain: [PROVISIONING_PROCEDURE, CMDB_CHANGE_RECORD]
+    target: [SERVICE_ORDER, PROVISIONING_TASK, ACTIVATION_TASK, NETWORK_ELEMENT, CIRCUIT]
+    inverse: GOVERNED_BY
+
+  GOVERNED_BY:
+    domain: [SERVICE_ORDER, PROVISIONING_TASK, ACTIVATION_TASK, NETWORK_ELEMENT, CIRCUIT]
+    target: [PROVISIONING_PROCEDURE, CMDB_CHANGE_RECORD]
+
+  MANDATES_SLA:
+    domain: [PROVISIONING_PROCEDURE]
+    target: [SLA_COMMITMENT]
+    note: "PROC-OSS-014 MANDATES_SLA of 5 business days for circuit-dependent activation (T02)"
+
+  COMMITS_SLA:
+    domain: [SERVICE_ORDER]
+    target: [SLA_COMMITMENT]
+    note: "SO-88291 COMMITS_SLA of 2 business days to the customer — conflicts with MANDATES_SLA (T02)"
+
+  # Service fulfillment structure
+  PROVISIONS:
+    domain: [SERVICE_ORDER]
+    target: [SERVICE_INSTANCE]
+    inverse: PROVISIONED_BY
+
+  RUNS_ON:
+    domain: [SERVICE_INSTANCE]
+    target: [CIRCUIT, NETWORK_ELEMENT, PORT]
+    inverse: HOSTS
+
+  HOSTS:
+    domain: [CIRCUIT, NETWORK_ELEMENT, PORT]
+    target: [SERVICE_INSTANCE]
+
+  TERMINATES_ON:
+    domain: [CIRCUIT]
+    target: [PORT, NETWORK_ELEMENT]
+
+  CONTAINS_TASK:
+    domain: [SERVICE_ORDER]
+    target: [PROVISIONING_TASK, ACTIVATION_TASK]
+    inverse: PART_OF_ORDER
+
+  # CMDB structure
+  TRACKED_AS:
+    domain: [NETWORK_ELEMENT, CIRCUIT, PORT, SERVICE_INSTANCE]
+    target: [CONFIGURATION_ITEM]
+
+  HAS_STATUS:
+    domain: [CONFIGURATION_ITEM, NETWORK_ELEMENT, CIRCUIT]
+    target: [CI_STATUS]
+
+  RAISED_FOR:
+    domain: [CHANGE_TICKET, CMDB_CHANGE_RECORD]
+    target: [CONFIGURATION_ITEM, NETWORK_ELEMENT, CIRCUIT]
+
+  # Org relationships
+  OPERATES:
+    domain: [OPERATOR, NETOPS_TEAM]
+    target: [NETWORK_ELEMENT, CIRCUIT]
+    inverse: OPERATED_BY
+
+  SUBSCRIBES_TO:
+    domain: [SUBSCRIBER_ORG]
+    target: [SERVICE_INSTANCE]
+    inverse: SERVES_SUBSCRIBER
+
+# ── Inference rules (telecom-specific) ────────────────────────────────────────
+# Supplement the built-in rules in graphrag/graph/inference_engine.py.
+
+inference_rules:
+  - name: decommissions_status_transitivity
+    relation: DECOMMISSIONS
+    rule_type: transitivity
+    max_depth: 2
+    confidence_decay: 0.95
+    note: >
+      If CR-4471 decommissions circuit BRN-2201, any SERVICE_INSTANCE
+      RUNS_ON that circuit should transitively be flagged as affected —
+      lets retrieval surface downstream impact of a decommission.
+
+  - name: governs_inverse
+    relation: GOVERNS
+    rule_type: inverse
+    derived_relation: GOVERNED_BY
+
+  - name: runs_on_inverse
+    relation: RUNS_ON
+    rule_type: inverse
+    derived_relation: HOSTS
+
+  - name: operates_inverse
+    relation: OPERATES
+    rule_type: inverse
+    derived_relation: OPERATED_BY
+
+  - name: contains_task_inverse
+    relation: CONTAINS_TASK
+    rule_type: inverse
+    derived_relation: PART_OF_ORDER
+
+# ── Exclusive state pairs (contradiction detection) ────────────────────────────
+# Extends the default pairs in contradiction_strategies.py. T01/T02 map
+# directly to the pairs below.
+
+exclusive_state_pairs:
+  - [CI_STATUS_DECOMMISSIONED,      CI_STATUS_ACTIVE]        # T01 — CMDB change record vs service order assumption
+  - [SLA_FIVE_BUSINESS_DAYS,        SLA_TWO_BUSINESS_DAYS]   # T02 — PROC-OSS-014 vs SO-88291 commitment
+  - [CMDB_VALIDATED,                CMDB_NOT_VALIDATED]
+  - [SERVICE_ACTIVE,                SERVICE_SUSPENDED]
+
+# ── Functional relations (one-to-one per time window) ─────────────────────────
+# Extends functional_relations in contradiction_strategies.py.
+
+functional_relations:
+  - HAS_STATUS                # a CI has exactly one active status at a given time
+  - SLA_COMMITMENT_OF         # a service order has exactly one committed SLA
+  - MANDATES_SLA              # a provisioning procedure has exactly one standard SLA per service class
+
+# ── Authority levels for this domain ──────────────────────────────────────────
+# Mirrors the AuthorityLevel enum (graphrag/core/models.py) — lower = higher
+# authority. CMDB change records are the source of truth for network state
+# (highest authority); service orders are the lowest-authority, most
+# execution-facing document.
+
+authority_levels:
+  CMDB_CHANGE_RECORD:         1   # CR-* — authoritative network-state record, source of truth (T01)
+  PROVISIONING_PROCEDURE:     2   # PROC-OSS-* — standard SLA + validation governance (T02)
+  NETWORK_INVENTORY_RECORD:   3   # INV-* — inventory snapshot, refreshed from CMDB
+  SERVICE_ORDER:              4   # SO-* — customer-facing execution request, lowest authority
+
+# ── Document prefix -> type/authority map ──────────────────────────────────────
+# Reference table so the ingestion script's per-document authority assignment
+# stays in sync with this ontology (mirrors automotive_iatf.yml /
+# marketing_adtech.yml's document_prefixes -> _telecom_corpus_config()).
+
+document_prefixes:
+  CMDB-ChangeRecord:  { type: CMDB_CHANGE_RECORD,        authority: 1 }
+  ProvisioningActivationProcedure: { type: PROVISIONING_PROCEDURE, authority: 2 }
+  NetworkInventory:   { type: NETWORK_INVENTORY_RECORD,  authority: 3 }
+  ServiceOrder:       { type: SERVICE_ORDER,              authority: 4 }
+
+# ── Known revision-supersession chains ─────────────────────────────────────────
+# No prior-version documents exist in the 4-file data/telecom/ corpus (current
+# versions only, same situation as marketing_adtech.yml) — left empty
+# intentionally. Add entries here if a superseded revision is added later.
+
+supersession_chains: []

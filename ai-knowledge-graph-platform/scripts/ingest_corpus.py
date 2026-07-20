@@ -140,11 +140,49 @@ def _marketing_corpus_config() -> dict:
     }
 
 
+def _telecom_corpus_config() -> dict:
+    """
+    Derive the telecom (OSS/BSS) corpus config from its domain ontology.
+
+    config/ontologies/telecom_oss.yml's `document_prefixes` and
+    `supersession_chains` sections are the source of truth, so the ingestion
+    script and the ontology never drift apart.
+    """
+    from graphrag.graph.domain_ontology import (
+        get_ontology_path_for_tenant,
+        load_domain_ontology,
+    )
+
+    ontology_path = get_ontology_path_for_tenant("telecom")
+    ontology = load_domain_ontology(ontology_path) if ontology_path else {}
+
+    prefixes = ontology.get("document_prefixes", {}) or {}
+    # Longest prefix first so e.g. "ProvisioningActivationProcedure" matches
+    # before any shorter alias.
+    authority_map = {
+        prefix: spec["authority"]
+        for prefix, spec in sorted(prefixes.items(), key=lambda kv: -len(kv[0]))
+    }
+
+    supersession_map: dict[str, list[str]] = {}
+    for chain in ontology.get("supersession_chains", []) or []:
+        supersession_map.setdefault(chain["successor"], []).append(chain["predecessor"])
+
+    return {
+        "corpus_dir": ROOT / "data" / "telecom",
+        "recursive": False,
+        "authority_map": authority_map,
+        "supersession_map": supersession_map,
+    }
+
+
 def _corpus_config(tenant: str) -> dict:
     if tenant == "automotive":
         return _automotive_corpus_config()
     if tenant == "marketing":
         return _marketing_corpus_config()
+    if tenant == "telecom":
+        return _telecom_corpus_config()
     return _CORPUS_CONFIGS.get(tenant, _CORPUS_CONFIGS["aerospace"])
 
 

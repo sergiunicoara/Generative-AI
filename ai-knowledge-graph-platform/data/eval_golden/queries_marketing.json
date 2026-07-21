@@ -1,0 +1,102 @@
+{
+  "version": "1.0",
+  "tenant": "marketing",
+  "description": "Golden evaluation set for the GraphRAG adtech/marketing corpus (Nova Beverages Global / WPP Open — Team Meridian, data/wpp_demo/, 4 documents). 10 questions covering single-hop facts, multi-hop policy chains, the two planted ground-truth contradictions (WPP01 stale-category exclusion, WPP02 sensitive-category prohibition), the SOW-prevails authority chain, and negative retrieval.",
+  "thresholds": {
+    "min_context_precision": 0.65,
+    "min_faithfulness":      0.75,
+    "min_relevancy":         0.65,
+    "min_citation_recall":   0.50,
+    "pass_rate_min":         0.70
+  },
+  "questions": [
+
+    {
+      "id": "SH-01", "type": "single_hop",
+      "question": "What is the quarterly media budget for Nova Beverages Global campaigns under the SOW?",
+      "expected_citations": ["sow-novabeverages-2024"],
+      "required_answer_terms": ["2,400,000"],
+      "forbidden_terms": ["unknown"],
+      "min_context_precision": 0.75,
+      "note": "SOW section 3 — quarterly media budget $2,400,000 USD, the single most retrievable numeric fact in the corpus"
+    },
+    {
+      "id": "SH-02", "type": "single_hop",
+      "question": "What is the target ROAS for Nova Beverages Global campaigns per the Statement of Work?",
+      "expected_citations": ["sow-novabeverages-2024"],
+      "required_answer_terms": ["4.2x"],
+      "forbidden_terms": ["unknown"],
+      "min_context_precision": 0.7,
+      "note": "SOW section 3 — target ROAS 4.2x minimum"
+    },
+
+    {
+      "id": "MH-01", "type": "multi_hop",
+      "question": "Which ad categories are strictly excluded from Nova Beverages Global campaigns, and which document governs if a campaign-level decision conflicts with that exclusion?",
+      "expected_citations": ["sow-novabeverages-2024"],
+      "required_answer_terms": ["gambling", "SOW"],
+      "forbidden_terms": [],
+      "min_context_precision": 0.65,
+      "note": "Chains SOW section 2 (excluded categories: alcohol-adjacent, gambling/sports-betting, political) with SOW section 4 (SOW is binding authority, prevails over Media Plan/Campaign Brief)"
+    },
+    {
+      "id": "MH-02", "type": "multi_hop",
+      "question": "What consent requirement applies to behavioral or interest-based targeting in EU markets for Nova Beverages, and which regulation is it based on?",
+      "expected_citations": ["dataprivacypolicy-novabeverages-2024"],
+      "required_answer_terms": ["opt-in", "GDPR"],
+      "forbidden_terms": [],
+      "min_context_precision": 0.65,
+      "note": "DPP section 2 — EU markets require explicit opt-in consent per GDPR Article 6 before behavioral/interest-based targeting"
+    },
+
+    {
+      "id": "CON-01", "type": "contradiction",
+      "question": "Can the EU Q3 SummerRush campaign run placements alongside sports-betting content in Germany and Poland?",
+      "expected_citations": ["sow-novabeverages-2024", "campaignbrief-novabeverages-eu-q3"],
+      "required_answer_terms": ["sports-betting", "SOW"],
+      "forbidden_terms": [],
+      "min_context_precision": 0.6,
+      "min_citation_recall": 0.4,
+      "note": "WPP01 — CampaignBrief-NovaBeverages-EU-Q3 extends adjacency into sports-betting companion apps in DE/PL under the Brand Guideline's local-approval flexibility clause, but SOW-NovaBeverages-2024 section 2 STRICTLY EXCLUDES gambling/sports-betting placements without exception and section 4 states the SOW prevails over any Media Plan or Campaign Brief in conflict. Tests whether the pipeline surfaces both documents rather than answering from the Campaign Brief alone. required_answer_terms loosened 2026-07-21 — original 'excluded' (exact substring) missed the model's correct 'excludes' phrasing; a real answer will always name the SOW and the sports-betting category regardless of verb tense."
+    },
+    {
+      "id": "CON-02", "type": "contradiction",
+      "question": "Does the Nova Beverages Global data privacy policy permit gambling-adjacent behavioral targeting for the EU Q3 SummerRush campaign's sports-betting adjacency?",
+      "expected_citations": ["dataprivacypolicy-novabeverages-2024", "campaignbrief-novabeverages-eu-q3"],
+      "required_answer_terms": ["prohibited"],
+      "forbidden_terms": [],
+      "min_context_precision": 0.6,
+      "min_citation_recall": 0.4,
+      "note": "WPP02 — DPP section 2-3 prohibits sensitive-category inference (gambling behavior included) regardless of consent status, and section 4 states the DPP supersedes any campaign-level or regional targeting approval — an independent authority conflicting with the same Campaign Brief adjacency extension as CON-01, via a different mechanism (privacy law vs contractual exclusion)"
+    },
+    {
+      "id": "AUTH-01", "type": "authority_chain",
+      "question": "If the Brand Guideline and the Statement of Work disagree on a campaign decision, which document prevails?",
+      "expected_citations": ["sow-novabeverages-2024", "brandguideline-novabeverages-global"],
+      "required_answer_terms": ["SOW", "prevails"],
+      "forbidden_terms": [],
+      "min_context_precision": 0.6,
+      "min_citation_recall": 0.4,
+      "note": "Brand Guideline section 5 explicitly defers: 'does NOT override contractual budget, category-exclusion, or compliance terms established in a client's active SOW... SOW terms take precedence where the two documents conflict'. forbidden_terms fixed 2026-07-21 — originally forbade mentioning 'Brand Guideline' at all, which incorrectly penalized a correct answer that names the SOW as the winner while explaining that the Brand Guideline itself defers to it. A correct answer legitimately mentions both documents."
+    },
+
+    {
+      "id": "NEG-01", "type": "negative",
+      "question": "What is the CPC bid cap for the SummerRush campaign's TikTok placements?",
+      "expected_citations": [],
+      "required_answer_terms": [],
+      "forbidden_terms": ["$", "EUR", "€"],
+      "min_context_precision": 0.5,
+      "note": "No CPC bid cap is specified anywhere in the corpus (only monthly recurring charge and activation fee appear in ServiceOrder-style docs from other tenants, not this one) — correct answer is an acknowledgment that the information isn't present, not an invented figure. forbidden_terms fixed 2026-07-21 — dropped 'bid cap' since a correct refusal legitimately echoes the question's own terminology ('the context does not contain any information about a CPC bid cap...'); only forbid actual fabricated currency figures."
+    },
+    {
+      "id": "NEG-02", "type": "negative",
+      "question": "How many total employees does WPP Open's Team Meridian have assigned to the Nova Beverages account?",
+      "expected_citations": [],
+      "required_answer_terms": [],
+      "forbidden_terms": [],
+      "min_context_precision": 0.5,
+      "note": "Headcount is never mentioned in the corpus — verifies the model recognizes the gap instead of fabricating a number"
+    }
+  ]
+}

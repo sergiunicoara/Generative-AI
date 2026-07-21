@@ -289,10 +289,22 @@ class LocalSearch:
             semantic_weight=sem_weight,
         )
 
+        # De-dupe by chunk_id as we go (not just against seed_ids) — multiple
+        # entities/paths in the same hop-traversal frequently converge on the
+        # same chunk, so get_multihop_chunks() can return one chunk_id dozens
+        # of times. Without updating `seen` per accepted chunk, hop_top_k caps
+        # on a pool that's mostly repeats of a handful of chunks, starving out
+        # distinct-but-single-occurrence chunks that never get a seed slot.
         hop_top_k = self._cfg.get("multihop_top_k", 50)
         seen: set[str] = set(seed_ids)
-        extra_chunks = [c for c in hop_chunks if c["chunk_id"] not in seen]
-        extra_chunks = extra_chunks[:hop_top_k]  # cap before GNN — prevents full-corpus scoring
+        extra_chunks: list[dict] = []
+        for c in hop_chunks:
+            if c["chunk_id"] in seen:
+                continue
+            seen.add(c["chunk_id"])
+            extra_chunks.append(c)
+            if len(extra_chunks) >= hop_top_k:  # cap before GNN — prevents full-corpus scoring
+                break
         all_chunks   = seed_chunks + extra_chunks
         all_ids      = [c["chunk_id"] for c in all_chunks]
 

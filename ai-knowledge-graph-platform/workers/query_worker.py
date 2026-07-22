@@ -1,10 +1,19 @@
 """Entry point: starts QueryConsumer with graceful SIGTERM shutdown."""
 
 import asyncio
+import io
 import os
 import signal
 import sys
 from pathlib import Path
+
+# On Windows, stdout/stderr default to the ANSI codepage (cp1252), which
+# raises UnicodeEncodeError on non-ASCII text (e.g. Romanian diacritics) in
+# log messages — an unhandled UnicodeEncodeError here crashes the whole
+# consumer process, silently killing the RabbitMQ consume loop after the
+# first such message (see scripts/ingest_corpus.py for the same fix).
+sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")
+sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding="utf-8", errors="replace")
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
@@ -74,7 +83,6 @@ async def main():
 
     health.set_ready()
 
-    import sys
     if sys.platform != "win32":
         loop = asyncio.get_running_loop()
         for sig in (signal.SIGTERM, signal.SIGINT):

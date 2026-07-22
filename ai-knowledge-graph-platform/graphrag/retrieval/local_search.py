@@ -174,17 +174,36 @@ class LocalSearch:
         if use_rerank and fused_chunks:
             seed_chunks = await self._reranker.rerank(enriched_question, fused_chunks)
 
-            # RRF floor: the cross-encoder (English-trained MS MARCO) can
-            # drop the #1 RRF-fused chunk entirely on non-English text even
-            # when it's a lexically-perfect match. If so, trust RRF fusion
-            # and treat it as the top seed (rank 0 -> _text_score=1.0 in the
-            # GNN blend), dropping the weakest reranked seed to keep the
-            # seed count at rerank_top_k.
-            top_fused_id = fused_chunks[0]["chunk_id"]
-            if seed_chunks and not any(c["chunk_id"] == top_fused_id for c in seed_chunks):
-                top_fused = dict(fused_chunks[0])
-                top_fused["rerank_score"] = top_fused.get("score", 0.0)
-                seed_chunks = [top_fused] + seed_chunks[:-1]
+            # RRF floor: the cross-encoder can drop a well-fused chunk
+            # entirely — not just the #1 RRF chunk. Two known failure modes:
+            # (a) non-English text (MS MARCO is English-trained) even when
+            # it's a lexically-perfect match; (b) a chunk whose *content* is
+            # a short numeric/list-style fact (e.g. "Quarterly media budget:
+            # $2,400,000") scored low against a verbose neighboring section,
+            # even in English, because the cross-encoder favors longer prose
+            # matches over dense fact fragments. Guarantee the top
+            # `rrf_floor_top_n` RRF-fused chunks a seed slot regardless of
+            # what the cross-encoder did with them, dropping the weakest
+            # reranked seeds to keep the seed count at rerank_top_k. This
+            # runs BEFORE the lexical-diversity step below so a same-document
+            # duplicate it inserts is naturally deduped by that step exactly
+            # like any other same-document duplicate — inserting after would
+            # need its own eviction logic that fights lexical-diversity's
+            # document-coverage guarantee.
+            floor_top_n = self._cfg.get("rrf_floor_top_n", 2)
+            missing_floor = [
+                c for c in fused_chunks[:floor_top_n]
+                if seed_chunks and not any(s["chunk_id"] == c["chunk_id"] for s in seed_chunks)
+            ]
+            floored_ids: set[str] = {c["chunk_id"] for c in missing_floor}
+            if missing_floor:
+                floored = []
+                for c in missing_floor:
+                    c = dict(c)
+                    c["rerank_score"] = c.get("score", 0.0)
+                    floored.append(c)
+                keep = max(0, len(seed_chunks) - len(floored))
+                seed_chunks = floored + seed_chunks[:keep]
 
             # Preserve lexical evidence from distinct source documents. The
             # MS MARCO cross-encoder is English-trained and can demote strong
@@ -214,6 +233,20 @@ class LocalSearch:
                         c for c in seed_chunks if c["chunk_id"] not in selected_ids
                     ]
                     seed_chunks = (lexical_diverse + remaining)[:len(seed_chunks)]
+
+            # Promote any floored chunk that survived the steps above back to
+            # the front (stable — relative order otherwise unchanged). This is
+            # rank-only, no membership change, so it can't undo the
+            # lexical-diversity document-coverage guarantee above: it only
+            # reorders chunks that are already seed members. Needed because
+            # the downstream GNN blend scores seed rank via 1.0-(rank/n_seed);
+            # a floored chunk left mid-list by lexical-diversity's reordering
+            # can score *worse* than a plain hop chunk's raw vector/BM25
+            # score, silently undoing the floor's whole purpose.
+            if floored_ids:
+                promoted = [c for c in seed_chunks if c["chunk_id"] in floored_ids]
+                rest = [c for c in seed_chunks if c["chunk_id"] not in floored_ids]
+                seed_chunks = promoted + rest
         else:
             seed_chunks = fused_chunks
 

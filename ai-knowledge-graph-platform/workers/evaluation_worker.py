@@ -1,7 +1,18 @@
 """Entry point: starts EvaluationConsumer with graceful SIGTERM shutdown."""
 
 import asyncio
+import io
 import signal
+import sys
+
+# On Windows, stdout/stderr default to the ANSI codepage (cp1252), which
+# raises UnicodeEncodeError on non-ASCII text (e.g. Romanian diacritics) in
+# log messages — an unhandled UnicodeEncodeError here crashes the whole
+# consumer process, silently killing the RabbitMQ consume loop after the
+# first such message (see scripts/ingest_corpus.py for the same fix).
+sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")
+sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding="utf-8", errors="replace")
+
 import structlog
 
 from graphrag.messaging.consumers import EvaluationConsumer
@@ -14,7 +25,6 @@ async def main():
     consumer = EvaluationConsumer()
     task = asyncio.create_task(consumer.start())
 
-    import sys
     if sys.platform != "win32":
         loop = asyncio.get_running_loop()
         for sig in (signal.SIGTERM, signal.SIGINT):

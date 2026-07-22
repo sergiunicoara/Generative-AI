@@ -60,7 +60,7 @@ retrieval:
   hybrid_weight_global: 0.4
   bm25_enabled: true       # BM25 fulltext + RRF fusion with vector results
   reranker_enabled: true   # cross-encoder rerank after RRF (ms-marco-MiniLM-L-6-v2)
-  query_rewrite_enabled: false  # Stage-1: expand/normalize query (acronyms, revisions, synonyms) before first-pass retrieval; search-only, never touches answer/eval. Fails open.
+  query_rewrite_enabled: true  # Stage-1: strip retrieval-diluting boilerplate + expand/normalize query before first-pass retrieval; search-only, never touches answer/eval. Fails open. Re-enabled 2026-07-21 after fixing prompt leakage (removed hardcoded domain examples that bled into unrelated rewrites) and adding malformed-output guards (boolean syntax, literal placeholders) — see graphrag/retrieval/query_rewriter.py.
   # ── Session context ──────────────────────────────────────────────────────────
   session_context_enabled: true     # enrich ambiguous follow-up queries with session entities
   session_max_turns: 10             # sliding window size per session

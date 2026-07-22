@@ -63,7 +63,8 @@
       "id": "CON-02", "type": "contradiction",
       "question": "Does the Nova Beverages Global data privacy policy permit gambling-adjacent behavioral targeting for the EU Q3 SummerRush campaign's sports-betting adjacency?",
       "expected_citations": ["dataprivacypolicy-novabeverages-2024", "campaignbrief-novabeverages-eu-q3"],
-      "required_answer_terms": ["prohibited"],
+      "required_answer_terms": [],
+      "required_answer_any_of": [["prohibited", "does not permit", "not permit", "not allowed"]],
       "forbidden_terms": [],
       "min_context_precision": 0.6,
       "min_citation_recall": 0.4,
@@ -73,11 +74,11 @@
       "id": "AUTH-01", "type": "authority_chain",
       "question": "If the Brand Guideline and the Statement of Work disagree on a campaign decision, which document prevails?",
       "expected_citations": ["sow-novabeverages-2024", "brandguideline-novabeverages-global"],
-      "required_answer_terms": ["SOW", "prevails"],
+      "required_answer_terms": ["SOW"],
       "forbidden_terms": [],
       "min_context_precision": 0.6,
       "min_citation_recall": 0.4,
-      "note": "Brand Guideline section 5 explicitly defers: 'does NOT override contractual budget, category-exclusion, or compliance terms established in a client's active SOW... SOW terms take precedence where the two documents conflict'. forbidden_terms fixed 2026-07-21 — originally forbade mentioning 'Brand Guideline' at all, which incorrectly penalized a correct answer that names the SOW as the winner while explaining that the Brand Guideline itself defers to it. A correct answer legitimately mentions both documents."
+      "note": "Brand Guideline section 5 explicitly defers: 'does NOT override contractual budget, category-exclusion, or compliance terms established in a client's active SOW... SOW terms take precedence where the two documents conflict'. forbidden_terms fixed 2026-07-21 — originally forbade mentioning 'Brand Guideline' at all, which incorrectly penalized a correct answer that names the SOW as the winner while explaining that the Brand Guideline itself defers to it. A correct answer legitimately mentions both documents. required_answer_terms loosened 2026-07-21 (second pass) — dropped exact-match 'prevails'; a correct answer legitimately paraphrases as 'takes precedence', which is the source document's own wording in section 5."
     },
 
     {

@@ -5,7 +5,18 @@ avoiding Fly.io cross-node Bolt protocol issues.
 """
 
 import asyncio
+import io
 import signal
+import sys
+
+# On Windows, stdout/stderr default to the ANSI codepage (cp1252), which
+# raises UnicodeEncodeError on non-ASCII text (e.g. Romanian diacritics) in
+# log messages — an unhandled UnicodeEncodeError here crashes the whole
+# consumer process, silently killing the RabbitMQ consume loop after the
+# first such message (see scripts/ingest_corpus.py for the same fix).
+sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")
+sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding="utf-8", errors="replace")
+
 import structlog
 
 from graphrag.messaging.consumers import IngestionConsumer, QueryConsumer
@@ -53,7 +64,6 @@ async def main():
     ingest_task = asyncio.create_task(ingest_consumer.start(), name="ingestion")
     query_task = asyncio.create_task(query_consumer.start(), name="query")
 
-    import sys
     if sys.platform != "win32":
         loop = asyncio.get_running_loop()
         for sig in (signal.SIGTERM, signal.SIGINT):

@@ -380,7 +380,8 @@ class GNNScorer:
         Reranked seed chunks use a rank-based score spanning the full
         [0, 1] range (1.0 for the cross-encoder's #1 pick, descending for
         lower ranks). Multi-hop chunks (no ``rerank_score``) use their
-        path_score as-is.
+        path_score, dampened below the weakest seed's own rank-based score
+        when seeds exist (see below).
 
         This is the *text* component of the final blend formula:
             final = α · text_score + β · gnn_score
@@ -388,7 +389,25 @@ class GNNScorer:
         if n_seed and chunk["chunk_id"] in seed_rank:
             rank = seed_rank[chunk["chunk_id"]]
             return float(1.0 - (rank / n_seed))
-        return float(chunk.get("score", 0.0))
+
+        raw = float(chunk.get("score", 0.0))
+        if not n_seed:
+            return raw
+
+        # Multi-hop chunks must never outscore the reranker's weakest seed on
+        # text_score alone. Raw cosine/path scores for topically-similar
+        # short text chunks cluster tightly (commonly 0.7-0.9) regardless of
+        # true relevance to the query, while rank-based seed scores spread
+        # evenly across [1/n_seed, 1.0] — the two populations were never on
+        # a comparable scale. Left unscaled, a merely-nearby hop chunk with
+        # raw score 0.8 can displace a cross-encoder-confirmed seed ranked
+        # below the top 1-2 positions, silently discarding the reranker's
+        # (and the RRF-floor/lexical-diversity logic's) verdict. Dampen hop
+        # scores into [0, seed_floor) — strictly below every seed's score —
+        # so multi-hop chunks can only ever act as tie-breakers / additional
+        # bridging context below the seed set, never above it.
+        seed_floor = 1.0 / n_seed
+        return raw * seed_floor
 
     # ------------------------------------------------------------------
     # Confidence propagation

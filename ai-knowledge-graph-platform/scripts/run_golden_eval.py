@@ -37,11 +37,6 @@ from pathlib import Path
 import httpx
 import structlog
 
-# Windows consoles default to cp1252, which can't encode the ⚠/✓/✗ markers
-# printed below.
-sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")
-sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding="utf-8", errors="replace")
-
 # Make project root importable
 sys.path.insert(0, str(Path(__file__).parents[1]))
 
@@ -90,6 +85,21 @@ def _check(question_spec: dict, result: dict) -> tuple[bool, list[str]]:
     for phrase in required:
         if phrase.lower() not in answer:
             failures.append(f"answer missing required term: {phrase!r}")
+
+    # Required terms — any-of groups. Each entry is a list of alternative
+    # phrasings; the answer must contain at least one from each group. Use
+    # this (rather than required_answer_terms) whenever a correct answer can
+    # be legitimately phrased more than one way — e.g. "prohibited" vs
+    # "does not permit" vs "not allowed" all correctly convey a prohibition,
+    # but a strict single-substring check only accepts whichever exact
+    # phrasing was guessed when the question was written. This has been a
+    # recurring false-failure pattern (correct answers penalized for
+    # paraphrasing), so it's a first-class schema field rather than another
+    # one-off question rewrite each time it recurs.
+    required_any = question_spec.get("required_answer_any_of", [])
+    for group in required_any:
+        if not any(alt.lower() in answer for alt in group):
+            failures.append(f"answer missing any of required terms: {group!r}")
 
     # Forbidden terms (supports both v2 and v1 field names)
     # Word-boundary match — a plain substring check would flag correct
@@ -256,4 +266,11 @@ def main() -> None:
 
 
 if __name__ == "__main__":
+    # Windows consoles default to cp1252, which can't encode the ⚠/✓/✗
+    # markers printed below. Only wrapped when run as a script — reassigning
+    # sys.stdout/stderr at import time (module level) breaks pytest's own
+    # stdout/stderr capture when this module is imported for its _check()
+    # helper (see tests/unit/test_run_golden_eval.py).
+    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")
+    sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding="utf-8", errors="replace")
     main()

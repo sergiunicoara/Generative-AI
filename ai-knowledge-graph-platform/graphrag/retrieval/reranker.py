@@ -39,12 +39,19 @@ class CrossEncoderReranker:
     def __init__(self, top_k: int = 5):
         self._top_k = top_k
 
-    async def rerank(self, query: str, chunks: list[dict]) -> list[dict]:
+    async def rerank(
+        self, query: str, chunks: list[dict], top_k: int | None = None
+    ) -> list[dict]:
         """Rerank chunks in a thread executor (model is CPU-bound).
 
         Args:
             query:  The user question.
             chunks: List of chunk dicts with at least a 'text' key.
+            top_k:  Per-call override for the number of chunks to return.
+                    Falls back to the instance default (`self._top_k`) when
+                    None. Lets a per-tenant `rerank_top_k` be supplied at query
+                    time without rebuilding the reranker (the model is a shared
+                    singleton bound at construction).
 
         Returns:
             Top-k chunks sorted by cross-encoder score (descending),
@@ -53,12 +60,13 @@ class CrossEncoderReranker:
         if not chunks:
             return chunks
 
+        limit = self._top_k if top_k is None else top_k
         loop = asyncio.get_running_loop()
         reranked = await loop.run_in_executor(
             None,
             lambda: self._score(query, chunks),
         )
-        top = reranked[: self._top_k]
+        top = reranked[:limit]
         log.info(
             "reranker.done",
             input_chunks=len(chunks),

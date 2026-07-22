@@ -23,7 +23,7 @@ import re
 
 import structlog
 
-from graphrag.core.config import get_settings
+from graphrag.core.config import get_settings, resolve_tenant_config
 from graphrag.graph.document_authority import DocumentAuthorityService
 from graphrag.graph.gnn_scorer import GNNScorer
 from graphrag.graph.neo4j_client import get_neo4j
@@ -129,11 +129,21 @@ class LocalSearch:
         referenced_* fields to call session_ctx.record_turn() with the real
         answer once it is known.
         """
-        top_k      = self._cfg.get("local_top_k", 10)
-        hops       = self._cfg.get("multihop_depth", 2)
-        use_bm25   = self._cfg.get("bm25_enabled", True)
-        use_rerank = self._cfg.get("reranker_enabled", True)
-        use_gnn    = self._cfg.get("gnn_enabled", True)
+        # Per-tenant config: merge this tenant's overrides over the global
+        # retrieval defaults. Resolved from self._cfg (the global retrieval dict,
+        # which carries the tenant_overrides sub-block) rather than re-fetching
+        # get_settings() each query. All call-time knob reads below use `cfg`, so
+        # a tenant can be tuned (deeper recall, different top_k) without
+        # regressing others. No override ⇒ global dict unchanged (empty
+        # tenant_overrides is a no-op). Construction-time defaults (self._cfg in
+        # __init__) remain the global fallback for objects bound at build time
+        # (reranker/GNN singletons).
+        cfg = resolve_tenant_config(self._cfg, tenant)
+        top_k      = cfg.get("local_top_k", 10)
+        hops       = cfg.get("multihop_depth", 2)
+        use_bm25   = cfg.get("bm25_enabled", True)
+        use_rerank = cfg.get("reranker_enabled", True)
+        use_gnn    = cfg.get("gnn_enabled", True)
 
         # ── Session context: resolve ambiguous follow-up queries ──────────────
         # Only runs when session_context_enabled=true in config AND a session_id
@@ -146,7 +156,7 @@ class LocalSearch:
                 log.info("local_search.query_enriched", session_id=session_id)
 
         # Step 1 — vector ANN (skipped when vector_search_enabled=false, e.g. OpenAI quota exhausted)
-        use_vector = self._cfg.get("vector_search_enabled", True)
+        use_vector = cfg.get("vector_search_enabled", True)
         embedding: list[float] | None = None
         if use_vector:
             embedding     = await self._embedder.embed_text(enriched_question)
@@ -172,7 +182,12 @@ class LocalSearch:
 
         # Step 3 — cross-encoder reranking
         if use_rerank and fused_chunks:
-            seed_chunks = await self._reranker.rerank(enriched_question, fused_chunks)
+            # Pass per-tenant rerank_top_k at call time: the reranker is a
+            # shared singleton whose top_k was bound at construction to the
+            # global default, so a tenant override must be supplied here.
+            seed_chunks = await self._reranker.rerank(
+                enriched_question, fused_chunks, top_k=cfg.get("rerank_top_k", 5)
+            )
 
             # RRF floor: the cross-encoder can drop a well-fused chunk
             # entirely — not just the #1 RRF chunk. Two known failure modes:
@@ -190,7 +205,7 @@ class LocalSearch:
             # like any other same-document duplicate — inserting after would
             # need its own eviction logic that fights lexical-diversity's
             # document-coverage guarantee.
-            floor_top_n = self._cfg.get("rrf_floor_top_n", 2)
+            floor_top_n = cfg.get("rrf_floor_top_n", 2)
             missing_floor = [
                 c for c in fused_chunks[:floor_top_n]
                 if seed_chunks and not any(s["chunk_id"] == c["chunk_id"] for s in seed_chunks)
@@ -211,7 +226,7 @@ class LocalSearch:
             # can then occupy nearly every seed slot. Keep the best RRF-fused
             # chunk from the configured number of distinct documents, then
             # fill remaining slots from the cross-encoder ranking.
-            min_seed_docs = self._cfg.get("lexical_seed_min_documents", 0)
+            min_seed_docs = cfg.get("lexical_seed_min_documents", 0)
             if min_seed_docs > 1 and len(seed_chunks) > 1:
                 fused_filenames = await self._neo4j.get_chunk_filenames(
                     [c["chunk_id"] for c in fused_chunks], tenant=tenant
@@ -313,7 +328,7 @@ class LocalSearch:
         # rather than just topologically-cheap ones. Cosine runs inside Neo4j —
         # no embeddings cross the wire. Requires the query embedding, so it
         # degrades to pure path-score ranking when vector search is disabled.
-        sem_weight = self._cfg.get("multihop_semantic_weight", 0.0)
+        sem_weight = cfg.get("multihop_semantic_weight", 0.0)
         hop_chunks = await self._neo4j.get_multihop_chunks(
             seed_ids,
             hops=hops,
@@ -328,7 +343,7 @@ class LocalSearch:
         # of times. Without updating `seen` per accepted chunk, hop_top_k caps
         # on a pool that's mostly repeats of a handful of chunks, starving out
         # distinct-but-single-occurrence chunks that never get a seed slot.
-        hop_top_k = self._cfg.get("multihop_top_k", 50)
+        hop_top_k = cfg.get("multihop_top_k", 50)
         seen: set[str] = set(seed_ids)
         extra_chunks: list[dict] = []
         for c in hop_chunks:
@@ -345,11 +360,11 @@ class LocalSearch:
         if use_gnn and all_chunks and embedding is not None:
             alpha, beta = _adaptive_weights(
                 enriched_question,
-                self._cfg.get("gnn_alpha", 0.9),
-                self._cfg.get("gnn_beta",  0.1),
+                cfg.get("gnn_alpha", 0.9),
+                cfg.get("gnn_beta",  0.1),
             ) if self._adaptive_weights else (
-                self._cfg.get("gnn_alpha", 0.9),
-                self._cfg.get("gnn_beta",  0.1),
+                cfg.get("gnn_alpha", 0.9),
+                cfg.get("gnn_beta",  0.1),
             )
 
             chunk_entities, entity_edges = await asyncio.gather(

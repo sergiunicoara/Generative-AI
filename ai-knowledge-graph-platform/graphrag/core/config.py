@@ -19,6 +19,29 @@ def _load_yaml() -> dict:
         return yaml.safe_load(f)
 
 
+def resolve_tenant_config(base: dict, tenant: str = "default") -> dict:
+    """Merge a config block's ``tenant_overrides.<tenant>`` over its defaults.
+
+    Shared by ``Settings.retrieval_for`` and the retrievers, which each already
+    hold the global retrieval dict (with its ``tenant_overrides`` sub-block) and
+    resolve per-tenant at query time. Mirrors ``AlertService._effective_thresholds``:
+    global dict, then the tenant's overrides win.
+
+    No override for the tenant ⇒ the base dict is returned unchanged (identity
+    when it has no ``tenant_overrides`` key at all), so an empty overrides block
+    is a guaranteed no-op. The ``tenant_overrides`` key is stripped from the
+    result so consumers never see it as a retrieval knob.
+    """
+    overrides = base.get("tenant_overrides", {}).get(tenant, {})
+    if not overrides:
+        if "tenant_overrides" not in base:
+            return base
+        return {k: v for k, v in base.items() if k != "tenant_overrides"}
+    merged = {k: v for k, v in base.items() if k != "tenant_overrides"}
+    merged.update(overrides)  # tenant wins
+    return merged
+
+
 class Settings(BaseSettings):
     # ── Google AI (last-resort fallback for RAGAS judge only; embeddings use OpenAI) ──
     google_api_key: str = ""
@@ -129,6 +152,14 @@ class Settings(BaseSettings):
     @property
     def retrieval(self) -> dict:
         return self._yaml.get("retrieval", {})
+
+    def retrieval_for(self, tenant: str = "default") -> dict:
+        """Retrieval config with this tenant's overrides merged over the global
+        defaults (see ``resolve_tenant_config``). Different corpora need
+        different retrieval depths, but a global change that fixes one tenant
+        has historically regressed another (see the reverts in settings.yml);
+        this scopes an override to one tenant. Empty overrides ⇒ global dict."""
+        return resolve_tenant_config(self.retrieval, tenant)
 
     @property
     def evaluation(self) -> dict:

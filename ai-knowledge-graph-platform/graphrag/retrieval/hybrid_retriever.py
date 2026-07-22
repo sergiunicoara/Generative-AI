@@ -7,7 +7,7 @@ import time
 
 import structlog
 
-from graphrag.core.config import get_settings
+from graphrag.core.config import get_settings, resolve_tenant_config
 from graphrag.core.llm_client import get_llm
 from graphrag.core.models import QueryResult
 from graphrag.retrieval.local_search import LocalSearch
@@ -87,6 +87,13 @@ class HybridRetriever:
     ) -> QueryResult:
         t0 = time.monotonic()
 
+        # Per-tenant config: merge this tenant's overrides over the global
+        # retrieval defaults (mirrors LocalSearch.search — resolved from
+        # self._cfg). Governs the knobs read below: query-rewrite gate, hybrid
+        # weights, the context top_k that decides how many chunks reach the LLM,
+        # claim verification, agentic fallback. Empty tenant_overrides ⇒ global.
+        cfg = resolve_tenant_config(self._cfg, tenant)
+
         from graphrag.retrieval.result_store import get_result_store
         _store = get_result_store() if query_id else None
 
@@ -102,7 +109,7 @@ class HybridRetriever:
         # is kept for answer synthesis and evaluation — we rewrite what we search
         # with, never what we answer or grade against. Fails open to `question`.
         search_query = question
-        if self._cfg.get("query_rewrite_enabled", True):
+        if cfg.get("query_rewrite_enabled", True):
             search_query = await self._rewriter.rewrite(question, tenant=tenant)
             if search_query != question:
                 await _step(f"📝 Query expanded → {search_query[:60]}")
@@ -115,7 +122,7 @@ class HybridRetriever:
                 session_id=session_id,
                 tenant=tenant,
             )
-            n_reranked = self._cfg.get("rerank_top_k", 5)
+            n_reranked = cfg.get("rerank_top_k", 5)
             await _step(f"📊 Cross-encoder reranking → top {n_reranked} chunks")
 
         if mode in ("global", "hybrid"):
@@ -127,10 +134,10 @@ class HybridRetriever:
             local_results=local_results,
             global_results=global_results,
             weights=(
-                self._cfg.get("hybrid_weight_local", 0.6),
-                self._cfg.get("hybrid_weight_global", 0.4),
+                cfg.get("hybrid_weight_local", 0.6),
+                cfg.get("hybrid_weight_global", 0.4),
             ),
-            top_k=self._cfg.get("rerank_top_k", 5),
+            top_k=cfg.get("rerank_top_k", 5),
         )
 
         answer = await get_llm().generate(
@@ -138,7 +145,7 @@ class HybridRetriever:
         ) or "Insufficient context to answer this question."
 
         # ── Claim verification — strip ungrounded sentences ────────────────────
-        if self._cfg.get("claim_verification", False):
+        if cfg.get("claim_verification", False):
             answer, n_removed = await self._verifier.verify(answer, context)
             if n_removed:
                 log.info("hybrid_retriever.claims_stripped", n_removed=n_removed)
@@ -161,7 +168,7 @@ class HybridRetriever:
         # If the hybrid answer is low-confidence, hand off to the iterative
         # agent which re-searches sub-questions until it accumulates enough
         # context to answer confidently (solves multi-document reasoning).
-        agentic_enabled = self._cfg.get("agentic_fallback", True)
+        agentic_enabled = cfg.get("agentic_fallback", True)
         if agentic_enabled and _is_low_confidence(answer, citations):
             log.info(
                 "hybrid_retriever.low_confidence",

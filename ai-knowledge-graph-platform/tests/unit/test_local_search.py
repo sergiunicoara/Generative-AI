@@ -74,6 +74,9 @@ def _make_local_search(cfg_overrides: dict | None = None) -> LocalSearch:
         mock_settings.return_value.retrieval = base_cfg
 
         ls = LocalSearch.__new__(LocalSearch)
+        # search() resolves per-tenant config from self._cfg via
+        # resolve_tenant_config(); base_cfg has no tenant_overrides key, so it
+        # passes through unchanged and these tests exercise the intended knobs.
         ls._cfg = base_cfg
         ls._neo4j = AsyncMock()
         ls._neo4j.get_chunk_filenames = AsyncMock(return_value={})

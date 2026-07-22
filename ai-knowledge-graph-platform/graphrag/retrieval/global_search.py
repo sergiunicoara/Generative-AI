@@ -6,7 +6,7 @@ import asyncio
 
 import structlog
 
-from graphrag.core.config import get_settings
+from graphrag.core.config import get_settings, resolve_tenant_config
 from graphrag.core.llm_client import get_llm
 from graphrag.graph.neo4j_client import get_neo4j
 from graphrag.ingestion.embedder import Embedder
@@ -41,14 +41,19 @@ class GlobalSearch:
         self._embedder = Embedder()
 
     async def search(self, question: str, tenant: str = "default") -> dict:
+        # Per-tenant config: merge this tenant's overrides over the global
+        # retrieval defaults (mirrors LocalSearch.search — resolved from
+        # self._cfg). Empty tenant_overrides ⇒ global dict unchanged.
+        cfg = resolve_tenant_config(self._cfg, tenant)
+
         # Skip global search when vector_search_enabled=false (e.g. OpenAI quota exhausted)
-        if not self._cfg.get("vector_search_enabled", True):
+        if not cfg.get("vector_search_enabled", True):
             log.info("global_search.vector_skipped", reason="vector_search_enabled=false")
             return {"communities": [], "synthesized_answer": ""}
 
         embedding = await self._embedder.embed_text(question)
 
-        top_k = self._cfg.get("global_top_communities", 5)
+        top_k = cfg.get("global_top_communities", 5)
         communities = await self._neo4j.vector_search_communities(
             embedding,
             top_k=top_k,

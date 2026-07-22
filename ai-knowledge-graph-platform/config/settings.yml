@@ -84,6 +84,18 @@ retrieval:
   agentic_fallback: true   # trigger iterative agent when hybrid answer is weak
   agentic_max_steps: 4     # max sub-searches before forced synthesis
   claim_verification: false # post-synthesis grounding check — DISABLED: re-confirmed via A/B (automotive golden set) that per-claim checks strip valid grounded claims, dropping faithfulness 0.917->0.800 (pass rate unchanged 9/10) despite a stricter answer prompt. Re-enable only with a more reliable verifier model.
+  # ── Per-tenant overrides ─────────────────────────────────────────────────────
+  # Any key above can be overridden per tenant here; the tenant's value wins over
+  # the global default for that tenant only (resolved by Settings.retrieval_for()).
+  # Empty block = no-op: every tenant uses the global defaults above. This exists
+  # so a retrieval knob can be tuned for one corpus (e.g. aerospace needs deeper
+  # recall) without regressing the validated automotive/marketing golden sets —
+  # the exact failure mode that produced the reverts documented above.
+  # Shape mirrors business_matrix.tenant_alert_thresholds. Example:
+  #   tenant_overrides:
+  #     aerospace:
+  #       rerank_top_k: 8
+  tenant_overrides: {}
 
 evaluation:
   ragas_metrics:

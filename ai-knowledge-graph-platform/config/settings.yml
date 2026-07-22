@@ -83,6 +83,7 @@ retrieval:
   # ─────────────────────────────────────────────────────────────────────────
   agentic_fallback: true   # trigger iterative agent when hybrid answer is weak
   agentic_max_steps: 4     # max sub-searches before forced synthesis
+  agentic_hedge_only_fallback: false  # when true, a hedging answer triggers the agent even if it has citations. Default false = strict gate (hedge AND no citations), keeping trigger rate ~10-15% and p95 ~2.5s. The strict gate has a real blind spot — multi-hop questions where retrieval returned citations that don't contain the answer never reach IRCoT. NOT RECOMMENDED to enable yet: measured on aerospace MH-03/TMP-03 (2026-07-22) the gate fires correctly and IRCoT generates the right sub-query, but it burns ~80s/query (4 sub-searches, each a full retrieval pass) and still fails to synthesize the retrieved bridging chunk into the answer — net worse (latency + citation recall) with no pass-rate gain. Enable only after the agentic retriever's sub-search synthesis and latency are addressed.
   claim_verification: false # post-synthesis grounding check — DISABLED: re-confirmed via A/B (automotive golden set) that per-claim checks strip valid grounded claims, dropping faithfulness 0.917->0.800 (pass rate unchanged 9/10) despite a stricter answer prompt. Re-enable only with a more reliable verifier model.
   # ── Per-tenant overrides ─────────────────────────────────────────────────────
   # Any key above can be overridden per tenant here; the tenant's value wins over

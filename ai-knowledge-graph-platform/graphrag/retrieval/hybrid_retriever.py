@@ -169,7 +169,12 @@ class HybridRetriever:
         # agent which re-searches sub-questions until it accumulates enough
         # context to answer confidently (solves multi-document reasoning).
         agentic_enabled = cfg.get("agentic_fallback", True)
-        if agentic_enabled and _is_low_confidence(answer, citations):
+        # Per-tenant: when true, a hedging answer triggers the agent even if it
+        # carried citations (see _is_low_confidence). Off by default.
+        hedge_only = cfg.get("agentic_hedge_only_fallback", False)
+        if agentic_enabled and _is_low_confidence(
+            answer, citations, require_no_citations=not hedge_only
+        ):
             log.info(
                 "hybrid_retriever.low_confidence",
                 answer_preview=answer[:80],

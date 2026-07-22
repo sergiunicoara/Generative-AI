@@ -4154,3 +4154,63 @@ serialized phase (one document at a time). Prioritize the latter. Also:
 a per-item round-trip whose only purpose is to label an audit/log field is
 a strong "drop or batch the *check* itself" signal, especially if the
 surrounding comment already admits the label is approximate.
+
+---
+
+## A127: The aerospace retrieval failures are ingestion-data gaps, not ranking bugs
+
+**Context:** After landing per-tenant retrieval config (Phase 1), the plan was
+three per-tenant-gated *retrieval* fixes for the remaining aerospace golden
+failures: AUT-01 (authority ranking), CON-01/02 (conflict co-retrieval), MH-03
+(multi-hop slice). Measuring each against the live graph before implementing
+invalidated the premise for all three.
+
+**What the measurements showed:**
+
+- **AUT-01 — not fixable by an authority ranking term.** `authority_level` *is*
+  populated correctly (FAA ADs=1, CMM=2). But supersession is only *half*
+  populated: exactly one `SUPERSEDES` edge exists (2024→2022), and
+  `FAA-AD-2020-05-11` — the superseded directive sitting in a top-5 slot — has
+  `superseded_by = NULL`. Authority level alone cannot distinguish FAA-2024 from
+  FAA-2020/2022/14CFR (all level 1), and the correct doc sits at rank 26. A
+  ranking term would promote the whole regulatory class, not the current
+  directive. **Blocked on ingestion-side supersession registration.**
+
+- **CON-01/02 — the contradiction was never detected.** 95 `Conflict` nodes
+  exist for aerospace but are *orphaned* (zero relationships; `src`/`tgt` are
+  entity-name properties and `sources` is a stringified list). More decisive:
+  94/95 are `conflict_type: multi_source` (= same relation from 2+ docs, i.e.
+  agreement), with **zero** `exclusive_states` / `positive_negative_pairs` —
+  the strategies that would catch "airworthy" vs "critical finding of
+  non-compliance". **Blocked on ingestion-side contradiction detection**, not a
+  retrieval read path.
+
+- **MH-03 — the gate fires but the agent can't use the result.** Root cause is
+  *not* a missing edge: `Southwest Airlines -[:RELATES_TO]-> Boeing 737 MAX`
+  exists and "Boeing 737 MAX" is a shared node across the MCAS and fleet docs.
+  Two hypotheses were tested and falsified:
+  1. *Entity-bridge boost* — measured `bridge_count` (hop-chunk entities ∩ seed
+     entities): the fleet chunk scores **4**, but 14CFR scores 5 and
+     Boeing_MCAS scores 6. Bridge-count measures topical overlap, not whether a
+     chunk answers the question; boosting by it would promote the wrong chunks.
+  2. *Hedge-only agentic gate* — `_is_low_confidence` requires
+     `hedges AND no_citations`, so a hedging answer that *has* citations (which
+     simply don't contain the answer) never reaches IRCoT. Relaxing this is a
+     genuine fix to a real blind spot, and it fires correctly: IRCoT generated
+     exactly the right sub-query ("Airlines operating Boeing 737-8 and 737-9
+     aircraft"), for which BM25 ranks the fleet chunk **#1**. But the agent
+     still failed to synthesize it into the answer, and cost **~80s/query**
+     (4 sub-searches, each a full retrieval pass) with *worse* citation recall.
+     Reverted the tenant opt-in; kept the knob default-off with the measurement
+     recorded in settings.yml.
+
+**Rule:** before building a ranking/scoring fix, verify the signal it will rank
+*on* actually exists in the graph. Three plausible retrieval fixes were designed
+against assumed data (supersession edges, semantic conflicts, a discriminating
+structural signal); none of that data was present. Query the live graph first —
+it costs minutes and invalidated a multi-day plan. Corollary: hop chunks are
+dampened to `raw · (1/n_seed)`, which compresses them into a ~0.04 band below
+every seed. That correctly stops weak hops outranking confirmed seeds (A126),
+but it also means no generic hop-ranking tweak can lift a genuinely relevant hop
+chunk above the weakest seed — hop recall has to be fixed by *retrieving it as a
+seed*, not by re-scoring hops.

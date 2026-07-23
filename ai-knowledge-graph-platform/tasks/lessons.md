@@ -4359,3 +4359,92 @@ strategy that needed no domain knowledge. A capability can be 100% broken and
 the count. Corollary: a config block documented as extending code ("Extends the
 defaults in X") is a claim to verify, not to trust — here four ontologies
 asserted a wiring that never existed.
+
+## A133: CON-01/CON-02 are broken tests — the corpus contains no contradiction, so the A129 extraction fix was scoped against a false premise
+
+**Trigger.** Approved to fix the A129 "layer 1" root cause (the extraction prompt
+never emits the ontology's contradiction vocabulary), on the stated grounds that
+it was the blocker for CON-01/CON-02. Before touching the prompt I re-read the
+two source documents end-to-end instead of grepping for the status tokens. The
+premise did not survive.
+
+**What the corpus actually says.**
+
+CON-01 asks *"Is the Boeing 737 MAX currently compliant with FAA-AD-2020-05-11?"*
+and requires the answer to contain `conflict` / `contradictory` / `two documents`,
+while **forbidding** `"yes, it is compliant"`. Every document in the corpus agrees:
+
+| Source | AD 2020-05-11 status |
+|---|---|
+| `G-ABCD_inspection_2024-01.txt:31` | `IS_COMPLIANT_WITH` |
+| `G-ABCD_AD_compliance_2024-03.txt:46` | `IS_COMPLIANT_WITH` |
+| `SWA_fleet_registry_2024.txt:39` | `COMPLIANT — all 87 aircraft` |
+
+There is no conflict. The test forbids the only correct answer.
+
+CON-02 asks about airworthiness status and requires `conflicting` / `different`.
+`IS_AIRWORTHY` appears once (inspection, line 79); the March report independently
+confirms *"Aircraft remains airworthy for operation"* (line 33). The only
+`unairworthy` in the corpus is a generic regulatory definition in
+`14CFR_Part39_excerpt.txt:101`, not about G-ABCD. Also no conflict.
+
+**Where the earlier diagnosis went wrong.** A129 recorded that the corpus "was
+authored to be detectable" because `IS_COMPLIANT_WITH` and `IS_NON_COMPLIANT_WITH`
+both appear across the two G-ABCD documents. They do — but on **different ADs**.
+The March report's `IS_NON_COMPLIANT_WITH` is against **AD 2024-01-02**, a newer
+directive that did not exist at inspection time, and the same paragraph reconciles
+it explicitly: *"Non-compliance is anticipated (deadline not reached). Aircraft
+remains airworthy."* Matching status tokens across documents without checking
+they share a **target** manufactured a contradiction that was never there.
+
+Worse, had the vocabulary been wired as planned, the exclusive-state detector
+would have fired on `IS_COMPLIANT_WITH(AD-2022-03-07)` vs
+`IS_NON_COMPLIANT_WITH(AD-2024-01-02)` — a **false positive**. The A129 fix
+would have made the graph wrong, not right. (Note the aerospace ontology does
+not even declare a COMPLIANT/NON_COMPLIANT exclusive pair; adding one would
+have been the actively harmful step.)
+
+**Consequence.** CON-01/CON-02 can only pass if the system asserts a conflict
+that the evidence does not support — i.e. the tests reward hallucination. No
+retrieval, ranking, or extraction change can or should fix them. Their
+`GENUINE FAILURE (not loosened)` notes are wrong: they are not measuring a
+pipeline limitation, they are measuring nothing.
+
+**The extraction fix is still justified — on different, measured grounds.**
+Live relation-vocabulary counts, all tenants:
+
+| Tenant | distinct relation names | edges | used exactly once |
+|---|---|---|---|
+| automotive | **999** | 4682 | 598 |
+| aerospace | 216 | 469 | 140 |
+| marketing | 31 | 51 | 21 |
+
+The prompt's `"relation": "VERB_RELATION"` placeholder lets the LLM invent a
+name per sentence: 16 distinct spellings of "compliance"
+(`ENSURES_COMPLIANCE_WITH`, `VERIFIES_COMPLIANCE_WITH`, `AUDITS_COMPLIANCE_WITH`,
+…), `MANUFACTURES_AT`/`MANUFACTURES_IN`, `HAS_VARIANT`/`IS_VARIANT_OF`. Nearly
+half of aerospace's relation types are singletons. That is a real defect with a
+real cost (traversal misses, dead inference rules) — but it is a **vocabulary
+fragmentation** problem, not a contradiction problem, and it must be justified
+and measured as such.
+
+**Lessons.**
+1. **A failing test is a claim, not evidence.** Before building anything to make
+   a test pass, verify the test is *correct*. Two prior sessions treated
+   CON-01/02 as ground truth and diagnosed four layers of "why the pipeline
+   can't satisfy them"; the pipeline was right and the tests were wrong.
+2. **Grep finds tokens; only reading finds meaning.** `IS_COMPLIANT_WITH` and
+   `IS_NON_COMPLIANT_WITH` in the same corpus looks like a contradiction and is
+   not. A relation is (subject, predicate, **object**) — comparing predicates
+   while ignoring objects is not a comparison.
+3. **A test that forbids the correct answer is worse than no test**, because it
+   converts "the system is right" into a red number that pulls engineering
+   effort toward making the system wrong. CON-01 forbids `"yes, it is
+   compliant"`, which is what all three sources say.
+4. **Scope justifications decay.** The extraction fix was approved on a premise
+   that turned out false; the work may still be worth doing, but it needs
+   re-justifying from its own measurements before spending an all-tenant
+   re-ingestion on it.
+5. **You cannot test contradiction detection on a corpus with no
+   contradictions.** Aerospace has zero. Restoring that coverage means
+   *authoring* a genuinely contradictory document, not tuning the detector.

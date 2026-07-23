@@ -152,7 +152,7 @@
         ["not compliant", "non-compliant", "not yet compliant", "noncompliant", "not fully compliant"],
         ["2024-01-02", "AD 2024-01-02", "FAA AD 2024-01-02"]
       ],
-      "forbidden_terms": ["yes, it is fully compliant", "fully compliant with all"],
+      "forbidden_terms": ["yes, it is fully compliant", "is fully compliant with all"],
       "min_context_precision": 0.70,
       "note": "Replaces the original CON-01 (retired 2026-07-23, see tasks/lessons.md A133). That question asked whether the two G-ABCD documents contradict each other on AD-2020-05-11 compliance; re-reading the source documents end-to-end showed all three sources (both G-ABCD reports and the SWA fleet registry) agree it IS compliant with AD-2020-05-11 -- there was no contradiction, and the test forbade the only correct answer ('yes, it is compliant'). The real nuance in this corpus is temporal: G-ABCD is compliant with the two older ADs (2020-05-11, 2022-03-07) but non-compliant with the newer AD-2024-01-02 as of the March 2024 report, because its May 15, 2024 compliance deadline had not yet passed. This tests synthesizing per-AD status across a multi-AD compliance report rather than a fabricated cross-document conflict."
     },

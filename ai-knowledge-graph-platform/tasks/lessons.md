@@ -4612,3 +4612,82 @@ the two claims. Corrected to point at `functional_violation` /
    to ignore it, which is worse than having no alert.
 5. **When retiring detector output, check the dedup guard.** Marking rows resolved
    can *re-arm* the detector that produced them.
+
+## A136: Aerospace had 38% duplicate chunks — ingestion is not idempotent, and the duplicates were propping up the eval score
+
+**Root cause.** `Document.id` and `Chunk.id` are
+`Field(default_factory=lambda: str(uuid4()))` — a fresh UUID every run — while
+`neo4j_client.merge_document` does `MERGE (d:Document {id: $id})`. The MERGE
+therefore only dedupes *within* a run: **re-ingesting any file creates a
+complete second copy**, document, chunks and all. Aerospace was partially
+re-ingested on 2026-07-21; automotive and marketing were `--wipe`d, which is the
+only reason they look clean. This is a general bug, not an aerospace one.
+
+Measured: 4 files duplicated, 52 of 138 aerospace chunks (38%) duplicate text.
+
+**How it corrupted retrieval.** AUT-01's top-5 — the whole context the LLM
+sees — was:
+
+| slot | file | |
+|---|---|---|
+| 1 | CMM | |
+| 2 | FAA-AD-2020-05-11 | superseded doc |
+| 3 | CMM | |
+| 4 | CMM | **byte-identical duplicate of #3** |
+| 5 | CMM | **byte-identical duplicate of #1** |
+
+Two of five slots were exact repeats and `FAA-AD-2024-01-02` — the answer — sat
+below rank 22. The LLM correctly refused. `rerank_top_k` is 5, so duplicates
+don't just add noise, they *consume the entire context budget*.
+
+After deleting the duplicates, FAA-AD-2024-01-02 rose from >22 to **rank 6**.
+
+**But the eval went DOWN: 29/34 -> 28/34.** Measured 4x per question, not once:
+
+| question | post-dedup | verdict |
+|---|---|---|
+| MH-06 | 3/4 pass (was failing) | real gain, but flaky |
+| SH-02 | 0/4 | real change — see below |
+| AUT-03 | 0/4 | **real regression** — pipeline now refuses |
+| AUT-01 | 0/4 | unchanged (fails for a different reason) |
+
+**Why duplicates were helping.** The duplicated `14CFR_Part39_excerpt` chunk is
+the one that lists every AD cross-reference. Having two copies doubled its odds
+of being retrieved, which propped up the supersession questions. The duplicates
+were acting as an accidental relevance boost for one high-value chunk — the eval
+score was partly *paid for by a data bug*.
+
+**Two of the three "regressions" were not regressions:**
+
+1. *CON-01 was my own test-authoring bug, introduced the same day.* Forbidden
+   term `"fully compliant with all"` matches as a substring of the correct
+   answer `"not fully compliant with all"`. I retired the original CON-01 (A133)
+   precisely for forbidding the only correct answer, then reintroduced the same
+   flaw in subtler form. Fixed to `"is fully compliant with all"`, which cannot
+   appear inside `"is not fully compliant with all"`, and verified in both
+   directions.
+2. *SH-02 is internally inconsistent.* Its note says "either superseding
+   directive is a correct answer" and `required_answer_any_of` accepts AD-2024 —
+   but `expected_citations` lists only `FAA-AD-2022-03-07`. The answer
+   ("FAA AD 2024-01-02 fully supersedes AD 2020-05-11") passed every content
+   check and failed **only** citation recall. The citation checker has no
+   any-of, so a test that admits two right answers can only encode one.
+
+Only **AUT-03** is a genuine quality loss.
+
+**Lessons.**
+1. **A score can be propped up by a bug.** Removing objectively-wrong data made
+   the headline number worse. Restoring 38% duplicate content to recover a point
+   would be overfitting the eval to a data-integrity defect. The number is a
+   proxy; the graph is the thing.
+2. **`MERGE` on a random UUID is not a merge.** Any natural-key entity whose id
+   is `uuid4()` by default will duplicate on every re-run. The fix is to MERGE on
+   `(tenant, filename)` for documents and `(document_id, chunk_index)` for
+   chunks, assigning the id `ON CREATE` — plus deleting chunks whose index
+   exceeds the new chunk count, or a re-chunk leaves orphans behind.
+3. **When top_k is small, duplicates are not noise — they are the context.**
+   Two wasted slots out of five is 40% of everything the model gets to read.
+4. **Measure flipped questions N times before calling them regressions.** Of
+   three apparent regressions, one was my bug, one was a test inconsistency, and
+   one was real. Single-run diffs on a non-deterministic LLM backend
+   (Groq is not reproducible at temperature 0) cannot distinguish these.

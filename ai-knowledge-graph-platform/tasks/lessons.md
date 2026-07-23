@@ -4279,3 +4279,83 @@ logic — re-verify against the golden sets after *any* change to the data it
 reads, not just after changes to the scoring code itself. "The graph is now
 more accurate" and "retrieval got better" are different claims; measure both,
 independently, before landing either.
+
+---
+
+## A129: Contradiction detection is non-functional end-to-end — the extractor never emits the ontology's vocabulary
+
+**Context:** A127 found that CON-01/02 (aerospace) couldn't be fixed by
+conflict co-retrieval because 94/95 aerospace conflicts were `multi_source`
+with zero `exclusive_state` / `positive_negative_pair`. Tracing *why* those
+strategies never fire exposed a complete, four-layer breakage of the designed
+contradiction-detection capability — affecting **every** tenant, not just
+aerospace.
+
+**The full causal chain (each layer verified against the live graph):**
+
+1. **The extraction prompt is domain-agnostic.** `graphrag/ingestion/extractor.py`
+   passes only generic `entity_types` (PERSON/ORG/PRODUCT/...) and specifies
+   relations as the placeholder `"relation": "VERB_RELATION"` — no vocabulary
+   at all. The domain ontology is consulted *only* post-hoc via
+   `registry.validate_extraction()`, never to guide extraction. So the LLM
+   invents free-form relations (`APPLIES_TO`, `IS_A`, `HAS_ENGINE`, `OPERATES`).
+
+2. **The designed vocabulary therefore never reaches any graph.** Every
+   ontology defines `exclusive_state_pairs` / `functional_relations` annotated
+   with the exact golden questions they power — automotive
+   `REQUIRES_THREE_OFFERS/REQUIRES_TWO_OFFERS` (C01),
+   `REEVALUATED_SEMESTRIAL/ANNUAL` (C03/C05); telecom
+   `CI_STATUS_DECOMMISSIONED/ACTIVE` (T01), `SLA_FIVE/TWO_BUSINESS_DAYS` (T02);
+   marketing `CATEGORY_EXCLUDED/LOCALLY_APPROVED` (WPP01),
+   `INFERENCE_PROHIBITED/PERMITTED` (WPP02); aerospace
+   `IS_AIRWORTHY/IS_UNAIRWORTHY`. **Measured: 0 of these exist in any tenant's
+   graph** (automotive 3013 entities, aerospace 338, marketing 66 — all zero).
+
+3. **The detector ignored the ontology anyway** (fixed here). Both
+   `_detect_exclusive_states` and `_detect_functional_violations` hardcoded
+   generic lists, despite every ontology documenting itself as "Extends the
+   default pairs in contradiction_strategies.py". The contract was written on
+   both sides and wired on neither.
+
+4. **`NEGATIVE_RELATES_TO`: 0 edges database-wide**, so
+   `_detect_positive_negative_pairs` can never fire either — negative-knowledge
+   extraction doesn't happen at ingestion.
+
+Net effect: only `multi_source` ever fires — and that's a *structural* signal
+(same triple from 2+ docs, i.e. agreement), not a semantic contradiction. The
+breakage was masked because multi_source produces plausible-looking conflict
+counts on the dashboard (95 aerospace / 63 automotive).
+
+**Why CON-01/02 specifically can't be fixed downstream:** the two G-ABCD
+documents state the contradiction in near-machine-readable form —
+`Status: IS_COMPLIANT_WITH` + `Aircraft Status: IS_AIRWORTHY` (inspection, Jan)
+vs `Status: IS_NON_COMPLIANT_WITH` (compliance, Mar). The corpus was authored to
+be detectable. But G-ABCD's *extracted* relations are purely structural
+(`IS_A`, `HAS_ENGINE`, `OPERATES`, `SUBJECT_TO`, `NOT_APPLICABLE_TO`) — no
+status assertion at all. There is nothing in the graph for any detector
+configuration to find.
+
+**Fixed here (layer 3 only):** `_ontology_lists(tenant)` merges the tenant's
+ontology `exclusive_state_pairs` / `functional_relations` over the generic
+defaults, fail-open (a missing/malformed ontology falls back to defaults rather
+than breaking a scan; `tenant=None` scan-all mode gets defaults only).
+Empirically safe: a full rescan of all three tenants produced **0 new
+conflicts** — no false positives, no graph mutation — because layer 1 means the
+vocabulary still isn't present. Correct and necessary, but inert until
+extraction is fixed.
+
+**Not fixed (layer 1 — the real blocker):** passing the domain ontology's
+relation vocabulary into the extraction prompt. That changes extraction for
+every tenant, so it requires re-ingesting automotive (3013 entities / 30 docs,
+LLM-heavy), aerospace and marketing, then re-validating all three golden sets —
+with automotive at 9/10 and marketing at 8/9 both at real risk since their
+entire entity/relation graph would change shape.
+
+**Rule:** when a subsystem produces output that *looks* healthy, check whether
+it's producing the *kind* of output it was designed for. 95 conflict nodes
+looked like working contradiction detection; every one of them was the one
+strategy that needed no domain knowledge. A capability can be 100% broken and
+0% visibly broken at the same time — the tell was the *type distribution*, not
+the count. Corollary: a config block documented as extending code ("Extends the
+defaults in X") is a claim to verify, not to trust — here four ontologies
+asserted a wiring that never existed.

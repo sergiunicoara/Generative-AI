@@ -21,6 +21,68 @@ import structlog
 
 log = structlog.get_logger(__name__)
 
+# Domain-agnostic fallbacks. Per-tenant vocabularies are layered on top of these
+# from the tenant's domain ontology — see _ontology_lists().
+_DEFAULT_EXCLUSIVE_PAIRS = [
+    ("IS_ACTIVE",     "IS_DEPRECATED"),
+    ("IS_APPROVED",   "IS_REJECTED"),
+    ("IS_CERTIFIED",  "IS_UNCERTIFIED"),
+    ("OPERATIONAL",   "DECOMMISSIONED"),
+]
+
+_DEFAULT_FUNCTIONAL_RELATIONS = ["CEO_OF", "FOUNDED_BY", "MANUFACTURES"]
+
+
+def _ontology_lists(tenant: str | None) -> tuple[list[tuple[str, str]], list[str]]:
+    """Return (exclusive_state_pairs, functional_relations) for a tenant.
+
+    The per-domain ontologies (config/ontologies/*.yml) each define
+    ``exclusive_state_pairs`` and ``functional_relations`` — annotated with the
+    golden-set contradictions they're meant to power (C01-C05 automotive,
+    T01/T02 telecom, WPP01/WPP02 marketing) and documented in-file as
+    "Extends the default pairs in contradiction_strategies.py". That contract
+    was never honored: both lists were hardcoded here, so a domain's carefully
+    designed contradiction vocabulary was silently ignored and only the generic
+    defaults (which match no domain's actual relation names) were ever scanned.
+
+    Fails open to the defaults — contradiction detection is a graph-quality
+    signal, not a gate, so a missing/malformed ontology must not break a scan.
+
+    Note: ``tenant=None`` (scan-all-tenants mode) can't resolve a single
+    ontology, so it gets the defaults only.
+    """
+    if not tenant:
+        return list(_DEFAULT_EXCLUSIVE_PAIRS), list(_DEFAULT_FUNCTIONAL_RELATIONS)
+
+    pairs = list(_DEFAULT_EXCLUSIVE_PAIRS)
+    functional = list(_DEFAULT_FUNCTIONAL_RELATIONS)
+    try:
+        from graphrag.graph.domain_ontology import (
+            get_ontology_path_for_tenant,
+            load_domain_ontology,
+        )
+
+        path = get_ontology_path_for_tenant(tenant)
+        ontology = load_domain_ontology(path) if path else {}
+
+        for pair in ontology.get("exclusive_state_pairs", []) or []:
+            if len(pair) == 2:
+                as_tuple = (str(pair[0]), str(pair[1]))
+                if as_tuple not in pairs:
+                    pairs.append(as_tuple)
+
+        for rel in ontology.get("functional_relations", []) or []:
+            if rel not in functional:
+                functional.append(str(rel))
+    except Exception as exc:  # fail open — never break a scan on ontology issues
+        log.warning(
+            "contradiction_strategies.ontology_load_failed",
+            tenant=tenant,
+            error=str(exc)[:120],
+        )
+
+    return pairs, functional
+
 
 class _ConflictStrategies:
     """Mixin — five detection strategies, each surfacing a different conflict class."""
@@ -214,13 +276,11 @@ class _ConflictStrategies:
         """
         Detect entities that carry mutually exclusive status values sourced from
         different documents (e.g. IS_ACTIVE and IS_DEPRECATED on the same entity).
+
+        Pairs come from the generic defaults plus the tenant's own domain
+        ontology (``exclusive_state_pairs``) — see _ontology_lists().
         """
-        exclusive_pairs = [
-            ("IS_ACTIVE",     "IS_DEPRECATED"),
-            ("IS_APPROVED",   "IS_REJECTED"),
-            ("IS_CERTIFIED",  "IS_UNCERTIFIED"),
-            ("OPERATIONAL",   "DECOMMISSIONED"),
-        ]
+        exclusive_pairs, _ = _ontology_lists(tenant)
 
         tenant_filter = "AND e.tenant = $tenant" if tenant else ""
         limit_clause  = f"LIMIT {scan_limit}" if scan_limit > 0 else ""
@@ -298,8 +358,11 @@ class _ConflictStrategies:
         """
         Detect violations of functional (many-to-one) relation constraints.
         A functional relation must have at most one target per source entity.
+
+        Relations come from the generic defaults plus the tenant's own domain
+        ontology (``functional_relations``) — see _ontology_lists().
         """
-        functional_relations = ["CEO_OF", "FOUNDED_BY", "MANUFACTURES"]
+        _, functional_relations = _ontology_lists(tenant)
         tenant_filter = "AND s.tenant = $tenant" if tenant else ""
         limit_clause  = f"LIMIT {scan_limit}" if scan_limit > 0 else ""
 

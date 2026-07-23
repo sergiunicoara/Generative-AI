@@ -140,7 +140,7 @@
       "required_answer_any_of": [["superseded", "supersedes", "supersession"]],
       "forbidden_terms": [],
       "min_context_precision": 0.65,
-      "note": "expected_citations narrowed to the terminal 2024 AD, which names the relationships to both the 2020 and 2022 directives; adequate provenance for the answer."
+      "note": "expected_citations narrowed to the terminal 2024 AD, which names the relationships to both the 2020 and 2022 directives; adequate provenance for the answer. GENUINE FAILURE (verified 2026-07-23): the supersession chain is explicitly documented -- FAA-AD-2022-03-07.txt states 'This AD supersedes AD 2020-05-11', FAA-AD-2024-01-02.txt states 'This AD supersedes AD 2022-03-07' and separately notes 2020 as fully superseded. Not a golden-set defect (checked per the CON-01/02 pattern, A133); a real multi-hop synthesis gap."
     },
 
     {
@@ -177,7 +177,7 @@
       "required_answer_any_of": [["FAA-AD-2024-01-02", "FAA AD 2024-01-02", "AD 2024-01-02"]],
       "forbidden_terms": ["FAA-AD-2020 is current", "FAA-AD-2022 is current"],
       "min_context_precision": 0.80,
-      "note": "FAA-AD-2024 is authoritative; older ones superseded."
+      "note": "FAA-AD-2024 is authoritative; older ones superseded. GENUINE FAILURE (verified 2026-07-23): grounded in 737MAX_CMM_Engine_Mount.txt section 3, 'The following ADs apply to LEAP-1B engine mount inspection: FAA AD 2024-01-02... FAA AD 2022-03-07...' -- this is the AUT-01 authority-ranking gap identified in tasks/lessons.md A127 (manufacturer CMM outranks the governing FAA AD in retrieval/synthesis). Not a golden-set defect; a real authority-weighting gap."
     },
     {
       "id": "AUT-02", "type": "authority_chain",

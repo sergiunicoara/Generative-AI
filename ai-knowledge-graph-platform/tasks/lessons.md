@@ -4448,3 +4448,89 @@ and measured as such.
 5. **You cannot test contradiction detection on a corpus with no
    contradictions.** Aerospace has zero. Restoring that coverage means
    *authoring* a genuinely contradictory document, not tuning the detector.
+
+## A134: Relation canonicalization measured — the fragmentation is real, the benefit is not. Phase 2 not recommended
+
+**What was built.** `scripts/analyze_relation_vocabulary.py` — read-only: proposes
+a relation-name canonicalization map (normalized -> fuzzy -> embedding cascade,
+reusing `AliasRegistry`'s thresholds) and *simulates* applying it, reporting edge
+collapse, manufactured conflicts, confidence crossings and degree shifts. Nothing
+is written; the map is an artifact for human review.
+
+**The hypothesis it was built to test.** Relation names are part of edge identity
+(`MERGE (s)-[r:RELATES_TO {relation: $relation}]->(t)`), so 999 distinct names in
+automotive should mean the Bayesian noisy-OR confidence merge never accumulates,
+and degree / PageRank / Leiden should all be distorted by parallel edges. I
+recommended this work to the user on exactly that reasoning.
+
+**Measured result — the hypothesis is false.**
+
+| Tenant | names before -> after | edges collapsed | conf. crossings | quarantine changes |
+|---|---|---|---|---|
+| automotive | 999 -> 802 | **29 / 4682 (0.6%)** | 0 | 0 |
+| aerospace | 216 -> 195 | **4 / 469 (0.9%)** | 0 | 0 |
+| marketing | 31 -> 31 | **0 / 51** | 0 | 0 |
+
+`high_conf_rate` and `noise_edge_rate` were unchanged to four decimal places.
+Independently re-verified in Cypher: aerospace 469->465 / 195 names, automotive
+4682->4653 / 802 names — matching the simulation exactly.
+
+**Why the reasoning was wrong.** I read "47 parallel edges between PlasiAuto SRL
+and AutoCorp GmbH" as 47 spellings of one relationship. They are not. They are
+`AUDITED_BY`, `CLIENT_OF`, `SUPPLIES`, `COMMITS_TO`, `EVALUATES_FEEDBACK_FROM`,
+`APPLIES_SANCTIONS_BASED_ON` — semantically *distinct assertions* that happen to
+share an entity pair, plus a handful of true variants. Canonicalization merges
+variants, but those variants overwhelmingly sit on **different entity pairs**, so
+they never collapse into each other. Vocabulary size shrinks; edge count barely
+moves. Fragmentation is real and ugly; it just is not what blocks confidence
+accumulation.
+
+**The proposed map is also not safe to apply as generated.** Short relation names
+break fuzzy matching: `MANAGED_BY -> MANDATED_BY`, `CONFIRM -> CONFORM`,
+`CONTRAST_WITH -> CONTRACTED_WITH`, `VERIFIED_BY -> CERTIFIED_BY`,
+`REEVALUATES -> EVALUATES`. Each is a high-ratio string match and a different
+fact.
+
+**Two findings worth keeping even though Phase 2 is dropped.**
+
+1. *The alias thresholds do not transfer across string distributions.*
+   `alias_embedding_threshold: 0.92` is tuned for entity name + description
+   strings. On 1-3 token relation names the same model puts a true merge
+   (MANUFACTURES_AT / MANUFACTURES_IN) at **0.856** and a true cross-language
+   merge (LIVREAZA_CATRE / DELIVERS_TO) at **0.620**, with unrelated pairs at
+   0.25-0.45. At 0.92 the embedding pass was provably dead weight — the run was
+   byte-identical to `--no-embeddings`. "Reuse the existing threshold rather than
+   inventing one" was the wrong instinct: a threshold is only meaningful relative
+   to the distribution it was fitted on. The tool now emits a calibration sweep
+   instead of asserting a constant.
+
+2. *Automated relation merging must guard against inverses.* The first working
+   run proposed `IS_VARIANT_OF -> HAS_VARIANT` and `SUPERSEDED -> SUPERSEDES`.
+   The second would have reversed the supersession chain that drives document
+   authority and the `supersedes_transitivity` inference rule. Voice markers
+   (`_BY`/`_FROM`/`_OF`) plus participle-flip detection now withhold 16 such
+   merges in aerospace and 41 in automotive, and the report lists what was
+   withheld and why — a silent guard cannot be reviewed.
+
+**Recommendation: do not proceed to Phase 2.** The migration's cost is a
+cross-cutting cascade (edges, `Conflict`, `Statement`, `RelationEmbedding`,
+`NEGATIVE_RELATES_TO`, `ChangeLog`), its risk is a hand-reviewed 201-entry map
+containing real semantic errors, and its measured benefit is a 0.6% edge
+reduction with no movement in any quality metric. Vocabulary legibility alone
+does not justify it. Retrieval never reads relation names at all.
+
+**Lessons.**
+1. **A mechanism being real does not make its consequence real.** 999 relation
+   names is a genuine defect and the noisy-OR reasoning was sound in the
+   abstract; the data simply does not have the shape the argument assumed.
+   Third time this session (A127, A133, here) that a well-reasoned mechanism
+   died on contact with measurement.
+2. **Build the measurement before the migration when the migration is
+   irreversible-ish.** Phase 1 cost about an hour and cancelled Phase 2. Had the
+   order been reversed, the cost would have been a full cascade migration plus
+   golden-set revalidation to discover the same thing.
+3. **Distrust thresholds carried across contexts.** Same model, same code,
+   different string length — and the operating point moves by 0.3 cosine.
+4. **Report what a guard suppressed, not just what it allowed.** The
+   `blocked_inverse` list is how `SUPERSEDED -> SUPERSEDES` became visible;
+   silently dropping it would have looked identical to it never matching.

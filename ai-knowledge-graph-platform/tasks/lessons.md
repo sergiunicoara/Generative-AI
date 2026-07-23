@@ -4534,3 +4534,81 @@ does not justify it. Retrieval never reads relation names at all.
 4. **Report what a guard suppressed, not just what it allowed.** The
    `blocked_inverse` list is how `SUPERSEDED -> SUPERSEDES` became visible;
    silently dropping it would have looked identical to it never matching.
+
+## A135: `multi_source` was never a contradiction detector — it flagged agreement, and it drowned the four strategies that work
+
+**The defect.** `_detect_multi_source_conflicts` matched:
+
+```cypher
+MATCH (s:Entity)-[r:RELATES_TO]->(t:Entity)
+WHERE size(r.source_doc_ids) > 1
+```
+
+A single edge, whose evidence came from 2+ non-superseding documents. But an edge
+*is* one triple `(src, rel, tgt)` — so its source documents necessarily assert
+**the same fact**. The strategy was structurally incapable of finding a
+contradiction; every row it returned was corroboration. The detector's own
+`conflict_type` table said so in plain language: "same (src, rel, tgt) from two
+non-superseding docs."
+
+Worse, `merge_relations_batch` *deliberately raises* an edge's confidence via
+noisy-OR when a second document confirms it. Two subsystems were reading
+identical evidence in exactly opposite directions — one as increased trust, the
+other as an open Conflict.
+
+**Where the intent went.** The module docstring still records what was meant:
+"two documents assert incompatible facts ... the Bayesian confidence merge
+accumulates both without surfacing the conflict." The condition needed was "2+
+sources **that disagree**"; the implementation kept only "2+ sources".
+Disagreement can only ever be observed by comparing *different* edges — which is
+precisely what strategies 2-5 do — so this strategy had no valid form.
+
+**Impact.** 94 of aerospace's 95 and 61 of automotive's 63 open conflicts. The
+conflicts dashboard showed a system apparently detecting contradictions and not
+doing so. `contradiction_rate` for aerospace sat at **0.2026** against an alert
+threshold of **0.05** — permanently breaching, on noise. After the fix: 1 open
+conflict (aerospace, functional_violation) and 2 (automotive,
+directional_reversal), rate 0.0021 and 0.0004.
+
+**What was kept.** The query's genuinely valuable part is the supersession
+filter: two documents where one supersedes the other are not independent
+evidence, two that don't are. That count is now written to the edge as
+`independent_source_count` and surfaced by `GraphEvaluator.relation_precision()`
+as `corroborated_edge_rate` — aerospace 20.0%, automotive 1.3%, marketing 0%. A
+regulatory corpus cross-confirms itself; a procedure corpus does not. That is a
+real quality signal, and it is the same computation, correctly labelled.
+
+**A coupling that had to be got right.** The old dedup guard matched
+`status: 'open'`. Retiring the 155 existing nodes to `false_positive` *without*
+the code change would have made `existing = 0` on the next scan and recreated
+every one of them. The retirement script and the strategy change are only safe
+shipped together — verified by rescanning all three tenants afterwards and
+getting 0 new conflicts.
+
+**Downstream exposure found.** `docs/hiring-and-presentation-strategy.md` scripted
+the user to present a `multi_source` row in interviews as "two EASA directives
+with contradictory supersession information, flagged automatically". That claim
+could not have survived a follow-up question, because the query never compared
+the two claims. Corrected to point at `functional_violation` /
+`directional_reversal`, with an honest framing for the volume drop.
+
+**Lessons.**
+1. **A capability can be 100% broken and 0% visibly broken.** This is the second
+   instance in the same subsystem (see A129). Both times the tell was the *type
+   distribution*, not the count: one strategy producing ~99% of output means the
+   other four are either dead or drowned, and nobody looks at a metric that has
+   always been high.
+2. **Check whether a detector's match condition can express what it claims.** Not
+   "is it finding things" but "given the data model, is what it finds capable of
+   being the thing?" One edge cannot hold two contradictory claims, so no query
+   over one edge can detect contradiction. That is provable before running
+   anything.
+3. **Two subsystems disagreeing about the same evidence is a design smell worth
+   chasing.** noisy-OR treating a second source as confirmation while the
+   detector treated it as conflict should have been caught when both were
+   written.
+4. **A permanently-breaching alert is an ignored alert.** aerospace at 4x the
+   contradiction threshold for its whole life meant the threshold taught the team
+   to ignore it, which is worse than having no alert.
+5. **When retiring detector output, check the dedup guard.** Marking rows resolved
+   can *re-arm* the detector that produced them.

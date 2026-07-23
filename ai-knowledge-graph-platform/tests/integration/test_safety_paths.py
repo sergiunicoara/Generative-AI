@@ -9,7 +9,7 @@ Coverage
    domain/range violations are corrected to RELATED_TO; deprecated relation
    names are migrated to canonical ones.
 
-3. Contradiction detection — multi_source, directional_reversal,
+3. Contradiction detection — directional_reversal,
    exclusive_state, and functional_violation conflict types are created
    as Conflict nodes and surfaced via get_open_conflicts().
 
@@ -205,44 +205,45 @@ class TestOntologyEnforcement:
 class TestContradictionDetection:
 
     @pytest.mark.asyncio
-    async def test_multi_source_conflict_created(self, neo4j_mock):
-        """A (src, rel, tgt) from two non-superseding docs creates a Conflict node.
+    async def test_corroboration_records_no_conflict(self, neo4j_mock):
+        """The same (src, rel, tgt) from two non-superseding docs is corroboration.
+
+        It used to create a `multi_source` Conflict node, which was wrong by
+        construction: an edge is a single triple, so both documents assert the
+        same fact. It now writes independent_source_count to the edge (in the
+        same statement as the match) and contributes nothing to scan()'s result.
 
         Call sequence inside scan():
-          1. _detect_multi_source_conflicts query  (1 row → 1 CREATE)
-          2. CREATE Conflict node
-          3. _detect_directional_reversals query   (empty → no CREATE)
-          4-7. _detect_exclusive_states 4 pairs   (empty each)
-          8-10. _detect_functional_violations 3 rels (empty each)
-          11. _detect_positive_negative_pairs query  (empty)
+          1. _record_corroboration query+SET      (returns the updated count)
+          2. _detect_directional_reversals query  (empty → no CREATE)
+          3-6. _detect_exclusive_states 4 pairs   (empty each)
+          7-9. _detect_functional_violations 3 rels (empty each)
+          10. _detect_positive_negative_pairs query (empty)
         """
         neo4j_mock.run = AsyncMock(side_effect=[
-            # 1: multi_source query — Cypher returns doc_ids (list), not sources
-            [{"src": "EngineA", "tgt": "PumpB", "rel": "USES",
-              "doc_ids": ["doc1", "doc2"],
-              "independent_pairs": [{"a": "doc1", "b": "doc2"}]}],
-            [],   # 2: CREATE Conflict
-            [],   # 3: directional reversals query (empty → no CREATE)
-            [],   # 4: exclusive_state pair 1
-            [], [], [],   # 5-7: exclusive_state pairs 2-4
-            [],   # 8: functional_violation CEO_OF
-            [], [],   # 9-10: FOUNDED_BY, MANUFACTURES
-            [],   # 11: positive_negative_pairs
+            [{"updated": 3}],   # 1: corroboration query+SET
+            [],   # 2: directional reversals query (empty → no CREATE)
+            [], [], [], [],   # 3-6: exclusive_state pairs 1-4
+            [], [], [],       # 7-9: functional_violation CEO_OF/FOUNDED_BY/MANUFACTURES
+            [],   # 10: positive_negative_pairs
         ])
         detector = ContradictionDetector(neo4j_mock)
         conflicts = await detector.scan()
 
-        created = [c for c in conflicts if c["type"] == "multi_source"]
-        assert len(created) == 1
-        assert created[0]["src"] == "EngineA"
-        assert created[0]["relation"] == "USES"
+        assert conflicts == []
+        assert not any(c.get("type") == "multi_source" for c in conflicts)
+
+        # the corroboration statement writes the trust signal itself
+        corroboration_cypher = neo4j_mock.run.call_args_list[0][0][0]
+        assert "SET r.independent_source_count" in corroboration_cypher
+        assert "CREATE (c:Conflict" not in corroboration_cypher
 
     @pytest.mark.asyncio
     async def test_directional_reversal_detected(self, neo4j_mock):
         """A→B and B→A for same relation creates a directional_reversal Conflict.
 
         Call sequence:
-          1. multi_source query      (empty → no CREATE)
+          1. corroboration query+SET (empty → nothing corroborated)
           2. directional query       (1 row → 1 CREATE)
           3. CREATE directional_reversal
           4-7. exclusive_state 4 pairs (empty each → no CREATEs)
@@ -254,7 +255,7 @@ class TestContradictionDetection:
         "CREATE for multi_source (none)" calls that never happened.
         """
         neo4j_mock.run = AsyncMock(side_effect=[
-            [],   # 1: multi_source query → empty (no CREATE follows)
+            [],   # 1: corroboration query+SET → empty
             [{"src": "A", "tgt": "B", "rel": "CEO_OF", "doc1": "d1", "doc2": "d2"}],  # 2: directional
             [],   # 3: CREATE directional_reversal
             [], [], [], [],   # 4-7: exclusive_state 4 pairs (empty)
@@ -286,7 +287,7 @@ class TestContradictionDetection:
         """Multiple targets for a functional relation creates functional_violation.
 
         Call sequence inside scan() when all pre-functional queries return empty:
-          1.  multi_source query              → [] (no rows → no CREATE)
+          1.  corroboration query+SET         → [] (nothing corroborated)
           2.  directional query               → [] (no rows → no CREATE)
           3-6. exclusive_state 4 pairs        → [] each (no rows → no CREATEs)
           7.  functional CEO_OF query         → 1 row → 1 CREATE
@@ -300,7 +301,7 @@ class TestContradictionDetection:
         row into the exclusive_state slot where `row["entity"]` was accessed.
         """
         side_effects = [
-            [],   # 1: multi_source query (empty → no CREATE)
+            [],   # 1: corroboration query+SET (empty)
             [],   # 2: directional query  (empty → no CREATE)
             [], [], [], [],   # 3-6: exclusive_state 4 pairs (empty each)
             [{"src": "E. Musk", "targets": ["Tesla", "SpaceX"], "docs": ["d1", "d2"]}],  # 7: CEO_OF

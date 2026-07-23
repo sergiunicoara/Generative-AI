@@ -95,6 +95,11 @@ class GraphEvaluator:
         - avg_confidence: mean confidence across all RELATES_TO edges
         - noise_edges: edges with confidence < 0.3 (likely LLM noise)
         - source_type_distribution: breakdown by source type
+        - corroborated_edge_rate: fraction of edges independently asserted by 2+
+          non-superseding documents (written by
+          ContradictionDetector._record_corroboration). This replaces the old
+          `multi_source` conflict count, which reported the same underlying
+          signal as if agreement were a defect.
         """
         rows = await self._neo4j.run(
             """
@@ -107,7 +112,9 @@ class GraphEvaluator:
                    count(CASE WHEN r.source_type = 'document' THEN 1 END) AS doc_edges,
                    count(CASE WHEN r.source_type = 'llm'      THEN 1 END) AS llm_edges,
                    count(CASE WHEN r.source_type = 'inferred' THEN 1 END) AS inferred_edges,
-                   count(CASE WHEN r.source_type = 'manual'   THEN 1 END) AS manual_edges
+                   count(CASE WHEN r.source_type = 'manual'   THEN 1 END) AS manual_edges,
+                   count(CASE WHEN coalesce(r.independent_source_count, 0) > 1
+                              THEN 1 END)                                 AS corroborated_edges
             """,
             tenant=tenant,
         )
@@ -118,6 +125,7 @@ class GraphEvaluator:
             "avg_confidence": round(r.get("avg_confidence") or 0, 4),
             "high_conf_rate": round((r.get("high_conf", 0) / total), 4),
             "noise_edge_rate": round((r.get("noise_edges", 0) / total), 4),
+            "corroborated_edge_rate": round((r.get("corroborated_edges", 0) / total), 4),
             "source_distribution": {
                 "document": r.get("doc_edges", 0),
                 "llm":      r.get("llm_edges", 0),

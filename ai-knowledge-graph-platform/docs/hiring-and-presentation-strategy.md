@@ -480,12 +480,16 @@ These are the topics a CTO will probe. Know them without notes.
 5. GNN scoring — re-score by graph-structural proximity, not just textual
 6. LLM synthesis — grounded, cited answer from the final context
 
-**6. Contradiction detection — 5 conflict types**
-- `multi_source`: same claim, different confidence levels across sources
+**6. Contradiction detection — 4 conflict types**
 - `directional_reversal`: A→B and B→A on the same relation
 - `exclusive_state`: entity in two mutually exclusive states (airworthy AND unairworthy)
 - `functional_violation`: entity has two values for a single-valued property
 - `positive_negative_pair`: RELATES_TO and NEGATIVE_RELATES_TO coexist
+
+Plus a separate **corroboration** signal (`independent_source_count` on the
+edge): how many mutually non-superseding documents independently assert the same
+triple. Aerospace runs ~20% corroborated, automotive ~1.3% — a regulatory corpus
+cross-confirms itself; a procedure corpus does not.
 - In code: `graphrag/graph/contradiction_detector.py`
 
 **7. Two-model agentic design (ADR-0006)**
@@ -598,9 +602,11 @@ These are the topics a CTO will probe. Know them without notes.
   ```
 
 **3. Contradiction detection (Step 4 — the winning moment)**
-- Point at: `EASA AD 2024-0072 ⊕ EASA AD 2022-0201 | Type: multi_source` — this pair has survived two consecutive re-ingestions, the most reliable single example to anchor on.
-- Say: "Two EASA directives with contradictory supersession information on the same subject, flagged automatically as multi_source. And [point at whichever functional_violation row is on screen, e.g. Airbus vs '[A320neo, Airbus A320neo]' or CFM International vs '[LEAP-1B engine, CFM LEAP-1B Engine]'] — a functional violation, the same real-world entity extracted under multiple names or with contradictory attributes across documents. This is what an auditor needs to catch before a report goes out."
-- ⚠ Don't memorize exact entity-name strings beyond the EASA AD pair — LLM extraction is non-deterministic, so the *specific* functional_violation rows shift between ingestions (confirm live with the query in Step 4 above before presenting). The conflict *types* and what they mean never change.
+- ⚠ **The `multi_source` anchor this section used to recommend has been retired — do not use it.** It fired on "same triple asserted by two non-superseding documents", which is *corroboration*, not contradiction: an edge is one triple, so both documents were agreeing. It produced 94 of aerospace's 95 open conflicts. Saying "two EASA directives with contradictory supersession information, flagged as multi_source" would not survive the follow-up question, because the query never compared the two claims at all. It is now a corroboration signal on the edge, and the pre-existing nodes are marked `false_positive`.
+- Point at a **`functional_violation`** (aerospace) or **`directional_reversal`** (automotive) row instead — these are the strategies that actually compare competing claims.
+- Say: "[point at the row on screen, e.g. Airbus vs '[A320neo, Airbus A320neo]'] — a functional violation: a single-valued property with two competing values across documents, which usually means the same real-world entity was extracted under multiple names. This is what an auditor needs to catch before a report goes out."
+- ⚠ Don't memorize exact entity-name strings — LLM extraction is non-deterministic, so the *specific* rows shift between ingestions (confirm live with the query in Step 4 above before presenting). The conflict *types* and what they mean never change.
+- **Honest framing if pressed on volume:** open conflicts are currently 1 (aerospace) and 2 (automotive). That is the *real* number now that corroboration is no longer counted as conflict — and being able to explain why the number dropped from 95 to 1 is a stronger answer than a big number you can't defend.
 - **To verify in Neo4j Browser:**
   ```cypher
   MATCH (c:Conflict {tenant: 'aerospace', status: 'open'})

@@ -36,11 +36,21 @@ API, scan orchestration, and resolution queries.
 
 conflict_type values
 --------------------
-  multi_source          — same (src, rel, tgt) from two non-superseding docs
   directional_reversal  — A→B and B→A for the same relation
   exclusive_state       — entity carries mutually exclusive status from 2 docs
   functional_violation  — many-to-one relation has multiple targets across docs
   positive_negative_pair — RELATES_TO and NEGATIVE_RELATES_TO coexist for the same triple
+
+Retired: `multi_source`
+----------------------
+A fifth type, `multi_source`, fired on "same (src, rel, tgt) from two
+non-superseding docs". That is corroboration, not contradiction — an edge is one
+triple, so two documents on it assert the same fact — and it produced 94 of
+aerospace's 95 and 61 of automotive's 63 open conflicts, hiding whether the four
+real strategies work at all. It is now `_record_corroboration()`, which writes
+`independent_source_count` to the edge instead of creating Conflict nodes.
+Pre-existing `multi_source` nodes are retired to `status: 'false_positive'` by
+`scripts/retire_multi_source_conflicts.py`.
 """
 
 from __future__ import annotations
@@ -86,18 +96,25 @@ class ContradictionDetector(_ConflictStrategies):
                      (or 0 for unlimited) for exhaustive maintenance scans.
 
         Detects (via _ConflictStrategies mixin):
-        1. Same (src, rel, tgt) from two non-superseding docs (multi_source).
-        2. Directional reversals: A→B and B→A for the same relation type.
-        3. Mutually exclusive entity states from different docs (exclusive_state).
-        4. Functional dependency violations — one-to-one relations with multiple
+        1. Directional reversals: A→B and B→A for the same relation type.
+        2. Mutually exclusive entity states from different docs (exclusive_state).
+        3. Functional dependency violations — one-to-one relations with multiple
            targets across documents (functional_violation).
-        5. Positive/negative triple pairs (positive_negative_pair).
+        4. Positive/negative triple pairs (positive_negative_pair).
+
+        Also records `independent_source_count` on corroborated edges — see
+        `_record_corroboration()`. That is not a conflict and is excluded from
+        the return value.
 
         Returns list of newly created conflict dicts.
         """
         new_conflicts: list[dict] = []
 
-        new_conflicts += await self._detect_multi_source_conflicts(doc_id, tenant, scan_limit)
+        # Not a conflict strategy — records how many independent documents assert
+        # each edge. Kept in scan() because it shares the supersession-aware
+        # source analysis, but it contributes no Conflict nodes.
+        corroborated = await self._record_corroboration(doc_id, tenant, scan_limit)
+
         new_conflicts += await self._detect_directional_reversals(doc_id, tenant, scan_limit)
         new_conflicts += await self._detect_exclusive_states(doc_id, tenant, scan_limit)
         new_conflicts += await self._detect_functional_violations(doc_id, tenant, scan_limit)
@@ -108,6 +125,7 @@ class ContradictionDetector(_ConflictStrategies):
             doc_id=doc_id or "all",
             tenant=tenant or "all",
             new_conflicts=len(new_conflicts),
+            corroborated_edges=corroborated,
         )
         return new_conflicts
 

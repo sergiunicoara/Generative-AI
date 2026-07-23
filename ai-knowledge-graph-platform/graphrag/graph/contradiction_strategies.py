@@ -87,20 +87,42 @@ def _ontology_lists(tenant: str | None) -> tuple[list[tuple[str, str]], list[str
 class _ConflictStrategies:
     """Mixin — five detection strategies, each surfacing a different conflict class."""
 
-    # ── Strategy 1: Multi-source conflicts ────────────────────────────────────
+    # ── Corroboration (formerly "Strategy 1: multi-source conflicts") ─────────
 
-    async def _detect_multi_source_conflicts(
+    async def _record_corroboration(
         self,
         doc_id: str | None,
         tenant: str | None,
         scan_limit: int,
-    ) -> list[dict]:
+    ) -> int:
         """
-        Find RELATES_TO edges that carry evidence from 2+ non-superseding
-        documents.  The evidence is read from r.source_doc_ids (an accumulated
-        list written by merge_relation) rather than a single r.source_doc_id,
-        so this detection survives the MERGE-collapse of multiple writes into
-        one edge.
+        Record how many *independent* documents assert each edge.
+
+        This used to create `conflict_type: 'multi_source'` Conflict nodes, which
+        was wrong by construction. An edge *is* a single triple (src, rel, tgt),
+        so two documents on the same edge necessarily assert **the same fact** —
+        that is corroboration, not contradiction. The detector's own docstring
+        described it as "same (src, rel, tgt) from two non-superseding docs", and
+        it accounted for 94 of aerospace's 95 and 61 of automotive's 63 open
+        conflicts, drowning the four strategies that detect real disagreement.
+
+        The intent behind it survives in the module docstring — "the Bayesian
+        confidence merge accumulates both without surfacing the conflict" — but
+        the implementation dropped the *disagreement* half of the condition, and
+        disagreement can only ever be seen by comparing **different** edges,
+        which is exactly what strategies 2-5 do. Worse, `merge_relations_batch`
+        deliberately *raises* confidence via noisy-OR when a second document
+        confirms a fact, so the two subsystems were reading identical evidence
+        in opposite directions.
+
+        What the query computes is genuinely valuable and is kept: the count of
+        mutually non-superseding source documents. Two documents where one
+        supersedes the other are not independent evidence; two that don't are.
+        That count is now written to the edge as a trust signal
+        (`r.independent_source_count`) and reported by
+        `GraphEvaluator.relation_precision()` as `corroborated_edge_rate`.
+
+        Returns the number of edges updated.
         """
         tenant_filter = "AND s.tenant = $tenant AND t.tenant = $tenant" if tenant else ""
         doc_filter    = "AND $doc_id IN r.source_doc_ids" if doc_id else ""
@@ -112,6 +134,9 @@ class _ConflictStrategies:
         if doc_id:
             params["doc_id"] = doc_id
 
+        # The SET is folded into the same statement rather than issued per row:
+        # the old shape was 1 query + N writes, which on a bulk scan meant one
+        # round-trip per corroborated edge.
         rows = await self._neo4j.run(
             f"""
             MATCH (s:Entity)-[r:RELATES_TO]->(t:Entity)
@@ -119,68 +144,41 @@ class _ConflictStrategies:
               AND size(r.source_doc_ids) > 1
               {tenant_filter}
               {doc_filter}
-            WITH s.name AS src, t.name AS tgt, r.relation AS rel,
-                 r.source_doc_ids AS doc_ids
+            WITH r, r.source_doc_ids AS doc_ids
+            {limit_clause}
 
             UNWIND range(0, size(doc_ids) - 2) AS i
             UNWIND range(i + 1, size(doc_ids) - 1) AS j
-            WITH src, tgt, rel, doc_ids, doc_ids[i] AS d_a, doc_ids[j] AS d_b
+            WITH r, doc_ids[i] AS d_a, doc_ids[j] AS d_b
 
+            // Documents in a supersession chain are not independent evidence —
+            // a revision restating its predecessor's claim corroborates nothing.
             OPTIONAL MATCH (da:Document {{id: d_a}})-[:SUPERSEDES*]->(db:Document {{id: d_b}})
             OPTIONAL MATCH (db2:Document {{id: d_b}})-[:SUPERSEDES*]->(da2:Document {{id: d_a}})
-            WITH src, tgt, rel, doc_ids, d_a, d_b,
-                 count(da) AS sup_fwd, count(db2) AS sup_rev
+            WITH r, d_a, d_b, count(da) AS sup_fwd, count(db2) AS sup_rev
             WHERE sup_fwd = 0 AND sup_rev = 0
 
-            WITH src, tgt, rel, doc_ids,
-                 collect({{a: d_a, b: d_b}}) AS independent_pairs
-            WHERE size(independent_pairs) > 0
+            WITH r, collect([d_a, d_b]) AS pairs
+            UNWIND pairs AS pair
+            UNWIND pair AS d
+            WITH r, collect(DISTINCT d) AS independent_docs
+            WHERE size(independent_docs) > 1
 
-            OPTIONAL MATCH (c:Conflict {{src: src, tgt: tgt, relation: rel,
-                                         status: 'open', conflict_type: 'multi_source'}})
-            WITH src, tgt, rel, doc_ids, independent_pairs, count(c) AS existing
-            WHERE existing = 0
-            RETURN src, tgt, rel, doc_ids, independent_pairs
-            {limit_clause}
+            SET r.independent_source_count = size(independent_docs),
+                r.corroborated_at          = datetime()
+            RETURN count(r) AS updated
             """,
             **params,
         )
 
-        created: list[dict] = []
-        for row in rows:
-            conflict_id = str(uuid4())
-            await self._neo4j.run(
-                """
-                CREATE (c:Conflict {
-                    id:            $id,
-                    src:           $src,
-                    tgt:           $tgt,
-                    relation:      $rel,
-                    conflict_type: 'multi_source',
-                    sources:       $sources,
-                    tenant:        $tenant,
-                    status:        'open',
-                    detected_at:   datetime(),
-                    resolved_at:   null,
-                    resolved_by:   null,
-                    winner_doc_id: null
-                })
-                """,
-                id=conflict_id,
-                src=row["src"],
-                tgt=row["tgt"],
-                rel=row["rel"],
-                sources=str(row["doc_ids"]),
-                tenant=tenant or "",
+        updated = int(rows[0]["updated"]) if rows and rows[0].get("updated") else 0
+        if updated:
+            log.info(
+                "contradiction_strategies.corroboration_recorded",
+                tenant=tenant or "all",
+                edges=updated,
             )
-            created.append({
-                "conflict_id": conflict_id,
-                "type": "multi_source",
-                "src": row["src"],
-                "tgt": row["tgt"],
-                "relation": row["rel"],
-            })
-        return created
+        return updated
 
     # ── Strategy 2: Directional reversals ────────────────────────────────────
 

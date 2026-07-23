@@ -1,7 +1,7 @@
 {
-  "version": "2.1",
+  "version": "2.2",
   "tenant": "aerospace",
-  "description": "Golden evaluation set for the GraphRAG aerospace regulatory corpus. 34 document-retrieval questions across single-hop, multi-hop, contradiction, authority-chain, inference, temporal, precision, calibration, agentic, contextual, and negative types. v2.1 (2026-07-21): (1) fixed expected_citation slugs that never matched the actual corpus filenames (e.g. 'faa-ad-2022' -> 'FAA-AD-2022-03-07'); (2) added required_answer_any_of alternatives where a correct answer legitimately varies in phrasing (document-ID format 'FAA AD 2024-01-02' vs 'FAA-AD-2024', or 737-8/737-9 vs '737 MAX'); (3) removed 5 mis-scoped meta-questions (ARC-01/02, DOM-01/02, CAL-02) that asked about the RAG platform's own architecture/config rather than the aerospace documents — they are unanswerable from a document corpus (empty expected_citations), so the system correctly declining to answer them was being penalized as a failure. Remaining failures after these fixes are genuine retrieval limitations (multi-hop under-citation, contradiction-document retrieval misses), NOT scoring artifacts, and are left failing deliberately.",
+  "description": "Golden evaluation set for the GraphRAG aerospace regulatory corpus. 34 document-retrieval questions across single-hop, multi-hop, authority-chain, inference, temporal, precision, calibration, agentic, contextual, and negative types. v2.2 (2026-07-23): retired the two 'contradiction'-type questions, CON-01 and CON-02 (see tasks/lessons.md A133). Both assumed the two G-ABCD compliance reports contradict each other on AD-2020-05-11 compliance/737 MAX airworthiness; re-reading the source documents end-to-end showed all sources agree on both points, so CON-01 forbade the only correct answer ('yes, it is compliant') and CON-02 asked the model to invent a conflict. The aerospace corpus currently contains no genuine cross-document contradiction, so 'contradiction' is not a covered type until one is deliberately authored into the corpus. Replaced (same IDs, new content) with a temporal-synthesis question (does G-ABCD's compliance status vary by directive/deadline as of a stated date) and an inference question (does non-compliance with a not-yet-due directive make an aircraft unairworthy) — both grounded in a real, verified nuance in the March 2024 report rather than a fabricated conflict. v2.1 (2026-07-21): (1) fixed expected_citation slugs that never matched the actual corpus filenames (e.g. 'faa-ad-2022' -> 'FAA-AD-2022-03-07'); (2) added required_answer_any_of alternatives where a correct answer legitimately varies in phrasing (document-ID format 'FAA AD 2024-01-02' vs 'FAA-AD-2024', or 737-8/737-9 vs '737 MAX'); (3) removed 5 mis-scoped meta-questions (ARC-01/02, DOM-01/02, CAL-02) that asked about the RAG platform's own architecture/config rather than the aerospace documents — they are unanswerable from a document corpus (empty expected_citations), so the system correctly declining to answer them was being penalized as a failure.",
   "thresholds": {
     "min_context_precision": 0.70,
     "min_faithfulness":      0.80,
@@ -144,22 +144,29 @@
     },
 
     {
-      "id": "CON-01", "type": "contradiction",
-      "question": "Is the Boeing 737 MAX currently compliant with FAA-AD-2020-05-11?",
-      "expected_citations": ["G-ABCD_inspection_2024-01", "G-ABCD_AD_compliance_2024-03"],
-      "required_answer_terms": ["conflict", "contradictory", "two documents"],
-      "forbidden_terms": ["yes, it is compliant", "no, it is not compliant"],
+      "id": "CON-01", "type": "temporal",
+      "question": "As of March 2024, is aircraft G-ABCD fully compliant with all applicable FAA airworthiness directives for its MCAS system?",
+      "expected_citations": ["G-ABCD_AD_compliance_2024-03"],
+      "required_answer_terms": [],
+      "required_answer_any_of": [
+        ["not compliant", "non-compliant", "not yet compliant", "noncompliant", "not fully compliant"],
+        ["2024-01-02", "AD 2024-01-02", "FAA AD 2024-01-02"]
+      ],
+      "forbidden_terms": ["yes, it is fully compliant", "fully compliant with all"],
       "min_context_precision": 0.70,
-      "note": "Correct answer surfaces the contradiction, not a binary yes/no. GENUINE FAILURE (not loosened): the two G-ABCD compliance documents that contradict each other are not being retrieved, so the pipeline never sees the conflict to surface. A real contradiction-retrieval limitation."
+      "note": "Replaces the original CON-01 (retired 2026-07-23, see tasks/lessons.md A133). That question asked whether the two G-ABCD documents contradict each other on AD-2020-05-11 compliance; re-reading the source documents end-to-end showed all three sources (both G-ABCD reports and the SWA fleet registry) agree it IS compliant with AD-2020-05-11 -- there was no contradiction, and the test forbade the only correct answer ('yes, it is compliant'). The real nuance in this corpus is temporal: G-ABCD is compliant with the two older ADs (2020-05-11, 2022-03-07) but non-compliant with the newer AD-2024-01-02 as of the March 2024 report, because its May 15, 2024 compliance deadline had not yet passed. This tests synthesizing per-AD status across a multi-AD compliance report rather than a fabricated cross-document conflict."
     },
     {
-      "id": "CON-02", "type": "contradiction",
-      "question": "What do the documents say about the 737 MAX airworthiness status?",
-      "expected_citations": ["G-ABCD_inspection_2024-01", "G-ABCD_AD_compliance_2024-03"],
-      "required_answer_terms": ["conflicting", "different"],
-      "forbidden_terms": [],
+      "id": "CON-02", "type": "inference",
+      "question": "Does G-ABCD's non-compliance with FAA AD-2024-01-02 in March 2024 mean the aircraft was unairworthy at that time?",
+      "expected_citations": ["G-ABCD_AD_compliance_2024-03"],
+      "required_answer_terms": [],
+      "required_answer_any_of": [
+        ["remains airworthy", "still airworthy", "was airworthy", "remained airworthy"]
+      ],
+      "forbidden_terms": ["unairworthy", "not airworthy", "grounded"],
       "min_context_precision": 0.70,
-      "note": "GENUINE FAILURE (not loosened): same missing G-ABCD contradiction documents as CON-01."
+      "note": "Replaces the original CON-02 (retired 2026-07-23, see tasks/lessons.md A133), which asked the model to find 'conflicting' airworthiness statements that do not exist -- both G-ABCD documents independently state the aircraft is airworthy. This tests the real, non-obvious distinction the March report makes explicit: non-compliance with a directive whose deadline has not yet passed does not make an aircraft unairworthy. GENUINE FAILURE (verified 2026-07-23, not loosened): the live pipeline cites the correct document (G-ABCD_AD_compliance_2024-03) but its answer denies the non-compliance is documented at all ('the report... no finding of non-compliance for that AD is documented'), even though the source states 'Status: IS_NON_COMPLIANT_WITH (compliance deadline not yet reached)' verbatim. The retrieved context evidently does not include the reconciling 'remains airworthy... deadline not yet reached' sentence a few lines below the status line, so the model hedges into 'cannot be determined' rather than reading the paragraph. A real context-slicing/synthesis limitation, left failing deliberately -- unlike the original CON-02, this one measures something that actually happens in the corpus."
     },
 
     {

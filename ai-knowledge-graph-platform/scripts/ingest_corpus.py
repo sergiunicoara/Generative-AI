@@ -193,6 +193,59 @@ def _authority_level(filename: str, authority_map: dict[str, int]) -> int:
     return 4
 
 
+async def reconcile_supersession(neo4j, tenant: str, supersession_map: dict[str, list[str]]) -> int:
+    """
+    Ensure every supersession_map entry has a SUPERSEDES edge + superseded_by
+    property in Neo4j, resolving successor/predecessor filenames to their
+    already-written Document node IDs.
+
+    Why this exists: write_document() (graphrag/ingestion/graph_writer.py)
+    calls DocumentAuthorityService.register_supersession() per document as
+    it's written, but that Cypher MATCHes *both* documents by id —
+    ``MATCH (old:Document {id: $old_id})`` included. ingest_all()'s writer
+    drains documents in extraction-*completion* order (concurrent extraction,
+    single serial writer), not the sorted predecessor-before-successor order
+    ``doc.supersedes`` was built from — so if a successor's write races ahead
+    of its predecessor's, register_supersession's MATCH silently matches zero
+    rows and the edge is dropped with no error, no warning, nothing. This
+    reconciliation re-asserts every configured pair once the whole batch has
+    finished writing, when every Document node is guaranteed to exist.
+    ``register_supersession`` is MERGE-based, so re-running it for pairs that
+    already succeeded is a safe no-op.
+
+    Also callable standalone (see --reconcile-supersession) to repair a tenant
+    that was already ingested before this reconciliation step existed, with no
+    re-ingestion / LLM calls needed — it's a pure graph patch over existing
+    Document nodes.
+
+    Returns the number of successor->predecessor pairs applied.
+    """
+    if not supersession_map:
+        return 0
+    from graphrag.graph.document_authority import DocumentAuthorityService
+
+    rows = await neo4j.run(
+        "MATCH (d:Document {tenant: $tenant}) RETURN d.filename AS filename, d.id AS id",
+        tenant=tenant,
+    )
+    doc_id_by_filename = {r["filename"]: r["id"] for r in rows}
+
+    svc = DocumentAuthorityService(neo4j)
+    applied = 0
+    for successor_name, predecessor_names in supersession_map.items():
+        new_id = doc_id_by_filename.get(successor_name)
+        if not new_id:
+            continue
+        old_ids = [
+            doc_id_by_filename[f] for f in predecessor_names if f in doc_id_by_filename
+        ]
+        if not old_ids:
+            continue
+        await svc.register_supersession(new_id, old_ids)
+        applied += len(old_ids)
+    return applied
+
+
 async def ingest_all(
     doc_filter: str | None,
     commit: bool,
@@ -418,6 +471,20 @@ async def ingest_all(
         log.warning("ingest_corpus.cycle_check_failed", error=str(exc))
         print(f"       WARNING: cycle check failed — {exc}")
 
+    # ── Supersession reconciliation (once, for the whole batch) ─────────────────
+    # See reconcile_supersession() docstring: the per-document
+    # register_supersession() call in write_document() can silently no-op if
+    # the predecessor doc's write hasn't landed yet (concurrent extraction,
+    # completion-order write queue). Re-assert every configured pair now that
+    # every Document node in this batch is guaranteed to exist.
+    print(f"\n[*] Reconciling supersession chains on '{tenant}' tenant...")
+    try:
+        _applied = await reconcile_supersession(neo4j, tenant, supersession_map)
+        print(f"       Supersession pairs applied: {_applied}")
+    except Exception as exc:
+        log.warning("ingest_corpus.supersession_reconcile_failed", error=str(exc))
+        print(f"       WARNING: supersession reconciliation failed — {exc}")
+
     # ── Contradiction scan (once, for the whole batch) ──────────────────────────
     print(f"\n[*] Scanning contradictions on '{tenant}' tenant...")
     try:
@@ -543,6 +610,20 @@ async def ingest_all(
     return 0
 
 
+async def _run_reconcile_supersession_only(tenant: str) -> int:
+    """Standalone repair path: patch SUPERSEDES edges on an already-ingested
+    tenant, no re-ingestion / LLM calls. See reconcile_supersession()."""
+    from graphrag.graph.neo4j_client import get_neo4j
+
+    config = _corpus_config(tenant)
+    neo4j = get_neo4j()
+    print(f"\n[*] Reconciling supersession chains on '{tenant}' tenant (standalone)...")
+    applied = await reconcile_supersession(neo4j, tenant, config["supersession_map"])
+    print(f"       Supersession pairs applied: {applied}")
+    await neo4j.close()
+    return 0
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(
         description=__doc__,
@@ -557,7 +638,14 @@ def main() -> None:
     parser.add_argument("--tenant", default="aerospace",
                         choices=sorted(set(_CORPUS_CONFIGS) | {"automotive", "marketing"}),
                         help="Tenant corpus to ingest (default: aerospace)")
+    parser.add_argument("--reconcile-supersession", action="store_true",
+                        help="Patch SUPERSEDES edges on an already-ingested tenant from "
+                             "its supersession_map, then exit. No re-ingestion / LLM calls "
+                             "— repairs the race described in reconcile_supersession().")
     args = parser.parse_args()
+
+    if args.reconcile_supersession:
+        raise SystemExit(asyncio.run(_run_reconcile_supersession_only(args.tenant)))
 
     raise SystemExit(asyncio.run(ingest_all(
         doc_filter=args.doc,

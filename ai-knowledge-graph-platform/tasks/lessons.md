@@ -4214,3 +4214,68 @@ every seed. That correctly stops weak hops outranking confirmed seeds (A126),
 but it also means no generic hop-ranking tweak can lift a genuinely relevant hop
 chunk above the weakest seed — hop recall has to be fixed by *retrieving it as a
 seed*, not by re-scoring hops.
+
+---
+
+## A128: Fixed the AUT-01 data gap (real race condition) — then reverted applying it
+
+**Context:** A127 identified that AUT-01 (authority ranking) was blocked because
+`FAA-AD-2020-05-11`'s `superseded_by` was `NULL` in the live aerospace graph,
+even though `_CORPUS_CONFIGS["aerospace"]["supersession_map"]` in
+`scripts/ingest_corpus.py` already had the correct chain
+(`2022→2020`, `2024→2022`).
+
+**Root cause found:** `ingest_all()` extracts documents concurrently
+(`extract_concurrency`, default 4) but writes them serially through a queue
+that drains in extraction-*completion* order, not the sorted
+predecessor-before-successor order `doc.supersedes` was resolved from.
+`graph_writer.write_document()` calls
+`DocumentAuthorityService.register_supersession(doc.id, doc.supersedes)` per
+document as it's written — and that Cypher `MATCH`es *both* documents by id
+(`MATCH (old:Document {id: $old_id})` included). If the predecessor's write
+hasn't landed yet when a concurrently-extracted successor's write races ahead,
+the `MATCH` silently matches zero rows and the edge is dropped — no exception,
+no warning, nothing. Two configured pairs, one race won, one lost: 2024→2022
+landed, 2022→2020 didn't.
+
+**Fix (kept, real value):** `reconcile_supersession()` in
+`scripts/ingest_corpus.py` re-asserts every `supersession_map` pair after the
+whole batch has finished writing (same "defer to end of batch" pattern already
+used for cycle detection and contradiction scanning in this file) — every
+Document node is guaranteed to exist by then, so the MATCH always succeeds.
+`register_supersession` is MERGE-based, so re-running it for already-correct
+pairs is a safe no-op. Also exposed as a standalone `--reconcile-supersession`
+CLI flag to repair an already-ingested tenant without re-ingestion (no LLM
+calls — pure Cypher patch over existing Document nodes). This protects every
+future bulk ingest of every tenant from the same race, at zero cost when
+nothing needs reconciling.
+
+**Applying it to the live aerospace graph — reverted:** Ran
+`--reconcile-supersession`; both pairs landed correctly (`superseded_by` now
+set on `FAA-AD-2020-05-11`, `SUPERSEDES` edge `2022→2020` present). But
+re-running the aerospace golden set showed a **reproducible regression**:
+28/34 → 27/34, `authority_chain` 2/3 → 1/3 (AUT-03 flipped pass→fail,
+confirmed across 2 clean cache-cleared runs — not flakiness). Measured: the
+chunk-ranking effect was negligible as expected (A127 already established
+`SUPERSEDED_CONFIDENCE_PENALTY` only reaches chunk score via β=0.1 GNN
+weight — FAA-AD-2020 stayed rank 0), but *something* about the penalty
+propagating through `apply_authority_weights()` → GNN edge confidence broke
+AUT-03's citation extraction specifically. Root cause not fully isolated
+before time-boxing the investigation — plausible mechanism is the confidence
+penalty on FAA-AD-2020's own entity edges reducing GNN structural propagation
+to entities shared with other documents, but this wasn't confirmed.
+
+**Decision:** reverted the live data mutation (removed the one edge + property
+`--reconcile-supersession` added), confirmed aerospace back to the exact
+28/34 baseline (AUT-01/02/03 = 2/3, matching pre-fix). Kept the code fix —
+inert until someone runs `--reconcile-supersession` or bulk-re-ingests, so
+nothing is currently exposed to the regression it triggered.
+
+**Rule:** a data-correctness fix is not automatically safe to apply just
+because the data was wrong. The `SUPERSEDED_CONFIDENCE_PENALTY` → GNN
+authority-weighting path (`document_authority.py` →
+`apply_authority_weights()` → `gnn_scorer.py`) is shared, cross-tenant scoring
+logic — re-verify against the golden sets after *any* change to the data it
+reads, not just after changes to the scoring code itself. "The graph is now
+more accurate" and "retrieval got better" are different claims; measure both,
+independently, before landing either.

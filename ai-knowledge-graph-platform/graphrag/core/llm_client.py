@@ -9,7 +9,7 @@ Usage:
 
 Provider strategy
 -----------------
-Primary:  DeepSeek-V3 (deepseek-chat) — single provider for the full ingestion
+Primary:  DeepSeek-V4 (deepseek-v4-pro) — single provider for the full ingestion
           run. At corpus-scale chunk volumes, Groq's free-tier rate limit is
           hit on nearly every call anyway, so routing extraction through one
           model gives a consistent extraction "voice" (entity/relation style,
@@ -246,7 +246,9 @@ class DeepSeekLLM(BaseLLM):
     """
 
     _BASE_URL     = "https://api.deepseek.com"
-    _DEFAULT_MODEL = "deepseek-chat"   # DeepSeek-V3
+    _DEFAULT_MODEL = "deepseek-v4-pro"   # was "deepseek-chat" — DeepSeek deprecated that
+                                          # id; API now rejects it with 400 on every call
+                                          # (found 2026-07-24 via worker.log retry/DLQ spam)
     _MAX_RETRIES  = 3
     _RETRY_WAIT   = 10.0  # seconds between retries on 429/503/timeout
     _TIMEOUT      = 60.0  # seconds — DeepSeek's API can stall under load with
@@ -419,7 +421,7 @@ _embedder: OpenAIEmbedder | None = None
 def get_llm() -> BaseLLM:
     """Return the primary (large) LLM — DeepSeek-V3, single provider by default.
 
-    Normal path: bare ``DeepSeekLLM`` (deepseek-chat) — one provider's
+    Normal path: bare ``DeepSeekLLM`` (deepseek-v4-pro) — one provider's
     extraction "voice" for the whole corpus, generous rate limits,
     ~$0.07/1M input tokens. No Groq round-trip, no mixed-model calibration
     across a single ingestion run.

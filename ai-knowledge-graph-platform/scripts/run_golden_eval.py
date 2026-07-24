@@ -183,6 +183,8 @@ def run(
                     "failures": failures,
                     "answer_snippet": (result.get("answer") or "")[:120],
                     "citations": result.get("citations", []),
+                    "steps": result.get("steps", []),
+                    "latency_ms": result.get("latency_ms"),
                 })
             except Exception as exc:
                 errored += 1

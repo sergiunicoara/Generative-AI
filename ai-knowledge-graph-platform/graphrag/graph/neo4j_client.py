@@ -78,17 +78,28 @@ class Neo4jClient:
         valid_from: str | None = None,
         valid_to: str | None = None,
         tenant: str = "default",
-    ):
-        await self.run(
+    ) -> str:
+        """MERGE on the document's real identity, (tenant, filename) — not on
+        doc_id, which is a fresh uuid4() every ingestion run and so can never
+        match an existing node. Keying on it made every re-ingest an
+        unconditional CREATE: a partial aerospace re-ingest silently duplicated
+        4 documents and 38% of that tenant's chunks (see tasks/lessons.md A136).
+
+        Returns the *canonical* id — the one already stored, if this document
+        existed before, otherwise doc_id. Callers MUST use the returned id for
+        every downstream write (chunks, relations, supersession) instead of the
+        id they passed in.
+        """
+        rows = await self.run(
             """
-            MERGE (d:Document {id: $id})
-            SET d.filename        = $filename,
-                d.ingested_at     = $ingested_at,
+            MERGE (d:Document {tenant: $tenant, filename: $filename})
+            ON CREATE SET d.id = $id, d.created_at = datetime()
+            SET d.ingested_at     = $ingested_at,
                 d.status          = 'done',
                 d.authority_level = $authority_level,
                 d.valid_from      = $valid_from,
-                d.valid_to        = $valid_to,
-                d.tenant          = $tenant
+                d.valid_to        = $valid_to
+            RETURN d.id AS doc_id
             """,
             id=doc_id,
             filename=filename,
@@ -98,15 +109,23 @@ class Neo4jClient:
             valid_to=valid_to,
             tenant=tenant,
         )
+        return rows[0]["doc_id"] if rows else doc_id
 
     async def merge_chunk(self, chunk: Chunk, tenant: str = "default"):
+        """MERGE on (document_id, chunk_index) — stable across re-ingestion and
+        re-chunking, unlike chunk.id (fresh uuid4() every run). Also writes
+        document_id itself, which chunks never carried before this change
+        (see backfill_chunk_document_id.py) — this activates the existing
+        chunk_doc index and is what counterfactual.py's document-removal
+        simulation queries on, previously matching nothing.
+        """
         await self.run(
             """
-            MERGE (c:Chunk {id: $id})
-            SET c.text        = $text,
-                c.chunk_index = $chunk_index,
-                c.embedding   = $embedding,
-                c.tenant      = $tenant
+            MERGE (c:Chunk {document_id: $doc_id, chunk_index: $chunk_index})
+            ON CREATE SET c.id = $id
+            SET c.text      = $text,
+                c.embedding = $embedding,
+                c.tenant    = $tenant
             WITH c
             MATCH (d:Document {id: $doc_id})
             MERGE (c)-[:PART_OF]->(d)
@@ -140,11 +159,11 @@ class Neo4jClient:
         await self.run(
             """
             UNWIND $rows AS row
-            MERGE (c:Chunk {id: row.id})
-            SET c.text        = row.text,
-                c.chunk_index = row.chunk_index,
-                c.embedding   = row.embedding,
-                c.tenant      = $tenant
+            MERGE (c:Chunk {document_id: row.doc_id, chunk_index: row.chunk_index})
+            ON CREATE SET c.id = row.id
+            SET c.text      = row.text,
+                c.embedding = row.embedding,
+                c.tenant    = $tenant
             WITH c, row
             MATCH (d:Document {id: row.doc_id})
             MERGE (c)-[:PART_OF]->(d)
@@ -152,6 +171,32 @@ class Neo4jClient:
             rows=rows,
             tenant=tenant,
         )
+
+    async def delete_stale_chunks(self, doc_id: str, keep_count: int, tenant: str = "default") -> int:
+        """Delete chunks left over from a previous ingestion of doc_id whose
+        chunk_index no longer has a counterpart in the current chunk set —
+        i.e. a re-chunk that produced fewer chunks than before (the
+        section-aware chunker rewrite did exactly this). Without this, the
+        surplus chunks stay in the retrieval pool with no owner. DETACH so
+        MENTIONS/PART_OF edges go with them. Returns the number deleted.
+        """
+        rows = await self.run(
+            """
+            MATCH (c:Chunk {document_id: $doc_id, tenant: $tenant})
+            WHERE c.chunk_index >= $keep_count
+            WITH collect(c) AS stale, count(c) AS n
+            UNWIND stale AS c
+            DETACH DELETE c
+            RETURN head(collect(n)) AS deleted
+            """,
+            doc_id=doc_id,
+            keep_count=keep_count,
+            tenant=tenant,
+        )
+        deleted = int(rows[0]["deleted"]) if rows and rows[0].get("deleted") else 0
+        if deleted:
+            log.info("neo4j.stale_chunks_deleted", doc_id=doc_id, deleted=deleted)
+        return deleted
 
     async def merge_entity(self, entity: Entity, tenant: str = "default"):
         """Merge entity scoped to tenant — same (name, type) in different tenants are distinct nodes."""

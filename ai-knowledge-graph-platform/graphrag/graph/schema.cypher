@@ -53,3 +53,14 @@ CREATE INDEX relation_source_doc_ids IF NOT EXISTS FOR ()-[r:RELATES_TO]-() ON (
 CREATE INDEX relation_tenant IF NOT EXISTS FOR ()-[r:RELATES_TO]-() ON (r.tenant);
 CREATE INDEX conflict_status IF NOT EXISTS FOR (c:Conflict) ON (c.status);
 CREATE INDEX conflict_tenant IF NOT EXISTS FOR (c:Conflict) ON (c.tenant);
+
+-- ── Ingestion idempotency (natural-key MERGE targets) ─────────────────────────
+-- merge_document/merge_chunk now MERGE on these composite keys instead of a
+-- fresh uuid4() id, so a re-ingested file updates the existing node instead of
+-- creating a duplicate (tasks/lessons.md A136). Index, not a uniqueness
+-- constraint: a constraint fails to create on any deployment that still has
+-- pre-existing duplicates, turning a data problem into a startup failure. The
+-- id constraints above (doc_id, chunk_id) are untouched — id stays unique,
+-- it just stops being the merge key.
+CREATE INDEX doc_natural IF NOT EXISTS FOR (d:Document) ON (d.tenant, d.filename);
+CREATE INDEX chunk_natural IF NOT EXISTS FOR (c:Chunk) ON (c.document_id, c.chunk_index);

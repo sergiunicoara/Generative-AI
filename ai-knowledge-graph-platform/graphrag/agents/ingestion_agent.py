@@ -111,8 +111,19 @@ class IngestionAgent(BaseGraphRAGAgent):
         doc    = extracted["doc"]
         chunks = extracted["chunks"]
 
-        # 1. Write document node
-        await self._writer.write_document(doc)
+        # 1. Write document node. write_document may return a DIFFERENT id than
+        # doc.id came in with — merge_document keys on (tenant, filename), so a
+        # re-ingested document resolves to its existing id, not the fresh
+        # uuid4() this run generated for `doc`. Every chunk was built during
+        # extract() with the old id, so they must be repointed before anything
+        # downstream (chunk write, relations, supersession) references them —
+        # otherwise those writes target a document node that doesn't exist and
+        # silently create a duplicate (see tasks/lessons.md A136).
+        original_id = doc.id
+        canonical_id = await self._writer.write_document(doc)  # mutates doc.id in place
+        if canonical_id != original_id:
+            for c in chunks:
+                c.document_id = canonical_id
 
         # 2. Write chunks to Neo4j
         await self._writer.write_chunks(chunks)

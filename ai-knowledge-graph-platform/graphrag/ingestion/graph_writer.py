@@ -98,8 +98,19 @@ class GraphWriter:
 
     # ── Document ───────────────────────────────────────────────────────────────
 
-    async def write_document(self, doc: Document) -> None:
-        await self._neo4j.merge_document(
+    async def write_document(self, doc: Document) -> str:
+        """Merge the document and return its canonical id.
+
+        merge_document keys on (tenant, filename), not doc.id (a fresh uuid4()
+        every run — see neo4j_client.merge_document docstring). If this
+        document already existed, the returned id is the *original* one, which
+        may differ from doc.id. Callers MUST reassign doc.id (and every
+        chunk.document_id) to the returned value before writing anything else
+        that references the document — chunks, relations, supersession — or
+        those writes will target a document node that doesn't exist and create
+        a fresh duplicate instead of updating the existing one.
+        """
+        canonical_id = await self._neo4j.merge_document(
             doc_id=doc.id,
             filename=doc.filename,
             ingested_at=doc.ingested_at.isoformat(),
@@ -108,6 +119,7 @@ class GraphWriter:
             valid_to=doc.valid_to.isoformat() if doc.valid_to else None,
             tenant=doc.tenant,
         )
+        doc.id = canonical_id
 
         # Register supersession chains
         if doc.supersedes:
@@ -122,19 +134,28 @@ class GraphWriter:
             changed_by=self._changed_by,
         )
         log.info("graph_writer.document_merged", doc_id=doc.id)
+        return doc.id
 
     # ── Chunks ─────────────────────────────────────────────────────────────────
 
     async def write_chunks(self, chunks: list[Chunk]) -> None:
         """Batched (UNWIND) instead of one merge_chunk() round-trip per
         chunk — sub-batched at embedding_batch_size to bound payload size
-        (each row carries a 3072-dim embedding)."""
+        (each row carries a 3072-dim embedding).
+
+        After the batch lands, deletes any chunk left over from a previous
+        ingestion of this document whose chunk_index is >= the current chunk
+        count — i.e. a re-chunk that shrank the document. Without this, the
+        surplus chunks stay in the retrieval pool with no owner.
+        """
         if not chunks:
             return
         batch_size = get_settings().ingestion.get("embedding_batch_size", 100)
         tenant = chunks[0].tenant
+        doc_id = chunks[0].document_id
         for i in range(0, len(chunks), batch_size):
             await self._neo4j.merge_chunks_batch(chunks[i:i + batch_size], tenant=tenant)
+        await self._neo4j.delete_stale_chunks(doc_id, keep_count=len(chunks), tenant=tenant)
         log.info("graph_writer.chunks_merged", count=len(chunks))
 
     # ── Entities ───────────────────────────────────────────────────────────────

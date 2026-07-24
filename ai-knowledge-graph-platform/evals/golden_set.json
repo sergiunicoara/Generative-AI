@@ -24,7 +24,7 @@
     {
       "id": "SH-02", "type": "single_hop",
       "question": "Which directive supersedes AD-2020?",
-      "expected_citations": ["FAA-AD-2022-03-07"],
+      "expected_citations": ["FAA-AD-2022-03-07", "FAA-AD-2024-01-02"],
       "required_answer_terms": ["supersede"],
       "required_answer_any_of": [
         ["AD-2022", "AD 2022", "2022-03-07", "AD-2024", "AD 2024", "2024-01-02"],
@@ -32,7 +32,8 @@
       ],
       "forbidden_terms": ["unknown"],
       "min_context_precision": 0.80,
-      "note": "AD-2020 was partially superseded by AD-2022 and fully by AD-2024; either superseding directive is a correct answer."
+      "min_citation_recall": 0.5,
+      "note": "AD-2020 was partially superseded by AD-2022 and fully by AD-2024; either superseding directive is a correct answer. GENUINE TEST BUG (found 2026-07-23, see tasks/lessons.md A136): required_answer_any_of already accepted either directive, but expected_citations listed only FAA-AD-2022-03-07, so an answer citing FAA-AD-2024-01-02 passed every content check yet failed on citation recall alone. Fixed by listing both citations with min_citation_recall: 0.5 (citing either one satisfies half of a 2-item list), matching the content check's own any-of semantics rather than inventing new schema."
     },
     {
       "id": "SH-03", "type": "single_hop",

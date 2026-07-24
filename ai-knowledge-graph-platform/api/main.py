@@ -147,14 +147,21 @@ async def health_ready():
         checks["neo4j"] = f"error: {exc}"
         failed = True
 
-    # ── Redis (session store) ───────────────────────────────────────────────────
+    # ── Redis ──────────────────────────────────────────────────────────────────
+    # Redis is critical in multi-process deployments: the result_store uses it
+    # to hand query results from the worker process back to the API process.
+    # If Redis is down, queries execute but results never reach the client.
     try:
         from graphrag.retrieval.session_store import get_session_store
         alive = await get_session_store().ping()
-        checks["redis"] = "ok" if alive else "unavailable (in-memory fallback active)"
+        if alive:
+            checks["redis"] = "ok"
+        else:
+            checks["redis"] = "unavailable (in-memory fallback active — result delivery broken in multi-process deployments)"
+            failed = True
     except Exception as exc:  # noqa: BLE001
         checks["redis"] = f"error: {exc}"
-        # Redis is non-critical when strict=False — don't mark as failed
+        failed = True
 
     if failed:
         raise HTTPException(status_code=503, detail={"status": "unhealthy", "checks": checks})

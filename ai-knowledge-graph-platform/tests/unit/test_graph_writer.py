@@ -106,7 +106,7 @@ class TestWriteEntities:
         writer._neo4j.entity_exists = AsyncMock(return_value=False)
         writer._neo4j.merge_entity = AsyncMock()
         writer._neo4j.merge_mentions = AsyncMock()
-        writer._neo4j.merge_entities_batch = AsyncMock()
+        writer._neo4j.merge_entities_batch = AsyncMock(return_value=[])
         writer._neo4j.merge_mentions_batch = AsyncMock()
         writer._audit.log_entity_change = AsyncMock()
 
@@ -123,6 +123,67 @@ class TestWriteEntities:
         assert [e.name for e in batched_entities] == ["SpaceX"]
         assert len(result) == 1
         assert result[0].name == "SpaceX"
+
+    async def test_low_similarity_merge_logs_collision_warning(self):
+        """merge_entities_batch reporting a low prior_similarity (same name+type,
+        semantically distant embedding — e.g. "Apple" ORG for the company vs.
+        mistakenly for the fruit) must surface as a warning, not pass silently."""
+        writer = _build_writer()
+        writer._cfg.ingestion = {"entity_collision_similarity_min": 0.5}
+        chunk = _make_chunk()
+
+        mock_registry = MagicMock()
+        mock_registry.resolve = MagicMock(return_value=None)
+        mock_registry.find_duplicate_by_embedding = AsyncMock(return_value=None)
+        mock_registry._exact = {}
+
+        writer._neo4j.merge_entities_batch = AsyncMock(return_value=[
+            {"name": "Apple", "type": "ORG", "prior_similarity": 0.12},
+        ])
+        writer._neo4j.merge_mentions_batch = AsyncMock()
+
+        with patch.object(writer, "_get_registry", return_value=mock_registry), \
+             patch.object(writer, "_ensure_registry", AsyncMock()), \
+             patch("graphrag.ingestion.graph_writer.log") as mock_log:
+            entity = _make_entity("Apple")
+            await writer.write_entities([entity], chunk)
+
+        mock_log.warning.assert_any_call(
+            "graph_writer.entity_possible_collision",
+            name="Apple", type="ORG", tenant="default",
+            similarity=0.12, threshold=0.5,
+            source_doc_id=chunk.document_id,
+            note="same (name, type) merged with a semantically distant "
+                 "prior mention — possible different meanings sharing a name",
+        )
+
+    async def test_high_similarity_merge_does_not_warn(self):
+        """A normal re-mention (similarity close to 1.0) must not be flagged."""
+        writer = _build_writer()
+        writer._cfg.ingestion = {"entity_collision_similarity_min": 0.5}
+        chunk = _make_chunk()
+
+        mock_registry = MagicMock()
+        mock_registry.resolve = MagicMock(return_value=None)
+        mock_registry.find_duplicate_by_embedding = AsyncMock(return_value=None)
+        mock_registry._exact = {}
+
+        writer._neo4j.merge_entities_batch = AsyncMock(return_value=[
+            {"name": "SpaceX", "type": "ORG", "prior_similarity": 0.97},
+        ])
+        writer._neo4j.merge_mentions_batch = AsyncMock()
+
+        with patch.object(writer, "_get_registry", return_value=mock_registry), \
+             patch.object(writer, "_ensure_registry", AsyncMock()), \
+             patch("graphrag.ingestion.graph_writer.log") as mock_log:
+            entity = _make_entity("SpaceX")
+            await writer.write_entities([entity], chunk)
+
+        collision_calls = [
+            c for c in mock_log.warning.call_args_list
+            if c.args and c.args[0] == "graph_writer.entity_possible_collision"
+        ]
+        assert collision_calls == []
 
     async def test_embedding_duplicate_not_written(self):
         """Entity whose embedding matches an existing entity is not duplicated."""

@@ -241,10 +241,22 @@ class Neo4jClient:
             tenant=tenant,
         )
 
-    async def merge_entities_batch(self, entities: list[Entity], tenant: str = "default") -> None:
-        """Same MERGE semantics as merge_entity(), one round-trip for the batch."""
+    async def merge_entities_batch(self, entities: list[Entity], tenant: str = "default") -> list[dict]:
+        """Same MERGE semantics as merge_entity(), one round-trip for the batch.
+
+        Returns one row per input entity: {name, type, prior_similarity}.
+        prior_similarity is the cosine similarity between the node's embedding
+        *before* this write and the incoming embedding — null on first create,
+        or when either embedding is missing/empty. A low value on a match
+        means the same (name, type, tenant) key was just asked to represent
+        two semantically distant things — the "Apple the company" vs. "Apple
+        the fruit" collision that (name, type) alone cannot prevent. The
+        caller (GraphWriter.write_entities) logs a warning when this drops
+        below ingestion.entity_collision_similarity_min so it surfaces for
+        review instead of silently blending the two senses into one node.
+        """
         if not entities:
-            return
+            return []
         rows = [
             {
                 "id": e.id,
@@ -259,9 +271,19 @@ class Neo4jClient:
             }
             for e in entities
         ]
-        await self.run(
+        return await self.run(
             """
             UNWIND $rows AS row
+            OPTIONAL MATCH (existing:Entity {name: row.name, type: row.type, tenant: $tenant})
+            WITH row, existing,
+                 CASE
+                   WHEN existing IS NOT NULL
+                        AND existing.embedding IS NOT NULL AND size(existing.embedding) > 0
+                        AND row.embedding IS NOT NULL AND size(row.embedding) > 0
+                        AND size(existing.embedding) = size(row.embedding)
+                   THEN vector.similarity.cosine(existing.embedding, row.embedding)
+                   ELSE null
+                 END AS prior_similarity
             MERGE (e:Entity {name: row.name, type: row.type, tenant: $tenant})
             ON CREATE SET e.id               = row.id,
                           e.description      = row.description,
@@ -275,6 +297,7 @@ class Neo4jClient:
             ON MATCH SET  e.description = CASE WHEN e.description = '' THEN row.description ELSE e.description END,
                           e.embedding   = CASE WHEN row.embedding IS NOT NULL AND size(row.embedding) > 0 THEN row.embedding ELSE e.embedding END,
                           e.updated_at  = datetime()
+            RETURN row.name AS name, row.type AS type, prior_similarity
             """,
             rows=rows,
             tenant=tenant,

@@ -16,6 +16,12 @@ ingestion:
                                      # communities (vs ~55 baseline) and caused a contradiction
                                      # false-positive explosion (500-cap conflicts), see A111
   alias_fuzzy_threshold: 85         # rapidfuzz ratio for soft name matching
+  # Same (name, type, tenant) MERGE key, but the incoming mention's embedding
+  # is below this cosine similarity to what's already stored — likely two
+  # different meanings sharing a name+type (e.g. "Apple" ORG for the company
+  # vs. mistakenly for the fruit). Logged as a warning, not blocked — see
+  # graph_writer.write_entities and neo4j_client.merge_entities_batch.
+  entity_collision_similarity_min: 0.5
   # ── Human review queue ──────────────────────────────────────────────────────
   review_queue_enabled: true         # queue ambiguous alias matches for human review
   review_fuzzy_min: 70               # lower bound of fuzzy "ambiguous" band (70–84 queued)

@@ -296,9 +296,31 @@ class GraphWriter:
             })
             written.append(entity)
 
-        await self._neo4j.merge_entities_batch(to_merge, tenant=tenant)
+        merge_results = await self._neo4j.merge_entities_batch(to_merge, tenant=tenant)
         await self._neo4j.merge_mentions_batch(chunk.id, to_mention, tenant=tenant)
         await self._audit.log_entities_batch(to_audit)
+
+        # Flag possible name collisions: same (name, type, tenant) MERGE key
+        # matched an existing node whose embedding is semantically distant
+        # from this mention's — e.g. "Apple" typed ORG for both the company
+        # and (mistakenly) the fruit. (name, type) alone can't catch this;
+        # it can only be caught after the fact by comparing what the name
+        # actually means in each mention. See merge_entities_batch docstring.
+        collision_min = self._cfg.ingestion.get("entity_collision_similarity_min", 0.5)
+        for row in merge_results:
+            similarity = row.get("prior_similarity")
+            if similarity is not None and similarity < collision_min:
+                log.warning(
+                    "graph_writer.entity_possible_collision",
+                    name=row.get("name"),
+                    type=row.get("type"),
+                    tenant=tenant,
+                    similarity=round(similarity, 4),
+                    threshold=collision_min,
+                    source_doc_id=chunk.document_id,
+                    note="same (name, type) merged with a semantically distant "
+                         "prior mention — possible different meanings sharing a name",
+                )
 
         log.info(
             "graph_writer.entities_merged",

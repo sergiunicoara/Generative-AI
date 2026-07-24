@@ -84,8 +84,16 @@ class Extractor:
         return raw
 
     async def extract(self, chunk: Chunk) -> tuple[list[Entity], list[Relation]]:
+        from graphrag.graph.domain_ontology import get_entity_types_for_tenant
+
+        # Domain-specific types (e.g. AIRWORTHINESS_DIRECTIVE for aerospace) are
+        # the primary defense against same-name-different-meaning collisions —
+        # see get_entity_types_for_tenant docstring. Falls back to the flat
+        # base list unchanged for tenants with no ontology file.
+        entity_types = get_entity_types_for_tenant(chunk.tenant, self._entity_types)
+
         prompt = _EXTRACT_PROMPT.format(
-            entity_types=", ".join(self._entity_types),
+            entity_types=", ".join(entity_types),
             text=chunk.text,
         )
 

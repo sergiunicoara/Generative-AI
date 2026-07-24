@@ -20,6 +20,7 @@ Domain ontology files define:
 
 from __future__ import annotations
 
+from functools import lru_cache
 from pathlib import Path
 
 import structlog
@@ -96,6 +97,43 @@ def get_type_hierarchy_pairs(ontology: dict) -> list[tuple[str, str]]:
             if child and parent:
                 pairs.append((child, parent))
     return pairs
+
+
+@lru_cache(maxsize=32)
+def _type_hierarchy_pairs_for_path(path_str: str) -> tuple[tuple[str, str], ...]:
+    """Cached load+parse — ontology files don't change at runtime, and this
+    would otherwise re-read+re-parse the same YAML on every extracted chunk."""
+    ontology = load_domain_ontology(path_str)
+    return tuple(get_type_hierarchy_pairs(ontology))
+
+
+def get_entity_types_for_tenant(tenant: str, base_types: list[str]) -> list[str]:
+    """
+    Return the entity type vocabulary to offer the extraction LLM: the generic
+    ``base_types`` plus every domain-specific type from the tenant's
+    ``config/ontologies/{tenant}*.yml`` type_hierarchy, if one exists.
+
+    Rationale: the entity MERGE key is (name, type, tenant) — see
+    neo4j_client.merge_entities_batch. Two same-name entities with different
+    meanings (e.g. "Apple" the company vs. "Apple" the fruit) stay distinct
+    nodes only if the extractor assigns them different types. A flat generic
+    type list (ORG/PRODUCT/CONCEPT/...) makes that collision likely whenever
+    both meanings would plausibly get the same generic type. Domain-specific
+    types (TECHNOLOGY_COMPANY vs. AGRICULTURAL_PRODUCT) make the collision
+    far less likely because the LLM has a more specific type to reach for.
+
+    Falls back to ``base_types`` unchanged when the tenant has no ontology
+    file (e.g. tenant "default").
+    """
+    path = get_ontology_path_for_tenant(tenant)
+    domain_types: set[str] = set()
+    if path is not None:
+        for child, _parent in _type_hierarchy_pairs_for_path(str(path)):
+            domain_types.add(child)
+    # Base types first (stable, familiar), then domain types sorted for a
+    # deterministic prompt — extraction is cached keyed on the full prompt
+    # text (see Extractor._generate), so a stable order matters for cache hits.
+    return list(dict.fromkeys(list(base_types) + sorted(domain_types)))
 
 
 def get_relation_rules(ontology: dict) -> dict[str, dict]:

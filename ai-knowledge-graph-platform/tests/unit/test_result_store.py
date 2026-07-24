@@ -86,23 +86,29 @@ class TestRedisStore:
         mock_redis.get = AsyncMock(return_value=None)
         assert await store.get("missing") is None
 
-    async def test_redis_write_failure_falls_back_to_memory(self, redis_store):
-        """When Redis write fails, result must still be readable via memory."""
+    async def test_redis_write_failure_does_not_fall_back_to_memory(self, redis_store):
+        """When Redis write fails, the result must NOT be silently written to
+        memory. In a multi-process deployment (API + worker containers), a
+        memory fallback here is a split-brain: the writer's process has the
+        value, the reader's process never will. Losing the write loudly (via
+        the ERROR log) is safer than pretending it succeeded."""
         store, mock_redis = redis_store
         mock_redis.setex = AsyncMock(side_effect=ConnectionError("Redis down"))
         await store.set("q_fallback", {"status": "completed", "answer": "ok"})
-        # Memory fallback should have the value
-        assert store._memory.get("q_fallback") is not None
+        assert store._memory.get("q_fallback") is None
 
-    async def test_redis_read_failure_falls_back_to_memory(self, redis_store):
-        """When Redis read fails, fall back to in-memory dict."""
+    async def test_redis_read_failure_returns_none(self, redis_store):
+        """When Redis read fails, return None rather than falling back to this
+        process's memory dict — that memory was never populated by whatever
+        process actually wrote the result, so a "hit" there would be either
+        stale or belong to an unrelated query_id collision, not the real
+        cross-process result."""
         store, mock_redis = redis_store
-        # Write directly to memory
+        # Simulate stale/unrelated local memory state that must NOT be served.
         store._memory["q_mem"] = {"status": "queued", "query_id": "q_mem"}
         mock_redis.get = AsyncMock(side_effect=ConnectionError("Redis down"))
         result = await store.get("q_mem")
-        assert result is not None
-        assert result["status"] == "queued"
+        assert result is None
 
     async def test_delete_calls_redis_delete(self, redis_store):
         store, mock_redis = redis_store

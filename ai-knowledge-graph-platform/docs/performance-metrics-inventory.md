@@ -109,7 +109,7 @@ Aggregate across 104 queries:
   Context Precision:   0.907
   Context Recall:      0.867
   Retrieval Mode:      hybrid (90%) / agentic (10%)
-  Generation model:    llama-3.3-70b-versatile (Groq) / DeepSeek-V3 (fallback)
+  Generation model:    DeepSeek deepseek-v4-pro (get_llm() default) / Groq (opt-in dev override)
   Embedding model:     text-embedding-3-large (OpenAI, 3072d)
 ```
 

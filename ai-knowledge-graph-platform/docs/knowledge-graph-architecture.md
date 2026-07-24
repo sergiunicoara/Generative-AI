@@ -193,52 +193,60 @@ and SPARQL endpoints without requiring a full migration to a triple store.
 
 ---
 
-## 9. LLM Routing — Groq for Generation, OpenAI for Embeddings
+## 9. LLM Routing — DeepSeek for Generation, Groq for Fast Routing, OpenAI for Embeddings
 
 All LLM calls are centralised through `graphrag/core/llm_client.py`. This module
-routes text generation to Groq (with DeepSeek-V3 fallback) and embeddings to
-OpenAI `text-embedding-3-large`, with a clean singleton interface used across
-all pipeline stages.
+routes text generation (`get_llm()`) to a bare `DeepSeekLLM` by default — one
+provider's extraction/synthesis voice for the whole corpus, no Groq round-trip.
+Groq is an opt-in override only, via `LLM_INGEST_PROVIDER=groq`, for quick,
+low-volume dev runs. The agentic retriever's intermediate SEARCH/ANSWER routing
+decisions (`get_fast_llm()`) default to Groq's small `llama-3.1-8b-instant`
+model (DeepSeek fallback), since that path is genuinely latency-bound.
+Embeddings go to OpenAI `text-embedding-3-large`, with a clean singleton
+interface used across all pipeline stages.
 
 ```
                 ┌─────────────────────────────────────┐
                 │          llm_client.py               │
                 │                                      │
-                │  get_llm()      → FallbackLLM        │
+                │  get_llm()      → DeepSeekLLM        │
+                │                    (bare; primary)   │
                 │  get_fast_llm() → FallbackLLM        │
+                │                    (Groq 8B primary) │
                 │  get_embedder() → OpenAIEmbedder     │
                 └───────────┬──────────────┬───────────┘
                             │              │
                ┌────────────▼──┐   ┌───────▼──────────────┐
-               │ Groq API      │   │ OpenAI API            │
-               │ llama-3.3-    │   │ text-embedding-3-     │
-               │ 70b-versatile │   │ large (3072d vectors) │
+               │ DeepSeek API  │   │ OpenAI API            │
+               │ deepseek-v4-  │   │ text-embedding-3-     │
+               │ pro (default) │   │ large (3072d vectors) │
                └──────┬────────┘   └──────────────────────┘
-                      │ rate limit
+                      │ opt-in dev override
                ┌──────▼────────┐
-               │ DeepSeek API  │
-               │ deepseek-chat │
-               │ (DeepSeek-V3) │
+               │ Groq API      │
+               │ (via          │
+               │ LLM_INGEST_   │
+               │ PROVIDER=groq)│
                └───────────────┘
 ```
 
 ### Why this split?
 
-| Concern | Groq + DeepSeek | OpenAI |
+| Concern | DeepSeek + Groq | OpenAI |
 |---|---|---|
-| Text generation | llama-3.3-70b-versatile, ~150 tok/s; DeepSeek-V3 instant failover on 429 | — |
-| Routing steps | llama-3.1-8b-instant, ~800 tok/s | — |
+| Text generation (synthesis + extraction) | DeepSeek `deepseek-v4-pro` (default via `get_llm()`); Groq available as opt-in dev override | — |
+| Routing steps | `llama-3.1-8b-instant` via Groq (default), ~800 tok/s; DeepSeek fallback | — |
 | Embedding | — | `text-embedding-3-large` (3072d), cosine-compatible, same schema as prior Gemini index |
-| Cost | Free tier sufficient for dev/testing | ~$0.13/1M tokens |
+| Cost | DeepSeek generation is the paid default; Groq free tier available for dev | ~$0.13/1M tokens |
 
-### What uses Groq / DeepSeek
+### What uses DeepSeek / Groq
 
-- `graphrag/ingestion/extractor.py` — entity + relation extraction from chunks
-- `graphrag/retrieval/local_search.py` — answer synthesis from retrieved context
-- `graphrag/retrieval/global_search.py` — map-reduce community summarisation
-- `graphrag/retrieval/agentic_retriever.py` — IRCoT routing (8B) and synthesis (70B)
-- `graphrag/graph/community_summarizer.py` — LLM community summaries
-- `graphrag/evaluation/ragas_evaluator.py` — RAGAS judge LLM (Groq-first; DeepSeek fallback)
+- `graphrag/ingestion/extractor.py` — entity + relation extraction from chunks (DeepSeek default)
+- `graphrag/retrieval/local_search.py` — answer synthesis from retrieved context (DeepSeek default)
+- `graphrag/retrieval/global_search.py` — map-reduce community summarisation (DeepSeek default)
+- `graphrag/retrieval/agentic_retriever.py` — IRCoT routing (Groq 8B, genuinely primary here) and final synthesis (DeepSeek default via `get_llm()`)
+- `graphrag/graph/community_summarizer.py` — LLM community summaries (DeepSeek default)
+- `graphrag/evaluation/ragas_evaluator.py` — RAGAS judge LLM (Groq-first; DeepSeek fallback — this ordering is specific to the judge and independent of the generation-primary choice above)
 
 ### What uses OpenAI (embeddings only)
 
@@ -247,8 +255,9 @@ all pipeline stages.
 - `graphrag/agents/ingestion_agent.py` — entity name+description embedding
 
 > **RAGAS evaluator note:** The judge LLM for RAGAS metrics is resolved in priority
-> order: Groq (`langchain-groq`) → DeepSeek → None.
-> Using Groq keeps the evaluation consistent with the generation pipeline.
+> order: Groq (`langchain-groq`) → DeepSeek → None. This ordering is specific to
+> the evaluation judge and is separate from `get_llm()`'s generation-primary
+> choice (DeepSeek by default).
 > Install with `pip install langchain-groq`.
 
 ### Cross-process result store

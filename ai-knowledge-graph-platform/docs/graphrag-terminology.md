@@ -100,7 +100,7 @@ A dense cluster of entities in the graph — nodes that are more connected to ea
 ### Community summary
 An LLM-generated natural language summary of a community's entities and their relationships. Used as a high-level context source in global search.
 
-**In this project:** `graphrag/graph/community_summarizer.py` — generates summaries using Groq. Stored as `Community.summary` in Neo4j.
+**In this project:** `graphrag/graph/community_summarizer.py` — generates summaries using `get_llm()` (DeepSeek by default; Groq only via the opt-in `LLM_INGEST_PROVIDER=groq` dev override). Stored as `Community.summary` in Neo4j.
 
 ---
 
@@ -109,7 +109,7 @@ A float [0.0, 1.0] representing how certain the system is that a relation is cor
 
 **Example:** "FAA-AD-2024-01-02 supersedes FAA-AD-2022-03-07" — explicit statement → confidence 0.95. "The 2024 directive appears to update the 2022 guidance" — implication → confidence 0.75.
 
-**In this project:** Extracted by Groq in the JSON output. Clamped to [0,1] in `graphrag/ingestion/extractor.py`. Merged with Bayesian accumulation in `merge_relation`. Decays per hop for inferred edges (default decay 0.95).
+**In this project:** Extracted by the primary LLM (DeepSeek via `get_llm()`) in the JSON output. Clamped to [0,1] in `graphrag/ingestion/extractor.py`. Merged with Bayesian accumulation in `merge_relation`. Decays per hop for inferred edges (default decay 0.95).
 
 ---
 

@@ -65,7 +65,7 @@ Measured across all 104 query runs. p95 computed from real timing data in `resul
 ## 🕸️ Knowledge Graph — Real Corpus
 
 Built from the **12-document aerospace regulatory corpus** (`scripts/ingest_corpus.py`) via the
-full LLM extraction pipeline (Groq/DeepSeek extraction + OpenAI embeddings + alias resolution +
+full LLM extraction pipeline (DeepSeek default extraction, Groq opt-in dev override + OpenAI embeddings + alias resolution +
 contradiction detection + forward-chaining). Numbers below were real, queried from Neo4j — **on
 2026-06-03**.
 

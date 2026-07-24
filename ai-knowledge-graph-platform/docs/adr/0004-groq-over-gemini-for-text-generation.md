@@ -105,3 +105,25 @@ After ADR-0004 was accepted, the Google Gemini API key was revoked, removing acc
 ### Impact
 
 No behavioral change to the retrieval pipeline. Vector dimensions unchanged. All 367 entities and 380 edges re-embedded and re-indexed without schema changes.
+
+---
+
+## Update 2026-07-24 — DeepSeek became the default primary generation engine
+
+The decision above (Groq for synthesis, `llama-3.1-8b-instant` for routing) described
+the architecture as of 2026-05-30/2026-06-03. Since then, `get_llm()` in
+`graphrag/core/llm_client.py` was changed to default to a bare `DeepSeekLLM`
+(`deepseek-v4-pro`) rather than Groq: one provider's extraction/synthesis voice
+for the whole corpus, with no Groq round-trip. Groq is now an **opt-in override
+only**, selected via `LLM_INGEST_PROVIDER=groq`, intended for quick, low-volume
+dev runs.
+
+`get_fast_llm()` — the separate, smaller model used only for the agentic
+retriever's intermediate SEARCH/ANSWER routing decisions — is unaffected by this
+change and still defaults to Groq's `llama-3.1-8b-instant` (with DeepSeek
+fallback), consistent with the "Two-model design" section above.
+
+The original reasoning in this ADR (why Groq was chosen over Gemini at the time,
+the quota/speed tradeoffs) remains an accurate record of that decision and is
+left unchanged. This update only corrects which provider is primary for
+generation *today*.

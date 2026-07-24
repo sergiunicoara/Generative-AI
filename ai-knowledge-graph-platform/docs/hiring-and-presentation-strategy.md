@@ -88,7 +88,7 @@ Be ready to narrate:
 - Why property graph over triple store (ADR-0001)
 - Why forward-chaining over backward-chaining (ADR-0002)
 - Why Bayesian confidence accumulation over last-write-wins (ADR-0003)
-- Why Groq primary + DeepSeek fallback for generation, OpenAI `text-embedding-3-large` for embeddings (ADR-0004)
+- Why DeepSeek primary for generation (Groq available as fast-routing model and opt-in dev override), OpenAI `text-embedding-3-large` for embeddings (ADR-0004)
 - Why Redis as cross-process result store (ADR-0005)
 - Why 8B routing + 70B synthesis in the agentic path (ADR-0006)
 - What broke first when you ran it against real Neo4j, and how you fixed it
@@ -386,7 +386,7 @@ Then run the second query (all inferred edges) and narrate:
 **Say:**
 > "26,600 lines of production Python. 364 tests. 38 knowledge graph modules. Six architecture decision records — every major choice documented: property graph vs triple store, forward-chaining vs backward-chaining, Bayesian confidence accumulation, LLM provider selection, Redis result store, two-model agentic design.
 >
-> The two-model agentic design — 8B for routing decisions, 70B for synthesis — cut agentic p95 from 6.8 seconds to 3.4 seconds. The LLM stack uses Groq as the primary, with DeepSeek-V3 as an instant fallback on rate-limit — no sleep, no queuing. Embeddings are OpenAI `text-embedding-3-large`, 3072 dimensions. Every one of these choices has a documented ADR explaining what I considered and why I decided. That's the difference between a platform and a prototype."
+> The two-model agentic design — 8B for routing decisions, large model for synthesis — cut agentic p95 from 6.8 seconds to 3.4 seconds. The LLM stack uses DeepSeek as the primary generation engine — one provider's extraction voice for the whole corpus — with Groq as an opt-in override for quick, low-volume dev runs, and as the fast 8B model for agentic routing decisions. Embeddings are OpenAI `text-embedding-3-large`, 3072 dimensions. Every one of these choices has a documented ADR explaining what I considered and why I decided. That's the difference between a platform and a prototype."
 
 ---
 
@@ -428,7 +428,7 @@ Then run the second query (all inferred edges) and narrate:
 > "Every tool call passes through a `ToolPolicy` gate before execution. The policy enforces an allowlist — only registered tools can be called. Each tool declares required scopes, so `erase_entity` requires `write + admin + gdpr_officer` and is denied for any other caller. Arguments are validated against a schema: type, required fields, enum values, min/max. There's a cross-tenant guard — a caller scoped to `aerospace` can't reference `banking` in an argument. Dry-run mode lets untrusted sessions preview what would happen without executing anything. Every call — allowed, denied, or timed out — is written to an audit log. `docs/jd-mapping.md` shows exactly where each of these is in the code."
 
 **"Can this use PwC's internal LLM?"**
-> "Yes — the LLM is routed through a single module, `llm_client.py`. Three functions: `get_llm()` for synthesis, `get_fast_llm()` for routing, `get_embedder()` for embeddings. The current stack uses Groq as primary with DeepSeek as a fallback — both are already wired. Adding PwC's internal endpoint is a single-file change, because the client interface is already provider-agnostic."
+> "Yes — the LLM is routed through a single module, `llm_client.py`. Three functions: `get_llm()` for synthesis, `get_fast_llm()` for routing, `get_embedder()` for embeddings. The current stack uses DeepSeek as the primary generation model via `get_llm()`, with Groq as an opt-in dev-mode override and as the default fast 8B model for `get_fast_llm()` routing — both are already wired. Adding PwC's internal endpoint is a single-file change, because the client interface is already provider-agnostic."
 
 **"Does the demo use real data?"**
 > "Yes — I'm running with `--live`, which means real Neo4j, real ingestion, real graph queries. The mock mode exists for CI and zero-services environments. What you saw in Neo4j Browser just now came from this demo script in real time. The script has both modes; the flag makes it unambiguous."
@@ -498,12 +498,12 @@ cross-confirms itself; a procedure corpus does not.
 - Operational rule: watch agentic trigger rate more closely than agentic p95. Agentic p95 tells you the safety net is expensive; trigger rate tells you how often retrieval needs rescuing.
 - In code: `graphrag/retrieval/agentic_retriever.py` — `_reason()` and `_synthesize()`
 
-**8. Provider split: Groq primary + DeepSeek fallback, OpenAI embeddings (ADR-0004)**
+**8. Provider split: DeepSeek primary for generation, Groq for fast routing (+ opt-in dev override), OpenAI embeddings (ADR-0004)**
 - Embeddings: OpenAI `text-embedding-3-large`, 3072d — switched from Gemini; same dimensionality, same schema, no re-indexing needed after migration
-- Generation: Groq `llama-3.3-70b-versatile` — primary synthesis; ~150 tok/s
-- Routing: Groq `llama-3.1-8b-instant` — ~800 tok/s, trivial structured output; ~0.2s per routing step
-- Fallback: DeepSeek-V3 (`deepseek-chat`) — fires immediately on Groq rate-limit, no sleep; same OpenAI-compatible API
-- Why DeepSeek over queuing or retry: a rate-limited generation request needs an answer now, not in 60 seconds; DeepSeek is instant and free-tier
+- Generation: DeepSeek (`deepseek-v4-pro`) via `get_llm()` — bare, primary synthesis and ingestion extraction; one provider's voice for the whole corpus
+- Routing: Groq `llama-3.1-8b-instant` via `get_fast_llm()` — ~800 tok/s, trivial structured output; ~0.2s per routing step; DeepSeek fallback if Groq is unavailable
+- Opt-in override: setting `LLM_INGEST_PROVIDER=groq` swaps `get_llm()` to Groq for quick, low-volume dev runs
+- Why DeepSeek as the default over Groq for generation: consistent extraction voice across the whole corpus without a Groq round-trip or its free-tier quota limits
 - Client swap: change `get_llm()` / `get_fast_llm()` / `get_embedder()` in `llm_client.py` — one file, nothing else changes
 
 **9. Redis as cross-process result store (ADR-0005)**
@@ -725,7 +725,7 @@ ORDER BY count DESC
 - [ ] Explain ADR-0001 (property graph vs triple store) conversationally — what you considered and why you decided
 - [ ] Explain ADR-0002 (forward-chaining over backward-chaining) — why materialise derived edges, why not compute at query time
 - [ ] Explain ADR-0003 (Bayesian confidence accumulation) — derive `1−(1−c₁)(1−c₂)` from memory, why not averaging
-- [ ] Explain ADR-0004 (Groq + DeepSeek fallback, OpenAI embeddings) — why DeepSeek over retry, why OpenAI over Gemini, client swap path
+- [ ] Explain ADR-0004 (DeepSeek primary generation, Groq fast-routing + opt-in dev override, OpenAI embeddings) — why DeepSeek is default, why OpenAI over Gemini, client swap path
 - [ ] Explain ADR-0005 (Redis result store) — why not PostgreSQL, why not RabbitMQ reply-to
 - [ ] Explain ADR-0006 (8B routing + 70B synthesis) — the latency table, why not 8B for synthesis
 - [ ] Explain the 6 retrieval stages in order, what failure mode each one fixes

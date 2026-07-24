@@ -177,7 +177,7 @@ Query
   │
   ├─► ContextBuilder (local 60% + global 40%)
   │
-  ├─► Groq (llama-3.3-70b-versatile) generates grounded answer with chunk citations
+  ├─► DeepSeek (`get_llm()` default) generates grounded answer with chunk citations
   │
   └─► Low confidence?
         └─► AgenticRetriever (IRCoT loop, max 4 steps)
@@ -200,7 +200,7 @@ The cross-encoder scores text similarity. It doesn't know that *Falcon 9* and *S
 | Message Queue | RabbitMQ 3.13 |
 | KPI Store | TimescaleDB (PostgreSQL 16) |
 | Embeddings | `text-embedding-3-large` (3072d) via OpenAI |
-| LLM | Groq `llama-3.3-70b-versatile` (primary) + DeepSeek-V3 (rate-limit fallback) |
+| LLM | DeepSeek `deepseek-v4-pro` (primary generation, via `get_llm()`) + Groq `llama-3.1-8b-instant` (fast routing, via `get_fast_llm()`; also available as opt-in dev override for generation) |
 | Reranker | `cross-encoder/ms-marco-MiniLM-L-6-v2` (sentence-transformers) |
 | GNN | PyTorch — GAT / GCN (configurable) |
 | Community detection | graspologic (Leiden algorithm) |
@@ -244,7 +244,7 @@ ai-knowledge-graph-platform/
 │   │   └── kpi_tracker.py           # KPI aggregation queries; real p50/p95 percentile (capped at 10k rows)
 │   ├── core/
 │   │   ├── config.py                # Settings (pydantic-settings, .env + YAML); production validators
-│   │   ├── llm_client.py            # Central LLM router: Groq→DeepSeek fallback for generation, OpenAI for embeddings
+│   │   ├── llm_client.py            # Central LLM router: DeepSeek primary for generation (Groq opt-in dev override; Groq 8B primary for fast routing), OpenAI for embeddings
 │   │   ├── llm_utils.py             # safe_response_text() — guards legacy Gemini response.text accesses (embedding path)
 │   │   ├── models.py                # Domain models: Document, Chunk, Entity, Relation, Community, SessionTurn ...
 │   │   └── retry.py                 # Async exponential-backoff decorator for Neo4j transient errors
@@ -326,13 +326,13 @@ Full end-to-end test completed 2026-03-21 (updated 2026-05-31 with Groq integrat
 |------|-----------|--------|
 | Infrastructure | Neo4j + RabbitMQ + TimescaleDB + Redis | ✅ Healthy |
 | API | FastAPI + OAuth + lifespan hook | ✅ Running on :8000 |
-| Ingestion | doc → chunk → embed (OpenAI text-embedding-3-large 3072d) → extract (Groq/DeepSeek Llama) → graph | ✅ |
+| Ingestion | doc → chunk → embed (OpenAI text-embedding-3-large 3072d) → extract (DeepSeek default; Groq opt-in dev override) → graph | ✅ |
 | Schema | Vector indexes + BM25 fulltext indexes (6 total, all ONLINE) | ✅ |
 | Graph counts | 1 doc · 1 chunk · 5 entities · 4 relations | ✅ |
 | Hybrid search | BM25=10 + vector=10 → fused=10 chunks | ✅ |
 | Cross-encoder reranker | ms-marco-MiniLM-L-6-v2, top_score=9.30 | ✅ |
 | GNN scoring | GAT 2-layer; α=0.9 text + β=0.1 graph | ✅ |
-| Answer synthesis | Groq llama-3.3-70b-versatile; citations included | ✅ |
+| Answer synthesis | DeepSeek (`get_llm()` default); citations included | ✅ |
 | Session context | Redis-backed; turn recorded after answer | ✅ |
 | RAGAS | 20% sampling; metrics stored in TimescaleDB | ✅ |
 | Dashboard | Live KPI charts at /dashboard/ | ✅ |
@@ -363,12 +363,13 @@ python -m pip install -r requirements.txt
 # Get key at: https://platform.openai.com/api-keys
 OPENAI_API_KEY=sk-...
 
-# Groq — text generation primary (100k TPD free tier)
+# Groq — fast routing model for agentic retrieval (get_fast_llm()); also usable
+# as an opt-in text-generation override via LLM_INGEST_PROVIDER=groq (100k TPD free tier)
 # Get key at: https://console.groq.com/keys
 GROQ_API_KEY=gsk_...
 GROQ_MODEL=llama-3.3-70b-versatile
 
-# DeepSeek — generation fallback on Groq rate-limit
+# DeepSeek — primary text generation (get_llm() default)
 DEEPSEEK_API_KEY=sk-...
 
 # Neo4j
@@ -445,7 +446,7 @@ python workers/combined_worker.py
 ### 7. Ingest real corpus data
 
 Ingest the 12-document aerospace regulatory corpus through the full LLM extraction
-pipeline (Groq/DeepSeek → OpenAI embeddings → alias resolution → contradiction detection):
+pipeline (DeepSeek default extraction → OpenAI embeddings → alias resolution → contradiction detection):
 
 ```bash
 python scripts/ingest_corpus.py --commit --wipe

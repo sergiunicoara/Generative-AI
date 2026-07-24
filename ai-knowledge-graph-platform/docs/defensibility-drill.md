@@ -105,7 +105,7 @@ Documented in `docs/adr/0003-bayesian-confidence-accumulation.md`.
 
 5. **GNN scoring.** Graph Convolutional Network / Graph Attention Network message-passing over the entity subgraph. Aggregates neighbourhood information into entity embeddings, then scores chunks by proximity of their entity mentions to the query entity in embedding space. Captures structural relevance, not just textual similarity.
 
-6. **LLM synthesis (Groq llama-3.3-70b).** Takes the final ranked context and generates a grounded, cited answer. The model is instructed to only use context, cite by chunk ID, and signal uncertainty explicitly.
+6. **LLM synthesis (DeepSeek, `get_llm()` default).** Takes the final ranked context and generates a grounded, cited answer. The model is instructed to only use context, cite by chunk ID, and signal uncertainty explicitly.
 
 Each stage reduces a different failure mode of the previous one. No single stage is sufficient; the pipeline is the point.
 
@@ -280,7 +280,7 @@ Three places isolation could fail:
 
 Three clear limits, in order of what breaks first:
 
-1. **Ingestion throughput: ~20 docs/minute on a single worker.** Bottleneck is the Groq API rate limit (1500 requests/day on free tier) and entity resolution embedding comparison. Fix: run N parallel workers (RabbitMQ `prefetch_count=1` already set; `compose.dev.yaml` starts one — add replicas) and a paid Groq tier.
+1. **Ingestion throughput: ~20 docs/minute on a single worker.** Bottleneck is the DeepSeek API quota (the default primary via `get_llm()`) and entity resolution embedding comparison — or, if `LLM_INGEST_PROVIDER=groq` dev override is set, Groq's free-tier rate limit (1500 requests/day). Fix: run N parallel workers (RabbitMQ `prefetch_count=1` already set; `compose.dev.yaml` starts one — add replicas) and a paid-tier quota for whichever provider is primary.
 
 2. **Alias resolution at ~500k entities.** The in-memory alias dictionary fits in RAM up to this point. Beyond this, `load()` takes too long. **Already mitigated:** alias tables are now pushed to Redis after load; subsequent workers warm from Redis without a full Neo4j scan. Hard RAM limit deferred to >500k entities.
 
@@ -290,7 +290,7 @@ Beyond these, Neo4j handles tens of millions of nodes/edges without concern assu
 
 ---
 
-### Q13. Why Groq for text generation, DeepSeek as fallback, and OpenAI for embeddings? Why not one provider?
+### Q13. Why DeepSeek for text generation, Groq for fast routing (+ opt-in dev override), and OpenAI for embeddings? Why not one provider?
 
 **What they're testing:** Whether the multi-provider architecture was deliberate, and whether it's production-hardened.
 
@@ -300,7 +300,7 @@ Three providers, three distinct roles — and the splits were made deliberately:
 
 1. **Embedding: OpenAI `text-embedding-3-large` (3072d).** The Neo4j vector index is created at 3072 dimensions. Switching providers requires re-embedding and recreating the index — expensive once you have real data. OpenAI's 3072d embeddings have strong multilingual and domain-specific performance and are reliably available. Gemini was the original choice but was replaced after Gemini's prepayment credits were exhausted mid-ingestion (blocking all embedding calls). The dimension stayed the same — zero schema migration.
 
-2. **Synthesis: Groq `llama-3.3-70b-versatile` — primary, with DeepSeek-V3 instant fallback.** Groq's free tier runs at ~150 tok/s which is fast enough for interactive queries. The fallback to DeepSeek-V3 (via OpenAI-compatible SDK, fail-fast — no sleep) activates the moment Groq raises a `RateLimitError`. This prevents ingestion from stalling overnight when the 100k token daily quota is exhausted. In production both would be replaced with client-internal models.
+2. **Synthesis: DeepSeek (bare `DeepSeekLLM`, `get_llm()` default) — primary.** One provider's extraction/synthesis voice for the whole corpus, no Groq round-trip. Groq is available as an opt-in override (`LLM_INGEST_PROVIDER=groq`) for quick, low-volume dev runs, via the same OpenAI-compatible SDK pattern. In production both would be replaced with client-internal models.
 
 3. **Routing: Groq `llama-3.1-8b-instant` — latency optimisation.** The agentic IRCoT reasoning steps (trivial SEARCH/ANSWER decisions) use the 8B model at ~800 tok/s. Each step costs ~0.2s instead of ~1.5s for 70B. This is why agentic p95 is 3.4s not 6.8s — a 50% latency reduction with no quality loss on routing decisions.
 

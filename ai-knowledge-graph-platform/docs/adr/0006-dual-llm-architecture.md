@@ -111,3 +111,21 @@ Combined p95 across hybrid and agentic: **5.9s → 2.7s** (under the 3s SLO).
 
 **Extension points:**
 - The same pattern applies to any multi-step pipeline where intermediate steps are structured and the final step is generative: ingestion extraction (8B for entity detection, 70B for relation extraction), evaluation (8B for classification, 70B for explanation).
+
+---
+
+## Update 2026-07-24 — synthesis model changed from Groq 70B to DeepSeek
+
+This ADR's split (fast 8B for routing, larger model for synthesis) is still the
+current architecture and remains correct. What changed is which provider backs
+the *synthesis* tier: `get_llm()` in `graphrag/core/llm_client.py` now defaults
+to a bare `DeepSeekLLM` (`deepseek-v4-pro`), not Groq's `llama-3.3-70b-versatile`
+as originally implemented and described above. Groq generation is now an
+opt-in override only, via `LLM_INGEST_PROVIDER=groq`.
+
+`get_fast_llm()` — the routing tier discussed throughout this ADR — is
+unaffected: it still defaults to Groq's `llama-3.1-8b-instant` (DeepSeek
+fallback), so the "8B routing / large-model synthesis" split and the latency
+analysis above remain accurate. Only the specific model name behind "final
+synthesis" in the table and code comments should now be read as DeepSeek,
+not `llama-3.3-70b-versatile`.

@@ -10,6 +10,8 @@ import structlog
 from graphrag.core.config import get_settings, resolve_tenant_config
 from graphrag.core.llm_client import get_llm
 from graphrag.core.models import QueryResult
+from graphrag.graph.contradiction_detector import ContradictionDetector
+from graphrag.graph.neo4j_client import get_neo4j
 from graphrag.retrieval.local_search import LocalSearch
 from graphrag.retrieval.global_search import GlobalSearch
 from graphrag.retrieval.context_builder import ContextBuilder
@@ -51,6 +53,9 @@ Source IS one of the named documents when the two conflict.
 - A "Community knowledge:" section is a coarse, lower-precision summary. If it conflicts with a \
 specific fact stated in a numbered "[Chunk ...]" section above it, the chunk-level fact is more \
 reliable — prefer it.
+- A "⚠ Unresolved conflicts:" section lists entities/relations where two sources disagree and no \
+resolution has been recorded. If your answer touches one of these, explicitly state that sources \
+disagree rather than presenting either side as settled fact.
 
 Context:
 {context}
@@ -68,6 +73,7 @@ class HybridRetriever:
         self._local = LocalSearch()
         self._global = GlobalSearch()
         self._context_builder = ContextBuilder()
+        self._contradiction = ContradictionDetector(get_neo4j())
         self._model_version = cfg.groq_model
         self._agentic = AgenticRetriever(
             max_steps=self._cfg.get("agentic_max_steps", 4)
@@ -129,6 +135,21 @@ class HybridRetriever:
             await _step("🕸️ Graph expansion (Leiden communities)...")
             global_results = await self._global.search(search_query, tenant=tenant)
 
+        # Warn the LLM about entities in this result set that are the subject
+        # of an open, unresolved contradiction — otherwise a disputed fact can
+        # be retrieved and stated as settled with no signal it's contested.
+        # Reuses referenced_entities already computed by LocalSearch.search()
+        # — no extra retrieval-stage cost beyond the one Conflict lookup.
+        conflicts: list[dict] = []
+        if cfg.get("conflict_annotation_enabled", True):
+            referenced_entities = local_results.get("referenced_entities", [])
+            if referenced_entities:
+                conflicts = await self._contradiction.get_open_conflicts_for_entities(
+                    referenced_entities, tenant=tenant
+                )
+                if conflicts:
+                    await _step(f"⚠️ {len(conflicts)} unresolved conflict(s) flagged")
+
         await _step("✍️ Synthesising answer with LLM...")
         context, citations = self._context_builder.build(
             local_results=local_results,
@@ -138,6 +159,7 @@ class HybridRetriever:
                 cfg.get("hybrid_weight_global", 0.4),
             ),
             top_k=cfg.get("rerank_top_k", 5),
+            conflicts=conflicts,
         )
 
         answer = await get_llm().generate(

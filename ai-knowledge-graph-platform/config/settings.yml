@@ -86,6 +86,11 @@ retrieval:
   gnn_adaptive_weights: true          # relational queries use 0.5/0.5, factoid uses alpha/beta
   # ── Authority-weighted retrieval ─────────────────────────────────────────────
   authority_weighting_enabled: true   # adjust edge confidence by source doc authority
+  # ── Conflict-aware answering ──────────────────────────────────────────────
+  conflict_annotation_enabled: true  # warn the LLM when a retrieved entity has an
+                                      # open, unresolved Conflict node (see
+                                      # ContradictionDetector) instead of letting it
+                                      # silently state a disputed fact as settled
   # ─────────────────────────────────────────────────────────────────────────
   agentic_fallback: true   # trigger iterative agent when hybrid answer is weak
   agentic_max_steps: 4     # max sub-searches before forced synthesis

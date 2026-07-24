@@ -83,3 +83,42 @@ class TestContextBuilderNearDuplicates:
         ]
         _, citations = ContextBuilder().build(_local(chunks), {}, top_k=3)
         assert citations == ["a", "b", "c"]
+
+
+class TestContextBuilderConflicts:
+    """An open, unresolved Conflict on a retrieved entity must be surfaced to
+    the LLM explicitly — see ContradictionDetector.get_open_conflicts_for_entities."""
+
+    def test_no_conflicts_section_when_none_given(self):
+        chunks = [{"chunk_id": "a", "text": "text", "final_score": 1.0}]
+        context, _ = ContextBuilder().build(_local(chunks), {}, top_k=1)
+        assert "Unresolved conflicts" not in context
+
+    def test_no_conflicts_section_when_empty_list(self):
+        chunks = [{"chunk_id": "a", "text": "text", "final_score": 1.0}]
+        context, _ = ContextBuilder().build(_local(chunks), {}, top_k=1, conflicts=[])
+        assert "Unresolved conflicts" not in context
+
+    def test_conflicts_section_rendered_when_present(self):
+        chunks = [{"chunk_id": "a", "text": "text", "final_score": 1.0}]
+        conflicts = [{
+            "src": "Apple", "tgt": "Orange",
+            "relation": "COMPETES_WITH", "conflict_type": "exclusive_state",
+        }]
+        context, _ = ContextBuilder().build(_local(chunks), {}, top_k=1, conflicts=conflicts)
+        assert "Unresolved conflicts" in context
+        assert "Apple" in context
+        assert "Orange" in context
+        assert "exclusive_state" in context
+
+    def test_conflicts_capped_at_five(self):
+        chunks = [{"chunk_id": "a", "text": "text", "final_score": 1.0}]
+        conflicts = [
+            {"src": f"E{i}", "tgt": f"F{i}", "relation": "REL", "conflict_type": "exclusive_state"}
+            for i in range(8)
+        ]
+        context, _ = ContextBuilder().build(_local(chunks), {}, top_k=1, conflicts=conflicts)
+        for i in range(5):
+            assert f"E{i}" in context
+        for i in range(5, 8):
+            assert f"E{i}" not in context

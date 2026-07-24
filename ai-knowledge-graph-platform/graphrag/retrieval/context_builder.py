@@ -35,6 +35,7 @@ class ContextBuilder:
         global_results: dict,
         weights: tuple[float, float] = (0.6, 0.4),
         top_k: int = 5,
+        conflicts: list[dict] | None = None,
     ) -> tuple[str, list[str]]:
         sections: list[str] = []
         citations: list[str] = []
@@ -87,6 +88,22 @@ class ContextBuilder:
                     f"{e['entity']} ({e['type']}): {e['description']}. Related: {neighbors}"
                 )
             sections.append("Entity context:\n" + "\n".join(entity_lines))
+
+        # Unresolved conflicts: an entity in this result set is the subject of
+        # an open contradiction (see ContradictionDetector) — two sources
+        # disagree on a fact. Surfaced explicitly here rather than left for
+        # the LLM to notice on its own by spotting disagreeing chunk text,
+        # which only works if both contradictory chunks happen to make top_k.
+        if conflicts:
+            conflict_lines = []
+            for c in conflicts[:5]:  # same cap as entity context, above
+                conflict_lines.append(
+                    f"{c['src']} —{c['relation']}→ {c['tgt']} ({c['conflict_type']}): "
+                    f"sources disagree, unresolved"
+                )
+            sections.append(
+                "⚠ Unresolved conflicts:\n" + "\n".join(conflict_lines)
+            )
 
         # Global: community-synthesized answer
         synthesized = global_results.get("synthesized_answer", "")

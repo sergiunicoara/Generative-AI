@@ -187,6 +187,39 @@ class ContradictionDetector(_ConflictStrategies):
             **params,
         )
 
+    async def get_open_conflicts_for_entities(
+        self,
+        entity_names: list[str],
+        tenant: str | None = None,
+    ) -> list[dict]:
+        """Return open conflicts touching any of the given entity names.
+
+        Used by the retrieval path (HybridRetriever) to warn the LLM when a
+        chunk it's about to answer from mentions an entity that's the subject
+        of an unresolved contradiction — see ContextBuilder.build()'s
+        "conflicts" section. Detection alone (scan()) doesn't protect a live
+        answer from stating a disputed fact as settled; this closes that gap.
+        """
+        if not entity_names:
+            return []
+        tenant_filter = "AND c.tenant = $tenant" if tenant else ""
+        params: dict = {"names": entity_names}
+        if tenant:
+            params["tenant"] = tenant
+        return await self._neo4j.run(
+            f"""
+            MATCH (c:Conflict {{status: 'open'}})
+            WHERE (c.src IN $names OR c.tgt IN $names) {tenant_filter}
+            RETURN c.id            AS conflict_id,
+                   c.src           AS src,
+                   c.tgt           AS tgt,
+                   c.relation      AS relation,
+                   c.conflict_type AS conflict_type,
+                   c.sources       AS sources
+            """,
+            **params,
+        )
+
     async def conflict_rate(self, tenant: str | None = None) -> float:
         """Ratio of open conflicts to total RELATES_TO edges — graph quality metric."""
         tenant_edge_filter     = "WHERE r.tenant = $tenant" if tenant else ""

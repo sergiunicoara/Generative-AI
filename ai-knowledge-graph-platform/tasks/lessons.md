@@ -4753,3 +4753,36 @@ was the last dated entry:
 - **The "supersession regression"** (aerospace golden-eval 28/34 → 27/34 after
   the A128 live-data revert) — still open, repeatedly deferred, never
   root-caused.
+
+## A138 — Query-rewrite A/B measurement: zero accuracy delta, large latency cost when disabled
+
+`query_rewrite_enabled` had been re-enabled 2026-07-21 after fixing known bugs
+(prompt leakage, malformed-output guards), but that re-enable was justified by
+"the known bugs are fixed," not by a measured accuracy benefit — no golden-eval
+comparison existed. Measured it directly on 2026-07-24: full aerospace golden
+set (34 questions) run twice against the live API, `qcache:*` flushed between
+runs, config flipped and API process restarted between arms (settings are
+`lru_cache`d, a file edit alone doesn't take effect).
+
+**Result:**
+- **Rewrite ON** (baseline): 29/34 (85%), completed in ~2-3 minutes.
+- **Rewrite OFF**: 29/34 (85%) — **identical pass/fail pattern**, confirmed via
+  a per-question diff (not just matching totals): same exact 5 questions failed
+  in both runs, same per-type breakdown. Zero measured accuracy contribution
+  from query rewrite on this golden set.
+- **But**: the OFF run took **~20 minutes** — roughly 7-10x slower than ON.
+  Not a caching artifact — OFF ran *second*, so Neo4j/embedding caches should
+  have been warmer if anything, biasing toward faster, not slower. API logs
+  showed heavy repeated polling per question, consistent with the agentic
+  IRCoT fallback firing far more often without rewrite cleaning up the query
+  first (previously measured at ~80s/trigger — see the `agentic_hedge_only_fallback`
+  note in `config/settings.yml`).
+
+**Conclusion:** query rewrite is not pulling its own weight on *accuracy* for
+this golden set, but disabling it is not a viable simplification either — it
+indirectly protects *latency* by keeping retrieval clean enough that the
+expensive agentic fallback stays rare. Restored to `true`. Caveat: only
+measured on the 34-question aerospace set; real production queries with more
+boilerplate/verbose phrasing may exercise the accuracy benefit this eval set
+doesn't surface — this is not evidence rewrite is useless everywhere, only
+that it's latency-protective and accuracy-neutral on this specific benchmark.

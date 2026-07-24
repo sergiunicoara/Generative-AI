@@ -66,7 +66,7 @@ retrieval:
   hybrid_weight_global: 0.4
   bm25_enabled: true       # BM25 fulltext + RRF fusion with vector results
   reranker_enabled: true   # cross-encoder rerank after RRF (ms-marco-MiniLM-L-6-v2)
-  query_rewrite_enabled: true  # Stage-1: strip retrieval-diluting boilerplate + expand/normalize query before first-pass retrieval; search-only, never touches answer/eval. Fails open. Re-enabled 2026-07-21 after fixing prompt leakage (removed hardcoded domain examples that bled into unrelated rewrites) and adding malformed-output guards (boolean syntax, literal placeholders) — see graphrag/retrieval/query_rewriter.py.
+  query_rewrite_enabled: true  # Stage-1: strip retrieval-diluting boilerplate + expand/normalize query before first-pass retrieval; search-only, never touches answer/eval. Fails open. A/B measured 2026-07-24 on aerospace golden set (34 Q): zero accuracy delta (identical 29/34 pass pattern both arms) but disabling it made runs ~7-10x slower (~20min vs ~2-3min) — disabling degrades retrieval enough to trigger the agentic IRCoT fallback far more often. Keep enabled for latency, not accuracy. See tasks/lessons.md A138.
   # ── Session context ──────────────────────────────────────────────────────────
   session_context_enabled: true     # enrich ambiguous follow-up queries with session entities
   session_max_turns: 10             # sliding window size per session

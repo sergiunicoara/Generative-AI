@@ -202,7 +202,10 @@ class AliasRegistry:
                 log.info("alias_registry.redis_pushed", tenant=self._tenant,
                          entries=len(self._exact))
             except Exception as exc:
-                log.warning("alias_registry.redis_push_failed", error=str(exc))
+                # ERROR: without this push every other worker loads aliases from
+                # Neo4j independently instead of the shared Redis cache, causing
+                # duplicate Neo4j scans on each worker startup.
+                log.error("alias_registry.redis_push_failed", error=str(exc))
             finally:
                 await redis.aclose()
 

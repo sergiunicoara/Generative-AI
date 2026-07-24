@@ -236,16 +236,18 @@ class SessionStore:
         """
         Log a per-operation Redis failure.
 
-        Strict mode → ERROR (operator attention required; data may drift to memory).
-        Non-strict mode → WARNING (expected fallback).
+        Strict mode → ERROR + re-raise: in multi-process deployments silently
+        falling back to memory loses session context across processes (load_turns
+        in the API returns an empty deque; save_turn in the worker writes to a
+        dict no other process can see). Propagating lets the caller surface a
+        real error to the client rather than silently answering without history.
+
+        Non-strict mode → WARNING + fall through to memory (dev / single-process).
         """
-        fields = {
-            "op": op,
-            "error": str(exc),
-            "fallback": "memory",
-        }
+        fields = {"op": op, "error": str(exc), "fallback": "memory"}
         if self._strict:
             log.error("session_store.redis_op_failed_strict", **fields)
+            raise exc
         else:
             log.warning(f"session_store.redis_{op}_failed", **fields)
 

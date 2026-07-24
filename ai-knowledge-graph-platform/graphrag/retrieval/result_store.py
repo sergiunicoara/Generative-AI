@@ -100,11 +100,15 @@ class ResultStore:
         if self._redis is not None:
             try:
                 await self._redis.setex(self._key(query_id), self._ttl, payload)
-                return
             except Exception as exc:  # broad: redis.RedisError hierarchy
-                log.warning("result_store.redis_write_failed",
-                            query_id=query_id, error=str(exc))
-        # In-memory fallback
+                # ERROR not WARNING: in a multi-process deployment the result
+                # lives only in this process's memory and the API will never see
+                # it — the client hangs until timeout. Don't fall back to memory.
+                log.error("result_store.redis_write_failed",
+                          query_id=query_id, error=str(exc),
+                          note="result lost — client will see timeout")
+            return  # regardless of success/fail, don't touch memory
+        # In-memory fallback — only active when Redis was never configured
         self._memory[query_id] = result
 
     async def get(self, query_id: str) -> dict | None:
@@ -116,8 +120,9 @@ class ResultStore:
                     return json.loads(raw)
                 return None
             except Exception as exc:  # broad: redis.RedisError hierarchy
-                log.warning("result_store.redis_read_failed",
-                            query_id=query_id, error=str(exc))
+                log.error("result_store.redis_read_failed",
+                          query_id=query_id, error=str(exc))
+                return None  # don't fall back to memory — wrong process's dict
         return self._memory.get(query_id)
 
     async def set_status(self, query_id: str, status: str) -> None:
@@ -137,10 +142,10 @@ class ResultStore:
         if self._redis is not None:
             try:
                 await self._redis.delete(self._key(query_id))
-                return
             except Exception as exc:  # broad: redis.RedisError hierarchy
-                log.warning("result_store.redis_delete_failed",
-                            query_id=query_id, error=str(exc))
+                log.error("result_store.redis_delete_failed",
+                          query_id=query_id, error=str(exc))
+            return
         self._memory.pop(query_id, None)
 
     def is_redis_backed(self) -> bool:

@@ -45,7 +45,7 @@ python workers/combined_worker.py   # runs ingestion + query in one process
 | Check | Command | Expected |
 |---|---|---|
 | API live | `curl http://localhost:8000/health` | `{"status":"ok"}` |
-| API ready | `curl http://localhost:8000/health/ready` | `{"neo4j":"ok","redis":"ok"}` |
+| API ready | `curl http://localhost:8000/health/ready` | `{"neo4j":"ok","redis":"ok"}` (returns HTTP 503 if either is down) |
 | Neo4j | Neo4j Browser → `:server status` | Connected |
 | Schema indexes | `SHOW INDEXES YIELD name, state` | 6 indexes ONLINE |
 | RabbitMQ | `curl -u graphrag:graphrag_dev http://localhost:15672/api/overview` | `{"object_totals":{...}}` |
@@ -63,7 +63,10 @@ python workers/combined_worker.py   # runs ingestion + query in one process
 Check: `ps aux | grep query_worker` / worker logs.
 Fix: Restart `query_worker.py` or `combined_worker.py`.
 
-**Cause B**: Redis not running — result store falls back to in-memory, worker and API can't share state.
+**Cause B**: Redis not running. The result store no longer silently falls back to
+an in-memory dict on a mid-operation Redis failure — it logs an ERROR and drops
+the write/read instead of pretending it succeeded, so a broken Redis surfaces as
+a stuck query rather than a hidden split-brain.
 Check: `redis-cli ping`.
 Fix: `docker-compose up redis`, restart workers and API.
 

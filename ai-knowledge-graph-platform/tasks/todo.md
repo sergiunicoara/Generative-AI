@@ -389,7 +389,9 @@ but single-tenant, formula-inconsistent, silently-degrading prototype, the syste
 ### What was not built
 - No load/performance testing of the GNN scoring layer under real concurrency
 - No automated alert routing from `GraphHealthSnapshot` threshold breaches
-- No UI for the corrections API (currently API-only)
+- ~~No UI for the corrections API (currently API-only)~~ — stale: the admin
+  dashboard now has a "Resolve conflict" button (was 404ing due to a wrong
+  route, fixed 2026-07-24 commit `f4322f1`; UI has existed since Phase 9d)
 
 ### Key numbers
 - 15 code correctness lessons documented

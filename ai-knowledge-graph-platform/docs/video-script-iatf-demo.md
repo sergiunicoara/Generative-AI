@@ -80,7 +80,11 @@ $env:GRAPHRAG_DEFAULT_TENANT="automotive"
 python scripts/ingest_corpus.py --commit --wipe
 ```
 Durată: ~15-30 min (30 documente, embeddings OpenAI + extracție LLM).
-La final trebuie să apară: `364 entities · 380 edges · 11 open conflicts`.
+La final trebuie să apară numere similare cu: `364 entities · 380 edges` — dar
+numărul de conflicte deschise nu mai este 11: `multi_source` (strategia care
+număra corborarea a două surse ca fiind conflict) a fost retrasă, deci
+conflictele reale acum sunt puține (1-2). Verifică live în Neo4j Browser
+înainte de a cita o cifră.
 
 ### D. Pornire API + worker (în două terminale separate)
 

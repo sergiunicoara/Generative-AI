@@ -102,6 +102,11 @@ mention A and B without commenting on their relationship.
 When a `RELATES_TO` and a `NEGATIVE_RELATES_TO` edge coexist for the same triple,
 the contradiction detector raises a `positive_negative_pair` conflict for resolution.
 
+Conflict detection is no longer write-side only: `HybridRetriever` looks up open
+`Conflict` nodes for entities in the retrieved result set and the answer prompt
+is warned when context includes a disputed fact, gated by
+`retrieval.conflict_annotation_enabled` (default on).
+
 ---
 
 ## 5. Document Authority System
@@ -265,9 +270,11 @@ QueryAgent.run(query_id)
                                       → 200 {status: "completed", answer: ...}
 ```
 
-**Without Redis**, the worker writes to its own in-process memory and the API
-always returns `{"status": "queued"}`. Set `REDIS_URL` in `.env` and ensure
-Redis is running before starting workers.
+**Without Redis**, `ResultStore` no longer silently falls back to its own
+in-process memory — it logs an ERROR and drops the write/read, so the API
+returns `{"status": "queued"}` visibly rather than masking a cross-process
+split-brain. Set `REDIS_URL` in `.env` and ensure Redis is running before
+starting workers.
 
 ---
 

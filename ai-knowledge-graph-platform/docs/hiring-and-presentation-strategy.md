@@ -222,23 +222,20 @@ python scripts/demo_regulatory.py --live
 
 **Step 4 — Contradiction detection (the winning moment):**
 
-**⚠ Anchor on conflict TYPES, not exact entity-name strings.** Like the inferred edges in Step 3, the exact conflicts shift between ingestion runs because LLM extraction is non-deterministic — entity names, aliasing, and which document pairs get flagged all vary slightly. What's *constant* across every run is the two conflict types and what they mean. Verify the actual top rows in Neo4j Browser right before you present (query below) and narrate whichever rows of each type are on screen — the mechanism and the story are identical either way.
+**⚠ Anchor on conflict TYPES, not exact entity-name strings.** Like the inferred edges in Step 3, the exact conflicts shift between ingestion runs because LLM extraction is non-deterministic — entity names, aliasing, and which document pairs get flagged all vary slightly. What's *constant* across every run is the conflict types and what they mean. Verify the actual top rows in Neo4j Browser right before you present (query below) and narrate whichever rows of each type are on screen — the mechanism and the story are identical either way.
 
-> "Two conflict types here. `functional_violation` — the same real-world entity got extracted under multiple names or with contradictory property values across documents (here: Airbus / 'A320neo' / 'Airbus A320neo' all referring to the same aircraft program, or CFM International's engine listed as both 'LEAP-1B engine' and 'CFM LEAP-1B Engine'). `multi_source` — the same relationship asserted differently by two different source documents (here: EASA AD 2024-0072 versus EASA AD 2022-0201 — two directives in conflicting supersession order). In a banking context: same counterparty, one document says 'in compliance', another says 'under investigation'. You want to catch this before it reaches a client report. Most RAG systems would return one answer at random. This platform surfaces the conflict automatically and holds it open until a human or the authority-resolution chain settles it."
+**⚠ `multi_source` has been retired — do not present it as a live conflict type.** It used to fire on "same (source, relation, target) triple asserted by two non-superseding documents", which is *corroboration*, not contradiction — both documents were agreeing. It accounted for 94 of aerospace's 95 open conflicts and is why the EASA AD 2024-0072 / EASA AD 2022-0201 example below used to be cited as a "conflict." It is now tracked as a corroboration signal (`independent_source_count`) on the edge instead, and the legacy Conflict nodes were marked `false_positive`. The live conflict types are `directional_reversal`, `exclusive_state`, `functional_violation`, and `positive_negative_pair`.
 
-**Actual output as of the 2026-06-07 ingestion (top 10 — confirm live before presenting):**
+> "The types here compare competing claims directly. `functional_violation` — the same real-world entity got extracted under multiple names or with contradictory property values across documents (here: Airbus / 'A320neo' / 'Airbus A320neo' all referring to the same aircraft program, or CFM International's engine listed as both 'LEAP-1B engine' and 'CFM LEAP-1B Engine'). In a banking context: same counterparty, one document says 'in compliance', another says 'under investigation'. You want to catch this before it reaches a client report. Most RAG systems would return one answer at random. This platform surfaces the conflict automatically and holds it open until a human or the authority-resolution chain settles it."
+
+**Actual output (top rows — confirm live before presenting; count is now small since corroboration is no longer miscounted as conflict):**
 ```
   1. CFM International ⊕ ['LEAP-1B engine', 'CFM LEAP-1B Engine']               | Type: functional_violation
   2. Airbus ⊕ ['A320neo', 'Airbus A320neo']                                     | Type: functional_violation
-  3. Federal Aviation Administration ⊕ United States                           | Type: multi_source
-  4. BOEING ⊕ ['737 family', 'BOEING 737 MAX']                                 | Type: functional_violation
-  5. Boeing Commercial Airplanes ⊕ ['BOEING 737 MAX', 'commercial jet aircraft'] | Type: functional_violation
-  6. EASA AD 2024-0072 ⊕ EASA AD 2022-0201                                     | Type: multi_source
-  7. Federal Aviation Administration ⊕ DOT                                      | Type: multi_source
-  8. Federal Aviation Administration ⊕ FAA-2020-0481                            | Type: multi_source
-  9. British Horizon Airways ⊕ G-ABCD                                           | Type: multi_source
+  3. BOEING ⊕ ['737 family', 'BOEING 737 MAX']                                 | Type: functional_violation
+  4. Boeing Commercial Airplanes ⊕ ['BOEING 737 MAX', 'commercial jet aircraft'] | Type: functional_violation
 ```
-**Row 6 is the one constant** — `EASA AD 2024-0072 ⊕ EASA AD 2022-0201` has survived two consecutive re-ingestions with the same `multi_source` type, so it's the safest single example to memorize if you want one fixed talking point. Everything else: point at whatever's on screen and narrate the *type*.
+Point at whatever `functional_violation` / `directional_reversal` / `exclusive_state` / `positive_negative_pair` rows are on screen and narrate the type — these are the strategies that actually compare competing claims.
 
 **To verify live before presenting:**
 ```cypher
@@ -428,7 +425,7 @@ Then run the second query (all inferred edges) and narrate:
 > "For regulatory data that's already published as Linked Data — EUR-Lex, FIBO, SEC XBRL — a pure triple store with OWL-DL reasoning is the natural fit. But PwC's clients don't live there. Their regulatory knowledge is in PDFs, Word documents, internal memos, audit workpapers. There's no SPARQL endpoint for those. This platform bridges the gap: the LLM extraction pipeline turns unstructured documents into a property graph, then the OWL-RL reasoner runs on top — transitivity, symmetry, inverse rules, supersession chains are all pre-materialised. The SPARQL bridge is there too when a client has structured RDF assets to integrate. It's not either/or — it's the extraction layer that pure triple stores don't have."
 
 **"If the agent can execute tools, how do you control it?"**
-> "Every tool call passes through a `ToolPolicy` gate before execution. The policy enforces an allowlist — only registered tools can be called. Each tool declares required scopes, so `erase_entity` requires `write + admin + gdpr_officer` and is denied for any other caller. Arguments are validated against a schema: type, required fields, enum values, min/max. There's a cross-tenant guard — a caller scoped to `aerospace` can't reference `banking` in an argument. Dry-run mode lets untrusted sessions preview what would happen without executing anything. Every call — allowed, denied, or timed out — is written to an audit log. `docs/pwc-jd-mapping.md` shows exactly where each of these is in the code."
+> "Every tool call passes through a `ToolPolicy` gate before execution. The policy enforces an allowlist — only registered tools can be called. Each tool declares required scopes, so `erase_entity` requires `write + admin + gdpr_officer` and is denied for any other caller. Arguments are validated against a schema: type, required fields, enum values, min/max. There's a cross-tenant guard — a caller scoped to `aerospace` can't reference `banking` in an argument. Dry-run mode lets untrusted sessions preview what would happen without executing anything. Every call — allowed, denied, or timed out — is written to an audit log. `docs/jd-mapping.md` shows exactly where each of these is in the code."
 
 **"Can this use PwC's internal LLM?"**
 > "Yes — the LLM is routed through a single module, `llm_client.py`. Three functions: `get_llm()` for synthesis, `get_fast_llm()` for routing, `get_embedder()` for embeddings. The current stack uses Groq as primary with DeepSeek as a fallback — both are already wired. Adding PwC's internal endpoint is a single-file change, because the client interface is already provider-agnostic."
@@ -713,7 +710,7 @@ ORDER BY count DESC
 | Tool guardrail tests (49) | `tests/unit/test_tool_safety.py` | `pytest tests/unit/test_tool_safety.py` |
 | Golden eval set (40 Qs) | `evals/golden_set.json` | — |
 | Golden eval runner | `scripts/run_golden_eval.py` | `python scripts/run_golden_eval.py` |
-| JD mapping (with Gap column) | `docs/pwc-jd-mapping.md` | — |
+| JD mapping (with Gap column) | `docs/jd-mapping.md` | — |
 
 ---
 
@@ -723,7 +720,7 @@ ORDER BY count DESC
 - [ ] Whiteboard the Bayesian confidence formula from memory — derive it, explain why not averaging
 - [ ] Explain the 4-stage entity resolution pipeline: what fails at each stage, what the thresholds mean
 - [ ] Run `make smoke-test` — confirm it exits 0 before the meeting (364 tests)
-- [ ] Know `docs/pwc-jd-mapping.md` — open it when any JD question comes up
+- [ ] Know `docs/jd-mapping.md` — open it when any JD question comes up
 - [ ] Know the answer to "how do you control the agent?" cold (ToolPolicy, 4 risk levels, audit log)
 - [ ] Explain ADR-0001 (property graph vs triple store) conversationally — what you considered and why you decided
 - [ ] Explain ADR-0002 (forward-chaining over backward-chaining) — why materialise derived edges, why not compute at query time
@@ -735,7 +732,7 @@ ORDER BY count DESC
 - [ ] Explain the two-model agentic design: which model does what, why, latency numbers
 - [ ] Explain agentic trigger rate: why ~9-10% is healthy, why >20% is an alert, and why combined p95 hides the signal
 - [ ] Explain the OR-to-AND fallback fix: hedged answer OR zero citations over-fired; hedged answer AND zero citations reduced unnecessary agentic calls
-- [ ] Explain contradiction detection: name all 5 types, explain `positive_negative_pair` with an example
+- [ ] Explain contradiction detection: name all 4 types (`directional_reversal`, `exclusive_state`, `functional_violation`, `positive_negative_pair`), explain `positive_negative_pair` with an example
 - [ ] State the real RAGAS numbers cold: faithfulness 0.940 on the full 39-question golden set (23 scored, 16 refusals), baseline 0.840 — and explain why the refusal split matters, and why `architecture`/`domain` questions correctly score 0/refused (no info-leak about the system's own internals from an aerospace corpus)
 - [ ] State the real latency numbers: hybrid p95 2.2s, agentic p95 3.4s, combined p95 2.7s, trigger rate ~9-10%
 

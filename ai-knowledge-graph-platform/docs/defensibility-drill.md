@@ -173,7 +173,7 @@ The 0.92 threshold is calibrated conservatively — false merges are worse than 
 
 An ontology is a formal definition of the concepts (entity types), relationships (relation types with domain/range constraints), and inference rules in a domain. It's the schema of the knowledge domain, distinct from the database schema.
 
-Why YAML instead of hardcoded: the platform is meant to be domain-agnostic. The aerospace regulatory ontology is a demonstration domain. A PwC client might need a banking regulatory ontology (instruments, institutions, regulations, directives) or a healthcare ontology (drugs, conditions, procedures, guidelines). The architecture separates domain knowledge (YAML) from platform logic (Python) so that onboarding a new domain is a configuration change, not a code change.
+Why YAML instead of hardcoded: the platform is meant to be domain-agnostic. The aerospace regulatory ontology is a demonstration domain. A client might need a banking regulatory ontology (instruments, institutions, regulations, directives) or a healthcare ontology (drugs, conditions, procedures, guidelines). The architecture separates domain knowledge (YAML) from platform logic (Python) so that onboarding a new domain is a configuration change, not a code change.
 
 Concretely: `config/ontologies/aerospace_regulatory.yml` defines 28 type hierarchy pairs and 12 relation rules. Changing to `banking_regulatory.yml` with different types and relations requires zero Python changes. The `OntologyRegistry` and `TypeTaxonomy` load whatever the YAML contains.
 
@@ -187,19 +187,19 @@ The inference rules in the YAML (`supersedes_transitivity`, `mandated_by_inverse
 
 **Model answer:**
 
-A contradiction in the knowledge graph is when two or more sources make mutually exclusive factual claims about the same entity. Five types are detected:
+A contradiction in the knowledge graph is when two or more sources make mutually exclusive factual claims about the same entity. Four types are detected:
 
-1. **Multi-source conflict** — the same (source, relation, target) triple appears with different properties (e.g., confidence, validity period) from two different documents. Subtle inconsistency, not outright contradiction.
+1. **Directional reversal** — doc A says X SUPERVISES Y, doc B says Y SUPERVISES X. Logically impossible for a strict hierarchy.
 
-2. **Directional reversal** — doc A says X SUPERVISES Y, doc B says Y SUPERVISES X. Logically impossible for a strict hierarchy.
+2. **Exclusive state** — the same entity is tagged with two mutually exclusive states in the YAML ontology: `IS_AIRWORTHY` / `IS_UNAIRWORTHY`, `IS_CERTIFIED` / `IS_DECERTIFIED`, `MANDATORY` / `ADVISORY`. This is the demo scenario.
 
-3. **Exclusive state** — the same entity is tagged with two mutually exclusive states in the YAML ontology: `IS_AIRWORTHY` / `IS_UNAIRWORTHY`, `IS_CERTIFIED` / `IS_DECERTIFIED`, `MANDATORY` / `ADVISORY`. This is the demo scenario.
+3. **Functional violation** — a functional relation (one-to-one by domain constraint) appears with multiple targets. For example, `CEO_OF` should have exactly one source entity per target company. If two documents name different CEOs, that's a violation.
 
-4. **Functional violation** — a functional relation (one-to-one by domain constraint) appears with multiple targets. For example, `CEO_OF` should have exactly one source entity per target company. If two documents name different CEOs, that's a violation.
+4. **Positive/negative pair** — one document asserts a relation; another explicitly negates it with a `NOT_` variant (e.g., `COMPLIANT_WITH` vs `NOT_COMPLIANT_WITH`).
 
-5. **Positive/negative pair** — one document asserts a relation; another explicitly negates it with a `NOT_` variant (e.g., `COMPLIANT_WITH` vs `NOT_COMPLIANT_WITH`).
+A fifth mechanism used to exist — `multi_source` — which fired whenever the same (source, relation, target) triple was asserted by two non-superseding documents. It was retired: that's corroboration (two sources agreeing), not contradiction, and it accounted for the vast majority of "open conflicts" shown in earlier demos. It's now tracked as a corroboration signal (`independent_source_count`) on the edge instead.
 
-The detector runs post-ingestion scoped to the newly-ingested document's entities, so it doesn't require a full graph scan on every ingest. Full scans run on a maintenance schedule.
+The detector runs post-ingestion scoped to the newly-ingested document's entities, so it doesn't require a full graph scan on every ingest. Full scans run on a maintenance schedule. Retrieval is conflict-aware too: `HybridRetriever` checks for open `Conflict` nodes on entities it returns and warns the LLM, so a disputed fact can't be surfaced silently in an answer.
 
 ---
 
@@ -226,25 +226,29 @@ The mock is not a weakness — it's a test strategy. Every production test suite
 
 ---
 
-### Q10. You have 362 passing tests. What's actually being tested?
+### Q10. You have 380 passing tests. What's actually being tested?
 
 **What they're testing:** Whether you know the test coverage or just the number.
 
 **Model answer:**
 
-Unit tests cover the most failure-prone logic in isolation:
+Unit tests cover the most failure-prone logic in isolation. What's actually exercised, concretely:
 
-- **Confidence clamping** — extractor confidence values outside [0,1] are clamped before Bayesian merge (otherwise `1−(1−c₁)(1−c₂)` overflows)
-- **Embedder count mismatch** — if the embedding API returns fewer vectors than chunks, raise ValueError immediately rather than silently shifting embeddings off by one
-- **Result store** — Redis SETEX/GET round-trip for cross-process query result sharing
-- **SPARQL bridge** — SPARQL SELECT over Turtle export returns correct results
-- **Type taxonomy** — LCA, subtype expansion, loading from hierarchy pairs
-- **Retry logic** — exponential backoff fires correctly, respects max attempts
-- **Ontology registry** — domain/range validation, type correction, migration map
+- **Confidence clamping** — LLM returns a relation with `confidence: 1.5` (models hallucinate scores outside range sometimes). Test asserts the stored relation's confidence is `<= 1.0`. A mirror test does the same for a negative value.
+- **Embedder count mismatch** — mock the embedding API to return 2 vectors for 3 input chunks (a real OpenAI-side failure mode). Test asserts this raises `ValueError` with "count mismatch" rather than silently zipping the 2 embeddings onto the first 2 chunks and leaving the 3rd wrong.
+- **Result store** — write a key via Redis SETEX, then overwrite it, then delete a key that was never set. Asserts the overwrite replaces the value cleanly and deleting a nonexistent key doesn't throw — cross-process query results (API writes, worker reads) can't silently corrupt or crash on a double-delete.
+- **SPARQL bridge** — round-trips a graph through Turtle export and back, then feeds it the literal string `"NOT VALID SPARQL AT ALL !!!!"`. Asserts the round-trip preserves triple count and the malformed query raises `ValueError` (matching "SPARQL" in the message) instead of returning empty/wrong results silently.
+- **Type taxonomy** — using the real aerospace ontology chain `CONCEPT → REGULATION → AIRWORTHINESS_DIRECTIVE`, asks for all subtypes of `CONCEPT` (transitive, 2 levels down) and separately queries `"NONEXISTENT"`. Asserts the transitive case includes `AIRWORTHINESS_DIRECTIVE` in the result and the unknown-type case returns `[]` rather than raising.
+- **Retry logic** — wraps a function that always raises a transient exception, with jitter enabled, and asserts the whole retry loop still completes within a 5-second timeout rather than jitter accidentally compounding into a near-infinite wait.
+- **Ontology registry** — extracts a relation `(LOCATION)-[FOUNDED]->(EVENT)` — a domain/range violation, since `FOUNDED` is only valid for `(PERSON, ORG)`. Asserts the relation gets silently corrected to the generic `RELATED_TO` type rather than persisting an invalid edge. A separate test feeds a brand-new relation type never seen before and asserts it's flagged as schema drift.
+- **Auth/scope enforcement** — builds a valid browser-type token with scopes `"read write"`, then checks it against an endpoint requiring `"admin"`. Asserts a 403 — same check repeated for machine-to-machine (`m2m`) tokens, confirming neither token type gets special treatment.
+- **PII detection** — feeds the text `"National ID: AB123456"` (6 digits) through the scanner twice, once with `min_confidence=0.80` and once with `0.60`. Because the NATIONAL_ID pattern's own confidence is exactly 0.60, the strict scanner suppresses it while the loose one flags it — asserts the confidence floor actually gates detections rather than being decorative.
+- **Claim verification / hallucination guard** — answer text: *"FAA AD 2024-01-02 supersedes AD 2022-03-07. The pilot was tired."* The first sentence is grounded in context, the second is an invented detail. Mocked LLM judge returns YES then NO per-claim. Asserts the verifier strips only the second sentence and keeps the first — partial correction, not all-or-nothing.
+- **Tool safety guardrails** (49 tests) — an aerospace-scoped agent tries to call `ingest_document` targeting `tenant: "banking"`. Asserts this is denied with reason `"invalid_arg"` and a `"cross-tenant"` detail message — even a GDPR officer scoped to aerospace can't erase a banking-tenant entity, tested as a separate case with the same pattern.
 
 Integration tests require live Docker services (Neo4j, RabbitMQ, Redis) and test the full ingest → query → result round-trip. They auto-skip if Docker is unavailable.
 
-The 362 number matters less than what it covers. The critical paths — confidence arithmetic, embedding alignment, cross-process result sharing, and agent tool safety — all have regression tests from real bugs that were found and fixed.
+The 380 number matters less than what it covers. The critical paths — confidence arithmetic, embedding alignment, cross-process result sharing, and agent tool safety — all have regression tests from real bugs that were found and fixed.
 
 ---
 
@@ -383,7 +387,7 @@ Before any meeting, verify you can do all of these **cold, without notes:**
 - [ ] Whiteboard the 6 retrieval stages and explain what each one adds
 - [ ] Derive `1−(1−c₁)(1−c₂)` from first principles and explain why not average
 - [ ] Explain forward vs. backward chaining and give the three reasons for the choice
-- [ ] Name the 5 contradiction types and give an example of each
+- [ ] Name the 4 contradiction types and give an example of each
 - [ ] Explain the entity resolution 4-stage pipeline and the 0.92 threshold rationale
 - [ ] State the three scale limits in order and what breaks first at each
 - [ ] Open `docs/adr/0001-property-graph-over-triple-store.md` and talk through it cold
@@ -396,6 +400,6 @@ Before any meeting, verify you can do all of these **cold, without notes:**
 - [ ] Explain why p95 must be reported per mode, not combined
 - [ ] Explain the two-model design: 8B for routing (~0.2s/step), 70B for synthesis (~1.5s)
 - [ ] Answer Q15 (agent control) from memory: allowlist, risk levels, scopes, cross-tenant, dry-run, timeout, audit
-- [ ] Know the test count cold: 362 passing (49 are tool safety guardrail tests)
-- [ ] Open `docs/pwc-jd-mapping.md` — know the Gap column entries honestly
+- [ ] Know the test count cold: 380 passing (49 are tool safety guardrail tests)
+- [ ] Open `docs/jd-mapping.md` — know the Gap column entries honestly
 - [ ] Answer Q16 conversationally, honestly, without sounding defensive

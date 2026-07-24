@@ -67,3 +67,22 @@ The `get_result_store()` singleton is initialised at worker startup and at API s
 **Negative / watch:**
 - Redis data is not durable by default. If Redis restarts mid-query, the result is lost and the user sees a perpetual `pending`. Mitigated by: (a) short TTL means the impact window is small; (b) Redis AOF can be enabled for production deployments
 - TTL default of 3600s (1 hour) may be too short for batch pipelines. Expose `QUERY_RESULT_TTL_SECONDS` env var to allow ops override without redeploy
+
+---
+
+## Update 2026-07-24 — silent in-memory fallback was a split-brain risk
+
+The original "in-memory dict fallback when Redis is unreachable (transparent;
+warning logged)" behaviour described in the Decision section above was found to
+be a real split-brain hazard, not just a dev convenience: on a mid-operation
+Redis failure, `result_store.py`, `session_store.py`, and `alias_registry.py`
+each silently wrote to the calling process's own in-memory dict, invisible to
+every other process. A worker could write a query result that the API process
+could never read back, and the client would hang until timeout with no error
+in the logs.
+
+Fixed: `ResultStore` no longer falls back silently — it logs an ERROR and drops
+the write/read instead of pretending it succeeded. `SessionStore` in strict mode
+re-raises instead of silently losing session context. `AliasRegistry` logs an
+ERROR (not WARNING) on cross-worker push failure. The decision to use Redis as
+the shared store is unchanged; only the failure-mode behavior was corrected.

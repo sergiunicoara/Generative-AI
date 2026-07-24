@@ -155,7 +155,7 @@ to a specific file, endpoint, demo step, or test — with a one-line business va
 | SUPERSEDES chain + transitive inference | Demo step 4 |
 | GDPR Article 17 right-to-be-forgotten | `POST /kg/gdpr/forget-entity` |
 | PII guard | `graphrag/ingestion/pii_guard.py` |
-| Contradiction detection (5 conflict types) | `graphrag/graph/contradiction_detector.py` |
+| Contradiction detection (4 conflict types) | `graphrag/graph/contradiction_detector.py` |
 | **Demo:** Airworthy vs unairworthy conflict surface | Demo step 5 |
 
 ---
@@ -211,12 +211,12 @@ query and use what it returns — not what's printed here.**
 | Agentic trigger rate | ~9% of queries |
 | Entities (real corpus) | 374 (LLM-extracted from 12-doc corpus, after alias dedup) |
 | Relations (real corpus) | 456 (asserted + 10 forward-chain inferred) |
-| Open conflicts detected | 70 (contradiction detector, verified on real data) |
+| Open conflicts detected | ⚠ stale — this figure predates the `multi_source` strategy retirement (it counted corroborating sources as conflicts). Re-run the live Cypher query for the current count; aerospace/automotive are now in the low single digits. |
 | Relation confidence | 99.6% edges ≥ 0.75 (live Neo4j snapshot) |
 | Alias coverage | 14.7% entities with aliases; 600+→374 canonical (~38% reduction) |
 | Orphan rate | 0.0% (all entities linked to source chunks) |
 | Community coherence | 90% (39 Leiden communities, real corpus) |
-| Contradiction rate | 153.51 / 1k edges (adversarial corpus — expected high) |
+| Contradiction rate | ⚠ stale — also inflated by the retired `multi_source` strategy; re-query for the current rate |
 | Calibration (Brier) | pipeline wired; target < 0.20 on production corpus |
 | Passing tests | 362 |
 | KG modules | 39 |

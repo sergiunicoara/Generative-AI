@@ -4691,3 +4691,65 @@ Only **AUT-03** is a genuine quality loss.
    three apparent regressions, one was my bug, one was a test inconsistency, and
    one was real. Single-run diffs on a non-deterministic LLM backend
    (Groq is not reproducible at temperature 0) cannot distinguish these.
+
+**RESOLVED (2026-07-24, commit `37b2fce`).** Root cause fully fixed, not just
+diagnosed: `Document.id`/`Chunk.id` switched from `uuid4()` defaults to
+natural-key MERGE — `(tenant, filename)` for documents, `(document_id,
+chunk_index)` for chunks — with `delete_stale_chunks` added for re-chunking.
+A required backfill migration (`scripts/backfill_chunk_document_id.py`) was
+written and already run live against all 3 tenants. Regression tests added.
+Verified via a live double-ingestion test: document/chunk counts held on the
+second run. Same commit also fixed the SH-02 golden-set bug referenced above
+(`expected_citations` only listed one of two valid superseding directives;
+`required_answer_any_of` now matches).
+
+## A137 — Session close-out: CON-01/02, MH-06/AUT-01, split-brain, and the retrieval-side conflict gap
+
+Follow-on fixes landed the same session as A133–A136, tracked here since A136
+was the last dated entry:
+
+1. **CON-01/CON-02 golden-set questions replaced** (commit `3afa3ea`) — the
+   fabricated-contradiction questions diagnosed as broken tests in A133 were
+   swapped for real corpus-grounded questions instead of being left disabled.
+2. **`multi_source` contradiction strategy retired** (commit `f0a8a83`) — per
+   A135's diagnosis, replaced by the `corroborated_edge_rate` edge signal;
+   155 false-positive `Conflict` nodes retired.
+3. **CON-01 forbidden-term substring bug fixed** (commit `3a5c4cb`) — the bug
+   A136 flagged as "my own test-authoring bug, introduced the same day" (the
+   forbidden term matched as a substring of the correct answer) is fixed and
+   verified in both directions.
+4. **MH-06 and AUT-01 confirmed as genuine corpus/system gaps**, not golden-set
+   bugs (commit `eb1e4dd`) — annotated with direct source-document evidence.
+   **AUT-03 is still open** — confirmed as a genuine regression from the A136
+   dedup work, but its root cause has not yet been investigated.
+5. **Redis split-brain bugs fixed** in `result_store.py`, `session_store.py`,
+   `alias_registry.py` (commit `c928cec`) — a mid-operation Redis failure used
+   to silently fall back to the process's own in-memory dict, invisible to
+   other processes (API vs. worker). Now `result_store` no longer falls back
+   silently (logs ERROR, drops the write), `session_store` strict mode
+   re-raises instead of losing session context, and `alias_registry` push
+   failures are logged at ERROR.
+6. **`GET /health/ready` now returns 503 on Redis failure** (commit
+   `e26a83d`) — it previously logged a warning but still returned 200.
+7. **Entity name/type collision fixed** (commit `430d69c`) — same name,
+   different meaning (e.g. "Apple" company vs. "Apple" fruit) could silently
+   merge if the LLM assigned both a shared generic type, since the merge key
+   is `(name, type, tenant)`. Fixed on both sides: the extraction prompt now
+   uses tenant-specific ontology types instead of one generic 6-type list, and
+   merge now flags a likely collision via embedding cosine similarity between
+   existing and incoming entity data.
+8. **Contradiction detection is no longer write-side only** (commit
+   `2d34ea2`) — `Conflict` nodes were created on ingestion but never checked
+   on the retrieval path, so a disputed fact could be retrieved and presented
+   as settled. `HybridRetriever` now looks up open conflicts for retrieved
+   entities and the LLM prompt warns about them explicitly.
+9. **Dashboard "Resolve conflict" button fixed** (commit `f4322f1`) — was
+   POSTing to a nonexistent route (`/corrections/resolve-conflict` instead of
+   `/corrections/conflict/resolve`); every click 404'd.
+
+**Still open, not to be read as resolved by the above:**
+- **AUT-03** — confirmed genuine regression (item 4), root cause not yet
+  investigated.
+- **The "supersession regression"** (aerospace golden-eval 28/34 → 27/34 after
+  the A128 live-data revert) — still open, repeatedly deferred, never
+  root-caused.

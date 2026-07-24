@@ -116,14 +116,19 @@ A float [0.0, 1.0] representing how certain the system is that a relation is cor
 ### Contradiction detection
 The process of finding pairs of facts in the knowledge graph that cannot both be true simultaneously.
 
-**Five types in this project:**
-1. Multi-source conflict
-2. Directional reversal  
-3. Exclusive state (e.g., IS_AIRWORTHY and IS_UNAIRWORTHY)
-4. Functional violation
-5. Positive/negative pair
+**Four types in this project:**
+1. Directional reversal
+2. Exclusive state (e.g., IS_AIRWORTHY and IS_UNAIRWORTHY)
+3. Functional violation
+4. Positive/negative pair
 
-**In this project:** `graphrag/graph/contradiction_detector.py: scan()`. Runs post-ingestion scoped to the new document's entities. Results stored as `(:Conflict)` nodes.
+A former fifth type, "multi-source conflict" (same triple asserted by two
+non-superseding documents), was retired — agreement between two independent
+documents on the same triple is corroboration, not a contradiction. It's now
+tracked as a trust signal (`independent_source_count` / `corroborated_edge_rate`)
+instead of an open `Conflict`.
+
+**In this project:** `graphrag/graph/contradiction_detector.py: scan()`. Runs post-ingestion scoped to the new document's entities. Results stored as `(:Conflict)` nodes. Retrieval checks for open conflicts on entities in the result set and warns the LLM in the answer prompt when context includes a disputed fact (gated by `retrieval.conflict_annotation_enabled`, default on).
 
 ---
 

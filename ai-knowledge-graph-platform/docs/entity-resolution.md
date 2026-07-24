@@ -137,6 +137,17 @@ If all three stages fail, the entity is genuinely new. A Neo4j `MERGE` is issued
 on `(name, type, tenant)` composite key, and the canonical name is registered in
 the in-process alias cache for future lookups within the same ingestion batch.
 
+**Collision guard:** because the merge key is `(name, type, tenant)`, two
+same-named entities with different real-world meanings (e.g. "Apple" the
+company vs. "Apple" the fruit) could previously merge into one node whenever
+the LLM assigned them the same generic type. This is now mitigated two ways:
+(a) the extraction prompt is tenant-aware and pulls entity types from each
+tenant's domain ontology (`config/ontologies/*.yml`) instead of one shared
+generic type list, so same-named entities in different domains are more
+likely to get distinct types; (b) `merge_entity()` computes embedding cosine
+similarity between the existing and incoming entity data and logs a warning
+on likely collision.
+
 ---
 
 ## Multi-Tenant Isolation
@@ -185,7 +196,6 @@ After entity resolution, contradiction detection scans for cases where the **sam
 entities** are linked by semantically incompatible assertions from different source
 documents:
 
-- **Multi-source:** same (A, rel, B) triple from two non-superseding documents
 - **Directional reversal:** A→B and B→A for the same relation type
 - **Exclusive states:** entity simultaneously `IS_ACTIVE` and `IS_DEPRECATED`
 - **Functional violation:** `CEO_OF` with two different targets (one person can't
@@ -193,8 +203,18 @@ documents:
 - **Positive/negative pair:** RELATES_TO and NEGATIVE_RELATES_TO coexist for the
   same triple
 
+The former `multi_source` strategy (same `(A, rel, B)` triple asserted by two
+non-superseding documents) has been retired as a conflict type — an edge is a
+single triple, so two documents agreeing on it is corroboration, not a
+contradiction. It's now tracked as a trust signal (`independent_source_count`
+/ `corroborated_edge_rate`) rather than an open conflict.
+
 Conflicts are persisted as `Conflict` nodes with `status: "open"` and surfaced via
 the `/corrections/list-conflicts` API for manual or authority-based resolution.
+Retrieval also checks for open conflicts on entities in the result set
+(`ContradictionDetector.get_open_conflicts_for_entities`) and the answer prompt
+is warned when context includes a disputed fact, gated by
+`retrieval.conflict_annotation_enabled` (default on).
 
 **Implementation:** `graphrag/graph/contradiction_detector.py`,
 `graphrag/graph/contradiction_strategies.py`

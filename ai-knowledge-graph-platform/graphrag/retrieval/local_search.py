@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import asyncio
 import re
+import time
 
 import structlog
 
@@ -329,12 +330,18 @@ class LocalSearch:
         # no embeddings cross the wire. Requires the query embedding, so it
         # degrades to pure path-score ranking when vector search is disabled.
         sem_weight = cfg.get("multihop_semantic_weight", 0.0)
+        _t0 = time.monotonic()
         hop_chunks = await self._neo4j.get_multihop_chunks(
             seed_ids,
             hops=hops,
             tenant=tenant,
             query_embedding=embedding if sem_weight > 0 else None,
             semantic_weight=sem_weight,
+        )
+        log.info(
+            "local_search.multihop.done",
+            elapsed_ms=round((time.monotonic() - _t0) * 1000, 1),
+            hop_chunks=len(hop_chunks),
         )
 
         # De-dupe by chunk_id as we go (not just against seed_ids) — multiple
@@ -367,17 +374,34 @@ class LocalSearch:
                 cfg.get("gnn_beta",  0.1),
             )
 
-            chunk_entities, entity_edges = await asyncio.gather(
-                self._neo4j.get_chunk_entity_embeddings(all_ids),
-                _fetch_subgraph_edges(self._neo4j, all_ids, tenant),
+            # Sequential, not asyncio.gather: _fetch_subgraph_edges needs
+            # chunk_entities as input (see its docstring) — it used to
+            # re-fetch get_chunk_entity_embeddings itself under gather(),
+            # which meant the "parallel" branches were really doing the same
+            # expensive Neo4j round-trip twice. Fixed 2026-07-24; see
+            # tasks/lessons.md.
+            _t0 = time.monotonic()
+            chunk_entities = await self._neo4j.get_chunk_entity_embeddings(all_ids)
+            entity_edges = await _fetch_subgraph_edges(self._neo4j, chunk_entities, tenant)
+            log.info(
+                "local_search.chunk_entities_edges.done",
+                elapsed_ms=round((time.monotonic() - _t0) * 1000, 1),
+                chunk_entities=len(chunk_entities),
+                entity_edges=len(entity_edges),
             )
 
             # Apply document authority weights to edge confidence (config-gated)
             if self._use_authority_weights:
+                _t0 = time.monotonic()
                 entity_edges = await self._authority_svc.apply_authority_weights(
                     entity_edges
                 )
+                log.info(
+                    "local_search.authority_weights.done",
+                    elapsed_ms=round((time.monotonic() - _t0) * 1000, 1),
+                )
 
+            _t0 = time.monotonic()
             loop = asyncio.get_running_loop()
             all_chunks = await loop.run_in_executor(
                 None,
@@ -389,6 +413,10 @@ class LocalSearch:
                     alpha          = alpha,
                     beta           = beta,
                 ),
+            )
+            log.info(
+                "local_search.gnn_score.done",
+                elapsed_ms=round((time.monotonic() - _t0) * 1000, 1),
             )
 
         # Attach source document filenames so the LLM can attribute claims to
@@ -441,19 +469,25 @@ class LocalSearch:
 
 async def _fetch_subgraph_edges(
     neo4j,
-    chunk_ids: list[str],
+    chunk_entities: list[dict],
     tenant: str = "default",
 ) -> list[dict]:
-    """Helper: get entity (name, type) pairs from chunks then fetch edges.
+    """Helper: derive entity (name, type) pairs from already-fetched
+    chunk-entity rows, then fetch RELATES_TO edges between them.
+
+    Takes the rows the caller already fetched via get_chunk_entity_embeddings
+    (not chunk_ids) — this used to re-fetch that same query itself, which
+    under the caller's asyncio.gather meant the "parallel" branch was
+    actually running the identical expensive Neo4j round-trip a second time.
+    Fixed 2026-07-24; see tasks/lessons.md.
 
     Passing full (name, type) pairs instead of names alone prevents ambiguous
     MATCH results when the same tenant has two entities with identical names
     but different types (e.g. "Apple" as ORG vs. PRODUCT).
     """
-    rows = await neo4j.get_chunk_entity_embeddings(chunk_ids)
     seen: set[tuple[str, str]] = set()
     entities: list[dict] = []
-    for r in rows:
+    for r in chunk_entities:
         key = (r["entity_name"], r["entity_type"])
         if key not in seen:
             seen.add(key)

@@ -9,25 +9,35 @@ Usage:
 
 Provider strategy
 -----------------
-Primary:  DeepSeek-V4 (deepseek-v4-pro) — single provider for the full ingestion
-          run. At corpus-scale chunk volumes, Groq's free-tier rate limit is
-          hit on nearly every call anyway, so routing extraction through one
-          model gives a consistent extraction "voice" (entity/relation style,
-          confidence calibration) across the whole graph — important for
-          reproducibility — and avoids ~1 wasted Groq round-trip per call.
+Primary:  DeepSeek-V4 (deepseek-v4-pro) via ``FallbackLLM.deepseek_primary()``
+          — single provider for the full ingestion run gives a consistent
+          extraction "voice" (entity/relation style, confidence calibration)
+          across the whole graph — important for reproducibility. Falls over
+          to Groq transparently on rate-limit, timeout, or an API error (e.g.
+          a bad/deprecated model id — see the 2026-07-24 incident note on
+          ``DeepSeekLLM``).
 Opt-in:   Groq (llama-3.3-70b-versatile) — set ``LLM_INGEST_PROVIDER=groq`` to
-          use Groq-primary with instant DeepSeek fallback on rate-limit
-          (``FallbackLLM``), e.g. for quick low-volume/dev runs.
+          use ``FallbackLLM.groq_primary()`` instead: Groq-primary with
+          instant DeepSeek fallback on rate-limit, e.g. for quick
+          low-volume/dev runs.
 Embeddings: OpenAI text-embedding-3-large (3072d) — replaced Gemini; same
           dimensions, same Neo4j schema, no re-indexing required.
 
-Rate-limit handling (Groq)
----------------------------
+Rate-limit / failure handling
+------------------------------
 When Groq returns a 429, the error message contains the exact wait time in the
 form "Please try again in XmY.Zs".  ``GroqLLM.generate()`` parses that value
 and sleeps for that duration (capped at ``_MAX_RETRY_WAIT`` seconds) before
-retrying.  After ``_MAX_RETRIES`` failed attempts the exception is propagated
-to ``FallbackLLM``, which transparently re-issues the call to DeepSeek instead.
+retrying.  After all retry attempts are exhausted the exception propagates to
+``FallbackLLM``, which transparently re-issues the call to the secondary
+provider instead.
+
+Both ``GroqLLM`` and ``DeepSeekLLM`` also track recent success/failure via
+``graphrag.core.provider_health`` — once a provider looks broken (see that
+module for the exact trip conditions), retries drop to a single fail-fast
+attempt instead of the full retry budget, so a sustained outage on the
+primary fails over to the secondary quickly instead of burning the full
+retry-and-sleep sequence on every call.
 """
 
 from __future__ import annotations
@@ -37,6 +47,8 @@ import re
 from typing import Any
 
 import structlog
+
+from graphrag.core.provider_health import is_healthy, record_result
 
 log = structlog.get_logger(__name__)
 
@@ -87,6 +99,7 @@ class GroqLLM(BaseLLM):
 
     _TIMEOUT = 60.0  # seconds — without this a stalled Groq response hangs forever
                       # and FallbackLLM never gets a chance to fall back.
+    _PROVIDER_NAME = "groq"
 
     def __init__(self, api_key: str, default_model: str, max_retries: int = _MAX_RETRIES):
         from groq import Groq
@@ -115,38 +128,49 @@ class GroqLLM(BaseLLM):
         loop = asyncio.get_running_loop()
         last_exc: Exception | None = None
 
-        for attempt in range(1, self._max_retries + 1):
+        # Fail fast once this provider looks broken — skip most of the retry
+        # budget instead of re-attempting a call that's failed the last N
+        # times in a row. Checked once per generate() call, not re-checked
+        # mid-loop. See graphrag.core.provider_health.
+        effective_max_retries = (
+            self._max_retries if is_healthy(self._PROVIDER_NAME) else 1
+        )
+
+        for attempt in range(1, effective_max_retries + 1):
             try:
                 response = await loop.run_in_executor(
                     None,
                     lambda: self._client.chat.completions.create(**kwargs),
                 )
+                record_result(self._PROVIDER_NAME, True)
                 return response.choices[0].message.content or ""
 
             except RateLimitError as exc:
+                record_result(self._PROVIDER_NAME, False)
                 wait = _parse_retry_after(str(exc))
                 log.warning(
                     "llm_client.rate_limit",
                     attempt=attempt,
-                    max_retries=self._max_retries,
+                    max_retries=effective_max_retries,
                     wait_seconds=wait,
                     model=model,
                 )
                 last_exc = exc
-                if attempt < self._max_retries:
+                if attempt < effective_max_retries:
                     await asyncio.sleep(wait)
                 # else fall through to re-raise
 
             except (APITimeoutError, APIConnectionError) as exc:
+                record_result(self._PROVIDER_NAME, False)
                 log.warning(
                     "llm_client.groq_timeout",
                     attempt=attempt,
-                    max_retries=self._max_retries,
+                    max_retries=effective_max_retries,
                     model=model,
                     error=type(exc).__name__,
                 )
                 last_exc = exc
-                if attempt < self._max_retries:
+                if attempt < effective_max_retries:
                     await asyncio.sleep(_MIN_RETRY_WAIT)
                 # else fall through to re-raise
 
@@ -253,11 +277,14 @@ class DeepSeekLLM(BaseLLM):
     _RETRY_WAIT   = 10.0  # seconds between retries on 429/503/timeout
     _TIMEOUT      = 60.0  # seconds — DeepSeek's API can stall under load with
                            # no error; without this the call hangs forever.
+    _PROVIDER_NAME = "deepseek"
 
-    def __init__(self, api_key: str, default_model: str = _DEFAULT_MODEL):
+    def __init__(self, api_key: str, default_model: str = _DEFAULT_MODEL,
+                 max_retries: int = _MAX_RETRIES):
         from openai import OpenAI
         self._client = OpenAI(api_key=api_key, base_url=self._BASE_URL, timeout=self._TIMEOUT)
         self._default_model = default_model
+        self._max_retries = max_retries
 
     async def generate(
         self,
@@ -280,53 +307,64 @@ class DeepSeekLLM(BaseLLM):
         loop = asyncio.get_running_loop()
         last_exc: Exception | None = None
 
-        for attempt in range(1, self._MAX_RETRIES + 1):
+        # See GroqLLM.generate() — same fail-fast pattern once this provider
+        # looks broken. This is the path that was silently retrying 3x10s per
+        # call for ~40 minutes during the 2026-07-24 deepseek-chat incident.
+        effective_max_retries = (
+            self._max_retries if is_healthy(self._PROVIDER_NAME) else 1
+        )
+
+        for attempt in range(1, effective_max_retries + 1):
             try:
                 response = await loop.run_in_executor(
                     None,
                     lambda: self._client.chat.completions.create(**kwargs),
                 )
+                record_result(self._PROVIDER_NAME, True)
                 return response.choices[0].message.content or ""
 
             except (RateLimitError, APIStatusError, APITimeoutError, APIConnectionError) as exc:
+                record_result(self._PROVIDER_NAME, False)
                 log.warning(
                     "llm_client.deepseek_retry",
                     attempt=attempt,
-                    max_retries=self._MAX_RETRIES,
+                    max_retries=effective_max_retries,
                     wait_seconds=self._RETRY_WAIT,
                     model=model,
                     error=type(exc).__name__,
                 )
                 last_exc = exc
-                if attempt < self._MAX_RETRIES:
+                if attempt < effective_max_retries:
                     await asyncio.sleep(self._RETRY_WAIT)
 
         raise last_exc  # type: ignore[misc]
 
 
-# ── Fallback LLM — Groq primary, Gemini on rate-limit exhaustion ──────────────
+# ── Fallback LLM — primary provider (fail-fast) → secondary on failure ───────
 
 class FallbackLLM(BaseLLM):
-    """Groq primary (one attempt, fail-fast) → DeepSeek fallback on rate limit.
+    """Wraps a primary provider (one attempt, fail-fast) and a secondary
+    provider used whenever the primary raises one of `fallback_exceptions`.
 
-    The Groq instance inside uses ``max_retries=1`` so the first 429 raises
-    immediately without sleeping.  ``FallbackLLM`` catches that and issues the
-    same call to DeepSeek-V3 instead — no delay, no sleeping.
+    Generalized 2026-07-24: previously hardcoded Groq-primary/DeepSeek-
+    secondary only. The 2026-07-24 incident (DeepSeek's model id deprecated,
+    ``get_llm()``'s default path had zero fallback) showed the primary
+    generation path needs the same redundancy `get_fast_llm()` already had —
+    so this now supports either direction via the two classmethods below,
+    with one shared try/except implementation instead of a near-duplicate
+    class.
 
-    - Normal operation : Groq handles the call (~280 tok/s).
-    - Groq rate-limited: DeepSeek handles it instantly, generous rate limits.
-    - Callers see no difference — same ``generate()`` signature.
+    Build via ``FallbackLLM.groq_primary(cfg)`` or
+    ``FallbackLLM.deepseek_primary(cfg)`` — don't call ``__init__`` directly
+    unless you're constructing the provider instances yourself.
     """
 
-    def __init__(self, api_key_groq: str, default_model_groq: str,
-                 api_key_deepseek: str):
-        # fail-fast Groq: one attempt only, no sleep on 429
-        self._groq = GroqLLM(
-            api_key=api_key_groq,
-            default_model=default_model_groq,
-            max_retries=1,
-        )
-        self._deepseek = DeepSeekLLM(api_key=api_key_deepseek)
+    def __init__(self, primary: BaseLLM, primary_name: str, secondary: BaseLLM,
+                 fallback_exceptions: tuple[type[Exception], ...]):
+        self._primary = primary
+        self._primary_name = primary_name
+        self._secondary = secondary
+        self._fallback_exceptions = fallback_exceptions
 
     async def generate(
         self,
@@ -335,20 +373,59 @@ class FallbackLLM(BaseLLM):
         json_mode: bool = False,
         temperature: float = 0.0,
     ) -> str:
-        from groq import RateLimitError, APITimeoutError, APIConnectionError
-
         try:
-            return await self._groq.generate(
+            return await self._primary.generate(
                 prompt, model=model, json_mode=json_mode, temperature=temperature
             )
-        except (RateLimitError, APITimeoutError, APIConnectionError) as exc:
+        except self._fallback_exceptions as exc:
             log.warning(
-                "llm_client.fallback_to_deepseek",
-                reason="groq_rate_limit" if isinstance(exc, RateLimitError) else "groq_timeout",
+                "llm_client.fallback",
+                primary=self._primary_name,
+                reason=type(exc).__name__,
             )
-            return await self._deepseek.generate(
+            return await self._secondary.generate(
                 prompt, json_mode=json_mode, temperature=temperature
             )
+
+    @classmethod
+    def groq_primary(cls, cfg, model: str | None = None) -> "FallbackLLM":
+        """Groq primary (~280 tok/s, fail-fast) -> DeepSeek on rate-limit/timeout.
+
+        `model` overrides `cfg.groq_model` — used by `get_fast_llm()` to
+        select the fast 8B model instead of the default 70B.
+        """
+        from groq import RateLimitError, APITimeoutError, APIConnectionError
+        return cls(
+            primary=GroqLLM(
+                api_key=cfg.groq_api_key,
+                default_model=model or cfg.groq_model,
+                max_retries=1,  # fail fast: first 429 raises immediately, no sleep
+            ),
+            primary_name="groq",
+            secondary=DeepSeekLLM(api_key=cfg.deepseek_api_key),
+            fallback_exceptions=(RateLimitError, APITimeoutError, APIConnectionError),
+        )
+
+    @classmethod
+    def deepseek_primary(cls, cfg) -> "FallbackLLM":
+        """DeepSeek primary (fail-fast) -> Groq on rate-limit/timeout/API error.
+
+        ``APIStatusError`` is included deliberately — that's the exact
+        exception a 400 (e.g. an invalid/deprecated model id, as in the
+        2026-07-24 incident) raises. Without it in this tuple, a repeat of
+        that incident would still take down synthesis entirely instead of
+        transparently failing over to Groq.
+        """
+        from openai import RateLimitError, APIStatusError, APITimeoutError, APIConnectionError
+        return cls(
+            primary=DeepSeekLLM(
+                api_key=cfg.deepseek_api_key,
+                max_retries=1,  # fail fast: same philosophy as groq_primary()
+            ),
+            primary_name="deepseek",
+            secondary=GroqLLM(api_key=cfg.groq_api_key, default_model=cfg.groq_model),
+            fallback_exceptions=(RateLimitError, APIStatusError, APITimeoutError, APIConnectionError),
+        )
 
 
 # ── OpenAI embedding client ───────────────────────────────────────────────────
@@ -419,16 +496,19 @@ _embedder: OpenAIEmbedder | None = None
 
 
 def get_llm() -> BaseLLM:
-    """Return the primary (large) LLM — DeepSeek-V3, single provider by default.
+    """Return the primary (large) LLM — DeepSeek-V4 primary, Groq fallback.
 
-    Normal path: bare ``DeepSeekLLM`` (deepseek-v4-pro) — one provider's
-    extraction "voice" for the whole corpus, generous rate limits,
-    ~$0.07/1M input tokens. No Groq round-trip, no mixed-model calibration
-    across a single ingestion run.
+    Normal path: ``FallbackLLM.deepseek_primary()`` — DeepSeek (deepseek-v4-pro)
+    handles the call for one provider's consistent extraction "voice" across
+    the whole corpus; Groq is used transparently if DeepSeek fails (rate
+    limit, timeout, or an API error like the 2026-07-24 incident where
+    DeepSeek's model id was deprecated and every call 400'd). Before
+    2026-07-24 this was a bare ``DeepSeekLLM`` with no fallback at all — that
+    gap is why the incident took down synthesis for ~40 minutes.
 
     Opt-in override — ``LLM_INGEST_PROVIDER=groq``:
-        Uses Groq llama-3.3-70b as primary (~280 tok/s) with instant
-        DeepSeek-V3 fallback on rate-limit (``FallbackLLM``). Useful for
+        ``FallbackLLM.groq_primary()`` — Groq llama-3.3-70b as primary
+        (~280 tok/s) with instant DeepSeek fallback on rate-limit. Useful for
         quick/low-volume dev runs where Groq's free tier won't be exhausted.
     """
     global _llm
@@ -441,13 +521,9 @@ def get_llm() -> BaseLLM:
                 provider="groq",
                 reason="LLM_INGEST_PROVIDER=groq — Groq-primary with DeepSeek fallback for this run",
             )
-            _llm = FallbackLLM(
-                api_key_groq=cfg.groq_api_key,
-                default_model_groq=cfg.groq_model,
-                api_key_deepseek=cfg.deepseek_api_key,
-            )
+            _llm = FallbackLLM.groq_primary(cfg)
         else:
-            _llm = DeepSeekLLM(api_key=cfg.deepseek_api_key)
+            _llm = FallbackLLM.deepseek_primary(cfg)
     return _llm
 
 
@@ -462,11 +538,7 @@ def get_fast_llm() -> FallbackLLM:
     if _fast_llm is None:
         from graphrag.core.config import get_settings
         cfg = get_settings()
-        _fast_llm = FallbackLLM(
-            api_key_groq=cfg.groq_api_key,
-            default_model_groq=cfg.groq_fast_model,
-            api_key_deepseek=cfg.deepseek_api_key,
-        )
+        _fast_llm = FallbackLLM.groq_primary(cfg, model=cfg.groq_fast_model)
     return _fast_llm
 
 

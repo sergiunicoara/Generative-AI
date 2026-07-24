@@ -80,18 +80,21 @@ class Settings(BaseSettings):
     # Enable with LLM_CACHE_ENABLED=1 or llm_cache_enabled: true in settings.yml.
     llm_cache_enabled: bool = False
 
-    # Temporary single-provider override for get_llm(): bypasses Groq entirely
-    # (and therefore the Groq→DeepSeek FallbackLLM split) so a one-time
-    # cache-populating ingestion run uses ONE provider's extraction "voice"
-    # for the whole corpus. Mixing Groq + DeepSeek mid-run — which happens
-    # naturally when Groq rate-limits partway through — pollutes the cache
-    # with two different models' outputs for what should be one deterministic
-    # baseline (see llm_cache.py). Pairs with LLM_CACHE_ENABLED=1.
-    # "" = normal Groq-primary FallbackLLM behavior (default).
-    # "deepseek" = route get_llm() straight to DeepSeek-V3 — generous rate
-    #              limits, ~$0.07/1M input tokens, no Groq daily-cap risk.
-    # Enable with LLM_INGEST_PROVIDER=deepseek; remove/unset afterwards —
-    # this is a one-shot knob, not a permanent provider switch.
+    # Selects which provider is PRIMARY for get_llm() — the other is always
+    # available as an automatic fallback (FallbackLLM), never fully bypassed.
+    # Also affects LLM_CACHE_ENABLED=1 runs: a one-time cache-populating
+    # ingestion run should use ONE provider's extraction "voice" for the whole
+    # corpus — mixing providers mid-run (which happens naturally whenever the
+    # primary fails over) pollutes the cache with two different models'
+    # outputs for what should be one deterministic baseline (see llm_cache.py).
+    # "" = default: get_llm() uses FallbackLLM.deepseek_primary() — DeepSeek-V4
+    #      primary (generous rate limits, ~$0.07/1M input tokens, no Groq
+    #      daily-cap risk), Groq as automatic fallback on failure.
+    # "groq" = get_llm() uses FallbackLLM.groq_primary() instead — Groq
+    #          primary (~280 tok/s) with instant DeepSeek fallback. Useful
+    #          for quick/low-volume dev runs. Enable with
+    #          LLM_INGEST_PROVIDER=groq; remove/unset afterwards — this is a
+    #          one-shot knob, not a permanent provider switch.
     llm_ingest_provider: str = ""
 
     # ── Neo4j ───────────────────────────────────────────────────────────────────

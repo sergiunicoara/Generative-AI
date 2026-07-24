@@ -72,10 +72,10 @@ async def _retrieve_with_params(
     all_chunks  = seed_chunks + [c for c in hop_chunks if c["chunk_id"] not in seen]
     all_ids     = [c["chunk_id"] for c in all_chunks]
 
-    chunk_entities, entity_edges = await asyncio.gather(
-        neo4j.get_chunk_entity_embeddings(all_ids),
-        _fetch_subgraph_edges(neo4j, all_ids),
-    )
+    # Sequential, not gather — _fetch_subgraph_edges takes the already-fetched
+    # chunk_entities now, not chunk_ids (see local_search.py, 2026-07-24).
+    chunk_entities = await neo4j.get_chunk_entity_embeddings(all_ids)
+    entity_edges = await _fetch_subgraph_edges(neo4j, chunk_entities)
 
     scorer = GNNScorer(
         gnn_type                  = cfg.get("gnn_type", "gat"),

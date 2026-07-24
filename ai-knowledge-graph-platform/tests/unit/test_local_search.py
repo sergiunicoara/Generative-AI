@@ -116,6 +116,26 @@ class TestLocalSearchPipelineFlags:
         assert "referenced_entities" in result
         assert "referenced_chunks" in result
 
+    async def test_chunk_entity_embeddings_fetched_once_not_twice(self):
+        """Regression test: get_chunk_entity_embeddings must be called
+        exactly once per search() call. It used to be called twice — once
+        directly, once again inside the old _fetch_subgraph_edges, which
+        re-fetched the same chunk_ids under the same asyncio.gather — see
+        tasks/lessons.md (2026-07-24)."""
+        ls = _make_local_search()
+        ls._embedder.embed_text = AsyncMock(return_value=[0.1] * 768)
+        ls._neo4j.vector_search_chunks = AsyncMock(return_value=[_chunk("c1")])
+        ls._bm25.search = AsyncMock(return_value=[_chunk("c1")])
+        ls._reranker.rerank = AsyncMock(return_value=[_chunk("c1")])
+        ls._neo4j.get_multihop_chunks = AsyncMock(return_value=[])
+        ls._neo4j.get_chunk_entity_embeddings = AsyncMock(return_value=[])
+        ls._neo4j.get_entity_relations_subgraph = AsyncMock(return_value=[])
+        ls._neo4j.get_entity_neighbors = AsyncMock(return_value=[])
+        ls._gnn.score = MagicMock(return_value=[_chunk("c1")])
+
+        await ls.search("test question")
+        ls._neo4j.get_chunk_entity_embeddings.assert_called_once()
+
     async def test_bm25_disabled_skips_bm25_call(self):
         ls = _make_local_search({"bm25_enabled": False})
         ls._embedder.embed_text = AsyncMock(return_value=[0.1] * 768)

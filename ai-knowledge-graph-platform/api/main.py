@@ -127,7 +127,7 @@ async def health():
 
 @app.get("/health/ready", tags=["Health"])
 async def health_ready():
-    """Readiness probe — verifies Neo4j and Redis are reachable.
+    """Readiness probe — verifies Neo4j, Redis, and LLM provider health.
 
     Returns HTTP 200 when all dependencies are healthy, HTTP 503 otherwise.
     Orchestrators (Kubernetes, ECS, docker-compose healthcheck) should use
@@ -161,6 +161,31 @@ async def health_ready():
             failed = True
     except Exception as exc:  # noqa: BLE001
         checks["redis"] = f"error: {exc}"
+        failed = True
+
+    # ── LLM provider ─────────────────────────────────────────────────────────
+    # Unlike Redis (no fallback exists — a Redis failure is always gating),
+    # get_llm() is now a redundant, multi-provider FallbackLLM (see
+    # llm_client.py, 2026-07-24 — the primary having zero fallback is what
+    # let a deprecated DeepSeek model id take down synthesis for ~40min
+    # undetected). If the primary is unhealthy but the secondary is serving,
+    # the service is degraded, not down — only gate readiness when BOTH are
+    # unhealthy, i.e. there is truly no viable synthesis path left.
+    try:
+        from graphrag.core.provider_health import is_healthy
+        from graphrag.core.config import get_settings
+        cfg = get_settings()
+        primary = "groq" if cfg.llm_ingest_provider == "groq" else "deepseek"
+        secondary = "deepseek" if primary == "groq" else "groq"
+        if is_healthy(primary):
+            checks["llm_provider"] = f"ok (primary={primary})"
+        elif is_healthy(secondary):
+            checks["llm_provider"] = f"degraded — {primary} unhealthy, serving via {secondary} fallback"
+        else:
+            checks["llm_provider"] = f"error — both {primary} and {secondary} unhealthy, no viable LLM path"
+            failed = True
+    except Exception as exc:  # noqa: BLE001
+        checks["llm_provider"] = f"error: {exc}"
         failed = True
 
     if failed:

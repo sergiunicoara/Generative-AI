@@ -89,7 +89,7 @@ def resolve_conflict(n_clicks, selected_rows, rows, resolution, winner_doc):
     if not selected_rows or not resolution:
         return "Select a row and choose a resolution type."
     conflict_id = rows[selected_rows[0]].get("conflict_id", "")
-    result = _post("/corrections/resolve-conflict", {
+    result = _post("/corrections/conflict/resolve", {
         "conflict_id":   conflict_id,
         "resolution":    resolution,
         "winner_doc_id": winner_doc or "",

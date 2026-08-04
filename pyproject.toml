@@ -1,0 +1,35 @@
+[project]
+name = "sales-context-graph"
+version = "0.1.0"
+description = "CRM + sales-call transcripts -> Neo4j knowledge graph -> query-specific context graphs for sales teams."
+requires-python = ">=3.12"
+dependencies = [
+    "fastapi>=0.115",
+    "pydantic>=2.9",
+    "uvicorn[standard]>=0.32",
+    "neo4j>=5.24",
+    "langgraph>=0.2",
+    "rapidfuzz>=3.10",
+    "structlog>=24.4",
+    "python-dotenv>=1.0",
+    "pyyaml>=6.0",
+    # No embedding provider pinned yet — Part 7 item 6 in the plan doc is
+    # still open (provider + dimensionality). Add openai / sentence-transformers
+    # / cohere here once that's decided, not before.
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.3",
+    "pytest-asyncio>=0.24",
+    "ruff>=0.7",
+    "mypy>=1.13",
+]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"

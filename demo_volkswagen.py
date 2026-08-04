@@ -6,10 +6,13 @@ Volkswagen Financial Services distractor, a "Volks Wagen" transcript mention,
 a seller-owned open Opportunity, an affirmed pricing objection, and two
 ContentAssets — one already viewed), then:
 
-1. Resolves "Volks Wagen" via src/resolution/pipeline.py, printing every
-   candidate considered, each one's component scores (lexical/semantic/base/
-   rel_bonus/final), the named relational signals that fired, the top-1/top-2
-   margin, and the final AUTO_LINKED/PENDING_REVIEW/UNRESOLVED status.
+1. Resolves "Volks Wagen" via src/resolution/pipeline.py, using a real local
+   embedding provider (src/embedding/sentence_transformer_provider.py — no
+   API key, no network call beyond the one-time model download) for the
+   semantic score, printing every candidate considered, each one's component
+   scores (lexical/semantic/base/rel_bonus/final), the named relational
+   signals that fired, the top-1/top-2 margin, and the final
+   AUTO_LINKED/PENDING_REVIEW/UNRESOLVED status.
 2. Runs the objection-to-content recommendation use case (§12) and prints the
    recommended (unviewed) asset with its exact transcript evidence and Claim id.
 
@@ -27,6 +30,7 @@ from datetime import datetime, timezone
 from uuid import uuid4
 
 from src.core.neo4j_client import Neo4jClient
+from src.embedding.sentence_transformer_provider import SentenceTransformerEmbeddingProvider
 from src.domain.identity import crm_entity_id, mention_id, segment_id
 from src.domain.conversation import Mention
 from src.domain.knowledge import AssetView, ContentAsset
@@ -162,10 +166,13 @@ async def main() -> None:
         conversation_id=conversation_id, seller_id=seller_id, participant_email_domain="vw.com",
     )
 
+    print("\nLoading local embedding model (all-MiniLM-L6-v2, ~80MB, one-time download if not cached)...")
+    embedding_provider = SentenceTransformerEmbeddingProvider()
+
     outcome = await resolve_mention(
         workspace_id=workspace_id, mention=mention, entity_type="Account",
         candidate_generator=candidate_generator, decided_at=_T0,
-        relational_signals_by_entity=signals,
+        relational_signals_by_entity=signals, embedding_provider=embedding_provider,
     )
 
     print(f"\nMention: {mention.surface_text!r} (mention_id={mention.mention_id[:16]}...)")

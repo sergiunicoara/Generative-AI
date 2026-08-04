@@ -48,15 +48,54 @@ test_duplicate_exact_names_do_not_deterministic_link_and_tied_margin_forces_revi
 
 ```
 lexical  = RapidFuzz plain ratio(mention_surface, candidate_name) / 100
-semantic = None (no embedding provider pinned yet — see README's
-           "Known limitations")
+semantic = cosine_similarity(embed(mention_surface), embed(candidate_name))
+           — real, via src/embedding/sentence_transformer_provider.py
+           (local all-MiniLM-L6-v2, no API key) when an embedding_provider is
+           passed to resolve_mention(); None (lexical-only) otherwise
 base     = blend(lexical, semantic) = lexical when semantic is None
 rel_bonus = min(len(relational_signals) * RELATIONAL_SIGNAL_BONUS, max_rel_bonus)
 final    = min(base + rel_bonus, 1.0)
 margin   = top1.final - top2.final  (top1.final itself if no runner-up)
 ```
 
-`RELATIONAL_SIGNAL_BONUS = 0.06`, `max_rel_bonus = 0.18` (3 signals).
+`RELATIONAL_SIGNAL_BONUS = 0.06`, `max_rel_bonus = 0.18` (3 signals),
+`DEFAULT_LEXICAL_WEIGHT = 0.97` in `blend()`.
+
+### Why the embedding provider is local, not a hosted API
+
+No `EMBEDDING_API_KEY` is configured anywhere in this environment, and
+fabricating or requesting one through chat isn't appropriate. `all-MiniLM-L6-v2`
+via `sentence-transformers` runs fully offline, has no per-call cost, and keeps
+`demo_volkswagen.py` and the test suite reproducible without network access —
+real semantic scoring, not a stub returning a fixed vector. Swapping to a
+hosted provider later means implementing `EmbeddingProvider`
+(`src/embedding/provider.py`) and passing it to `resolve_mention()`; nothing
+else changes.
+
+### Why `lexical_weight = 0.97`, not an even 0.5/0.5 blend
+
+Measured directly, the same way `base_threshold` was calibrated:
+
+| Pair | `lexical` (RapidFuzz `ratio`) | `semantic` (MiniLM cosine) |
+|---|---|---|
+| "volks wagen" / "volkswagen group" | 0.7407 | 0.1718 |
+| "volks wagen" / "volkswagen financial services" | 0.5000 | 0.1262 |
+
+`semantic` correctly orders the pair (true match scores higher than the
+distractor) but at a much lower absolute magnitude — general-purpose sentence
+embeddings are tuned for topical/semantic sentence similarity, not short
+proper-noun identity matching, and short company-name fragments cluster low
+even when related. An even blend (`lexical_weight=0.6`, closer to a naive
+50/50 split after accounting for the formula's asymmetry) would drag the true
+match's `base` from 0.7407 down to ~0.51 — using the *weaker* signal to
+override the stronger one. `lexical_weight=0.97` keeps `semantic` as a small,
+always-real, always-surfaced corroborating signal (never silently `None`)
+without letting it dominate. Full reasoning in
+`src/resolution/scoring.py`'s `DEFAULT_LEXICAL_WEIGHT` comment. Confirmed end
+to end: `tests/integration/test_resolution_vw_fixtures.py::
+test_vw_positive_autolinks_with_real_semantic_scoring` and
+`demo_volkswagen.py` (real run: `semantic=0.1718`, `base=0.7237`,
+`final=0.9037`, still `AUTO_LINKED`).
 
 **Why plain `fuzz.ratio` and not `partial_ratio`/`token_sort_ratio`**: measured
 directly —

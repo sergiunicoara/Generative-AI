@@ -14,3 +14,4 @@ python-dotenv>=1.0
 pyyaml>=6.0
 pydantic-settings>=2.3
 redis[asyncio]>=5.0
+sentence-transformers>=3.0

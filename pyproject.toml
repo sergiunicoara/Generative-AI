@@ -18,9 +18,12 @@ dependencies = [
     # fails open (returns None) if Redis is unreachable — no Redis service is
     # required to run this repo's tests.
     "redis[asyncio]>=5.0",
-    # No embedding provider pinned yet — Part 7 item 6 in the plan doc is
-    # still open (provider + dimensionality). Add openai / sentence-transformers
-    # / cohere here once that's decided, not before.
+    # Embedding provider (Part 7 item 6, now resolved): local
+    # sentence-transformers (all-MiniLM-L6-v2, 384-dim) — no API key needed,
+    # fully offline/reproducible. See src/embedding/sentence_transformer_provider.py
+    # for why local over a hosted API, and src/resolution/scoring.py for the
+    # real measured calibration this choice drove.
+    "sentence-transformers>=3.0",
 ]
 
 [project.optional-dependencies]

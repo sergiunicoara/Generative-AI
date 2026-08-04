@@ -13,10 +13,11 @@ from datetime import datetime
 from src.domain.assertion import ResolutionDecision
 from src.domain.conversation import Mention
 from src.domain.enums import ResolutionStatus
+from src.embedding.provider import EmbeddingProvider
 from src.resolution.candidates import Candidate, CandidateGenerator, union_candidates
 from src.resolution.deterministic import DeterministicRule, resolve_deterministic
 from src.resolution.policy import PolicyThresholds, decide, decide_deterministic
-from src.resolution.scoring import rank_candidates, score_candidate
+from src.resolution.scoring import cosine_similarity, rank_candidates, score_candidate
 
 
 @dataclass(frozen=True)
@@ -65,6 +66,7 @@ async def resolve_mention(
     relational_signals_by_entity: dict[str, frozenset[str]] | None = None,
     thresholds: PolicyThresholds = PolicyThresholds(),
     candidate_cap: int = 50,
+    embedding_provider: EmbeddingProvider | None = None,
 ) -> ResolutionOutcome:
     relational_signals_by_entity = relational_signals_by_entity or {}
 
@@ -86,10 +88,25 @@ async def resolve_mention(
     pool = await candidate_generator.all_names_in_workspace(workspace_id, entity_type)
     candidates: list[Candidate] = union_candidates(exact_matches, pool, cap=candidate_cap)
 
+    # One batched embed() call for the mention + every candidate name — never
+    # one call per candidate (same N+1-avoidance principle as the rest of
+    # this repo). Absent entirely when no embedding_provider is passed;
+    # score_candidate() falls back to semantic=None (lexical-only) either way.
+    semantic_by_entity: dict[str, float] = {}
+    if embedding_provider is not None and candidates:
+        texts = [mention.surface_text] + [c.name for c in candidates]
+        vectors = await embedding_provider.embed(texts)
+        mention_vector, candidate_vectors = vectors[0], vectors[1:]
+        semantic_by_entity = {
+            c.entity_id: cosine_similarity(mention_vector, vec)
+            for c, vec in zip(candidates, candidate_vectors)
+        }
+
     scored = [
         score_candidate(
             entity_id=c.entity_id, entity_type=c.entity_type, name=c.name,
             mention_surface=mention.surface_text,
+            semantic=semantic_by_entity.get(c.entity_id),
             relational_signals=relational_signals_by_entity.get(c.entity_id, frozenset()),
         )
         for c in candidates

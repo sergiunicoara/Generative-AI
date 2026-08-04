@@ -113,6 +113,56 @@ async def test_vw_positive_autolinks_with_two_plus_relational_signals(executor):
     assert outcome.mention.resolved_entity_id == vw_group.account_id
 
 
+async def test_vw_positive_autolinks_with_real_semantic_scoring(executor, embedding_provider):
+    """Same fixture as the positive case above, but with a real (not None)
+    semantic score computed by a local sentence-transformers model — proves
+    the embedding provider is actually wired into resolve_mention, not just
+    unit-tested in isolation. See src/resolution/scoring.py's
+    DEFAULT_LEXICAL_WEIGHT comment for why semantic is a small (3%) blend
+    contribution: measured all-MiniLM-L6-v2 cosine similarity for short
+    company-name fragments is real signal, but weaker than lexical fuzzy
+    matching for this task."""
+    workspace_id = _ws()
+    crm_repo = CrmRepository(executor)
+    conv_repo = ConversationRepository(executor)
+    candidate_generator = CandidateGenerator(executor)
+
+    vw_group, vw_financial = await _seed_vw_accounts(crm_repo, workspace_id)
+
+    conversation = Conversation(
+        conversation_id=crm_entity_id(workspace_id, "gong", "Conversation", "call-vw-embed"),
+        workspace_id=workspace_id, source_record_id="rec-call-vw-embed", source_system="gong",
+        external_call_id="call-vw-embed", occurred_at=_T0, account_id=vw_group.account_id,
+    )
+    await conv_repo.upsert_conversation(conversation)
+
+    opportunity = Opportunity(
+        opportunity_id=crm_entity_id(workspace_id, "salesforce", "Opportunity", "006VWEMBED"),
+        workspace_id=workspace_id, source_record_id="rec-opp-vw-embed", account_id=vw_group.account_id,
+        seller_id="seller-embed-1", name="VW Deal", stage="Negotiation", is_open=True,
+    )
+    await crm_repo.upsert_opportunity(opportunity)
+
+    seg_id = segment_id(conversation.conversation_id, 0)
+    mention = _vw_mention(workspace_id, seg_id)
+
+    signals = await gather_relational_signals(
+        candidate_generator, workspace_id=workspace_id,
+        conversation_id=conversation.conversation_id, seller_id="seller-embed-1",
+        participant_email_domain="vw.com",
+    )
+
+    outcome = await resolve_mention(
+        workspace_id=workspace_id, mention=mention, entity_type="Account",
+        candidate_generator=candidate_generator, decided_at=_T0,
+        relational_signals_by_entity=signals, embedding_provider=embedding_provider,
+    )
+
+    assert outcome.decision.semantic_score is not None  # real embedding computed, not the None fallback
+    assert outcome.decision.status == ResolutionStatus.AUTO_LINKED
+    assert outcome.decision.resolved_entity_id == vw_group.account_id
+
+
 async def test_vw_without_relational_evidence_stays_pending_review(executor):
     workspace_id = _ws()
     crm_repo = CrmRepository(executor)

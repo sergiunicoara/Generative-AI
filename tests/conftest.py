@@ -10,8 +10,15 @@ import pytest
 import src.core.neo4j_client as neo4j_client_module
 from src.core.config import get_settings
 from src.core.neo4j_client import Neo4jClient
+from src.embedding.sentence_transformer_provider import SentenceTransformerEmbeddingProvider
 from src.graph.execution import GraphExecutor
 from src.graph.migrations.migration_001_init_schema import run as run_migration
+
+
+@pytest.fixture(scope="session")
+def embedding_provider() -> SentenceTransformerEmbeddingProvider:
+    """Model loading (~1-2s) happens once per test session, not once per test."""
+    return SentenceTransformerEmbeddingProvider()
 
 
 @pytest.fixture(autouse=True)

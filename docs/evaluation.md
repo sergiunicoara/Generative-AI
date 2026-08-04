@@ -1,14 +1,15 @@
 # Evaluation
 
 Real results from this repo's own test suite, run against a live Neo4j
-container (`docker-compose.yml`'s `neo4j` service) on 2026-08-04. Reproduce
-with `make test` (or `pytest tests/` directly, after `docker compose up -d
-neo4j`).
+container (`docker-compose.yml`'s `neo4j` service). Original P0-P4.5 run on
+2026-08-04; updated 2026-08-04 after wiring a real local embedding provider
+(`src/embedding/`) into entity-resolution semantic scoring. Reproduce with
+`make test` (or `pytest tests/` directly, after `docker compose up -d neo4j`).
 
 ## Test suite results
 
 ```
-163 passed, 6 warnings in 24.88s
+171 passed, 8 warnings in 27.50s
 ```
 
 | Suite | Count | What it proves |
@@ -17,9 +18,10 @@ neo4j`).
 | `tests/unit/graph/` | 7 | `GraphExecutor.tenant_query()`'s structural scoping guard, both accepted forms, both rejected forms. |
 | `tests/unit/graph_legacy/` | 30 | The 8 forked modules import cleanly and their cross-file wiring survives the `graphrag.*` -> `src.*` rewrite; the sales ontology YAML validates. |
 | `tests/unit/extraction/` | 18 | Fixture-extractor byte-stability, polarity detection, window construction (duration/token/topic-boundary triggers, overlap, never-drop-closing-portion), bounded LLM retry/repair -> explicit permanent failure. |
-| `tests/unit/resolution/` | 24 | Scoring formula, decision-policy guard rails (all four, isolated), Stage A uniqueness. |
+| `tests/unit/resolution/` | 27 | Scoring formula (including real cosine-similarity helper tests), decision-policy guard rails (all four, isolated), Stage A uniqueness. |
+| `tests/unit/embedding/` | 4 | Local embedding provider: correct dimension, normalized vectors, deterministic output, correctly orders similar vs. unrelated names. |
 | `tests/unit/api/` | 3 | In-process ingestion store does not survive a process restart (proven, not just documented). |
-| `tests/integration/` | 50 | Everything above, end to end, against live Neo4j: tenant isolation (identical names/subjects/statuses across two workspaces), CRM reconciliation (identical/changed/merged/converted/archived/deleted), transcript ingestion (opaque speakers, evidence-span mapping, overlap dedup, idempotent re-ingest), the full VW fixture suite, async review + targeted Claim reconciliation, Context Graph budget/diversity enforcement, the objection-recommendation use case end to end, and every required API endpoint. |
+| `tests/integration/` | 51 | Everything above, end to end, against live Neo4j: tenant isolation (identical names/subjects/statuses across two workspaces), CRM reconciliation (identical/changed/merged/converted/archived/deleted), transcript ingestion (opaque speakers, evidence-span mapping, overlap dedup, idempotent re-ingest), the full VW fixture suite (including a real-embedding-provider variant), async review + targeted Claim reconciliation, Context Graph budget/diversity enforcement, the objection-recommendation use case end to end, and every required API endpoint. |
 | `tests/eval/` | 1 | Blocking recall (see below). |
 | `tests/security/` | 3 | Prompt delimiting, size limits, injected-instruction containment. |
 
@@ -42,20 +44,23 @@ fixture data it seeds (see below).
 | Duplicate exact Account names ("Acme Corp" x2) | Stage A refuses to link; probabilistic path ties (`margin < 0.08`) -> not `AUTO_LINKED` |
 | Domain-equality-only signal ("Acme" vs. "Acme Global Holdings", matching domain) | not `AUTO_LINKED` |
 
-### Real component scores (from `demo_volkswagen.py`, captured 2026-08-04)
+### Real component scores (from `demo_volkswagen.py`, captured 2026-08-04, with
+the local `all-MiniLM-L6-v2` embedding provider wired in for semantic scoring)
 
 ```
 Mention: 'Volks Wagen'
 Candidates shown: Volkswagen Group, Volkswagen Financial Services
 
 lexical          = 0.7407407407407408
-semantic         = None            (no embedding provider pinned — see README)
-base             = 0.7407407407407408
-relational_bonus = 0.18            (3 signals: participant_belongs_to_account,
-                                     participant_email_domain_matches_account,
-                                     seller_owns_open_opportunity)
-final            = 0.9207407407407409
-margin           = 0.42074074074074086
+semantic         = 0.171837982723871   (real cosine similarity — local
+                                         sentence-transformers, no API key)
+base             = 0.7236736580002346  (blend, lexical_weight=0.97 — see
+                                         docs/entity-resolution.md for why)
+relational_bonus = 0.18                (3 signals: participant_belongs_to_account,
+                                         participant_email_domain_matches_account,
+                                         seller_owns_open_opportunity)
+final            = 0.9036736580002347
+margin           = 0.4148871554518442
 
 STATUS: AUTO_LINKED -> Volkswagen Group
 ```

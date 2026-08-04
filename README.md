@@ -12,7 +12,7 @@ evidence-backed, query-specific context for one sales workflow:
 ## Status
 
 The full P0–P4.5 vertical slice described in [`docs/plan.md`](docs/plan.md) is
-implemented and tested. 163 tests pass (unit, integration against a live
+implemented and tested. 171 tests pass (unit, integration against a live
 Neo4j, security, and eval), run in 8 increments — see the completion report at
 the end of this document for the phase-by-phase breakdown, real measured
 numbers, and known limitations.
@@ -201,10 +201,15 @@ breakdown per module.
   package — a deliberate Increment 1 decision, documented in `src/core/config.py`'s
   header, to avoid packaging-metadata risk before there's a reason to publish
   this as a package.
-- **No embedding provider is pinned** — semantic scoring in entity resolution
-  and the versioned vector index (`contact_embeddings_v1`) exist structurally
-  but run unpopulated; `base_threshold`/`RELATIONAL_SIGNAL_BONUS` in
-  `src/resolution/policy.py` are calibrated against lexical-only scoring.
+- **Embedding provider**: local `sentence-transformers` (`all-MiniLM-L6-v2`,
+  384-dim, no API key — `src/embedding/`), wired into `resolve_mention()`'s
+  semantic scoring. The versioned vector index (`contact_embeddings_v1`) still
+  exists structurally but runs unpopulated — `vector_candidates()` (candidate
+  *generation* via the index) is a separate, larger milestone (embedding-on-
+  write for every Contact, backfill) from semantic *scoring* of already-
+  generated candidates, which is what's wired today. See
+  `docs/entity-resolution.md` for the real measured calibration
+  (`DEFAULT_LEXICAL_WEIGHT=0.97`) this choice drove.
 - **In-process ingestion job store** (`api/state.py`) does not survive a
   process restart — proven, not just described, by
   `tests/unit/api/test_ingestion_store.py`. The interface is shaped so a

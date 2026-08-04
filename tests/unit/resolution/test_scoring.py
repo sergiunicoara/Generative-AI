@@ -1,6 +1,20 @@
 from __future__ import annotations
 
-from src.resolution.scoring import blend, lexical_score, rank_candidates, score_candidate
+from src.resolution.scoring import blend, cosine_similarity, lexical_score, rank_candidates, score_candidate
+
+
+def test_cosine_similarity_of_identical_normalized_vectors_is_one():
+    v = [0.6, 0.8]  # already unit-norm
+    assert abs(cosine_similarity(v, v) - 1.0) < 1e-9
+
+
+def test_cosine_similarity_of_orthogonal_vectors_is_zero():
+    assert cosine_similarity([1.0, 0.0], [0.0, 1.0]) == 0.0
+
+
+def test_cosine_similarity_is_floored_at_zero_not_negative():
+    # opposite-direction unit vectors -> raw dot product -1.0
+    assert cosine_similarity([1.0, 0.0], [-1.0, 0.0]) == 0.0
 
 
 def test_lexical_score_of_identical_strings_is_one():

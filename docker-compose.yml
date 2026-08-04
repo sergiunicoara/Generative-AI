@@ -10,10 +10,15 @@ services:
     image: neo4j:5.20-community
     container_name: scg_neo4j
     ports:
-      - "7474:7474"   # HTTP browser
-      - "7687:7687"   # Bolt
+      # Host ports shifted by +1 (7475/7688) — the ai-knowledge-graph-platform
+      # sibling project's graphrag_neo4j container already holds the standard
+      # 7474/7687 on this machine. Container-internal ports are unchanged
+      # (still 7474/7687), so the `api` service's bolt://neo4j:7687 (container-
+      # to-container, same compose network) is unaffected.
+      - "7475:7474"   # HTTP browser
+      - "7688:7687"   # Bolt
     environment:
-      NEO4J_AUTH: neo4j/scg_dev
+      NEO4J_AUTH: neo4j/scg_dev_local
       NEO4J_PLUGINS: '["apoc", "graph-data-science"]'
       NEO4J_server_memory_heap_max__size: 2G
       NEO4J_server_memory_pagecache_size: 1G
@@ -21,7 +26,7 @@ services:
       - neo4j_data:/data
       - neo4j_logs:/logs
     healthcheck:
-      test: ["CMD", "cypher-shell", "-u", "neo4j", "-p", "scg_dev", "RETURN 1"]
+      test: ["CMD", "cypher-shell", "-u", "neo4j", "-p", "scg_dev_local", "RETURN 1"]
       interval: 15s
       timeout: 10s
       retries: 5

@@ -1,0 +1,38 @@
+{
+  "accounts": [
+    {
+      "Id": "001VWGROUP",
+      "Name": "Volkswagen Group",
+      "Website": "vw.com",
+      "IsDeleted": false,
+      "MasterRecordId": null
+    },
+    {
+      "Id": "001VWFIN",
+      "Name": "Volkswagen Financial Services",
+      "Website": "vwfs.com",
+      "IsDeleted": false,
+      "MasterRecordId": null
+    }
+  ],
+  "contacts": [
+    {
+      "Id": "003ELENA",
+      "AccountId": "001VWGROUP",
+      "Name": "Elena Popescu",
+      "Email": "elena.popescu@vw.com",
+      "IsDeleted": false
+    }
+  ],
+  "opportunities": [
+    {
+      "Id": "006VWDEAL",
+      "Name": "VW Group Renewal",
+      "AccountId": "001VWGROUP",
+      "OwnerId": "005SAM",
+      "StageName": "Negotiation",
+      "IsClosed": false,
+      "IsDeleted": false
+    }
+  ]
+}

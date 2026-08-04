@@ -9,7 +9,7 @@ use ``self._neo4j`` from the host class.
 
 Import pattern::
 
-    from graphrag.graph.contradiction_strategies import _ConflictStrategies
+    from src.graph.contradiction_strategies import _ConflictStrategies
 
     class ContradictionDetector(_ConflictStrategies):
         ...
@@ -59,7 +59,7 @@ def _ontology_lists(tenant: str | None) -> tuple[list[tuple[str, str]], list[str
     pairs = list(_DEFAULT_EXCLUSIVE_PAIRS)
     functional = list(_DEFAULT_FUNCTIONAL_RELATIONS)
     try:
-        from graphrag.graph.domain_ontology import (
+        from src.graph.domain_ontology import (
             get_ontology_path_for_tenant,
             load_domain_ontology,
         )

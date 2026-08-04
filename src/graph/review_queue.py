@@ -17,8 +17,8 @@ from uuid import uuid4
 
 import structlog
 
-from graphrag.graph.alias_registry import get_alias_registry
-from graphrag.graph.neo4j_client import get_neo4j
+from src.graph.alias_registry import get_alias_registry
+from src.core.neo4j_client import get_neo4j
 
 log = structlog.get_logger(__name__)
 

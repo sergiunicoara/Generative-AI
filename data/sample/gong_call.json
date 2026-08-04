@@ -1,0 +1,45 @@
+{
+  "calls": [
+    {
+      "id": "call-vw-demo",
+      "started": "2026-06-15T14:00:00Z",
+      "deleted": false,
+      "parties": [
+        {
+          "speakerId": "spk_1",
+          "name": "Elena Popescu",
+          "emailAddress": "elena.popescu@vw.com"
+        },
+        {
+          "speakerId": "spk_2",
+          "name": "Sam Seller",
+          "emailAddress": "sam@ourcompany.com"
+        },
+        {
+          "speakerId": "spk_3"
+        }
+      ],
+      "transcript": [
+        {
+          "speakerId": "spk_1",
+          "sentences": [
+            {"text": "This is Volks Wagen calling, and we are concerned about pricing this quarter.", "start": 0, "end": 4000}
+          ]
+        },
+        {
+          "speakerId": "spk_2",
+          "sentences": [
+            {"text": "Understood, let's talk about security as well.", "start": 4000, "end": 7000}
+          ]
+        },
+        {
+          "speakerId": "spk_3",
+          "sentences": [
+            {"text": "Yes, the security review is also a concern for us.", "start": 7000, "end": 10000}
+          ]
+        }
+      ]
+    }
+  ]
+}
+

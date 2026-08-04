@@ -1,0 +1,71 @@
+# Sales Context Graph domain ontology — replaces the leftover ad-tech-industry
+# marketing template that was here from the initial port (wrong business domain
+# entirely — advertisers/campaigns/publishers, no sales-CRM concepts at all).
+# Consumed by the legacy src/graph/{domain_ontology,ontology_registry}.py modules
+# kept working in Increment 1; not yet wired into a live OntologyRegistry.load()
+# call site (that's future work once a phase actually needs schema-drift
+# detection against this ontology, not before).
+#
+# relation_rules.ADDRESSES_OBJECTION is docs/plan.md §12's required explicit
+# source for the Objection<->ContentAsset mapping: "It may come from a curated
+# taxonomy or reviewed Claim; it must not be invented at query time." This file
+# is that curated taxonomy.
+
+ontology:
+  id: sales-context-graph-ontology
+  version: 1.0.0
+  status: active
+  compatible_with: sales-context-graph>=0.1.0
+  deprecated_types: []
+  deprecated_relations: []
+
+migration_map: {}
+
+type_hierarchy:
+  - [ACCOUNT, ORG]
+  - [CONTACT, PERSON]
+  - [LEAD, PERSON]
+  - [SELLER, PERSON]
+  - [OBJECTION, CONCEPT]
+  - [PAIN_POINT, CONCEPT]
+  - [BLOCKER, CONCEPT]
+  - [BUYING_SIGNAL, CONCEPT]
+  - [CONTENT_ASSET, ASSET]
+
+relation_rules:
+  RAISED_OBJECTION:
+    domain: [CONTACT, LEAD]
+    target: [OBJECTION]
+    note: >
+      A buyer-side stakeholder raising an Objection during a call — the Claim
+      predicate transcript extraction produces (§7-8). Domain is restricted to
+      buyer-shaped entities; a seller voicing an internal concern isn't this
+      predicate.
+  ADDRESSES_OBJECTION:
+    domain: [CONTENT_ASSET, PRODUCT]
+    target: [OBJECTION]
+    note: >
+      §12's required explicit Objection-ContentAsset mapping source, curated
+      here rather than invented at Context Graph query time.
+  HAS_ASSIGNMENT:
+    domain: [OPPORTUNITY]
+    target: [STAKEHOLDER_ASSIGNMENT]
+    note: "(Opportunity)-[:HAS_ASSIGNMENT]->(StakeholderAssignment), §5."
+  ASSIGNS:
+    domain: [STAKEHOLDER_ASSIGNMENT]
+    target: [CONTACT]
+    note: "(StakeholderAssignment)-[:ASSIGNS]->(Contact), §5."
+  CONVERTED_TO:
+    domain: [LEAD]
+    target: [CONTACT, ACCOUNT, OPPORTUNITY]
+    note: "Lead -[:CONVERTED_TO]-> Contact|Account|Opportunity, §5."
+  MERGED_INTO:
+    domain: [ACCOUNT]
+    target: [ACCOUNT]
+    note: "Account -[:MERGED_INTO]-> Account, §5."
+
+inference_rules: []
+
+exclusive_state_pairs: []
+
+functional_relations: []

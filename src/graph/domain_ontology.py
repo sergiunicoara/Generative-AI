@@ -348,7 +348,7 @@ def build_inference_rules_from_ontology(ontology: dict):
     Returns a list of InferenceRule objects ready to pass to
     ``ForwardChainingEngine(rules=...)`` or ``engine.add_rule(...)``.
     """
-    from graphrag.graph.inference_engine import InferenceRule
+    from src.graph.inference_engine import InferenceRule
 
     rules = []
     for entry in get_inference_rules(ontology):

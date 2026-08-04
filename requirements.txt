@@ -1,0 +1,16 @@
+# Mirrors pyproject.toml's [project.dependencies] — pyproject.toml is
+# authoritative; this file exists only because the Dockerfile installs from a
+# requirements file rather than `pip install -e .` (this repo deliberately has
+# no [build-system] table yet — see src/core/config.py's header comment and
+# README.md's "Known limitations").
+fastapi>=0.115
+pydantic>=2.9
+uvicorn[standard]>=0.32
+neo4j>=5.24
+langgraph>=0.2
+rapidfuzz>=3.10
+structlog>=24.4
+python-dotenv>=1.0
+pyyaml>=6.0
+pydantic-settings>=2.3
+redis[asyncio]>=5.0

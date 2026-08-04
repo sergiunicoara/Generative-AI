@@ -32,7 +32,7 @@ Architecture
 - ContradictionDetector.scan() runs post-ingestion or on-demand.
 - ContradictionDetector.resolve() marks a conflict with a chosen winner.
 
-Detection strategies are in graphrag.graph.contradiction_strategies (_ConflictStrategies
+Detection strategies are in src.graph.contradiction_strategies (_ConflictStrategies
 mixin) — one method per conflict class — to keep this file focused on the public
 API, scan orchestration, and resolution queries.
 
@@ -59,7 +59,7 @@ from __future__ import annotations
 
 import structlog
 
-from graphrag.graph.contradiction_strategies import _ConflictStrategies
+from src.graph.contradiction_strategies import _ConflictStrategies
 
 log = structlog.get_logger(__name__)
 

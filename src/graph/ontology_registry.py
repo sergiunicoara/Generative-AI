@@ -122,7 +122,7 @@ class OntologyRegistry:
 
         # Load migration map + domain ontology path from settings
         try:
-            from graphrag.core.config import get_settings
+            from src.core.config import get_settings
             onto_cfg = get_settings().ontology or {}
             raw_map = onto_cfg.get("migration_map", {}) or {}
             self._migration_map = {
@@ -131,14 +131,14 @@ class OntologyRegistry:
             # A configured path overrides tenant convention. Otherwise, each
             # tenant automatically owns config/ontologies/{tenant}_*.yml.
             domain_path = onto_cfg.get("domain_ontology_path", "") or ""
-            from graphrag.graph.domain_ontology import (
+            from src.graph.domain_ontology import (
                 assert_valid_ontology,
                 get_ontology_path_for_tenant,
                 get_relation_rules,
                 get_type_hierarchy_pairs,
                 load_domain_ontology,
             )
-            from graphrag.core.config import ROOT
+            from src.core.config import ROOT
 
             full_path = ROOT / domain_path if domain_path else get_ontology_path_for_tenant(
                 self._tenant, ROOT / "config" / "ontologies"
@@ -365,7 +365,7 @@ class OntologyRegistry:
 
     async def apply_ontology_migration(self, current: dict, target: dict) -> dict:
         """Validate a versioned ontology diff, then apply its relation map."""
-        from graphrag.graph.ontology_migration import plan_migration
+        from src.graph.ontology_migration import plan_migration
         report = plan_migration(current, target)
         if not report.compatible:
             raise ValueError("ontology migration has unmapped removals")
@@ -578,7 +578,7 @@ _registries: dict[tuple[int, str], OntologyRegistry] = {}
 def get_ontology_registry(neo4j_client=None, tenant: str = "default") -> OntologyRegistry:
     """Return an ontology registry isolated by Neo4j client and tenant."""
     if neo4j_client is None:
-        from graphrag.graph.neo4j_client import get_neo4j
+        from src.core.neo4j_client import get_neo4j
         neo4j_client = get_neo4j()
     key = (id(neo4j_client), tenant)
     if key not in _registries:

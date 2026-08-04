@@ -1,0 +1,26 @@
+{
+  "division_id": "division-emea",
+  "content_assets": [
+    {
+      "id": "asset-pricing-guide",
+      "title": "Pricing Objection Handling Guide",
+      "url": "https://showpad.example/pricing-guide",
+      "type": "pdf",
+      "tags": ["pricing", "objection"]
+    },
+    {
+      "id": "asset-roi-calculator",
+      "title": "Enterprise Pricing ROI Calculator",
+      "url": "https://showpad.example/roi-calculator",
+      "type": "spreadsheet",
+      "tags": ["pricing", "roi"]
+    },
+    {
+      "id": "asset-security-whitepaper",
+      "title": "Security & Compliance Whitepaper",
+      "url": "https://showpad.example/security-whitepaper",
+      "type": "pdf",
+      "tags": ["security", "compliance"]
+    }
+  ]
+}

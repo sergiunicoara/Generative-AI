@@ -159,7 +159,7 @@ class AliasRegistry:
         self._stemmed: dict[str, tuple[str, str]] = {}
         self._loaded = False
 
-        from graphrag.core.config import get_settings
+        from src.core.config import get_settings
         ingestion_cfg = get_settings().ingestion
         self._embedding_threshold = ingestion_cfg.get(
             "alias_embedding_threshold", _DEFAULT_EMBEDDING_SIMILARITY_THRESHOLD
@@ -275,7 +275,7 @@ class AliasRegistry:
                 )
                 return best_match
             # Ambiguous band — close but not confident enough to auto-merge
-            from graphrag.core.config import get_settings
+            from src.core.config import get_settings
             _review_min = get_settings().ingestion.get("review_fuzzy_min", 70)
             if _review_min <= best_score < self._fuzzy_threshold and best_match:
                 log.debug(
@@ -415,7 +415,7 @@ def get_alias_registry(neo4j_client=None, tenant: str = "default") -> AliasRegis
     global _registries
     if tenant not in _registries:
         if neo4j_client is None:
-            from graphrag.graph.neo4j_client import get_neo4j
+            from src.core.neo4j_client import get_neo4j
             neo4j_client = get_neo4j()
         _registries[tenant] = AliasRegistry(neo4j_client, tenant=tenant)
     return _registries[tenant]

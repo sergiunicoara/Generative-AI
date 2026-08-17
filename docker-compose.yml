@@ -90,8 +90,6 @@ services:
       NEO4J_URI: bolt://neo4j:7687
       RABBITMQ_URL: amqp://graphrag:graphrag_dev@rabbitmq:5672/
       REDIS_URL: redis://redis:6379/0
-      HF_HOME: /tmp/huggingface
-      TRANSFORMERS_CACHE: /tmp/huggingface
       KPI_DB_PATH: /data/kpis.db
       KPI_BACKEND: timescale
       TIMESCALE_DB_URL: postgresql+asyncpg://graphrag:graphrag_dev@timescaledb:5432/graphrag
@@ -143,12 +141,15 @@ services:
       NEO4J_URI: bolt://neo4j:7687
       RABBITMQ_URL: amqp://graphrag:graphrag_dev@rabbitmq:5672/
       REDIS_URL: redis://redis:6379/0
-      HF_HOME: /tmp/huggingface
-      TRANSFORMERS_CACHE: /tmp/huggingface
-      WORKER_HEALTH_PORT: "8082"
       KPI_DB_PATH: /data/kpis.db
       KPI_BACKEND: timescale
       TIMESCALE_DB_URL: postgresql+asyncpg://graphrag:graphrag_dev@timescaledb:5432/graphrag
+      # The Dockerfile's non-root "app" user has no real home directory
+      # (HOME=/nonexistent), so huggingface_hub's default ~/.cache/huggingface
+      # cache-dir resolution fails with PermissionError on first model load.
+      # Point it at a writable path instead.
+      HF_HOME: /tmp/huggingface
+      TRANSFORMERS_CACHE: /tmp/huggingface
     depends_on:
       neo4j:
         condition: service_healthy
@@ -161,12 +162,6 @@ services:
     volumes:
       - .:/app
       - kpi_data:/data
-    healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8082/ready', timeout=3)"]
-      interval: 15s
-      timeout: 5s
-      retries: 5
-      start_period: 60s
 
   evaluation_worker:
     build:

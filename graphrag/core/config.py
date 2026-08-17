@@ -78,16 +78,27 @@ class Settings(BaseSettings):
     deepseek_api_key: str = ""
 
     # ── Cerebras (text generation primary — free tier: 1M tokens/day, no card) ──
+    # Model verified live against GET /v1/models on 2026-08-17 — Cerebras only
+    # serves {gpt-oss-120b, gemma-4-31b, zai-glm-4.7}, not "llama-3.3-70b" (a
+    # Groq/Meta model name that never existed on Cerebras; the original guess
+    # at implementation time was wrong and every call was silently failing
+    # over to paid DeepSeek ever since, defeating the whole point of this
+    # provider chain — see docs/audit-2026-08-13.md).
     cerebras_api_key: str = ""
-    cerebras_model: str = "llama-3.3-70b"
+    cerebras_model: str = "gpt-oss-120b"
 
     # ── Groq (text generation) ───────────────────────────────────────────────────
     groq_api_key: str = ""
-    groq_model: str = "llama-3.3-70b-versatile"
+    # Both model names below verified live against GET /v1/models on
+    # 2026-08-17 — Groq deprecated "llama-3.3-70b-versatile" and
+    # "llama-3.1-8b-instant" (both 404 model_not_found now); replaced with the
+    # closest available equivalents in Groq's current catalog.
+    groq_model: str = "openai/gpt-oss-120b"
     # Fast model used for cheap intermediate reasoning steps (IRCoT SEARCH/ANSWER
-    # decisions). llama-3.1-8b-instant runs at ~800 tok/s on Groq vs ~150 tok/s
-    # for 70B — cuts each reasoning step from ~1.5s to ~0.2s.
-    groq_fast_model: str = "llama-3.1-8b-instant"
+    # decisions). No small instant-class model remains in Groq's catalog as of
+    # 2026-08-17 (the whole 8B-class tier was retired) — gpt-oss-20b is the
+    # smallest/fastest general chat model currently available.
+    groq_fast_model: str = "openai/gpt-oss-20b"
 
     # ── Optional features ───────────────────────────────────────────────────────
     # Wikidata linking: ground high-confidence entities to canonical QIDs.

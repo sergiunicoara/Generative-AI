@@ -8,11 +8,25 @@ python-dotenv>=1.0.0
 structlog>=24.2.0
 tenacity>=8.3.0
 aio-pika>=9.4.0
-# Worker readiness probes and the provider clients used by the shared LLM
-# adapter.  Keep these in the common layer: every worker imports the health
-# server and may select a provider via environment configuration.
-aiohttp>=3.9.0
-groq>=0.9.0
-openai>=1.30.0
 sqlalchemy>=2.0.30
 aiosqlite>=0.20.0
+
+# ── LLM clients (graphrag/core/llm_client.py) ───────────────────────────────────
+# Direct dependencies of every worker that calls get_llm()/get_fast_llm()/
+# get_embedder() (ingestion + query, not just one) -- were only present in
+# requirements.lock as transitive pull-ins from some other declared package,
+# never declared here directly. See requirements/query.txt's aiohttp comment
+# for the same class of gap and why it went undiscovered until now.
+openai>=1.0.0
+groq>=0.9.0
+google-genai>=1.0.0
+
+# ── Graph scoring (graphrag/graph/gnn_scorer.py) ────────────────────────────────
+# Loads unconditionally via local_search.py's top-level import.
+numpy>=1.26.0
+
+# ── Tracing (graphrag/observability/tracing.py) ────────────────────────────────
+# configure_tracing() runs unconditionally at every worker/api startup.
+opentelemetry-api>=1.27.0
+opentelemetry-sdk>=1.27.0
+opentelemetry-exporter-otlp-proto-http>=1.27.0

@@ -1,5 +1,9 @@
 -r base.txt
 
+# ── Worker health server (graphrag/workers/health_server.py) ───────────────────
+# Direct dependency — see requirements/query.txt for why this was missing.
+aiohttp>=3.9.0
+
 # ── Graph processing ───────────────────────────────────────────────────────────
 graspologic>=3.3.0
 networkx>=3.3

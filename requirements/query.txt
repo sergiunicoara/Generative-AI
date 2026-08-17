@@ -1,11 +1,14 @@
 -r base.txt
 
+# ── Worker health server (graphrag/workers/health_server.py) ───────────────────
+# Direct dependency, not just a transitive pull-in — was missing here (only
+# present in requirements.lock via some other package's own dependency chain),
+# which left every worker image silently broken until first actually run
+# against a correctly-built image.
+aiohttp>=3.9.0
+
 # ── Reranking + GNN ────────────────────────────────────────────────────────────
-# The query image is CPU-only.  Without this explicit wheel, current PyPI torch
-# releases pull a multi-gigabyte CUDA toolkit into the production image.
---extra-index-url https://download.pytorch.org/whl/cpu
-torch==2.3.1+cpu
-sentence-transformers>=3.0.0,<4.0.0
+sentence-transformers>=3.0.0
 networkx>=3.3
 
 # ── RDF / Ontology ─────────────────────────────────────────────────────────────

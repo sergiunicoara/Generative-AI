@@ -22,12 +22,16 @@ x-worker-env: &worker-env      # shared env for all Python services
   NEO4J_URI:                bolt://neo4j:7687
   RABBITMQ_URL:             amqp://graphrag:graphrag_dev@rabbitmq:5672/
   REDIS_URL:                redis://redis:6379/0
-  HF_HOME:                  /tmp/huggingface
-  TRANSFORMERS_CACHE:       /tmp/huggingface
   KPI_DB_PATH:              /data/kpis.db
   KPI_BACKEND:              timescale
   TIMESCALE_DB_URL:         postgresql+asyncpg://graphrag:graphrag_dev@timescaledb:5432/graphrag
   QUERY_RESULT_TTL_SECONDS: "3600"   # override at deploy time; no redeploy needed
+  # The Dockerfile's non-root "app" user has no real home directory
+  # (HOME=/nonexistent), so huggingface_hub's default ~/.cache/huggingface
+  # cache-dir resolution fails with PermissionError on query_worker's first
+  # model load. Harmless on services that never touch huggingface_hub.
+  HF_HOME:                  /tmp/huggingface
+  TRANSFORMERS_CACHE:       /tmp/huggingface
 
 x-worker-depends: &worker-depends
   neo4j:

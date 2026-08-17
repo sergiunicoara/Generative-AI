@@ -36,6 +36,8 @@ class ContextBuilder:
         weights: tuple[float, float] = (0.6, 0.4),
         top_k: int = 5,
         conflicts: list[dict] | None = None,
+        hop_reserved_slots: int = 0,
+        hop_reserved_min_gnn: float = 0.3,
     ) -> tuple[str, list[str]]:
         sections: list[str] = []
         citations: list[str] = []
@@ -70,6 +72,38 @@ class ContextBuilder:
             deduped.append(chunk)
             if len(deduped) >= top_k:
                 break
+
+        # Reserved hop slots (opt-in, default 0 — exact prior behavior).
+        # GNNScorer's seed-floor dampening (_text_score, see gnn_scorer.py)
+        # makes a hop-only chunk's score provably always less than the
+        # weakest seed's, so a genuinely-reached multi-hop chunk can never
+        # win a top_k slot above, no matter how good the traversal is (MH-03
+        # in evals/golden_set.json). Rather than gate this on query-text
+        # classification (query_planner.classify_query tags MH-03's own
+        # question as "factoid", not "multi_hop" — a keyword classifier is
+        # the wrong signal here), gate on the structural fact that actually
+        # matters: does a qualifying hop chunk exist at all. A chunk lacking
+        # "rerank_score" is exactly how GNNScorer._seed_ranks already
+        # distinguishes hop chunks from cross-encoder-ranked seeds. This
+        # never evicts a chunk from `deduped` above — additive only, so it
+        # can't cause an existing citation to regress.
+        if hop_reserved_slots > 0:
+            hop_candidates = sorted(
+                (
+                    c for c in chunks_sorted
+                    if c["chunk_id"] not in seen_chunk_ids
+                    and "rerank_score" not in c
+                    and c.get("gnn_score", 0) >= hop_reserved_min_gnn
+                ),
+                key=lambda c: c.get("final_score", c.get("gnn_score", 0)),
+                reverse=True,
+            )
+            for chunk in hop_candidates[:hop_reserved_slots]:
+                if _is_near_duplicate(chunk["text"], seen_texts):
+                    continue
+                seen_chunk_ids.add(chunk["chunk_id"])
+                seen_texts.append(_normalize(chunk["text"])[:300])
+                deduped.append(chunk)
 
         for chunk in deduped:
             source = chunk.get("source")

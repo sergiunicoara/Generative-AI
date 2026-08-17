@@ -79,6 +79,20 @@ retrieval:
                                   # so it needs facts not prose. ~4.3s fixed overhead means this
                                   # bounds the tail, it does not make reduce fast. See A144.
   rerank_top_k: 5  # validated baseline — precision 0.907 measured at this value. A124: 7+_text_score floor fixed automotive 12/13 but broke aerospace (4/39), reverted. A125: 6 alone (no _text_score change) regressed automotive to 9/13 (below 70% gate, CON-02 newly failed) — also reverted.
+  context_hop_reserved_slots: 0        # Change B, MH-03 design proposal (docs/audit-2026-08-13.md,
+                                        # 2026-08-17): opt-in, additive-only extra context slots for
+                                        # hop-only chunks (no rerank_score -- GNNScorer's seed-floor
+                                        # dampening makes them provably always score below the
+                                        # weakest rerank_top_k seed, so they can never win a slot
+                                        # above regardless of traversal quality). 0 = current exact
+                                        # behavior. Never evicts a chunk already selected by
+                                        # rerank_top_k, so cannot regress an existing citation --
+                                        # only risk is prompt dilution / min_context_precision on
+                                        # multi-hop questions. NOT wired into agentic_retriever.py's
+                                        # fallback path (see its constructor comment).
+  context_hop_reserved_min_gnn: 0.3    # floor on a hop chunk's own gnn_score to admit it via a
+                                        # reserved slot -- keeps noise hops out even when a slot is
+                                        # available.
   lexical_seed_min_documents: 3  # preserve distinct BM25 evidence before multilingual GNN scoring
   hybrid_weight_local: 0.6
   hybrid_weight_global: 0.4

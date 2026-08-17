@@ -203,3 +203,92 @@ class TestContextBuilderGraphRelationships:
         _, citations = ContextBuilder().build(_local(chunks, entity_edges=edges), {}, top_k=1)
         assert "A" not in citations
         assert "B" not in citations
+
+
+class TestContextBuilderHopReservedSlots:
+    """hop_reserved_slots (Change B, MH-03 design proposal, 2026-08-17):
+    additive-only extra slots for hop-only chunks (no rerank_score) that
+    GNNScorer's seed-floor dampening always ranks below the weakest seed —
+    see gnn_scorer.py's _text_score. Default 0 must be a byte-for-byte no-op
+    vs. the pre-2026-08-17 signature; when > 0 it must never evict a chunk
+    the ordinary top_k slice already selected."""
+
+    def test_default_zero_is_a_no_op(self):
+        """Same call, only the presence of a qualifying hop chunk differs —
+        with hop_reserved_slots at its default (0), output must be
+        identical either way."""
+        seed = {"chunk_id": "seed", "text": "seed text", "final_score": 1.0, "rerank_score": 0.9}
+        hop = {"chunk_id": "hop", "text": "hop text", "final_score": 0.05, "gnn_score": 0.9}
+        ctx_without_hop, cit_without_hop = ContextBuilder().build(
+            _local([seed]), {}, top_k=1,
+        )
+        ctx_with_hop, cit_with_hop = ContextBuilder().build(
+            _local([seed, hop]), {}, top_k=1,
+        )
+        assert ctx_without_hop == ctx_with_hop
+        assert cit_without_hop == cit_with_hop
+        assert "hop text" not in ctx_with_hop
+
+    def test_reserved_slot_admits_qualifying_hop_chunk(self):
+        seed = {"chunk_id": "seed", "text": "seed text", "final_score": 1.0, "rerank_score": 0.9}
+        hop = {"chunk_id": "hop", "text": "hop text", "final_score": 0.05, "gnn_score": 0.9}
+        context, citations = ContextBuilder().build(
+            _local([seed, hop]), {}, top_k=1, hop_reserved_slots=1,
+        )
+        assert "hop text" in context
+        assert "seed text" in context   # additive -- the seed slot is untouched
+
+    def test_reserved_slot_never_evicts_an_existing_seed(self):
+        """Two seeds already fill top_k=2; a hop chunk must be ADDED as a
+        6th-ish slot, never swap out either seed."""
+        seed_a = {"chunk_id": "sa", "text": "seed A", "final_score": 1.0, "rerank_score": 0.9}
+        seed_b = {"chunk_id": "sb", "text": "seed B", "final_score": 0.8, "rerank_score": 0.7}
+        hop = {"chunk_id": "hop", "text": "hop text", "final_score": 0.05, "gnn_score": 0.9}
+        context, _ = ContextBuilder().build(
+            _local([seed_a, seed_b, hop]), {}, top_k=2, hop_reserved_slots=1,
+        )
+        assert "seed A" in context
+        assert "seed B" in context
+        assert "hop text" in context
+
+    def test_hop_chunk_below_min_gnn_floor_not_admitted(self):
+        seed = {"chunk_id": "seed", "text": "seed text", "final_score": 1.0, "rerank_score": 0.9}
+        weak_hop = {"chunk_id": "hop", "text": "weak hop text", "final_score": 0.02, "gnn_score": 0.1}
+        context, _ = ContextBuilder().build(
+            _local([seed, weak_hop]), {}, top_k=1,
+            hop_reserved_slots=1, hop_reserved_min_gnn=0.3,
+        )
+        assert "weak hop text" not in context
+
+    def test_seed_chunk_never_double_counted_as_a_hop_slot(self):
+        """A chunk that already made the top_k cut (has rerank_score) must
+        not also be pulled in as a "reserved hop slot" duplicate."""
+        seed = {"chunk_id": "seed", "text": "seed text", "final_score": 1.0, "rerank_score": 0.9}
+        context, citations = ContextBuilder().build(
+            _local([seed]), {}, top_k=1, hop_reserved_slots=2,
+        )
+        assert context.count("seed text") == 1
+        assert citations.count("seed") <= 1
+
+    def test_reserved_slots_capped_even_with_many_qualifying_hops(self):
+        seed = {"chunk_id": "seed", "text": "seed text", "final_score": 1.0, "rerank_score": 0.9}
+        # Genuinely distinct passages -- near-identical text (e.g. "hop text
+        # 0" vs "hop text 1") would correctly trip the existing
+        # near-duplicate filter and undercount this test's own assertion.
+        passages = [
+            "Southwest Airlines operates the affected 737 MAX fleet.",
+            "The maintenance crew inspected the AOA sensor bracket.",
+            "Boeing issued a service bulletin for the MCAS software.",
+            "The FAA emergency order grounded the aircraft type.",
+            "CFM International manufactures the LEAP-1B engine.",
+        ]
+        hops = [
+            {"chunk_id": f"hop{i}", "text": passages[i], "final_score": 0.05 - i * 0.001,
+             "gnn_score": 0.9}
+            for i in range(5)
+        ]
+        context, _ = ContextBuilder().build(
+            _local([seed, *hops]), {}, top_k=1, hop_reserved_slots=2,
+        )
+        admitted = sum(1 for p in passages if p in context)
+        assert admitted == 2

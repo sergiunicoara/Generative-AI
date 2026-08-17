@@ -81,6 +81,12 @@ class AgenticRetriever:
 
     def __init__(self, max_steps: int = 2):
         self._local = LocalSearch()
+        # NOTE: unlike HybridRetriever, this class doesn't thread per-tenant
+        # config through to ContextBuilder.build() calls below (both are
+        # hardcoded top_k), so context_hop_reserved_slots (see
+        # context_builder.py) has no effect on this agentic-fallback path --
+        # only on the primary hybrid/local path. Defaults to 0 (no-op)
+        # either way, so this is a known scope gap, not a behavior change.
         self._ctx_builder = ContextBuilder()
         self._max_steps = max_steps
         self._verifier = ClaimVerifier()

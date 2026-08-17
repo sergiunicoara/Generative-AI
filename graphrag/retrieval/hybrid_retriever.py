@@ -616,6 +616,8 @@ class HybridRetriever:
             ),
             top_k=cfg.get("rerank_top_k", 5),
             conflicts=conflicts,
+            hop_reserved_slots=cfg.get("context_hop_reserved_slots", 0),
+            hop_reserved_min_gnn=cfg.get("context_hop_reserved_min_gnn", 0.3),
         )
 
         answer = await get_llm().generate(

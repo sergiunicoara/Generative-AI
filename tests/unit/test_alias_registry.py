@@ -9,6 +9,7 @@ import pytest
 from graphrag.graph.alias_registry import (
     AliasRegistry,
     _normalize,
+    _normalize_regulatory,
     _normalize_ro,
     _stem_ro_token,
 )
@@ -41,6 +42,37 @@ class TestNormalize:
         """Ensure write-key (graph_writer) equals read-key (registry.resolve)."""
         raw = "Foo  Bar!"
         assert _normalize(raw) == _normalize(_normalize(raw))
+
+
+# ── _normalize_regulatory ────────────────────────────────────────────────────────
+
+class TestNormalizeRegulatory:
+    """Regulatory-agency prefix stripping so 'EASA AD 2022-0201' / 'AD 2022-0201'
+    (and other regulator+identifier variants) converge to one canonical key,
+    enabling forward-chaining transitivity across a supersession chain. See
+    INF-01 in evals/golden_set.json — the space-only prefix pattern silently
+    never matched the hyphenated form real corpora actually use
+    ('FAA-AD-2022-03-07'), leaving it permanently un-deduped against its
+    space-separated twin ('AD 2022-03-07')."""
+
+    def test_space_separated_prefix_stripped(self):
+        assert _normalize_regulatory("EASA AD 2022-0201") == _normalize_regulatory("AD 2022-0201")
+
+    def test_hyphenated_prefix_stripped(self):
+        assert _normalize_regulatory("FAA-AD-2022-03-07") == _normalize_regulatory("AD 2022-03-07")
+
+    def test_hyphenated_and_space_separated_converge(self):
+        assert (
+            _normalize_regulatory("FAA-AD-2020-05-11")
+            == _normalize_regulatory("FAA AD 2020-05-11")
+            == _normalize_regulatory("AD 2020-05-11")
+        )
+
+    def test_unprefixed_name_unchanged_by_stripping(self):
+        assert _normalize_regulatory("AD 2022-03-07") == _normalize("AD 2022-03-07")
+
+    def test_non_regulatory_name_unaffected(self):
+        assert _normalize_regulatory("Boeing 737 MAX") == _normalize("Boeing 737 MAX")
 
 
 # ── _normalize_ro / _stem_ro_token ──────────────────────────────────────────────

@@ -70,8 +70,16 @@ def _normalize(text: str) -> str:
 # Regulatory agency prefixes that are stripped when normalizing AD / regulation names.
 # "EASA AD 2022-0201" and "AD 2022-0201" refer to the same document —
 # the prefix is a source attribution, not a distinguishing identifier.
+#
+# [\s-]+ (not \s+): real corpora hyphenate the prefix onto the identifier
+# ("FAA-AD-2022-03-07") at least as often as they space-separate it
+# ("FAA AD 2022-03-07") — a space-only pattern silently never fires for the
+# hyphenated form, leaving it and its space-separated twin as two permanently
+# unmerged entity nodes. That gap broke forward-chaining transitivity across
+# a whole supersession chain (INF-01 in evals/golden_set.json) even though
+# every other piece of the transitivity/citation pipeline worked correctly.
 _REGULATORY_PREFIXES = re.compile(
-    r"^(easa|faa|icao|dot|tc|stc|pma|tso)\s+",
+    r"^(easa|faa|icao|dot|tc|stc|pma|tso)[\s-]+",
     re.IGNORECASE,
 )
 

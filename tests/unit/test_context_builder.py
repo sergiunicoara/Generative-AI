@@ -176,3 +176,30 @@ class TestContextBuilderGraphRelationships:
             assert f"E{i}" in context
         for i in range(10, 15):
             assert f"E{i}" not in context
+
+    def test_edge_endpoints_registered_as_citations(self):
+        """A fact surfaced only via a graph edge (e.g. a transitive
+        supersession chain no single chunk states outright) must still put
+        its endpoints in the citations list — otherwise a correct,
+        graph-grounded answer reports insufficient citation recall. See
+        INF-01 in evals/golden_set.json."""
+        chunks = [{"chunk_id": "a", "text": "text", "final_score": 1.0, "source": "FAA-AD-2024-01-02.txt"}]
+        edges = [{
+            "src": "FAA-AD-2024-01-02", "tgt": "FAA-AD-2020-05-11", "relation": "SUPERSEDES",
+            "source_type": "inferred", "inferred_by": "supersedes_transitivity",
+        }]
+        _, citations = ContextBuilder().build(_local(chunks, entity_edges=edges), {}, top_k=1)
+        assert "FAA-AD-2020-05-11" in citations
+
+    def test_edge_endpoint_citations_deduped_against_chunk_citations(self):
+        chunks = [{"chunk_id": "a", "text": "text", "final_score": 1.0, "source": "FAA-AD-2024-01-02.txt"}]
+        edges = [{"src": "FAA-AD-2024-01-02", "tgt": "FAA-AD-2022-03-07", "relation": "SUPERSEDES"}]
+        _, citations = ContextBuilder().build(_local(chunks, entity_edges=edges), {}, top_k=1)
+        assert citations.count("FAA-AD-2024-01-02") == 1
+
+    def test_edge_without_relation_label_not_cited(self):
+        chunks = [{"chunk_id": "a", "text": "text", "final_score": 1.0}]
+        edges = [{"src": "A", "tgt": "B", "relation": None}]
+        _, citations = ContextBuilder().build(_local(chunks, entity_edges=edges), {}, top_k=1)
+        assert "A" not in citations
+        assert "B" not in citations

@@ -114,6 +114,21 @@ class ContextBuilder:
                     rule = e.get("inferred_by")
                     line += f" (inferred{f' via {rule}' if rule else ''})"
                 edge_lines.append(line)
+                # Register both endpoints as citations too, not just the prompt
+                # text above. A fact surfaced ONLY here (e.g. a transitive
+                # supersession chain that no single chunk states outright, see
+                # INF-01/CON-02 in evals/golden_set.json) can ground a correct
+                # answer while its endpoint document never independently
+                # survives the chunk-citation top_k cutoff a few lines up —
+                # leaving the citation list silently short even though the
+                # answer is right. Extraction assigns entity `type` from an
+                # open, LLM-chosen vocabulary (see extractor.py) with no fixed
+                # "Document" label to gate on, so this citations the edge
+                # unconditionally rather than filtering by type; the
+                # dict.fromkeys dedup below already collapses overlap with
+                # chunk-derived citations, and the [:10] cap above bounds it.
+                citations.append(e["src"])
+                citations.append(e["tgt"])
             if edge_lines:
                 sections.append(
                     "Known graph relationships:\n" + "\n".join(edge_lines)

@@ -283,14 +283,22 @@ class GeminiLLM(BaseLLM):
 class DeepSeekLLM(BaseLLM):
     """Async wrapper around DeepSeek chat completions via OpenAI-compatible API.
 
-    DeepSeek-V3 supports JSON mode, has generous rate limits, and costs
-    ~$0.07/1M input tokens — used as the Groq rate-limit fallback.
+    Supports JSON mode, has generous rate limits — used as the Groq
+    rate-limit fallback.
     """
 
     _BASE_URL     = "https://api.deepseek.com"
-    _DEFAULT_MODEL = "deepseek-v4-pro"   # was "deepseek-chat" — DeepSeek deprecated that
-                                          # id; API now rejects it with 400 on every call
-                                          # (found 2026-07-24 via worker.log retry/DLQ spam)
+    _DEFAULT_MODEL = "deepseek-v4-flash"  # was "deepseek-v4-pro" until 2026-08-17 —
+                                          # v4-pro is ~3x more expensive across every
+                                          # pricing tier ($0.66/$1.98 per 1M cache-miss
+                                          # input/output vs v4-flash's $0.22/$0.66; see
+                                          # api-docs.deepseek.com/quick_start/pricing).
+                                          # This is only the fallback hop behind Groq's
+                                          # free tier now, so the cheaper/lighter model
+                                          # is the right tradeoff here.
+                                          # (was "deepseek-chat" before that — DeepSeek
+                                          # deprecated that id; found 2026-07-24 via
+                                          # worker.log retry/DLQ spam)
     _MAX_RETRIES  = 3
     _RETRY_WAIT   = 10.0  # seconds between retries on 429/503/timeout
     _TIMEOUT      = 60.0  # seconds — DeepSeek's API can stall under load with
@@ -444,6 +452,112 @@ class CerebrasLLM(BaseLLM):
         raise last_exc  # type: ignore[misc]
 
 
+# ── OpenRouter text-generation client ────────────────────────────────────────
+
+class OpenRouterLLM(BaseLLM):
+    """Async wrapper around OpenRouter chat completions via OpenAI-compatible API.
+
+    Added 2026-08-17 as a free-tier layer behind Groq/DeepSeek. OpenRouter's
+    ``:free``-suffixed model slugs (e.g. ``nvidia/nemotron-3-super-120b-a12b:free``)
+    are free to call: 20 req/min, 50 req/day (rising to 1,000/day once the
+    account has ever topped up $10+ — not required to use the free tier
+    itself). Verify current free model slugs and limits at
+    https://openrouter.ai/models?max_price=0 and
+    https://openrouter.ai/docs/api-reference/limits before relying on this —
+    OpenRouter can retire/rename free slugs without notice.
+
+    Same request/response shape as DeepSeek/Cerebras (OpenAI-compatible), so
+    this mirrors ``CerebrasLLM`` almost exactly.
+
+    Live-tested 2026-08-17: the default model does internal reasoning before
+    its final answer, so a tight ``max_tokens`` (~15) can truncate mid-
+    reasoning with an empty/garbled result — confirmed harmless today since
+    every call site in this codebase passes ``max_tokens=None`` or a
+    generous budget, but keep this in mind before adding a tightly-capped
+    call that might route through this fallback.
+    """
+
+    _BASE_URL      = "https://openrouter.ai/api/v1"
+    _DEFAULT_MODEL = "nvidia/nemotron-3-super-120b-a12b:free"  # live-verified
+                                                          # 2026-08-17 via GET
+                                                          # /v1/models?free — the
+                                                          # deepseek-chat-v3.1:free
+                                                          # slug originally chosen
+                                                          # (from pre-verification
+                                                          # research) had already
+                                                          # been retired from the
+                                                          # free tier by then; this
+                                                          # confirms slugs really do
+                                                          # need live verification,
+                                                          # not just doc citations
+    _MAX_RETRIES   = 3
+    _RETRY_WAIT    = 10.0  # seconds between retries on 429/503/timeout
+    _TIMEOUT       = 60.0  # seconds — same rationale as CerebrasLLM/DeepSeekLLM.
+    _PROVIDER_NAME = "openrouter"
+
+    def __init__(self, api_key: str, default_model: str = _DEFAULT_MODEL,
+                 max_retries: int = _MAX_RETRIES):
+        from openai import OpenAI
+        self._client = OpenAI(api_key=api_key, base_url=self._BASE_URL, timeout=self._TIMEOUT)
+        self._default_model = default_model
+        self._max_retries = max_retries
+
+    async def generate(
+        self,
+        prompt: str,
+        model: str | None = None,
+        json_mode: bool = False,
+        temperature: float = 0.0,
+        max_tokens: int | None = None,
+    ) -> str:
+        from openai import RateLimitError, APIStatusError, APITimeoutError, APIConnectionError
+
+        model = model or self._default_model
+        kwargs: dict[str, Any] = {
+            "model":    model,
+            "messages": [{"role": "user", "content": prompt}],
+            "temperature": temperature,
+        }
+        if json_mode:
+            kwargs["response_format"] = {"type": "json_object"}
+        if max_tokens is not None:
+            kwargs["max_tokens"] = max_tokens
+
+        loop = asyncio.get_running_loop()
+        last_exc: Exception | None = None
+
+        # See CerebrasLLM.generate() — same fail-fast pattern once this
+        # provider looks broken.
+        effective_max_retries = (
+            self._max_retries if is_healthy(self._PROVIDER_NAME) else 1
+        )
+
+        for attempt in range(1, effective_max_retries + 1):
+            try:
+                response = await loop.run_in_executor(
+                    None,
+                    lambda: self._client.chat.completions.create(**kwargs),
+                )
+                record_result(self._PROVIDER_NAME, True)
+                return response.choices[0].message.content or ""
+
+            except (RateLimitError, APIStatusError, APITimeoutError, APIConnectionError) as exc:
+                record_result(self._PROVIDER_NAME, False)
+                log.warning(
+                    "llm_client.openrouter_retry",
+                    attempt=attempt,
+                    max_retries=effective_max_retries,
+                    wait_seconds=self._RETRY_WAIT,
+                    model=model,
+                    error=type(exc).__name__,
+                )
+                last_exc = exc
+                if attempt < effective_max_retries:
+                    await asyncio.sleep(self._RETRY_WAIT)
+
+        raise last_exc  # type: ignore[misc]
+
+
 # ── Fallback LLM — primary provider (fail-fast) → secondary on failure ───────
 
 class FallbackLLM(BaseLLM):
@@ -499,12 +613,38 @@ class FallbackLLM(BaseLLM):
 
     @classmethod
     def groq_primary(cls, cfg, model: str | None = None) -> "FallbackLLM":
-        """Groq primary (~280 tok/s, fail-fast) -> DeepSeek on rate-limit/timeout.
+        """Groq primary (~280 tok/s, fail-fast) -> DeepSeek on rate-limit/timeout,
+        with OpenRouter as a third hop if ``cfg.openrouter_api_key`` is set.
 
         `model` overrides `cfg.groq_model` — used by `get_fast_llm()` to
         select the fast 8B model instead of the default 70B.
+
+        OpenRouter tier added 2026-08-17, opt-in via ``OPENROUTER_API_KEY``:
+        with no key set (the default — no key has been issued yet), this
+        collapses to the plain Groq -> DeepSeek chain exactly as before,
+        unchanged. Once a key is added, DeepSeek's own secondary becomes
+        OpenRouter's ``:free`` tier instead of terminating — see
+        ``OpenRouterLLM`` for slug/limit caveats.
         """
         from groq import RateLimitError, APITimeoutError, APIConnectionError
+
+        deepseek = DeepSeekLLM(api_key=cfg.deepseek_api_key)
+        secondary: BaseLLM = deepseek
+        openrouter_key = getattr(cfg, "openrouter_api_key", "") or ""
+        if openrouter_key:
+            from openai import RateLimitError as _OAIRateLimit, APIStatusError as _OAIStatus, \
+                APITimeoutError as _OAITimeout, APIConnectionError as _OAIConn
+            secondary = cls(
+                primary=deepseek,
+                primary_name="deepseek",
+                secondary=OpenRouterLLM(
+                    api_key=openrouter_key,
+                    default_model=getattr(cfg, "openrouter_model", OpenRouterLLM._DEFAULT_MODEL)
+                        or OpenRouterLLM._DEFAULT_MODEL,
+                ),
+                fallback_exceptions=(_OAIRateLimit, _OAIStatus, _OAITimeout, _OAIConn),
+            )
+
         return cls(
             primary=GroqLLM(
                 api_key=cfg.groq_api_key,
@@ -512,7 +652,7 @@ class FallbackLLM(BaseLLM):
                 max_retries=1,  # fail fast: first 429 raises immediately, no sleep
             ),
             primary_name="groq",
-            secondary=DeepSeekLLM(api_key=cfg.deepseek_api_key),
+            secondary=secondary,
             fallback_exceptions=(RateLimitError, APITimeoutError, APIConnectionError),
         )
 
@@ -650,47 +790,49 @@ def get_generation_route() -> dict[str, str]:
 
 
 def get_llm() -> BaseLLM:
-    """Return the primary (large) LLM — Cerebras primary, DeepSeek -> Groq fallback chain.
+    """Return the primary (large) LLM — Groq primary, DeepSeek fallback chain.
 
-    Normal path: ``FallbackLLM.cerebras_primary()`` — Cerebras (free tier,
-    1M tokens/day, no card) handles the call; DeepSeek-V4 is used
-    transparently if Cerebras fails or its daily cap is hit, with Groq as a
-    further fallback behind that. Changed 2026-08-17 (was DeepSeek-primary
-    before this — see the 2026-07-24 incident note on ``DeepSeekLLM`` for why
-    that path itself always has a fallback): DeepSeek-primary was consuming
-    paid balance on every single call, even during runs that fit easily in
-    Cerebras's free tier.
+    Normal path (default, ``LLM_INGEST_PROVIDER=""`` / ``"groq"``):
+    ``FallbackLLM.groq_primary()`` — Groq (free tier, ~280 tok/s) handles the
+    call; DeepSeek-V4-flash is used transparently on rate-limit/timeout.
+    Changed 2026-08-17 (was Cerebras-primary before this): the Cerebras
+    account on this key is unfunded ($0.00 balance, no subscription —
+    confirmed via its billing dashboard), so cerebras_primary() was just
+    adding a fail-fast 400 + 10s retry wait to every call before falling
+    through to this same DeepSeek/Groq chain anyway. Groq-primary skips that
+    dead hop and keeps spend on the paid DeepSeek key to only the calls that
+    exceed Groq's free-tier cap.
+
+    Opt-in override — ``LLM_INGEST_PROVIDER=cerebras``:
+        ``FallbackLLM.cerebras_primary()`` — Cerebras primary falling over to
+        DeepSeek, then Groq. Re-enable if the Cerebras account gets
+        funded/subscribed again.
 
     Opt-in override — ``LLM_INGEST_PROVIDER=deepseek``:
-        ``FallbackLLM.deepseek_primary()`` — skips Cerebras entirely,
-        DeepSeek primary with Groq fallback (the pre-2026-08-17 default).
-        Use if Cerebras quality/latency doesn't hold up for a given workload.
-
-    Opt-in override — ``LLM_INGEST_PROVIDER=groq``:
-        ``FallbackLLM.groq_primary()`` — Groq llama-3.3-70b as primary
-        (~280 tok/s) with instant DeepSeek fallback on rate-limit. Useful for
-        quick/low-volume dev runs where Groq's free tier won't be exhausted.
+        ``FallbackLLM.deepseek_primary()`` — DeepSeek primary with Groq
+        fallback (the pre-2026-08-17 default). Use if Groq quality/latency
+        doesn't hold up for a given workload.
     """
     global _llm
     if _llm is None:
         from graphrag.core.config import get_settings
         cfg = get_settings()
-        if cfg.llm_ingest_provider == "groq":
-            log.warning(
-                "llm_client.single_provider_override",
-                provider="groq",
-                reason="LLM_INGEST_PROVIDER=groq — Groq-primary with DeepSeek fallback for this run",
-            )
-            _llm = FallbackLLM.groq_primary(cfg)
-        elif cfg.llm_ingest_provider == "deepseek":
+        if cfg.llm_ingest_provider == "deepseek":
             log.warning(
                 "llm_client.single_provider_override",
                 provider="deepseek",
-                reason="LLM_INGEST_PROVIDER=deepseek — Cerebras skipped for this run",
+                reason="LLM_INGEST_PROVIDER=deepseek — Groq skipped for this run",
             )
             _llm = FallbackLLM.deepseek_primary(cfg)
-        else:
+        elif cfg.llm_ingest_provider == "cerebras":
+            log.warning(
+                "llm_client.single_provider_override",
+                provider="cerebras",
+                reason="LLM_INGEST_PROVIDER=cerebras — opt back into the (unfunded) Cerebras chain",
+            )
             _llm = FallbackLLM.cerebras_primary(cfg)
+        else:
+            _llm = FallbackLLM.groq_primary(cfg)
     return _llm
 
 

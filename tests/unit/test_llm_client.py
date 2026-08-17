@@ -17,7 +17,7 @@ import pytest
 from openai import APIStatusError, APITimeoutError
 
 from graphrag.core import provider_health as ph
-from graphrag.core.llm_client import CerebrasLLM, DeepSeekLLM, FallbackLLM, GroqLLM, get_llm
+from graphrag.core.llm_client import CerebrasLLM, DeepSeekLLM, FallbackLLM, GroqLLM, OpenRouterLLM, get_llm
 
 
 @pytest.fixture(autouse=True)
@@ -215,11 +215,28 @@ class TestFallbackLLMClassmethods:
         assert isinstance(fb._secondary, GroqLLM)
 
     def test_groq_primary_uses_groq_first(self):
-        cfg = MagicMock(deepseek_api_key="ds-key", groq_api_key="groq-key", groq_model="groq-model")
+        # openrouter_api_key="" (unset) so the secondary stays a bare
+        # DeepSeekLLM — see test_groq_primary_adds_openrouter_hop_when_keyed
+        # below for the keyed case.
+        cfg = MagicMock(
+            deepseek_api_key="ds-key", groq_api_key="groq-key", groq_model="groq-model",
+            openrouter_api_key="",
+        )
         fb = FallbackLLM.groq_primary(cfg)
         assert fb._primary_name == "groq"
         assert isinstance(fb._primary, GroqLLM)
         assert isinstance(fb._secondary, DeepSeekLLM)
+
+    def test_groq_primary_adds_openrouter_hop_when_keyed(self):
+        cfg = MagicMock(
+            deepseek_api_key="ds-key", groq_api_key="groq-key", groq_model="groq-model",
+            openrouter_api_key="or-key", openrouter_model="nvidia/nemotron-3-super-120b-a12b:free",
+        )
+        fb = FallbackLLM.groq_primary(cfg)
+        assert fb._primary_name == "groq"
+        assert isinstance(fb._secondary, FallbackLLM)
+        assert fb._secondary._primary_name == "deepseek"
+        assert isinstance(fb._secondary._secondary, OpenRouterLLM)
 
     def test_groq_primary_model_override_for_fast_llm(self):
         cfg = MagicMock(deepseek_api_key="ds-key", groq_api_key="groq-key", groq_model="big-model")
@@ -277,10 +294,11 @@ class TestFallbackLLMClassmethods:
 class TestGetLlmDefaultHasFallback:
     """Regression test for the actual incident: get_llm()'s default path
     must be a redundant FallbackLLM, not a bare single-provider client with
-    no failover. Default primary changed 2026-08-17 from DeepSeek to
-    Cerebras (free tier) — see llm_client.py module docstring."""
+    no failover. Default primary changed 2026-08-17: DeepSeek -> Cerebras
+    (free tier) -> Groq (free tier, current) — Cerebras was found unfunded
+    on this key the same day, see llm_client.py module docstring."""
 
-    def test_default_provider_is_cerebras_with_deepseek_groq_chain(self):
+    def test_default_provider_is_groq_with_deepseek_fallback(self):
         import graphrag.core.llm_client as llm_client_module
         llm_client_module._llm = None  # clear the singleton so get_llm() rebuilds
 
@@ -291,14 +309,19 @@ class TestGetLlmDefaultHasFallback:
             deepseek_api_key="ds-key",
             groq_api_key="groq-key",
             groq_model="groq-model",
+            openrouter_api_key="",  # unset — see test_groq_primary_adds_openrouter_hop_when_keyed
         )
         with patch("graphrag.core.config.get_settings", return_value=settings):
             llm = get_llm()
 
+        # Default as of 2026-08-17: Groq primary (free tier), DeepSeek
+        # fallback — Cerebras is skipped by default because the account on
+        # this key is unfunded (see llm_ingest_provider's docstring in
+        # graphrag/core/config.py). groq_primary() is flat (no nested
+        # FallbackLLM), unlike the old cerebras_primary() chain.
         assert isinstance(llm, FallbackLLM)
-        assert llm._primary_name == "cerebras"
-        assert isinstance(llm._secondary, FallbackLLM)
-        assert llm._secondary._primary_name == "deepseek"
+        assert llm._primary_name == "groq"
+        assert not isinstance(llm._secondary, FallbackLLM)
 
         llm_client_module._llm = None  # don't leak the mocked singleton to other tests
 
@@ -318,5 +341,27 @@ class TestGetLlmDefaultHasFallback:
         assert isinstance(llm, FallbackLLM)
         assert llm._primary_name == "deepseek"
         assert isinstance(llm._secondary, GroqLLM)  # flat chain, no Cerebras hop
+
+        llm_client_module._llm = None
+
+    def test_cerebras_override_restores_old_default_chain(self):
+        import graphrag.core.llm_client as llm_client_module
+        llm_client_module._llm = None
+
+        settings = MagicMock(
+            llm_ingest_provider="cerebras",
+            cerebras_api_key="cb-key",
+            cerebras_model="cb-model",
+            deepseek_api_key="ds-key",
+            groq_api_key="groq-key",
+            groq_model="groq-model",
+        )
+        with patch("graphrag.core.config.get_settings", return_value=settings):
+            llm = get_llm()
+
+        assert isinstance(llm, FallbackLLM)
+        assert llm._primary_name == "cerebras"
+        assert isinstance(llm._secondary, FallbackLLM)
+        assert llm._secondary._primary_name == "deepseek"
 
         llm_client_module._llm = None

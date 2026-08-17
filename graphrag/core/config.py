@@ -77,6 +77,17 @@ class Settings(BaseSettings):
     # ── DeepSeek (text generation fallback) ─────────────────────────────────────
     deepseek_api_key: str = ""
 
+    # ── OpenRouter (free-tier text generation, third fallback hop) ──────────────
+    # Added 2026-08-17. Optional — no key means FallbackLLM.groq_primary()
+    # collapses to the plain Groq -> DeepSeek chain, unchanged from before.
+    # Get a key at https://openrouter.ai (Keys page, no card required for the
+    # free tier). Free ``:free``-suffixed model slugs: 20 req/min, 50 req/day
+    # (1,000/day once the account has ever topped up $10+). Verify the slug
+    # below is still live at https://openrouter.ai/models?max_price=0 before
+    # relying on it — OpenRouter can retire/rename free slugs without notice.
+    openrouter_api_key: str = ""
+    openrouter_model: str = "nvidia/nemotron-3-super-120b-a12b:free"
+
     # ── Cerebras (text generation primary — free tier: 1M tokens/day, no card) ──
     # Model verified live against GET /v1/models on 2026-08-17 — Cerebras only
     # serves {gpt-oss-120b, gemma-4-31b, zai-glm-4.7}, not "llama-3.3-70b" (a
@@ -123,21 +134,26 @@ class Settings(BaseSettings):
     # corpus — mixing providers mid-run (which happens naturally whenever the
     # primary fails over) pollutes the cache with two different models'
     # outputs for what should be one deterministic baseline (see llm_cache.py).
-    # "" = default: get_llm() uses FallbackLLM.cerebras_primary() — Cerebras
-    #      primary (free tier: 1M tokens/day, no card, LPU-fast) falling over
-    #      to DeepSeek, then Groq, on failure/quota. Keeps token spend on the
-    #      paid DeepSeek key to the cases where Cerebras itself is down or
-    #      over its daily cap, instead of every call.
+    # "" = default: get_llm() uses FallbackLLM.groq_primary() — Groq
+    #      primary (free tier: 200K TPD, ~280 tok/s) with instant DeepSeek
+    #      fallback. Changed 2026-08-17 (was cerebras_primary before this):
+    #      the Cerebras account on this key has $0.00 balance / no active
+    #      subscription (confirmed via the Cerebras billing dashboard), so
+    #      cerebras_primary() was silently eating a fail-fast 400 + a 10s
+    #      retry wait on every single call before falling through anyway —
+    #      pure wasted latency, zero benefit. Groq costs nothing until its
+    #      free-tier cap is hit, at which point DeepSeek (now the cheaper
+    #      deepseek-v4-flash tier, see DeepSeekLLM._DEFAULT_MODEL) takes over
+    #      transparently.
+    # "cerebras" = get_llm() uses FallbackLLM.cerebras_primary() — Cerebras
+    #          primary falling over to DeepSeek, then Groq. Re-enable this if
+    #          the Cerebras account gets funded/subscribed again — cheaper
+    #          than Groq's rate limits for high-volume runs.
     # "deepseek" = get_llm() uses FallbackLLM.deepseek_primary() — skips
     #          Cerebras entirely, DeepSeek-V4 primary with Groq fallback.
-    #          This was the default before 2026-08-17; use it if Cerebras
+    #          This was the default before 2026-08-17; use it if Groq
     #          quality/latency doesn't hold up for a given workload.
-    # "groq" = get_llm() uses FallbackLLM.groq_primary() instead — Groq
-    #          primary (~280 tok/s) with instant DeepSeek fallback. Useful
-    #          for quick/low-volume dev runs. Enable with
-    #          LLM_INGEST_PROVIDER=groq; remove/unset afterwards — this is a
-    #          one-shot knob, not a permanent provider switch.
-    llm_ingest_provider: str = ""
+    llm_ingest_provider: str = "groq"
 
     # ── Neo4j ───────────────────────────────────────────────────────────────────
     neo4j_uri: str = "bolt://localhost:7687"

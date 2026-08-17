@@ -44,12 +44,17 @@ class RagasEvaluator:
         try:
             from langchain_openai import ChatOpenAI
             llm = ChatOpenAI(
-                model="deepseek-v4-pro",   # was "deepseek-chat" — deprecated, API rejects it
+                model="deepseek-v4-flash",   # was "deepseek-v4-pro" until 2026-08-17 —
+                                              # ~3x cheaper across every pricing tier,
+                                              # see DeepSeekLLM._DEFAULT_MODEL in
+                                              # graphrag/core/llm_client.py for the
+                                              # pricing breakdown. (was "deepseek-chat"
+                                              # before that — deprecated, API rejects it)
                 api_key=cfg.deepseek_api_key,
                 base_url="https://api.deepseek.com",
                 temperature=0.0,
             )
-            log.info("ragas_evaluator.llm_deepseek", model="deepseek-v4-pro")
+            log.info("ragas_evaluator.llm_deepseek", model="deepseek-v4-flash")
             return llm
         except ImportError:
             log.debug("ragas_evaluator.langchain_openai_missing — trying Groq")

@@ -79,7 +79,15 @@ retrieval:
                                   # so it needs facts not prose. ~4.3s fixed overhead means this
                                   # bounds the tail, it does not make reduce fast. See A144.
   rerank_top_k: 5  # validated baseline — precision 0.907 measured at this value. A124: 7+_text_score floor fixed automotive 12/13 but broke aerospace (4/39), reverted. A125: 6 alone (no _text_score change) regressed automotive to 9/13 (below 70% gate, CON-02 newly failed) — also reverted.
-  context_hop_reserved_slots: 0        # Change B, MH-03 design proposal (docs/audit-2026-08-13.md,
+  context_hop_reserved_slots: 0        # 2026-08-17 verification run REVERTED to default (0): two
+                                        # clean aerospace runs (22/34, 21/34) showed MH-03 -- this
+                                        # change's own target -- failing identically in both, and
+                                        # the automotive cross-tenant guard collapsed to 2/10 with
+                                        # 0/5 contradiction recall (was tested together with
+                                        # authority_as_edge_weight=true, not isolated -- causation
+                                        # not proven, but the burden of proof is on keeping a flag
+                                        # on, not on reverting it). See docs/audit-2026-08-13.md.
+                                        # Change B, MH-03 design proposal (docs/audit-2026-08-13.md,
                                         # 2026-08-17): opt-in, additive-only extra context slots for
                                         # hop-only chunks (no rerank_score -- GNNScorer's seed-floor
                                         # dampening makes them provably always score below the
@@ -139,7 +147,17 @@ retrieval:
                                        # a dominant term
   # ── Authority-weighted retrieval ─────────────────────────────────────────────
   authority_weighting_enabled: true   # adjust edge confidence by source doc authority
-  authority_as_edge_weight: false     # False (default): authority multiplier is folded into
+  authority_as_edge_weight: false     # 2026-08-17 verification run REVERTED to default (false): two
+                                        # clean aerospace runs (22/34, 21/34) showed AUT-01/AUT-03 --
+                                        # this change's own targets -- failing identically in both
+                                        # (as expected -- this is only Change C's prerequisite, not a
+                                        # standalone fix for them), and the automotive cross-tenant
+                                        # guard collapsed to 2/10 with 0/5 contradiction recall
+                                        # (tested together with context_hop_reserved_slots=1, not
+                                        # isolated -- causation not proven, but the burden of proof
+                                        # is on keeping a flag on, not on reverting it). See
+                                        # docs/audit-2026-08-13.md.
+                                        # False (default): authority multiplier is folded into
                                        # edge confidence, which is ALSO a hard drop threshold
                                        # (gnn_edge_confidence_threshold) -- for a superseded
                                        # document that's 1.0*0.5=0.5 < 0.7, so every edge from

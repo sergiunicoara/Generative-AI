@@ -1,7 +1,7 @@
 {
-  "version": "2.2",
+  "version": "2.3",
   "tenant": "aerospace",
-  "description": "Golden evaluation set for the GraphRAG aerospace regulatory corpus. 34 document-retrieval questions across single-hop, multi-hop, authority-chain, inference, temporal, precision, calibration, agentic, contextual, and negative types. v2.2 (2026-07-23): retired the two 'contradiction'-type questions, CON-01 and CON-02 (see tasks/lessons.md A133). Both assumed the two G-ABCD compliance reports contradict each other on AD-2020-05-11 compliance/737 MAX airworthiness; re-reading the source documents end-to-end showed all sources agree on both points, so CON-01 forbade the only correct answer ('yes, it is compliant') and CON-02 asked the model to invent a conflict. The aerospace corpus currently contains no genuine cross-document contradiction, so 'contradiction' is not a covered type until one is deliberately authored into the corpus. Replaced (same IDs, new content) with a temporal-synthesis question (does G-ABCD's compliance status vary by directive/deadline as of a stated date) and an inference question (does non-compliance with a not-yet-due directive make an aircraft unairworthy) — both grounded in a real, verified nuance in the March 2024 report rather than a fabricated conflict. v2.1 (2026-07-21): (1) fixed expected_citation slugs that never matched the actual corpus filenames (e.g. 'faa-ad-2022' -> 'FAA-AD-2022-03-07'); (2) added required_answer_any_of alternatives where a correct answer legitimately varies in phrasing (document-ID format 'FAA AD 2024-01-02' vs 'FAA-AD-2024', or 737-8/737-9 vs '737 MAX'); (3) removed 5 mis-scoped meta-questions (ARC-01/02, DOM-01/02, CAL-02) that asked about the RAG platform's own architecture/config rather than the aerospace documents — they are unanswerable from a document corpus (empty expected_citations), so the system correctly declining to answer them was being penalized as a failure.",
+  "description": "Golden evaluation set for the GraphRAG aerospace regulatory corpus. 34 document-retrieval questions across single-hop, multi-hop, authority-chain, inference, temporal, precision, calibration, agentic, contextual, and negative types. v2.3 (2026-08-17): rewrote CAL-01, which had the identical defect the v2.2 note below already documents for CON-01/CON-02 -- it asked the model to find a conflicting compliance status between the two G-ABCD reports, but re-reading both end-to-end (see docs/audit-2026-08-13.md, 'What's left') found no AD is ever given two different statuses across them; the reports are temporally sequential, not contradictory. Rather than fabricate a conflict a third time, CAL-01 now asks the model to correctly recognize the *absence* of a contradiction, resisting the surface-level pattern a less careful reader might make (see the question's own 'note' field for detail). v2.2 (2026-07-23): retired the two 'contradiction'-type questions, CON-01 and CON-02 (see tasks/lessons.md A133). Both assumed the two G-ABCD compliance reports contradict each other on AD-2020-05-11 compliance/737 MAX airworthiness; re-reading the source documents end-to-end showed all sources agree on both points, so CON-01 forbade the only correct answer ('yes, it is compliant') and CON-02 asked the model to invent a conflict. The aerospace corpus currently contains no genuine cross-document contradiction, so 'contradiction' is not a covered type until one is deliberately authored into the corpus. Replaced (same IDs, new content) with a temporal-synthesis question (does G-ABCD's compliance status vary by directive/deadline as of a stated date) and an inference question (does non-compliance with a not-yet-due directive make an aircraft unairworthy) — both grounded in a real, verified nuance in the March 2024 report rather than a fabricated conflict. v2.1 (2026-07-21): (1) fixed expected_citation slugs that never matched the actual corpus filenames (e.g. 'faa-ad-2022' -> 'FAA-AD-2022-03-07'); (2) added required_answer_any_of alternatives where a correct answer legitimately varies in phrasing (document-ID format 'FAA AD 2024-01-02' vs 'FAA-AD-2024', or 737-8/737-9 vs '737 MAX'); (3) removed 5 mis-scoped meta-questions (ARC-01/02, DOM-01/02, CAL-02) that asked about the RAG platform's own architecture/config rather than the aerospace documents — they are unanswerable from a document corpus (empty expected_citations), so the system correctly declining to answer them was being penalized as a failure.",
   "thresholds": {
     "min_context_precision": 0.7,
     "min_faithfulness": 0.8,
@@ -595,19 +595,30 @@
     {
       "id": "CAL-01",
       "type": "calibration",
-      "question": "Is there any evidence of conflicting compliance status for a specific aircraft in this corpus?",
+      "question": "Do the G-ABCD inspection report (January 2024) and the AD compliance report (March 2024) contradict each other regarding this aircraft's compliance status?",
       "expected_citations": [
         "G-ABCD_inspection_2024-01",
         "G-ABCD_AD_compliance_2024-03"
       ],
-      "required_answer_terms": [
-        "yes",
-        "conflict"
+      "required_answer_any_of": [
+        [
+          "no conflict",
+          "not conflicting",
+          "no contradiction",
+          "do not conflict",
+          "does not conflict",
+          "not contradict",
+          "consistent"
+        ]
       ],
       "forbidden_terms": [
-        "no conflict"
+        "yes, they conflict",
+        "yes, there is a conflict",
+        "the two reports conflict",
+        "the reports contradict"
       ],
-      "min_context_precision": 0.75
+      "min_context_precision": 0.75,
+      "note": "Rewritten 2026-08-17 -- replaces the original CAL-01, which asked the model to find a conflicting compliance status between these same two documents. Re-reading both source documents end-to-end (see docs/audit-2026-08-13.md, 'What's left') showed no AD is ever given two different statuses across the two reports: every AD they share (2022-03-07, 2020-05-11) is IS_COMPLIANT_WITH in both, and the one AD unique to the March report (2024-01-02) is explicitly flagged there as anticipated/pre-deadline non-compliance, not a lapse -- the two reports are temporally sequential and consistent, not contradictory. This is the same mistake already diagnosed and fixed for the original CON-01/CON-02 (tasks/lessons.md A133): the golden set asserted a conflict that isn't in the corpus. Rather than fabricate a conflict a third time, this question now tests the calibration skill actually available here -- correctly recognizing that two reports covering different ADs with different statuses is NOT a contradiction, resisting the surface-level pattern match ('non-compliant' appears near 'compliant' and 'airworthy') a less careful reader might make. No plain required_answer_terms: [\"no\"] gate -- live-tested 2026-08-17 and dropped because it's a bare substring check that 'not'/'consequently' etc. satisfy by accident, not because the model said the word; required_answer_any_of alone carries the real signal here (it matched the live answer's actual 'do not contradict... consistent' phrasing)."
     },
     {
       "id": "AGT-01",

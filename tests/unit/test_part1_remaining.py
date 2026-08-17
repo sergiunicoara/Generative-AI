@@ -14,6 +14,24 @@ def test_query_planner_routes_classes_and_fallbacks():
     assert retrieval_plan("Compare the chain across steps")["fallback"] == "agentic"
 
 
+def test_query_planner_routes_existence_check_to_negative_class():
+    # Added 2026-08-17 for NEG-03 — see query_planner.py's classify_query()
+    # docstring comment for the full root-cause trace. "is there"/"any
+    # evidence" phrasing needs the same wider top_k as "contradiction": a
+    # contrasting fact needed to answer correctly can score low against the
+    # cross-encoder reranker's literal-relevance-to-query-wording model.
+    plan = retrieval_plan("Is there a FAA airworthiness directive governing Airbus aircraft in this corpus?")
+    assert plan["query_class"] == "negative"
+    assert plan["top_k"] == 10
+    assert plan["mode"] == "hybrid"
+
+    # Regression guard: plain factoid/single-hop questions must NOT be swept
+    # into the wider tier just because they happen to ask about existence of
+    # a fact in passing — only the "is there"/"any evidence" phrasing should.
+    assert classify_query("Who manufactures the Boeing 737 MAX?") == "factoid"
+    assert classify_query("Does Airbus manufacture the Boeing 737 MAX?") == "factoid"
+
+
 def test_migration_report_requires_mapping_for_removals():
     report = plan_migration({"classes": {"Old": {}}, "properties": {}},
                             {"classes": {"New": {}}, "properties": {},

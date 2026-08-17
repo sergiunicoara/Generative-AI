@@ -7,6 +7,7 @@ asyncio.TaskGroup instead of back-to-back sequential awaits.
 from __future__ import annotations
 
 import asyncio
+import time
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -143,3 +144,50 @@ class TestExceptionTypePreservation:
 
         with pytest.raises(ValueError, match="boom"):
             await hr.retrieve_and_answer("question", mode="hybrid")
+
+
+class TestNegativeClassTopKWiring:
+    """Regression test for the bug found diagnosing NEG-03 (2026-08-17, see
+    docs/audit-2026-08-13.md "What's left"): query_planner_enabled computed a
+    per-query-class top_k but every self._local.search()/self._global.search()
+    call passed config_overrides=profile_overrides — the pre-planner dict —
+    instead of the updated cfg, so the computed top_k never actually reached
+    LocalSearch, and separately never touched rerank_top_k either. Scoped
+    narrowly to query_class == "negative" only (see hybrid_retriever.py's
+    inline comment for why the other classes aren't touched here — this exact
+    lever has a documented regression history, A124/A125/local_top_k=15)."""
+
+    async def test_negative_class_question_gets_widened_top_k(self) -> None:
+        hr = _make_hybrid_retriever({
+            "query_planner_enabled": True,
+            "adaptive_router_enabled": False,  # keyword_planner path — no adaptive_router mock needed
+        })
+        hr._local.search = AsyncMock(return_value={})
+        hr._global.search = AsyncMock(return_value={})
+
+        await hr.retrieve_and_answer(
+            "Is there a FAA airworthiness directive governing Airbus aircraft in this corpus?",
+            mode="hybrid",
+        )
+
+        _, kwargs = hr._local.search.call_args
+        assert kwargs["config_overrides"]["local_top_k"] == 10
+        assert kwargs["config_overrides"]["rerank_top_k"] == 10
+
+    async def test_factoid_class_question_is_unaffected(self) -> None:
+        # Regression guard: a plain factoid question must NOT pick up the
+        # negative-class widening — config_overrides should stay exactly the
+        # pre-fix profile_overrides dict (empty here), same as before this
+        # session's change.
+        hr = _make_hybrid_retriever({
+            "query_planner_enabled": True,
+            "adaptive_router_enabled": False,
+        })
+        hr._local.search = AsyncMock(return_value={})
+        hr._global.search = AsyncMock(return_value={})
+
+        await hr.retrieve_and_answer("Who manufactures the Boeing 737 MAX?", mode="hybrid")
+
+        _, kwargs = hr._local.search.call_args
+        assert "local_top_k" not in kwargs["config_overrides"]
+        assert "rerank_top_k" not in kwargs["config_overrides"]

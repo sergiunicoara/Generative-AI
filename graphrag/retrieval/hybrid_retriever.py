@@ -412,6 +412,29 @@ class HybridRetriever:
             routing_reason = "retrieval_profile"
         plan = retrieval_plan(question)
         if mode == "hybrid" and cfg.get("query_planner_enabled", False):
+            # Bug fix 2026-08-17 (found while diagnosing NEG-03, see
+            # docs/audit-2026-08-13.md "What's left"): this block has computed
+            # a per-query-class top_k since the planner/adaptive-router were
+            # added, but every downstream self._local.search()/
+            # self._global.search() call below passed config_overrides=
+            # profile_overrides (the ORIGINAL, pre-planner dict) instead of
+            # this updated `cfg` — so the computed top_k never reached
+            # LocalSearch, and separately never touched `rerank_top_k`
+            # either (a same-named but distinct cutoff LocalSearch's own
+            # internal reranker and this function's context_builder call
+            # both read independently). Net effect: query_planner_enabled
+            # has been a no-op for top_k since it shipped — it correctly
+            # switched `mode` (confirmed: query_class-appropriate steps like
+            # "Graph expansion" do appear in live traces) but never widened
+            # or narrowed how many chunks reach the LLM. Only "negative"
+            # (added this session for NEG-03) is scoped tightly enough (1 of
+            # 34 golden questions matches its trigger) to fix here with a
+            # bounded, auditable blast radius; before touching this for
+            # relational/contradiction/multi_hop too, rerun the full golden
+            # eval — this exact lever has a documented regression history
+            # (see rerank_top_k's and local_top_k's comments below in
+            # settings.yml: A124/A125, and local_top_k=15 breaking AUT-02/
+            # NEG-02 on 2026-08-14).
             if cfg.get("adaptive_router_enabled", True):
                 try:
                     route = await self._adaptive_router.choose(question, tenant)
@@ -427,6 +450,9 @@ class HybridRetriever:
                 mode = plan["mode"]
                 routing_reason = "keyword_planner"
                 cfg = {**cfg, "local_top_k": plan["top_k"]}
+            if plan["query_class"] == "negative":
+                cfg = {**cfg, "rerank_top_k": cfg["local_top_k"]}
+                profile_overrides = {**profile_overrides, **cfg}
             log.info("hybrid_retriever.query_plan", query_class=plan["query_class"], mode=mode,
                      top_k=cfg["local_top_k"], fallback=plan["fallback"],
                      routing_reason=routing_reason)

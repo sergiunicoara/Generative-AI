@@ -1,4 +1,4 @@
-"""Unit tests for graphrag.core.llm_utils — safe_response_text."""
+"""Unit tests for graphrag.core.llm_utils — safe_response_text, normalize_dashes."""
 
 from __future__ import annotations
 
@@ -6,7 +6,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from graphrag.core.llm_utils import safe_response_text
+from graphrag.core.llm_utils import normalize_dashes, safe_response_text
 
 
 class TestSafeResponseText:
@@ -66,3 +66,35 @@ class TestSafeResponseText:
         )
         # This must be detected as low-confidence → triggers agentic fallback
         assert _is_low_confidence(answer, citations=[])
+
+
+class TestNormalizeDashes:
+    """Regression test for the bug found diagnosing PRE-01/PRE-02/AUT-01/
+    AUT-03/CON-01/AGT-02 golden-eval failures (2026-08-17, see
+    docs/audit-2026-08-13.md): Groq's gpt-oss models write hyphenated
+    document IDs/dates using U+2011 NON-BREAKING HYPHEN instead of ASCII
+    "-", confirmed via a live UnicodeEncodeError on the raw response text,
+    not a display artifact. Uses \\uXXXX escapes throughout (not literal
+    characters) so a visually-identical-but-wrong dash can't be pasted into
+    the test itself by mistake."""
+
+    def test_non_breaking_hyphen_normalized(self):
+        # The exact confirmed culprit: U+2011 in "FAA-AD-2022-03-07".
+        nbh = "‑"
+        raw = f"FAA{nbh}AD{nbh}2022{nbh}03{nbh}07"
+        assert normalize_dashes(raw) == "FAA-AD-2022-03-07"
+
+    def test_all_dash_variants_normalized(self):
+        variants = "‐‑‒–—−"
+        assert normalize_dashes(variants) == "-" * len(variants)
+
+    def test_ascii_hyphen_passes_through_unchanged(self):
+        assert normalize_dashes("FAA-AD-2022-03-07") == "FAA-AD-2022-03-07"
+
+    def test_plain_text_without_dashes_unchanged(self):
+        assert normalize_dashes("The aircraft is airworthy.") == "The aircraft is airworthy."
+
+    def test_mixed_ascii_and_unicode_dashes(self):
+        nbh = "‑"
+        raw = f"AD 2022-03-07 supersedes AD{nbh}2020{nbh}05{nbh}11"
+        assert normalize_dashes(raw) == "AD 2022-03-07 supersedes AD-2020-05-11"

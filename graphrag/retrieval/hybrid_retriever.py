@@ -11,6 +11,7 @@ import structlog
 
 from graphrag.core.config import get_settings, resolve_tenant_config
 from graphrag.core.llm_client import get_generation_route, get_llm
+from graphrag.core.llm_utils import normalize_dashes
 from graphrag.core.models import QueryResult
 from graphrag.context_graph.models import (
     AgentRun, Case, CGEpisode, ConditionOperator, ContextManifest, Decision,
@@ -649,6 +650,10 @@ class HybridRetriever:
         answer = await get_llm().generate(
             _ANSWER_PROMPT.format(context=context, question=question),
         ) or "Insufficient context to answer this question."
+        # See llm_utils.normalize_dashes — Groq's gpt-oss models write
+        # document IDs/dates with U+2011 NON-BREAKING HYPHEN instead of
+        # ASCII "-", found 2026-08-17 diagnosing golden-eval failures.
+        answer = normalize_dashes(answer)
 
         # ── Claim verification — strip ungrounded sentences ────────────────────
         if cfg.get("claim_verification", False):

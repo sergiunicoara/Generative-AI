@@ -56,3 +56,34 @@ def safe_response_text(response: object, default: str = "") -> str:
     except AttributeError:
         log.warning("llm_utils.text_attr_missing", response_type=type(response).__name__)
         return default
+
+
+# Groq's gpt-oss models (found 2026-08-17 diagnosing PRE-01/PRE-02/AUT-01/
+# AUT-03/CON-01/AGT-02 golden-eval failures) write hyphenated document IDs
+# and dates using U+2011 NON-BREAKING HYPHEN instead of ASCII "-" — visually
+# identical in a terminal/browser, but a plain substring check like
+# `'2022-03-07' in answer` silently fails against it. Confirmed via a raw
+# UnicodeEncodeError on the live response text, not a display artifact.
+# Previously misattributed (see docs/audit-2026-08-13.md) to a vague
+# "free-tier quality tradeoff" — this is a specific, deterministic character
+# substitution, so a deterministic post-processing fix is more reliable than
+# hoping a free-tier model follows a style instruction. Scoped to dash
+# variants only (the proven failure mode); extend the table if other
+# typographic substitutions (smart quotes, etc.) turn up real evidence.
+_DASH_VARIANTS = str.maketrans({
+    "‐": "-",  # HYPHEN
+    "‑": "-",  # NON-BREAKING HYPHEN
+    "‒": "-",  # FIGURE DASH
+    "–": "-",  # EN DASH
+    "—": "-",  # EM DASH
+    "−": "-",  # MINUS SIGN
+})
+
+
+def normalize_dashes(text: str) -> str:
+    """Replace Unicode dash/hyphen variants with ASCII '-'.
+
+    Apply to every LLM-synthesized answer before it's returned to the
+    caller or graded — see the module comment above `_DASH_VARIANTS` for why.
+    """
+    return text.translate(_DASH_VARIANTS)

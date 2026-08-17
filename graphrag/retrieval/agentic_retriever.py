@@ -17,6 +17,7 @@ import structlog
 
 from graphrag.core.config import get_settings
 from graphrag.core.llm_client import get_fast_llm, get_llm
+from graphrag.core.llm_utils import normalize_dashes
 from graphrag.core.models import QueryResult
 from graphrag.retrieval.local_search import LocalSearch
 from graphrag.retrieval.context_builder import ContextBuilder
@@ -97,7 +98,10 @@ class AgenticRetriever:
 
     async def _synthesize(self, prompt: str) -> str:
         """Full 70B model for final answer synthesis."""
-        return await get_llm().generate(prompt)
+        # See llm_utils.normalize_dashes — same fix as HybridRetriever's
+        # main synthesis path, applied here too since this is also a
+        # final, user-facing/graded answer, not an intermediate step.
+        return normalize_dashes(await get_llm().generate(prompt))
 
     async def retrieve_and_answer(
         self,
@@ -155,7 +159,14 @@ class AgenticRetriever:
 
             if reasoning.upper().startswith("ANSWER:"):
                 # LLM is confident — extract and verify the answer
-                answer = reasoning[7:].strip()
+                # normalize_dashes here too: this early-exit shortcut uses
+                # _reason()/get_fast_llm(), a separate model call from
+                # _synthesize()/get_llm() below — missed on the first pass
+                # of this fix (2026-08-17) because it's a distinct code path
+                # that live-verification against AGT-02/CON-01/AUT-01/AUT-03/
+                # PRE-02 caught: all five were taking THIS shortcut, not the
+                # _synthesize() path already fixed.
+                answer = normalize_dashes(reasoning[7:].strip())
                 current_context = "\n\n---\n\n".join(context_sections)
                 cfg = get_settings().retrieval
                 if cfg.get("claim_verification", False):

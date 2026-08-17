@@ -125,6 +125,19 @@ retrieval:
                                        # a dominant term
   # ── Authority-weighted retrieval ─────────────────────────────────────────────
   authority_weighting_enabled: true   # adjust edge confidence by source doc authority
+  authority_as_edge_weight: false     # False (default): authority multiplier is folded into
+                                       # edge confidence, which is ALSO a hard drop threshold
+                                       # (gnn_edge_confidence_threshold) -- for a superseded
+                                       # document that's 1.0*0.5=0.5 < 0.7, so every edge from
+                                       # it is silently deleted from the adjacency matrix, not
+                                       # down-weighted (caused an unresolved regression, see
+                                       # tasks/lessons.md A128/A137). True: authority multiplies
+                                       # edge WEIGHT instead, decoupled from the confidence
+                                       # threshold -- down-weights superseded sources rather
+                                       # than deleting them. See document_authority.py's
+                                       # apply_authority_weights docstring. Opt-in pending
+                                       # verification; do not flip without re-running the
+                                       # aerospace golden eval + automotive eval as guards.
   # ── Conflict-aware answering ──────────────────────────────────────────────
   conflict_annotation_enabled: true  # warn the LLM when a retrieved entity has an
                                       # open, unresolved Conflict node (see

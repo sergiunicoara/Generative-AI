@@ -149,6 +149,7 @@ class GNNScorer:
         beta: float = 0.1,        # weight for GNN structural score
         edge_confidence_threshold: float = 0.7,  # drop edges below this confidence
         confidence_half_life_days: int = 0,       # 0 = no decay
+        authority_as_edge_weight: bool = False,   # see document_authority.py
     ):
         if gnn_type not in ("gcn", "gat"):
             raise ValueError(f"gnn_type must be 'gcn' or 'gat', got {gnn_type!r}")
@@ -158,6 +159,14 @@ class GNNScorer:
         self._beta = beta
         self._edge_conf_threshold = edge_confidence_threshold
         self._half_life_days = confidence_half_life_days
+        # When True, edge["authority_weight"] (written by
+        # DocumentAuthorityService.apply_authority_weights(as_edge_weight=True))
+        # multiplies edge weight directly instead of being folded into
+        # edge["confidence"] upstream -- decouples the authority signal from
+        # the hard edge_confidence_threshold drop below. Default False
+        # preserves prior behavior exactly (authority affects nothing here;
+        # it's baked into "confidence" before this class ever sees the edge).
+        self._authority_as_edge_weight = authority_as_edge_weight
 
     # ------------------------------------------------------------------
     # Public API
@@ -242,6 +251,8 @@ class GNNScorer:
             j = entity_idx.get(edge["tgt"])
             if i is not None and j is not None and i != j:
                 w = float(edge.get("weight") or 1.0)
+                if self._authority_as_edge_weight:
+                    w *= float(edge.get("authority_weight") or 1.0)
                 A[i, j] = w
                 A[j, i] = w   # treat as undirected
                 edge_count += 1

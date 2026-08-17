@@ -192,6 +192,51 @@ class TestGNNScorerEdgeFiltering:
         assert all(np.isfinite(c["final_score"]) for c in result)
 
 
+class TestGNNScorerAuthorityAsEdgeWeight:
+    """authority_as_edge_weight decouples the authority signal from the hard
+    confidence-drop threshold -- see document_authority.py's
+    apply_authority_weights docstring and tasks/lessons.md A128/A137 for why
+    folding it into `confidence` (the default) caused an unresolved
+    regression. Default (False) must leave existing behavior untouched."""
+
+    def test_default_ignores_authority_weight_field(self):
+        """Same edge, same confidence, only authority_weight differs -- with
+        the flag off (default), the adjacency matrix must be identical."""
+        scorer_off = GNNScorer(gnn_type="gcn", authority_as_edge_weight=False)
+        chunks = [{"chunk_id": "c0", "score": 0.5}, {"chunk_id": "c1", "score": 0.3}]
+        chunk_entities = [
+            {"chunk_id": "c0", "entity_name": "A", "embedding": [1.0, 0.0, 0.0, 0.0]},
+            {"chunk_id": "c1", "entity_name": "B", "embedding": [0.9, 0.1, 0.0, 0.0]},
+        ]
+        edges_no_authority = _make_edges([("A", "B")], confidence=0.9)
+        edges_with_low_authority = [
+            {**e, "authority_weight": 0.35} for e in _make_edges([("A", "B")], confidence=0.9)
+        ]
+        r1 = scorer_off.score([1.0, 0.0, 0.0, 0.0], chunks, chunk_entities, edges_no_authority)
+        r2 = scorer_off.score([1.0, 0.0, 0.0, 0.0], chunks, chunk_entities, edges_with_low_authority)
+        assert r1[0]["gnn_score"] == pytest.approx(r2[0]["gnn_score"])
+
+    def test_enabled_downweights_edge_without_dropping_it(self):
+        """A superseded-source edge (authority_weight=0.35, well below what
+        would survive as a *confidence*) must still enter the adjacency
+        matrix when as_edge_weight=True is on, just down-weighted -- not
+        silently deleted by edge_confidence_threshold."""
+        scorer = GNNScorer(gnn_type="gcn", edge_confidence_threshold=0.7,
+                            authority_as_edge_weight=True)
+        chunks = [{"chunk_id": "c0", "score": 0.5}, {"chunk_id": "c1", "score": 0.3}]
+        chunk_entities = [
+            {"chunk_id": "c0", "entity_name": "A", "embedding": [1.0, 0.0, 0.0, 0.0]},
+            {"chunk_id": "c1", "entity_name": "B", "embedding": [0.9, 0.1, 0.0, 0.0]},
+        ]
+        # confidence=0.9 clears the 0.7 threshold; authority_weight=0.35 is
+        # the down-weighting signal, decoupled from that threshold check.
+        edges = [{**e, "authority_weight": 0.35}
+                 for e in _make_edges([("A", "B")], confidence=0.9)]
+        result = scorer.score([1.0, 0.0, 0.0, 0.0], chunks, chunk_entities, edges)
+        assert all(np.isfinite(c["final_score"]) for c in result)
+
+
+
 class TestGNNScorerTextScore:
     """_text_score should rank-normalise seed chunks and pass through path scores."""
 

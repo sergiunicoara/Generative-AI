@@ -97,6 +97,10 @@ class LocalSearch:
         self._reranker       = CrossEncoderReranker(
             top_k=self._cfg.get("rerank_top_k", 5)
         )
+        # See document_authority.py's apply_authority_weights docstring for
+        # why this is decoupled from the confidence-drop threshold below --
+        # default False preserves prior behavior exactly.
+        self._authority_as_edge_weight = self._cfg.get("authority_as_edge_weight", False)
         self._gnn = GNNScorer(
             gnn_type                  = self._cfg.get("gnn_type", "gat"),
             num_layers                = self._cfg.get("gnn_layers", 2),
@@ -104,6 +108,7 @@ class LocalSearch:
             beta                      = self._cfg.get("gnn_beta",  0.1),
             edge_confidence_threshold = self._cfg.get("gnn_edge_confidence_threshold", 0.7),
             confidence_half_life_days = self._cfg.get("gnn_confidence_half_life_days", 0),
+            authority_as_edge_weight  = self._authority_as_edge_weight,
         )
         self._adaptive_weights     = self._cfg.get("gnn_adaptive_weights", True)
         self._use_authority_weights = self._cfg.get("authority_weighting_enabled", True)
@@ -423,7 +428,7 @@ class LocalSearch:
             if self._use_authority_weights:
                 _t0 = time.monotonic()
                 entity_edges = await self._authority_svc.apply_authority_weights(
-                    tenant, entity_edges
+                    tenant, entity_edges, as_edge_weight=self._authority_as_edge_weight,
                 )
                 log.info(
                     "local_search.authority_weights.done",

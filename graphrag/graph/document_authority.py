@@ -232,17 +232,38 @@ class DocumentAuthorityService:
             )
         return conflicts
 
-    async def apply_authority_weights(self, tenant: str, edges: list[dict]) -> list[dict]:
+    async def apply_authority_weights(
+        self, tenant: str, edges: list[dict], as_edge_weight: bool = False,
+    ) -> list[dict]:
         """
-        Adjust edge confidence based on source document authority.
-        Called by GNNScorer before building the adjacency matrix.
+        Adjust edge confidence (or, optionally, a separate edge weight) based
+        on source document authority. Called by GNNScorer before building the
+        adjacency matrix.
 
         Rules:
-        - Regulatory (1): confidence × 1.0 (unchanged)
-        - Manufacturer spec (2): confidence × 0.95
-        - Internal procedure (3): confidence × 0.85
-        - Informal (4): confidence × 0.70
+        - Regulatory (1): × 1.0 (unchanged)
+        - Manufacturer spec (2): × 0.95
+        - Internal procedure (3): × 0.85
+        - Informal (4): × 0.70
         - Superseded: additional × 0.5 penalty
+
+        `as_edge_weight` (default False, preserves prior behavior exactly):
+        when False, the multiplier is folded into `edge["confidence"]`, which
+        GNNScorer also uses as a hard drop threshold
+        (`gnn_edge_confidence_threshold`, default 0.7) -- for a superseded
+        document that's `1.0 * 0.5 = 0.5 < 0.7`, so EVERY edge sourced from a
+        superseded document gets silently dropped from the adjacency matrix
+        entirely, not down-weighted. That coupling caused an unresolved
+        regression (tasks/lessons.md A128/A137) when supersession data was
+        last populated: an edgeless node loses all GAT propagation, and
+        because GAT attention is row-softmax-normalised, dropping those
+        edges also perturbs gnn_score for *other* documents sharing that
+        neighbourhood -- a "soft" authority signal was implemented via a
+        hard binary filter. When True, the multiplier is written to a
+        separate `edge["authority_weight"]` field instead and applied by
+        GNNScorer as an edge *weight* multiplier (down-weighting, not
+        deletion), decoupled from the extraction-confidence drop threshold.
+        Opt-in via `retrieval.authority_as_edge_weight` in settings.yml.
 
         `tenant` required: this feeds retrieval ranking directly (called
         from LocalSearch.search()), so an unscoped Document lookup here was
@@ -283,6 +304,9 @@ class DocumentAuthorityService:
             multiplier = AUTHORITY_MULTIPLIER.get(meta["level"], 0.70)
             if meta.get("superseded"):
                 multiplier *= SUPERSEDED_CONFIDENCE_PENALTY
-            edge["confidence"] = float(edge.get("confidence", 1.0)) * multiplier
+            if as_edge_weight:
+                edge["authority_weight"] = multiplier
+            else:
+                edge["confidence"] = float(edge.get("confidence", 1.0)) * multiplier
 
         return edges

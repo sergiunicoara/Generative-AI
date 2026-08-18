@@ -38,10 +38,17 @@ class TestMemoryStore:
         assert await memory_store.get("nonexistent") is None
 
     async def test_set_status_stores_queued(self, memory_store):
-        await memory_store.set_status("q2", "queued")
+        await memory_store.set_status("q2", "queued", "acme")
         result = await memory_store.get("q2")
         assert result["status"] == "queued"
         assert result["query_id"] == "q2"
+
+    async def test_set_status_records_tenant_for_ownership_check(self, memory_store):
+        """GET /query/{id} authorizes by comparing this field to the caller's
+        tenant. A status entry without it is unreadable by anyone, so the
+        write must always carry it."""
+        await memory_store.set_status("q4", "queued", "acme")
+        assert (await memory_store.get("q4"))["tenant"] == "acme"
 
     async def test_delete_removes_entry(self, memory_store):
         await memory_store.set("q3", {"status": "completed"})

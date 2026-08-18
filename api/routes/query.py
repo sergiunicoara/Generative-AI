@@ -69,7 +69,7 @@ async def submit_query(request: Request, body: QueryRequest, tenant: str = Depen
     # would do a full (expensive, real LLM cost) retrieval and its result would
     # have nowhere durable to land — the client would poll forever for nothing.
     try:
-        await get_result_store().set_status(query_id, "queued")
+        await get_result_store().set_status(query_id, "queued", tenant)
     except ResultStoreUnavailable as exc:
         raise HTTPException(status_code=503, detail=f"Result store unavailable: {exc}")
     try:
@@ -91,7 +91,7 @@ async def submit_query(request: Request, body: QueryRequest, tenant: str = Depen
 
 
 @router.get("/{query_id}", dependencies=[Depends(require_scope("read"))])
-async def get_query_result(query_id: str):
+async def get_query_result(query_id: str, tenant: str = Depends(get_tenant)):
     try:
         result = await get_result_store().get(query_id)
     except ResultStoreUnavailable as exc:
@@ -99,5 +99,17 @@ async def get_query_result(query_id: str):
         # would be a lie: we don't actually know whether the query exists.
         raise HTTPException(status_code=503, detail=f"Result store unavailable: {exc}")
     if result is None:
+        raise HTTPException(status_code=404, detail="Query not found")
+    # Ownership check. The result-store key is the query_id alone, so without
+    # this any caller holding a "read" scope could fetch any tenant's stored
+    # answer and cited source text by id. Guessing a uuid4 was the only
+    # barrier, and /kpis/timeseries used to hand out the ids directly.
+    #
+    # Fails CLOSED: an entry with no recorded tenant (written by a worker from
+    # before this field existed) is treated as not-yours rather than
+    # not-checked. During a rolling deploy that turns a stale in-flight poll
+    # into a 404 — deliberately preferred over serving it unauthorized.
+    # 404 rather than 403 so the endpoint doesn't confirm the id exists.
+    if result.get("tenant") != tenant:
         raise HTTPException(status_code=404, detail="Query not found")
     return result

@@ -177,10 +177,48 @@ class TestGetQueryResultResultStoreDown:
     def test_200_when_result_found(self):
         client = _make_client()
         mock_store = AsyncMock()
-        mock_store.get = AsyncMock(return_value={"status": "completed", "answer": "42"})
+        mock_store.get = AsyncMock(return_value={
+            "status": "completed", "answer": "42", "tenant": "test-tenant",
+        })
 
         with patch("api.routes.query.get_result_store", return_value=mock_store):
             resp = client.get("/query/found-id")
 
         assert resp.status_code == 200
         assert resp.json()["answer"] == "42"
+
+
+class TestGetQueryResultTenantIsolation:
+    """Adversarial: the result-store key is the query_id alone, so ownership
+    must be enforced in the handler. Before this check, any caller holding a
+    'read' scope could fetch any tenant's stored answer and cited source text
+    by id — and /kpis/timeseries?metric=query_id handed out the ids, removing
+    the uuid4-guessing barrier that was the only control.
+    """
+
+    def test_other_tenants_result_is_not_returned(self):
+        client = _make_client()   # token tenant: "test-tenant"
+        mock_store = AsyncMock()
+        mock_store.get = AsyncMock(return_value={
+            "status": "completed",
+            "answer": "victim tenant's confidential answer",
+            "tenant": "victim-tenant",
+        })
+
+        with patch("api.routes.query.get_result_store", return_value=mock_store):
+            resp = client.get("/query/someone-elses-id")
+
+        assert resp.status_code == 404
+        assert "confidential" not in resp.text
+
+    def test_entry_without_tenant_fails_closed(self):
+        """A result written by a worker from before the tenant field existed
+        is treated as not-yours, never as not-checked."""
+        client = _make_client()
+        mock_store = AsyncMock()
+        mock_store.get = AsyncMock(return_value={"status": "completed", "answer": "42"})
+
+        with patch("api.routes.query.get_result_store", return_value=mock_store):
+            resp = client.get("/query/legacy-id")
+
+        assert resp.status_code == 404

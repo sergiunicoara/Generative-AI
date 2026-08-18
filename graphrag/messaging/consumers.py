@@ -88,6 +88,12 @@ class QueryConsumer:
             await _persist_final_result(_store, msg.query_id, {
                 "status":     "completed",
                 "query_id":   msg.query_id,
+                # Authorizes GET /query/{query_id}: the API compares this
+                # against the caller's token tenant before returning the
+                # answer. Without it the completed result overwrites the
+                # "queued" entry that did carry a tenant, and the read check
+                # would fail closed for the legitimate owner.
+                "tenant":     msg.tenant,
                 "answer":     result.answer,
                 "contexts":   result.contexts,
                 "citations":  result.citations,

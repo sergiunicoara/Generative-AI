@@ -152,9 +152,17 @@ class ResultStore:
                 raise ResultStoreUnavailable(str(exc)) from exc
         return self._memory.get(query_id)
 
-    async def set_status(self, query_id: str, status: str) -> None:
-        """Write a lightweight status-only entry (used by the API on enqueue)."""
-        await self.set(query_id, {"status": status, "query_id": query_id})
+    async def set_status(self, query_id: str, status: str, tenant: str) -> None:
+        """Write a lightweight status-only entry (used by the API on enqueue).
+
+        ``tenant`` is required, not optional: GET /query/{query_id} authorizes
+        the read by comparing the caller's tenant against the one recorded
+        here, and a status entry with no tenant would be unreadable by anyone
+        (the check fails closed). Making it a required positional parameter
+        means a caller that forgets it fails at import/call time rather than
+        silently creating an orphaned entry.
+        """
+        await self.set(query_id, {"status": status, "query_id": query_id, "tenant": tenant})
 
     async def push_progress(self, query_id: str, step: str) -> None:
         """Append a progress step to an in-flight result (visible to polling clients).

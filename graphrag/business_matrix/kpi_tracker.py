@@ -20,6 +20,27 @@ from graphrag.core.models import KPIEvent
 
 log = structlog.get_logger(__name__)
 
+# Columns a caller may plot. Deliberately an allowlist of NUMERIC measurement
+# columns, not "every column except the ones we thought of".
+#
+# get_timeseries() selects its column via getattr(KPIEventRow, metric), so
+# whatever string the caller sends names a real ORM column. KPIEventRow also
+# carries `query_id`, and the endpoint that exposes this
+# (api/routes/kpis.py) had neither a scope nor a tenant filter — and
+# KPIEventRow has no tenant column to filter on. So `?metric=query_id`
+# returned every tenant's query IDs, which GET /query/{query_id} would then
+# redeem for the full stored answer. Restricting the selectable set removes
+# the identifier-enumeration half of that chain.
+# See docs/context_graph_gap_plan.md F10.
+_ALLOWED_TIMESERIES_METRICS = frozenset({
+    "latency_ms",
+    "faithfulness",
+    "answer_relevancy",
+    "context_precision",
+    "context_recall",
+    "cost_usd",
+})
+
 
 def _percentile(values: list[float], p: float) -> float:
     """Return the p-th percentile (0–1) of a sorted list, linear interpolation."""
@@ -104,8 +125,17 @@ class KPITracker:
         metric: str = "latency_ms",
         window_days: int = 7,
     ) -> list[dict]:
+        # Reject rather than silently falling back to latency_ms: a caller
+        # asking for a column that isn't plottable has made a mistake worth
+        # surfacing, and the old fallback made an identifier request look like
+        # a successful latency query.
+        if metric not in _ALLOWED_TIMESERIES_METRICS:
+            raise ValueError(
+                f"unsupported metric {metric!r}; "
+                f"allowed: {', '.join(sorted(_ALLOWED_TIMESERIES_METRICS))}"
+            )
         since = datetime.now(timezone.utc) - timedelta(days=window_days)
-        col = getattr(KPIEventRow, metric, KPIEventRow.latency_ms)
+        col = getattr(KPIEventRow, metric)
         async with await get_session() as session:
             result = await session.execute(
                 select(KPIEventRow.recorded_at, col)

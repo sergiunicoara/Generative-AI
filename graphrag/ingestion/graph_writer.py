@@ -41,6 +41,19 @@ from graphrag.graph.review_queue import ReviewQueueService
 log = structlog.get_logger(__name__)
 
 
+def _resolved_pair(resolved) -> tuple[str, str] | None:
+    """Narrow an AliasRegistry.resolve() result to a (name, type) pair or None.
+
+    resolve() has three return shapes: a (canonical_name, canonical_type)
+    tuple, None, or an AmbiguousMatch for a below-auto-merge-threshold hit.
+    Only the tuple is subscriptable, so callers that index the result directly
+    raise TypeError on the ambiguous band. Collapsing "ambiguous" to None here
+    keeps that band meaning the same thing everywhere: not resolved, leave the
+    caller's own name and type alone.
+    """
+    return resolved if isinstance(resolved, tuple) else None
+
+
 class GraphWriter:
     def __init__(self, changed_by: str = "ingestion_worker", *, neo4j_client=None):
         self._neo4j                  = neo4j_client or get_neo4j()
@@ -387,8 +400,16 @@ class GraphWriter:
             # Alias resolution can change the canonical type too, so capture
             # both name and type after resolution so merge_relation can match
             # on the full (name, type, tenant) triple.
-            src_canonical = registry.resolve(src.name)
-            tgt_canonical = registry.resolve(tgt.name)
+            # resolve() returns a (name, type) tuple, None, or an AmbiguousMatch
+            # for the fuzzy 70-84 band. AmbiguousMatch is a plain dataclass —
+            # truthy but NOT subscriptable — so indexing it raises TypeError and
+            # crashes ingestion. write_entities (above) already treats the
+            # ambiguous band as "unresolved"; do the same here so both paths
+            # agree on what a below-threshold match means. Resolving it to the
+            # candidate instead would auto-merge at a confidence the entity path
+            # deliberately refused.
+            src_canonical = _resolved_pair(registry.resolve(src.name))
+            tgt_canonical = _resolved_pair(registry.resolve(tgt.name))
             src_name = src_canonical[0] if src_canonical else src.name
             src_type = src_canonical[1] if src_canonical else src.type
             tgt_name = tgt_canonical[0] if tgt_canonical else tgt.name

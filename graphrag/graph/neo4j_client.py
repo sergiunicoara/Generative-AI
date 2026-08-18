@@ -482,6 +482,10 @@ class Neo4jClient:
             MATCH (t:Entity {name: $tgt_name, type: $tgt_type, tenant: $tenant})
             MERGE (s)-[r:RELATES_TO {relation: $relation}]->(t)
             ON CREATE SET r.recorded_at = datetime()   // transaction time — set once, never updated
+            // Snapshot the contributing-document list BEFORE the SET below
+            // rewrites it, so the confidence guard tests the pre-update state
+            // rather than depending on SET clause evaluation order.
+            WITH r, coalesce(r.source_doc_ids, []) AS prior_docs
             SET r.weight           = $weight,
                 r.extracted_at     = $extracted_at,
                 r.source_doc_id    = $source_doc_id,
@@ -495,12 +499,20 @@ class Neo4jClient:
                 // contradiction detection can see every source even after
                 // multiple merges collapse to a single edge.
                 r.source_doc_ids   = CASE
-                    WHEN r.source_doc_ids IS NULL         THEN [$source_doc_id]
-                    WHEN $source_doc_id IN r.source_doc_ids THEN r.source_doc_ids
-                    ELSE r.source_doc_ids + [$source_doc_id]
+                    WHEN $source_doc_id IN prior_docs THEN prior_docs
+                    ELSE prior_docs + [$source_doc_id]
                 END,
+                // Bayesian accumulation treats each contributing document as an
+                // INDEPENDENT observation. Re-ingesting a document is not a new
+                // observation, so it must not raise confidence: without this
+                // guard, ingesting the same unchanged file at 0.8 twice yields
+                // 0.96, then 0.992 — silent corruption that compounds on every
+                // re-run. The source_doc_ids write directly above was already
+                // guarded against the same repeat; confidence simply wasn't.
+                // See docs/context_graph_gap_plan.md F2.
                 r.confidence       = CASE
-                    WHEN r.confidence IS NULL THEN $confidence
+                    WHEN r.confidence IS NULL              THEN $confidence
+                    WHEN $source_doc_id IN prior_docs      THEN r.confidence
                     ELSE 1.0 - (1.0 - r.confidence) * (1.0 - $confidence)
                 END
             """,
@@ -563,6 +575,10 @@ class Neo4jClient:
             MATCH (t:Entity {name: row.tgt_name, type: row.tgt_type, tenant: $tenant})
             MERGE (s)-[r:RELATES_TO {relation: row.relation}]->(t)
             ON CREATE SET r.recorded_at = datetime()
+            // Snapshot the contributing-document list BEFORE the SET below
+            // rewrites it, so the confidence guard tests the pre-update state
+            // rather than depending on SET clause evaluation order.
+            WITH r, row, coalesce(r.source_doc_ids, []) AS prior_docs
             SET r.weight           = row.weight,
                 r.extracted_at     = row.extracted_at,
                 r.source_doc_id    = row.source_doc_id,
@@ -573,12 +589,15 @@ class Neo4jClient:
                 r.valid_to         = row.valid_to,
                 r.tenant           = $tenant,
                 r.source_doc_ids   = CASE
-                    WHEN r.source_doc_ids IS NULL            THEN [row.source_doc_id]
-                    WHEN row.source_doc_id IN r.source_doc_ids THEN r.source_doc_ids
-                    ELSE r.source_doc_ids + [row.source_doc_id]
+                    WHEN row.source_doc_id IN prior_docs THEN prior_docs
+                    ELSE prior_docs + [row.source_doc_id]
                 END,
+                // Re-ingesting a document is not an independent observation,
+                // so it must not raise confidence. See the identical guard in
+                // merge_relation and docs/context_graph_gap_plan.md F2.
                 r.confidence       = CASE
-                    WHEN r.confidence IS NULL THEN row.confidence
+                    WHEN r.confidence IS NULL             THEN row.confidence
+                    WHEN row.source_doc_id IN prior_docs  THEN r.confidence
                     ELSE 1.0 - (1.0 - r.confidence) * (1.0 - row.confidence)
                 END,
                 r.chunk_span_start = row.span_start,

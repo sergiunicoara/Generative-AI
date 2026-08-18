@@ -407,3 +407,86 @@ class TestReingestionDoesNotDuplicate:
 
         assert id_a != id_b
         assert len(documents) == 2
+
+
+# ── Relation confidence must not inflate on re-ingest ─────────────────────────
+
+class TestRelationConfidenceIdempotency:
+    """Bayesian accumulation treats each contributing document as an
+    INDEPENDENT observation:
+
+        r.confidence = 1.0 - (1.0 - r.confidence) * (1.0 - new_confidence)
+
+    That is correct for two *different* documents asserting the same edge. It
+    was being applied unconditionally, so re-ingesting one unchanged document
+    at 0.8 produced 0.96, then 0.992 — confidence manufactured out of a repeat
+    with no new evidence, compounding on every run.
+
+    The `source_doc_ids` write immediately above it was already guarded against
+    exactly this repeat; the guard simply hadn't been applied to confidence.
+
+    See docs/context_graph_gap_plan.md F2.
+    """
+
+    @pytest.mark.asyncio
+    async def test_single_merge_guards_confidence_on_repeat_source(self):
+        from graphrag.graph.neo4j_client import Neo4jClient
+        from graphrag.core.models import Relation
+
+        client = Neo4jClient.__new__(Neo4jClient)
+        client.run = AsyncMock(return_value=[])
+        rel = Relation(source_entity_id="a", target_entity_id="b",
+                       relation="SUPERSEDES", source_doc_id="doc-1")
+
+        await client.merge_relation(rel, "A", "ORG", "B", "ORG", tenant="aerospace")
+        cypher = client.run.call_args[0][0]
+
+        assert "WHEN $source_doc_id IN prior_docs      THEN r.confidence" in cypher
+        # The guard must read a pre-SET snapshot, not the field it rewrites.
+        assert "coalesce(r.source_doc_ids, []) AS prior_docs" in cypher
+
+    @pytest.mark.asyncio
+    async def test_batch_merge_guards_confidence_on_repeat_source(self):
+        """The batch path is the one graph_writer actually calls, so a guard
+        present only on merge_relation would not protect real ingestion."""
+        from graphrag.graph.neo4j_client import Neo4jClient
+
+        client = Neo4jClient.__new__(Neo4jClient)
+        client.run = AsyncMock(return_value=[])
+        rows = [{
+            "src_name": "A", "src_type": "ORG", "tgt_name": "B", "tgt_type": "ORG",
+            "relation": "SUPERSEDES", "weight": 1.0, "confidence": 0.8,
+            "extracted_at": "2026-01-01T00:00:00+00:00", "source_doc_id": "doc-1",
+            "source_type": "document", "constraint_type": "none",
+            "confidence_state": "asserted", "valid_from": None, "valid_to": None,
+            "span_start": 0, "span_end": 1, "extraction_model": "m", "prompt_version": "v1",
+        }]
+
+        await client.merge_relations_batch(rows, tenant="aerospace")
+        cypher = client.run.call_args[0][0]
+
+        assert "WHEN row.source_doc_id IN prior_docs  THEN r.confidence" in cypher
+        assert "coalesce(r.source_doc_ids, []) AS prior_docs" in cypher
+
+    @pytest.mark.asyncio
+    async def test_new_source_still_accumulates(self):
+        """Regression guard the other way: a genuinely new contributing
+        document must still raise confidence, or this fix would have broken
+        multi-source corroboration."""
+        from graphrag.graph.neo4j_client import Neo4jClient
+
+        client = Neo4jClient.__new__(Neo4jClient)
+        client.run = AsyncMock(return_value=[])
+        rows = [{
+            "src_name": "A", "src_type": "ORG", "tgt_name": "B", "tgt_type": "ORG",
+            "relation": "SUPERSEDES", "weight": 1.0, "confidence": 0.8,
+            "extracted_at": "2026-01-01T00:00:00+00:00", "source_doc_id": "doc-2",
+            "source_type": "document", "constraint_type": "none",
+            "confidence_state": "asserted", "valid_from": None, "valid_to": None,
+            "span_start": 0, "span_end": 1, "extraction_model": "m", "prompt_version": "v1",
+        }]
+
+        await client.merge_relations_batch(rows, tenant="aerospace")
+        cypher = client.run.call_args[0][0]
+
+        assert "ELSE 1.0 - (1.0 - r.confidence) * (1.0 - row.confidence)" in cypher

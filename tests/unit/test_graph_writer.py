@@ -462,3 +462,76 @@ class TestMaybeRecomputePagerank:
         mock_computer.compute_and_persist.assert_not_called()
         assert report["recomputed"] is False
         assert report["reason"] == "up_to_date"
+
+
+class TestWriteRelationsAmbiguousMatch:
+    """AliasRegistry.resolve() has three return shapes: a (name, type) tuple,
+    None, or an AmbiguousMatch for the fuzzy 70-84 band.
+
+    write_entities has always guarded the third case with isinstance().
+    write_relations did not — it subscripted the result directly. AmbiguousMatch
+    is a plain dataclass: truthy, but NOT subscriptable, so `src_canonical[0]`
+    raised TypeError and crashed ingestion whenever a relation endpoint's name
+    landed in that band.
+
+    See docs/context_graph_gap_plan.md F3.
+    """
+
+    async def test_ambiguous_endpoint_does_not_crash(self):
+        from graphrag.graph.alias_registry import AmbiguousMatch
+
+        writer = _build_writer()
+        mock_registry = MagicMock()
+        # Exactly what the fuzzy band returns for a near-miss name.
+        mock_registry.resolve = MagicMock(return_value=AmbiguousMatch(
+            candidate=("Acme Corporation", "ORG"), score=78.0, match_type="fuzzy",
+        ))
+
+        mock_ontology = MagicMock()
+        mock_ontology.validate_relation_triplet = MagicMock(return_value=(True, "WORKS_AT"))
+        writer._ontology = mock_ontology
+        writer._neo4j.merge_relations_batch = AsyncMock()
+        writer._audit.log_relation_change = AsyncMock()
+
+        src = _make_entity("Alice", "PERSON")
+        tgt = _make_entity("Acme Corp", "ORG")
+        rel = Relation(source_entity_id=src.id, target_entity_id=tgt.id, relation="WORKS_AT")
+        entity_map = {src.id: src, tgt.id: tgt}
+
+        with patch.object(writer, "_get_registry", return_value=mock_registry), \
+             patch.object(writer, "_ensure_registry", AsyncMock()):
+            # Before the fix this raised TypeError: 'AmbiguousMatch' object is
+            # not subscriptable.
+            await writer.write_relations([rel], entity_map, doc_id="doc1", tenant="default")
+
+    async def test_ambiguous_endpoint_keeps_original_name_not_candidate(self):
+        """An ambiguous match is deliberately NOT auto-merged: the entity path
+        refused it at this score, so the relation path must not quietly adopt
+        the candidate and create the merge by the back door."""
+        from graphrag.graph.alias_registry import AmbiguousMatch
+
+        writer = _build_writer()
+        mock_registry = MagicMock()
+        mock_registry.resolve = MagicMock(return_value=AmbiguousMatch(
+            candidate=("Acme Corporation", "ORG"), score=78.0, match_type="fuzzy",
+        ))
+
+        mock_ontology = MagicMock()
+        mock_ontology.validate_relation_triplet = MagicMock(return_value=(True, "WORKS_AT"))
+        writer._ontology = mock_ontology
+        writer._neo4j.merge_relations_batch = AsyncMock()
+        writer._audit.log_relation_change = AsyncMock()
+
+        src = _make_entity("Alice", "PERSON")
+        tgt = _make_entity("Acme Corp", "ORG")
+        rel = Relation(source_entity_id=src.id, target_entity_id=tgt.id, relation="WORKS_AT")
+        entity_map = {src.id: src, tgt.id: tgt}
+
+        with patch.object(writer, "_get_registry", return_value=mock_registry), \
+             patch.object(writer, "_ensure_registry", AsyncMock()):
+            await writer.write_relations([rel], entity_map, doc_id="doc1", tenant="default")
+
+        rows = writer._neo4j.merge_relations_batch.await_args.args[0]
+        assert rows, "expected the relation to still be written"
+        assert rows[0]["tgt_name"] == "Acme Corp"
+        assert rows[0]["tgt_name"] != "Acme Corporation"

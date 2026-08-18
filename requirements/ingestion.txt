@@ -16,6 +16,15 @@ langchain-text-splitters>=0.2.0
 # ── RDF / Ontology ─────────────────────────────────────────────────────────────
 rdflib>=7.0.0
 owlrl>=6.0.0
+# pyshacl is a HARD requirement of this service, not an optional extra:
+# graphrag/ingestion/relational.py:306 gates every relational mapping on
+# SHACLValidator.validate_relational_batch(), which imports pyshacl lazily and
+# re-raises ImportError. Without it the relational ingest path doesn't skip
+# validation — it crashes. It was declared only in the monolithic
+# requirements.txt, which the Dockerfile never installs (it installs
+# requirements/${SERVICE}.txt), and CI installs requirements-dev.txt, so no
+# test could ever catch the gap. See docs/context_graph_gap_plan.md F1.
+pyshacl>=0.29.0
 
 # ── Messaging ──────────────────────────────────────────────────────────────────
 pika>=1.3.2

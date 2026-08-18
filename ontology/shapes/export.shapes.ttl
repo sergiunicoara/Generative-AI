@@ -1,0 +1,94 @@
+@prefix sh:    <http://www.w3.org/ns/shacl#> .
+@prefix owl:   <http://www.w3.org/2002/07/owl#> .
+@prefix rdf:   <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs:  <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd:   <http://www.w3.org/2001/XMLSchema#> .
+@prefix annot: <https://graphrag.example.com/annotation#> .
+@prefix shapes: <https://graphrag.example.com/shapes#> .
+
+# SHACL shapes for the RDF graph produced by scripts/export_rdf.py.
+#
+# Named (not anonymous [] blank-node) shapes: pyshacl's validation report
+# attaches the failing sh:sourceShape to every result, and a blank-node
+# shape has no stable identity across runs — grouping "failures by shape"
+# for metrics or a machine-readable report needs a real name to group on.
+#
+# Every constraint declares sh:severity explicitly rather than relying on
+# the pyshacl default (sh:Violation) — this is what lets the platform
+# distinguish a hard rejection from a data-quality warning at all. See
+# graphrag/graph/shacl_validator.py and docs/context_graph_gap_plan.md
+# (Priority 1 — SHACL validation, Step 2).
+
+# Every NamedIndividual (extracted entity) must carry a human-readable
+# label and a domain type beyond owl:NamedIndividual itself. Both are
+# genuine data-quality failures if missing — an unlabelled or untyped
+# entity is not a usable knowledge-graph node — so both stay sh:Violation.
+shapes:EntityShape a sh:NodeShape ;
+    sh:targetClass owl:NamedIndividual ;
+    sh:property shapes:EntityLabelProperty ;
+    sh:property shapes:EntityTypeProperty .
+
+shapes:EntityLabelProperty a sh:PropertyShape ;
+    sh:path rdfs:label ;
+    sh:minCount 1 ;
+    sh:datatype xsd:string ;
+    sh:severity sh:Violation ;
+    sh:message "Entity is missing an rdfs:label." .
+
+shapes:EntityTypeProperty a sh:PropertyShape ;
+    sh:path rdf:type ;
+    sh:minCount 2 ;
+    sh:severity sh:Violation ;
+    sh:message "Entity must have a domain type beyond owl:NamedIndividual." .
+
+# Every reified relation (owl:Axiom) must carry its full subject/predicate/
+# object triple as annotations — export_rdf.py always sets all three, so
+# any occurrence here is a genuine export bug, not a data-quality nuance.
+shapes:AxiomShape a sh:NodeShape ;
+    sh:targetClass owl:Axiom ;
+    sh:property shapes:AxiomSourceProperty ;
+    sh:property shapes:AxiomPropertyProperty ;
+    sh:property shapes:AxiomTargetProperty ;
+    sh:property shapes:AxiomConfidencePresenceProperty ;
+    sh:property shapes:AxiomConfidenceRangeProperty .
+
+shapes:AxiomSourceProperty a sh:PropertyShape ;
+    sh:path owl:annotatedSource ;
+    sh:minCount 1 ;
+    sh:maxCount 1 ;
+    sh:severity sh:Violation ;
+    sh:message "Axiom is missing annotatedSource." .
+
+shapes:AxiomPropertyProperty a sh:PropertyShape ;
+    sh:path owl:annotatedProperty ;
+    sh:minCount 1 ;
+    sh:maxCount 1 ;
+    sh:severity sh:Violation ;
+    sh:message "Axiom is missing annotatedProperty." .
+
+shapes:AxiomTargetProperty a sh:PropertyShape ;
+    sh:path owl:annotatedTarget ;
+    sh:minCount 1 ;
+    sh:maxCount 1 ;
+    sh:severity sh:Violation ;
+    sh:message "Axiom is missing annotatedTarget." .
+
+# export_rdf.py only sets :confidence when the source Neo4j edge's
+# confidence property is non-null (relations written before confidence
+# tracking existed, or via a path that never set it, legitimately have
+# none) — so an absent confidence is a WARNING (visible, not blocking),
+# while a confidence that IS present but malformed is a real VIOLATION.
+shapes:AxiomConfidencePresenceProperty a sh:PropertyShape ;
+    sh:path annot:confidence ;
+    sh:minCount 1 ;
+    sh:severity sh:Warning ;
+    sh:message "Axiom has no confidence annotation (may be legitimate for older data)." .
+
+shapes:AxiomConfidenceRangeProperty a sh:PropertyShape ;
+    sh:path annot:confidence ;
+    sh:maxCount 1 ;
+    sh:datatype xsd:float ;
+    sh:minInclusive 0.0 ;
+    sh:maxInclusive 1.0 ;
+    sh:severity sh:Violation ;
+    sh:message "confidence must be an xsd:float in [0, 1]." .

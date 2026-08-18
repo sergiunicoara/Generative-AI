@@ -65,6 +65,9 @@ test-safety:   ## Run safety-path integration tests
 test-ops:      ## Run operational-path integration tests
 	$(PYTEST) tests/integration/test_operational_paths.py -v
 
+test-shacl:    ## Run SHACL/ontology validation tests (fast, no live services)
+	$(PYTEST) tests/unit/test_shacl_validator.py tests/unit/test_ontology_lifecycle.py tests/unit/test_ontology_registry.py tests/unit/test_export_rdf.py tests/unit/test_relational_ingestion.py -v
+
 # ── Lint ───────────────────────────────────────────────────────────────────────
 
 lint:          ## Lint with ruff (fast, replaces flake8 + isort)

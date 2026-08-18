@@ -445,6 +445,107 @@ new tests across 2 new files — zero prior coverage existed for
 documentation and the deferred P5 schema-touching work noted in the original
 plan (Priority 4/5 sections above).
 
+### Step 2 (P1 SHACL hardening) and Step 3 (P2 governance docs) — done 2026-08-18
+
+Resumed the original Step 2/3 plan (Section 5) after the F11–F14 detour.
+
+**Shapes moved to version-controlled files.** `ontology/shapes/export.shapes.ttl`
+and `ontology/shapes/ingestion.shapes.ttl` are now the source of truth,
+loaded by path. The inline Python-string constants remain as a last-resort
+fallback (used only if the file is missing at runtime — a packaging issue,
+not normal operation) and are kept byte-identical to the files, verified by
+a test that loads both and compares triple counts.
+
+**Named shapes, not anonymous `[]` blank nodes.** Every shape now has a
+stable IRI (`shapes:EntityLabelProperty`, `shapes:AxiomConfidenceRangeProperty`,
+etc.). This is what makes "failures by shape" grouping meaningful — a blank
+node's identity isn't stable across validation runs, so grouping by it
+would have produced a different, meaningless key every time.
+
+**`sh:severity` added explicitly to every constraint**, distinguishing
+`sh:Violation` (fails validation) from `sh:Warning` (visible in the report
+and counts, does not fail). One new, grounded warning-tier constraint: an
+`owl:Axiom`'s confidence annotation may legitimately be absent —
+`export_rdf.py` only writes it when the source Neo4j edge's confidence is
+non-null — so its absence is now a warning, not indistinguishable from a
+genuinely malformed confidence value (still a hard violation when present
+but out of range or wrong datatype).
+
+**Non-obvious pyshacl finding, verified empirically before relying on it**:
+without `allow_warnings=True`, pyshacl's `conforms` flips to `False` for a
+*bare* `sh:Warning` result too — not documented anywhere obvious in pyshacl's
+own docs. Without this flag the whole severity distinction would have been
+cosmetic: every warning would still silently reject. Confirmed both ways
+with a throwaway script before writing the real implementation.
+
+**Machine-readable report added additively.** `validate()` and
+`validate_relational_batch()` keep their exact original `(bool, str)`
+signatures — zero existing callers or tests needed to change. New
+`validate_report()` / `validate_relational_batch_report()` return a
+`ShaclReport` dataclass: `.conforms`, `.text`, `.results: list[ShaclResult]`
+(per-violation focus node / message / shape / severity), `.counts` (total /
+violations / warnings), `.failures_by_shape`.
+
+**Metrics** — `graphrag_shacl_records_validated_total`,
+`graphrag_shacl_validation_failures_total` (labeled by severity),
+`graphrag_shacl_failures_by_shape_total`, all labeled by `target`
+(`export` | `relational_batch`). Same optional-`prometheus_client` pattern
+already used in `graphrag/observability/*` — a no-op if the package isn't
+installed, not a hard dependency added by this change. **Not added**: a
+"quarantined records" metric — nothing quarantines on a SHACL failure today
+(the relational path rejects via `ValueError`; the LLM-extraction path
+coerces, per F5, still open). A metric that would always read zero was not
+worth fabricating; F5 remains the tracked gap for when SHACL becomes a real
+quarantine trigger.
+
+**F9 fixed**: `test_ontology_lifecycle.py`'s hardcoded 6-file list (which had
+silently omitted `sustainability_supply_chain.yml`) is now a glob over
+`config/ontologies/*.yml`. Verified the previously-untested file: it passes
+validation, confirming this was a real coverage gap, not a file that would
+have failed if it had been included.
+
+**`ontology/README.md`** — governance/process doc, distinct from the existing
+`docs/ontology-model.md` (which covers the technical model): naming
+conventions and what's actually enforced (with exact line citations,
+verified against the code before publishing), the lifecycle state machine,
+a realistic propose → validate → review → migrate → release process matching
+how this repo actually operates, and competency questions **drawn from the
+live golden-eval suites** (`evals/golden_set.json`,
+`data/eval_golden/queries_*.json`) rather than invented — each one is a
+question the ontology is already being tested against, not an aspiration.
+
+**`ontology/CHANGELOG.md`** — records the current baseline (all 7 ontologies
+at `1.0.0`, no deprecations yet) honestly as a starting point, not
+reconstructed history, plus a template for future entries that requires
+linking a concrete reason and stating which golden-eval questions were
+re-verified — matching this repo's own evidence-over-inference convention
+(`tasks/lessons.md` A154).
+
+**CI step — explicitly NOT added, flagged rather than silently skipped.**
+The live GitHub Actions workflow
+(`.github/workflows/ai-knowledge-graph-platform-ci.yml`) lives in the
+**parent** `Generative-AI` repository root, not in this nested repo — GitHub
+Actions only reads workflows from a repository's actual root, confirmed
+earlier this session. Editing a copy inside this nested repo would have no
+effect on real CI runs; editing the parent repo's workflow file is a
+cross-repo, outward-facing change to live automation that wasn't part of
+what was asked. Added a `make test-shacl` target instead
+(`test_shacl_validator.py` + `test_ontology_lifecycle.py` +
+`test_ontology_registry.py` + `test_export_rdf.py` +
+`test_relational_ingestion.py`) that a CI step can call once the workflow
+question is resolved.
+
+**Live-validated end-to-end**, not just unit-mocked graphs: ran
+`scripts/export_rdf.py --tenant aerospace --validate` against the real
+aerospace corpus (447 entities, 648 edges, 8910 RDF triples) — loaded shapes
+from the actual `ontology/shapes/export.shapes.ttl` file on disk, conformed
+cleanly with 0 violations, 0 warnings.
+
+Tests: 1191 → 1205 passed, 1 skipped, 0 failures (measured, full suite; one
+test-authoring bug caught and fixed along the way — a `minCount 1` test
+wrongly assumed an empty-string literal fails a minCount check, corrected to
+exercise a value the code path can actually produce). ruff held at 49.
+
 **F10 residual:** the allowlist removes identifier enumeration, but `/kpis/*`
 still returns **cross-tenant aggregate** latency/cost figures, because
 `KPIEventRow` has no tenant column at all. Adding one is a persistence-format

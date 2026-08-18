@@ -1,0 +1,75 @@
+@prefix sh:  <http://www.w3.org/ns/shacl#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs:<http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix ing: <https://graphrag.example.com/ingestion#> .
+
+# SHACL shapes that gate graphrag/ingestion/relational.py's relational
+# ingestion path BEFORE any Neo4j write (see SHACLValidator.
+# validate_relational_batch). Every constraint here is sh:Violation: this is
+# a live mutation gate, not a post-hoc report, so nothing here is advisory.
+
+ing:MappedEntityShape a sh:NodeShape ;
+    sh:targetClass ing:MappedEntity ;
+    sh:property [
+        sh:path rdfs:label ;
+        sh:minCount 1 ;
+        sh:datatype xsd:string ;
+        sh:severity sh:Violation ;
+        sh:message "Mapped entity is missing a label." ;
+    ] ;
+    sh:property [
+        sh:path ing:entityType ;
+        sh:minCount 1 ;
+        sh:datatype xsd:string ;
+        sh:severity sh:Violation ;
+        sh:message "Mapped entity is missing an entityType." ;
+    ] ;
+    sh:property [
+        sh:path ing:tenant ;
+        sh:minCount 1 ;
+        sh:datatype xsd:string ;
+        sh:severity sh:Violation ;
+        sh:message "Mapped entity is missing a tenant." ;
+    ] .
+
+ing:MappedRelationShape a sh:NodeShape ;
+    sh:targetClass ing:MappedRelation ;
+    sh:property [
+        sh:path ing:source ;
+        sh:minCount 1 ;
+        sh:class ing:MappedEntity ;
+        sh:severity sh:Violation ;
+        sh:message "Mapped relation has no valid source entity." ;
+    ] ;
+    sh:property [
+        sh:path ing:target ;
+        sh:minCount 1 ;
+        sh:class ing:MappedEntity ;
+        sh:severity sh:Violation ;
+        sh:message "Mapped relation has no valid target entity." ;
+    ] ;
+    sh:property [
+        sh:path ing:relation ;
+        sh:minCount 1 ;
+        sh:datatype xsd:string ;
+        sh:severity sh:Violation ;
+        sh:message "Mapped relation is missing a relation name." ;
+    ] ;
+    sh:property [
+        sh:path ing:confidence ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+        sh:datatype xsd:float ;
+        sh:minInclusive 0.0 ;
+        sh:maxInclusive 1.0 ;
+        sh:severity sh:Violation ;
+        sh:message "Mapped relation confidence must be an xsd:float in [0, 1]." ;
+    ] ;
+    sh:property [
+        sh:path ing:tenant ;
+        sh:minCount 1 ;
+        sh:datatype xsd:string ;
+        sh:severity sh:Violation ;
+        sh:message "Mapped relation is missing a tenant." ;
+    ] .

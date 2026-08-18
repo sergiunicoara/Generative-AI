@@ -1,5 +1,7 @@
 """Lifecycle and activation gates for YAML ontology definitions."""
 
+from pathlib import Path
+
 import pytest
 
 from graphrag.graph.domain_ontology import (
@@ -7,6 +9,8 @@ from graphrag.graph.domain_ontology import (
     assert_valid_ontology,
     validate_ontology_yaml,
 )
+
+_ONTOLOGIES_DIR = Path(__file__).resolve().parents[2] / "config" / "ontologies"
 
 
 def _ontology(type_hierarchy=None, **metadata):
@@ -29,12 +33,15 @@ def _ontology(type_hierarchy=None, **metadata):
 
 
 def test_all_shipped_ontologies_pass_lifecycle_gate():
-    for name in (
-        "aerospace_regulatory.yml", "automotive_iatf.yml",
-        "marketing_adtech.yml", "pharma_commercial.yml", "synthetic_large.yml", "telecom_oss.yml",
-    ):
-        report = validate_ontology_yaml(f"config/ontologies/{name}")
-        assert report["valid"] is True
+    """Globs config/ontologies/*.yml rather than a hand-maintained list — the
+    hardcoded list had silently omitted sustainability_supply_chain.yml, so a
+    newly added ontology was never actually gated by CI (F9,
+    docs/context_graph_gap_plan.md). A glob can't go stale the same way."""
+    files = sorted(_ONTOLOGIES_DIR.glob("*.yml"))
+    assert files, "found no ontology files — the scan is broken, not the fixtures"
+    for path in files:
+        report = validate_ontology_yaml(str(path))
+        assert report["valid"] is True, f"{path.name}: {report}"
 
 
 def test_invalid_hierarchy_cycle_is_rejected():

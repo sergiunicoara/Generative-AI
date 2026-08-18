@@ -304,12 +304,16 @@ async def export(tenant: str, output: Path, limit: int, infer: bool = False, val
     # ── Optional SHACL shape validation ────────────────────────────────────────
     if validate:
         from graphrag.graph.shacl_validator import SHACLValidator
-        conforms, report = SHACLValidator(g).validate()
-        log.info("export_rdf.shacl", conforms=conforms)
-        print(f"\n{'✅' if conforms else '❌'}  SHACL validation: "
-              f"{'conforms' if conforms else 'violations found'}")
-        if not conforms:
-            print(report)
+        report = SHACLValidator(g).validate_report()
+        log.info("export_rdf.shacl", conforms=report.conforms, **report.counts)
+        print(f"\n{'✅' if report.conforms else '❌'}  SHACL validation: "
+              f"{'conforms' if report.conforms else 'violations found'} "
+              f"({report.counts['violations']} violation(s), "
+              f"{report.counts['warnings']} warning(s))")
+        if report.failures_by_shape:
+            print("  By shape:", report.failures_by_shape)
+        if not report.conforms:
+            print(report.text)
 
     entity_count = len(ent_rows)
     edge_count   = len(edge_rows)

@@ -81,8 +81,8 @@ class SessionContext:
 
     # ── Internal ───────────────────────────────────────────────────────────────
 
-    async def _get_turns(self, session_id: str) -> deque[SessionTurn]:
-        return await self._store.load_turns(session_id)
+    async def _get_turns(self, session_id: str, tenant: str) -> deque[SessionTurn]:
+        return await self._store.load_turns(session_id, tenant=tenant)
 
     # ── Write ──────────────────────────────────────────────────────────────────
 
@@ -93,8 +93,15 @@ class SessionContext:
         answer: str,
         referenced_entities: list[str],
         referenced_chunks: list[str],
+        *,
+        tenant: str,
     ) -> None:
-        """Append a completed turn to the session history."""
+        """Append a completed turn to the session history.
+
+        `tenant` is keyword-only and required — this writes the question AND
+        the full answer, so an unscoped write deposits this tenant's content
+        into whatever session namespace the client-supplied id names.
+        """
         if not session_id:
             return
         turn = SessionTurn(
@@ -103,10 +110,11 @@ class SessionContext:
             referenced_entities=referenced_entities,
             referenced_chunks=referenced_chunks,
         )
-        await self._store.save_turn(session_id, turn)
+        await self._store.save_turn(session_id, turn, tenant=tenant)
         log.debug(
             "session_context.turn_recorded",
             session_id=session_id,
+            tenant=tenant,
             entities=referenced_entities,
             backend="redis" if self._store.is_redis_backed() else "memory",
         )
@@ -114,18 +122,23 @@ class SessionContext:
     # ── Read / enrich ──────────────────────────────────────────────────────────
 
     async def enrich_query(
-        self, session_id: str, question: str, tenant: str = "default",
+        self, session_id: str, question: str, *, tenant: str,
     ) -> str:
         """
         If the question contains ambiguity signals, append the most
         recently referenced entities as explicit context.
 
         Returns the (possibly enriched) query string.
+
+        `tenant` lost its "default" fallback deliberately: the entities read
+        here are spliced into the outgoing prompt, so silently defaulting to a
+        shared namespace is precisely how one tenant's entity names ended up
+        in another's query. Callers must say which tenant is asking.
         """
         if not session_id:
             return question
 
-        turns = await self._get_turns(session_id)
+        turns = await self._get_turns(session_id, tenant)
         if not _AMBIGUITY_RE.search(question):
             return question
 
@@ -170,11 +183,11 @@ class SessionContext:
         )
         return enriched
 
-    async def get_recent_entities(self, session_id: str, n: int = 5) -> list[str]:
+    async def get_recent_entities(self, session_id: str, n: int = 5, *, tenant: str) -> list[str]:
         """Return the N most recently referenced unique entity names."""
         if not session_id:
             return []
-        turns = await self._get_turns(session_id)
+        turns = await self._get_turns(session_id, tenant)
         seen: list[str] = []
         for turn in reversed(list(turns)):
             for entity in turn.referenced_entities:
@@ -184,11 +197,11 @@ class SessionContext:
                 break
         return seen[:n]
 
-    async def get_recent_chunks(self, session_id: str, n: int = 10) -> list[str]:
+    async def get_recent_chunks(self, session_id: str, n: int = 10, *, tenant: str) -> list[str]:
         """Return the N most recently retrieved chunk IDs."""
         if not session_id:
             return []
-        turns = await self._get_turns(session_id)
+        turns = await self._get_turns(session_id, tenant)
         seen: list[str] = []
         for turn in reversed(list(turns)):
             for chunk_id in turn.referenced_chunks:
@@ -198,18 +211,18 @@ class SessionContext:
                 break
         return seen[:n]
 
-    async def clear_session(self, session_id: str) -> None:
+    async def clear_session(self, session_id: str, *, tenant: str) -> None:
         """Remove all history for a session (e.g. user logs out)."""
-        await self._store.clear(session_id)
+        await self._store.clear(session_id, tenant=tenant)
 
-    async def session_summary(self, session_id: str) -> dict:
+    async def session_summary(self, session_id: str, *, tenant: str) -> dict:
         """Return a summary of the session for debugging."""
-        turns = await self._get_turns(session_id)
+        turns = await self._get_turns(session_id, tenant)
         return {
             "session_id": session_id,
             "turn_count": len(turns),
-            "recent_entities": await self.get_recent_entities(session_id),
-            "recent_chunks": await self.get_recent_chunks(session_id, 5),
+            "recent_entities": await self.get_recent_entities(session_id, tenant=tenant),
+            "recent_chunks": await self.get_recent_chunks(session_id, 5, tenant=tenant),
             "backend": "redis" if self._store.is_redis_backed() else "memory",
         }
 

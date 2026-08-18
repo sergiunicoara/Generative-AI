@@ -155,10 +155,10 @@ class TestSessionStoreE2E:
         store = SessionStore(redis_url=redis_url, max_turns=10)
         sid = f"e2e-session-{uuid.uuid4().hex[:8]}"
 
-        await store.save_turn(sid, SessionTurn(question="Who?", answer="Alice"))
-        await store.save_turn(sid, SessionTurn(question="Where?", answer="Berlin"))
+        await store.save_turn(sid, SessionTurn(question="Who?", answer="Alice"), tenant="acme")
+        await store.save_turn(sid, SessionTurn(question="Where?", answer="Berlin"), tenant="acme")
 
-        turns = await store.load_turns(sid)
+        turns = await store.load_turns(sid, tenant="acme")
         assert len(turns) == 2
         questions = {t.question for t in turns}
         assert "Who?" in questions
@@ -182,9 +182,9 @@ class TestSessionStoreE2E:
         sid = f"e2e-window-{uuid.uuid4().hex[:8]}"
 
         for i in range(max_t + 2):
-            await store.save_turn(sid, SessionTurn(question=f"q{i}", answer=f"a{i}"))
+            await store.save_turn(sid, SessionTurn(question=f"q{i}", answer=f"a{i}"), tenant="acme")
 
-        turns = await store.load_turns(sid)
+        turns = await store.load_turns(sid, tenant="acme")
         assert len(turns) == max_t
         questions = {t.question for t in turns}
         assert "q0" not in questions

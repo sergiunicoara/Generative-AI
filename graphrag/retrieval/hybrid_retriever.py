@@ -695,6 +695,7 @@ class HybridRetriever:
                 answer=answer,
                 referenced_entities=local_results.get("referenced_entities", []),
                 referenced_chunks=local_results.get("referenced_chunks", []),
+                tenant=tenant,
             )
 
         # ── Agentic fallback ───────────────────────────────────────────────────

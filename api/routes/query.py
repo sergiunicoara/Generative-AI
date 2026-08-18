@@ -56,7 +56,9 @@ async def submit_query(request: Request, body: QueryRequest, tenant: str = Depen
         # call: don't enqueue a real ~13-26s LLM retrieval for a follow-up
         # that's already known to be unable to get correct context.
         try:
-            await get_session_store().load_turns(body.session_id, required=True)
+            await get_session_store().load_turns(
+                body.session_id, tenant=tenant, required=True,
+            )
         except SessionContextUnavailable as exc:
             raise HTTPException(status_code=503,
                 detail=f"Session context unavailable: {exc}")

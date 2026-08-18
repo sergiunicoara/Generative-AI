@@ -55,7 +55,7 @@ async def test_session_store_concurrent_saves():
     n = 50
 
     coros = [
-        store.save_turn(f"sess-{i % 5}", _make_turn(f"q{i}", f"a{i}"))
+        store.save_turn(f"sess-{i % 5}", _make_turn(f"q{i}", f"a{i}"), tenant="acme")
         for i in range(n)
     ]
     stats = await _measure(coros, label="session_store.concurrent_saves")
@@ -65,7 +65,7 @@ async def test_session_store_concurrent_saves():
     )
     # Verify data integrity: each of the 5 session slots has turns
     for slot in range(5):
-        turns = await store.load_turns(f"sess-{slot}")
+        turns = await store.load_turns(f"sess-{slot}", tenant="acme")
         assert len(turns) > 0, f"sess-{slot} should have turns after concurrent saves"
 
 
@@ -82,12 +82,12 @@ async def test_session_store_concurrent_loads():
     # Pre-populate sessions sequentially
     for sid, turns in sessions.items():
         for t in turns:
-            await store.save_turn(sid, t)
+            await store.save_turn(sid, t, tenant="acme")
 
     # 50 concurrent loads spread across the 5 sessions
     session_ids = list(sessions.keys())
     coros = [
-        store.load_turns(session_ids[i % len(session_ids)])
+        store.load_turns(session_ids[i % len(session_ids)], tenant="acme")
         for i in range(50)
     ]
     results = await asyncio.gather(*coros)

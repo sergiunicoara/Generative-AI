@@ -57,10 +57,10 @@ class TestSessionStorePersistence:
 
         t1 = _make_turn("Who founded SpaceX?", "Elon Musk")
         t2 = _make_turn("When?", "2002")
-        await store.save_turn(sid, t1)
-        await store.save_turn(sid, t2)
+        await store.save_turn(sid, t1, tenant="acme")
+        await store.save_turn(sid, t2, tenant="acme")
 
-        turns = await store.load_turns(sid)
+        turns = await store.load_turns(sid, tenant="acme")
         assert len(turns) == 2
         questions = [t.question for t in turns]
         assert "Who founded SpaceX?" in questions
@@ -93,12 +93,14 @@ class TestSessionStorePersistence:
 
         sid = "fallback-session"
         turn = _make_turn("fallback?", "yes")
-        await store.save_turn(sid, turn)   # should NOT raise
+        await store.save_turn(sid, turn, tenant="acme")   # should NOT raise
 
-        # Turn should have landed in memory
-        assert sid in store._memory
-        assert len(store._memory[sid]) == 1
-        assert store._memory[sid][0].question == "fallback?"
+        # Turn should have landed in memory, under the (tenant, session_id)
+        # key the fallback now uses — the fallback is a full substitute for
+        # Redis, so it carries the same tenant scoping (see F11).
+        assert ("acme", sid) in store._memory
+        assert len(store._memory[("acme", sid)]) == 1
+        assert store._memory[("acme", sid)][0].question == "fallback?"
 
     @pytest.mark.asyncio
     async def test_strict_mode_logs_error_on_op_failure(self):
@@ -132,9 +134,9 @@ class TestSessionStorePersistence:
         sid = "window-session"
 
         for i in range(max_t + 2):
-            await store.save_turn(sid, _make_turn(f"q{i}", f"a{i}"))
+            await store.save_turn(sid, _make_turn(f"q{i}", f"a{i}"), tenant="acme")
 
-        turns = await store.load_turns(sid)
+        turns = await store.load_turns(sid, tenant="acme")
         assert len(turns) == max_t
         # The deque kept the LAST max_t turns
         questions = [t.question for t in turns]

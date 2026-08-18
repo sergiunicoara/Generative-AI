@@ -266,11 +266,31 @@ unchanged at 49 pre-existing errors, and every touched file is ruff-clean.
 | **F3** | `_resolved_pair()` narrows `resolve()` to a tuple-or-None; ambiguous band now means "unresolved" in the relation path, matching the entity path | 2 unit tests, incl. one asserting the candidate is **not** silently adopted |
 | **F10** | `_ALLOWED_TIMESERIES_METRICS` allowlist (numeric measurement columns only, rejects rather than defaulting); `/kpis` now requires `read` scope; `GET /query/{id}` enforces tenant ownership, **failing closed** on entries with no recorded tenant; `set_status` takes a required `tenant`; the worker records `msg.tenant` on the completed result | 6 allowlist tests + 2 adversarial cross-tenant tests + 1 fail-closed test |
 
-**Deliberately NOT fixed** (each needs its own iteration): **F11** session-store
-tenant scoping touches ~10 call sites across `SessionStore`, `SessionContext`,
-`local_search`, `hybrid_retriever` and the API — too broad to land safely
-alongside the above. **F12**, **F13**, **F14** likewise. F11 in particular is
-still a live cross-tenant read/write path and should be the next thing done.
+### F11 — fixed 2026-08-18 (follow-up pass)
+
+`SessionStore` now keys on `(tenant, session_id)` in **both** backends:
+`graphrag:session:<quote(tenant)>:<session_id>` in Redis, and a
+`dict[tuple[str, str], ...]` in the in-memory fallback — the fallback is a full
+substitute for Redis whenever it is unconfigured or unreachable, so leaving it
+unscoped would have reopened the leak on exactly the degraded path where it is
+hardest to notice. `tenant` is **keyword-only and required** on every
+`SessionStore` / `SessionContext` method that reaches storage, so a caller that
+forgets it raises `TypeError` at the call site instead of silently reading a
+shared namespace. `enrich_query` lost its `tenant: str = "default"` fallback for
+the same reason (that default is gap **M9** in its own right).
+
+`quote()` on the tenant segment stops a tenant named `a:b` from aliasing a
+different `(tenant, session)` pair; ordinary names pass through unchanged so
+keys stay greppable in `redis-cli`.
+
+**Live-validated** against real Redis: an attacker reusing the victim's exact
+client-supplied `session_id` reads 0 turns, their write leaves the victim's
+history intact, and the two land in separate keys
+(`graphrag:session:victim:…` vs `graphrag:session:attacker:…`).
+7 new adversarial unit tests (read leak, write poisoning, tenant-scoped
+`clear`, key shape, colon-aliasing, required-kwarg enforcement).
+
+**Still NOT fixed** (each needs its own iteration): **F12**, **F13**, **F14**.
 
 **F10 residual:** the allowlist removes identifier enumeration, but `/kpis/*`
 still returns **cross-tenant aggregate** latency/cost figures, because

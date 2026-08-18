@@ -9,7 +9,7 @@ the next question to be answered as if it were the first.
 
 Architecture
 ------------
-- Primary: Redis list per session (key = graphrag:session:<session_id>)
+- Primary: Redis list per session (key = graphrag:session:<tenant>:<session_id>)
   - Each list element is a JSON-serialised SessionTurn
   - List is capped to SESSION_MAX_TURNS via LTRIM after every RPUSH
   - Keys expire after SESSION_TTL_SECONDS (default 24 h)
@@ -54,6 +54,7 @@ from __future__ import annotations
 
 import json
 from collections import deque
+from urllib.parse import quote
 
 import structlog
 
@@ -109,7 +110,9 @@ class SessionStore:
         self._ttl        = ttl_seconds
         self._strict     = strict
         self._redis      = None
-        self._memory: dict[str, deque[SessionTurn]] = {}
+        # Keyed by (tenant, session_id) — see save_turn() for why the tenant
+        # half is required on the fallback path too.
+        self._memory: dict[tuple[str, str], deque[SessionTurn]] = {}
 
         if redis_url:
             try:
@@ -177,13 +180,33 @@ class SessionStore:
     # ── Key helpers ────────────────────────────────────────────────────────────
 
     @staticmethod
-    def _key(session_id: str) -> str:
-        return f"graphrag:session:{session_id}"
+    def _key(session_id: str, tenant: str) -> str:
+        """Redis key for one tenant's view of one session.
+
+        The tenant segment is NOT decorative. `session_id` is supplied by the
+        client (api/routes/query.py QueryRequest.session_id), so keying on it
+        alone let any caller read — and write — another tenant's conversation
+        history simply by guessing or reusing an id: enrich_query would splice
+        the other tenant's entity names into this tenant's prompt, and
+        record_turn would append this tenant's question and full answer into
+        theirs. See docs/context_graph_gap_plan.md F11.
+
+        quote() the tenant so a name containing ':' can't shift the segment
+        boundary and alias a different (tenant, session) pair. Ordinary names
+        pass through unchanged, keeping keys greppable in redis-cli.
+        """
+        return f"graphrag:session:{quote(tenant, safe='')}:{session_id}"
 
     # ── Core operations ────────────────────────────────────────────────────────
 
-    async def load_turns(self, session_id: str, required: bool = False) -> deque[SessionTurn]:
+    async def load_turns(
+        self, session_id: str, *, tenant: str, required: bool = False,
+    ) -> deque[SessionTurn]:
         """Return the turn history for a session (most recent last).
+
+        `tenant` is keyword-only and required: session history is
+        tenant-private, and a caller that omits it should fail loudly at the
+        call site rather than silently read a shared namespace.
 
         `required=True` overrides the module's own strict/non-strict
         setting for this one call: if Redis is configured but the read
@@ -193,7 +216,7 @@ class SessionStore:
         """
         if self._redis is not None:
             try:
-                raw_list = await self._redis.lrange(self._key(session_id), 0, -1)
+                raw_list = await self._redis.lrange(self._key(session_id, tenant), 0, -1)
                 turns: deque[SessionTurn] = deque(maxlen=self._max_turns)
                 dropped = 0
                 for raw in raw_list:
@@ -224,13 +247,13 @@ class SessionStore:
                 self._log_op_failure("load", exc)
                 # Fall through to memory
 
-        return self._memory.get(session_id, deque(maxlen=self._max_turns))
+        return self._memory.get((tenant, session_id), deque(maxlen=self._max_turns))
 
-    async def save_turn(self, session_id: str, turn: SessionTurn) -> None:
+    async def save_turn(self, session_id: str, turn: SessionTurn, *, tenant: str) -> None:
         """Append a turn to the session history, capping at max_turns."""
         if self._redis is not None:
             try:
-                key = self._key(session_id)
+                key = self._key(session_id, tenant)
                 await self._redis.rpush(key, turn.model_dump_json())
                 await self._redis.ltrim(key, -self._max_turns, -1)
                 await self._redis.expire(key, self._ttl)
@@ -239,21 +262,25 @@ class SessionStore:
                 self._log_op_failure("save", exc)
                 # Fall through to memory
 
-        # Memory fallback
-        if session_id not in self._memory:
-            self._memory[session_id] = deque(maxlen=self._max_turns)
-        self._memory[session_id].append(turn)
+        # Memory fallback — keyed by (tenant, session_id) for the same reason
+        # the Redis key is: this dict is a full substitute for Redis whenever
+        # Redis is unconfigured or unreachable, so keying it on session_id
+        # alone would reopen the cross-tenant leak on exactly the degraded
+        # path where it is hardest to notice.
+        if (tenant, session_id) not in self._memory:
+            self._memory[(tenant, session_id)] = deque(maxlen=self._max_turns)
+        self._memory[(tenant, session_id)].append(turn)
 
-    async def clear(self, session_id: str) -> None:
+    async def clear(self, session_id: str, *, tenant: str) -> None:
         """Delete all history for a session."""
         if self._redis is not None:
             try:
-                await self._redis.delete(self._key(session_id))
+                await self._redis.delete(self._key(session_id, tenant))
                 return
             except Exception as exc:
                 self._log_op_failure("clear", exc)
 
-        self._memory.pop(session_id, None)
+        self._memory.pop((tenant, session_id), None)
 
     def is_redis_backed(self) -> bool:
         return self._redis is not None

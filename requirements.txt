@@ -16,6 +16,14 @@ langchain-text-splitters>=0.2.0
 aio-pika>=9.4.0
 pika>=1.3.2
 
+# ── Worker health server (graphrag/workers/health_server.py) ───────────────────
+# Direct dependency, not previously declared -- was only present in
+# requirements.lock as some other package's transitive pull-in, which left
+# every worker image silently broken until first actually run against a
+# correctly-built Docker image (see requirements/README.md and the per-service
+# subset files for the split this feeds into).
+aiohttp>=3.9.0
+
 # ── Evaluation ─────────────────────────────────────────────────────────────────
 ragas>=0.2.0
 datasets>=2.20.0
@@ -42,7 +50,7 @@ pyyaml>=6.0.1
 python-dotenv>=1.0.0
 
 # ── Reranking ──────────────────────────────────────────────────────────────────
-sentence-transformers>=3.0.0,<4.0.0
+sentence-transformers>=3.0.0
 
 # ── Observability ──────────────────────────────────────────────────────────────
 structlog>=24.2.0

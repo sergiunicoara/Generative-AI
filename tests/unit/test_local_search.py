@@ -64,11 +64,11 @@ def _make_local_search(cfg_overrides: dict | None = None) -> LocalSearch:
 
     with (
         patch("graphrag.retrieval.local_search.get_settings") as mock_settings,
-        patch("graphrag.retrieval.local_search.get_neo4j"),
-        patch("graphrag.retrieval.local_search.Embedder"),
-        patch("graphrag.retrieval.local_search.HybridBM25Search"),
-        patch("graphrag.retrieval.local_search.CrossEncoderReranker"),
-        patch("graphrag.retrieval.local_search.GNNScorer"),
+        patch("graphrag.retrieval.local_search.get_neo4j") as mock_neo4j,
+        patch("graphrag.retrieval.local_search.Embedder") as mock_embedder_cls,
+        patch("graphrag.retrieval.local_search.HybridBM25Search") as mock_bm25_cls,
+        patch("graphrag.retrieval.local_search.CrossEncoderReranker") as mock_reranker_cls,
+        patch("graphrag.retrieval.local_search.GNNScorer") as mock_gnn_cls,
         patch("graphrag.retrieval.local_search.DocumentAuthorityService"),
         patch("graphrag.retrieval.local_search.get_session_context"),
     ):

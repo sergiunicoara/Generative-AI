@@ -1,0 +1,291 @@
+{
+  "run_at": "2026-08-17T16:22:12.185292+00:00",
+  "tenant": "automotive",
+  "golden": {
+    "pass_rate": 0.2,
+    "passed": 2,
+    "failed": 8,
+    "errored": 0,
+    "by_type": {
+      "single_hop": {
+        "passed": 0,
+        "total": 2
+      },
+      "multi_hop": {
+        "passed": 0,
+        "total": 2
+      },
+      "contradiction": {
+        "passed": 0,
+        "total": 4
+      },
+      "negative": {
+        "passed": 2,
+        "total": 2
+      }
+    },
+    "questions": [
+      {
+        "id": "SH-02",
+        "type": "single_hop",
+        "passed": false,
+        "failures": [
+          "answer missing required term: '1%'",
+          "insufficient citation recall — missing: ['csr-client-2023']"
+        ],
+        "answer": "Contextul nu conține informații despre PlastiAuto, AutoCorp GmbH sau vreo rată de neconformitate stabilită între aceste entități. Nu pot răspunde la întrebare pe baza informațiilor furnizate.",
+        "citations": [
+          "4a719657-145e-4484-9c98-b4a9adf0b8c5",
+          "8775d868-04f1-4443-babd-8c2fe89c8706",
+          "ebef63dd-75bd-48bd-80bf-5dea90061c4b",
+          "30d95409-1e46-40d3-a3e7-62b85e8e4346",
+          "db83f2f2-081a-4399-a9cb-19ad7c3404bc"
+        ],
+        "has_context": true,
+        "latency_s": 14.3,
+        "faithfulness": 0.75
+      },
+      {
+        "id": "SH-03",
+        "type": "single_hop",
+        "passed": false,
+        "failures": [
+          "answer missing required term: '95%'",
+          "insufficient citation recall — missing: ['csr-client-2023']"
+        ],
+        "answer": "Contextul nu conține informații despre PlastiAuto SRL sau despre indicatorii de performanță KPI ai acestuia, inclusiv ținta procentuală pentru rata de livrare la timp a furnizorilor.",
+        "citations": [
+          "142e141d-9abb-4019-a280-8d6be8a1e409",
+          "bb322ed4-e4a6-4f23-a52d-5953efd0a5b5",
+          "e051dc45-1c21-4fef-9385-ac4d261b7616",
+          "df91ca21-fcc9-4a23-9d15-67fd7901e31e",
+          "b9925f14-b374-4c82-a74c-454cd895e0d2"
+        ],
+        "has_context": true,
+        "latency_s": 6.8,
+        "faithfulness": 1.0
+      },
+      {
+        "id": "MH-01",
+        "type": "multi_hop",
+        "passed": false,
+        "failures": [
+          "answer missing required term: 'semestrial'",
+          "insufficient citation recall — missing: ['csr-client-2023']"
+        ],
+        "answer": "Contextul nu conține informații despre furnizori PlastiAuto, clasificarea CRITIC în baza KPI-urilor de performanță sau reevaluarea periodică a acestora. Nu pot răspunde la întrebare pe baza contextului dat.",
+        "citations": [
+          "4d8e4e74-0a54-4126-8cb5-2455800fdf4a",
+          "30d95409-1e46-40d3-a3e7-62b85e8e4346",
+          "3ee169eb-e26d-46d0-8c18-169355f92d84",
+          "0fd22516-6ee2-4b29-875f-607aff33cd73",
+          "cd6a3912-7cd0-48fd-b983-35749a5f3f18"
+        ],
+        "has_context": true,
+        "latency_s": 6.0,
+        "faithfulness": 1.0
+      },
+      {
+        "id": "MH-02",
+        "type": "multi_hop",
+        "passed": false,
+        "failures": [
+          "answer missing required term: 'măsuri corective'",
+          "answer missing required term: '95%'",
+          "insufficient citation recall — missing: ['csr-client-2023']"
+        ],
+        "answer": "Contextul nu conține informații despre furnizorul PlastiAuto, despre consecințele depășirii unei rate de neconformitate de 1% sau despre o țintă procentuală pentru rata de livrare la timp a furnizorilor.",
+        "citations": [
+          "4a719657-145e-4484-9c98-b4a9adf0b8c5",
+          "4d8e4e74-0a54-4126-8cb5-2455800fdf4a",
+          "5233ee4d-16aa-4bac-af02-537cf40c8ca0",
+          "8775d868-04f1-4443-babd-8c2fe89c8706",
+          "db83f2f2-081a-4399-a9cb-19ad7c3404bc"
+        ],
+        "has_context": true,
+        "latency_s": 6.9,
+        "faithfulness": 1.0
+      },
+      {
+        "id": "CON-01",
+        "type": "contradiction",
+        "passed": false,
+        "failures": [
+          "answer missing required term: 'trei'",
+          "insufficient citation recall — missing: ['csr-client-2023', 'pq-07-rev3', 'il-proc-12-rev1', 'il-nc-06-rev2']"
+        ],
+        "answer": "Contextul nu conține informații despre numărul de oferte competitive necesare pentru aprobarea unui furnizor nou, indiferent de valoarea comenzii.",
+        "citations": [
+          "ba63912d-6316-4bb0-9001-afc1863c1968",
+          "636f0773-db7b-4eb0-8176-940d83e511c8",
+          "a6dfdd4d-b9cb-4440-a347-b5bc7183bad0",
+          "cb0721a2-9fdf-4053-9af8-8ece018b4dd2",
+          "78ccac8a-837b-470f-904a-eb5c8424664b"
+        ],
+        "has_context": true,
+        "latency_s": 5.8,
+        "faithfulness": 1.0
+      },
+      {
+        "id": "CON-02",
+        "type": "contradiction",
+        "passed": false,
+        "failures": [
+          "answer missing required term: 'on-site'",
+          "insufficient citation recall — missing: ['csr-client-2023', 'fp-inj-03', 'reg-evf-01']"
+        ],
+        "answer": "Contextul nu conține informații despre obligativitatea auditării furnizorilor noi la sediul lor înainte de aprobare.",
+        "citations": [
+          "a0a0da3f-c5ae-4fb5-b606-6338aa4722d2",
+          "b7f47309-f17a-4b4a-b34c-1d4bf7e60f5a",
+          "8775d868-04f1-4443-babd-8c2fe89c8706",
+          "4e303a60-6957-4e2c-9271-7b47c00f4f06",
+          "9f9a58e8-7e89-4ece-9368-8a894f193f95"
+        ],
+        "has_context": true,
+        "latency_s": 6.4,
+        "faithfulness": 1.0
+      },
+      {
+        "id": "CON-03",
+        "type": "contradiction",
+        "passed": false,
+        "failures": [
+          "answer missing required term: 'semestrial'",
+          "insufficient citation recall — missing: ['mc-01-s8-rev6', 'pq-07-rev3']"
+        ],
+        "answer": "Contextul nu conține informații despre Manualul Calității MC-01, procedura PQ-07 sau frecvența reevaluării furnizorilor activi.",
+        "citations": [
+          "30d95409-1e46-40d3-a3e7-62b85e8e4346",
+          "8e8ea41a-07e4-4c27-bde5-38a6a62c3f83",
+          "0d45f52d-711f-4b40-944e-1e244678accb",
+          "4d8e4e74-0a54-4126-8cb5-2455800fdf4a",
+          "15f2b064-8016-4ab8-af07-1744a0f81f93"
+        ],
+        "has_context": true,
+        "latency_s": 5.1,
+        "faithfulness": 1.0
+      },
+      {
+        "id": "CON-05",
+        "type": "contradiction",
+        "passed": false,
+        "failures": [
+          "answer missing required term: 'semestrial'",
+          "insufficient citation recall — missing: ['csr-client-2023', 'rfa-reg-01-rev5']"
+        ],
+        "answer": "Contextul nu conține informații despre frecvența de reevaluare a furnizorilor clasificați ca CRITICI și nici despre RFA-REG-01 sau frecvența de reevaluare specificată pentru toți furnizorii.",
+        "citations": [
+          "cd6a3912-7cd0-48fd-b983-35749a5f3f18",
+          "5f984052-ff50-40b1-94e2-606cd56e076f",
+          "af15113f-05f3-47bb-9b13-3175ecdfd268",
+          "30d95409-1e46-40d3-a3e7-62b85e8e4346",
+          "15f2b064-8016-4ab8-af07-1744a0f81f93"
+        ],
+        "has_context": true,
+        "latency_s": 6.4,
+        "faithfulness": 1.0
+      },
+      {
+        "id": "NEG-01",
+        "type": "negative",
+        "passed": true,
+        "failures": [],
+        "answer": "Contextul nu conține informații despre PlastiAuto SRL sau despre procentul producției destinat exportului către piața nord-americană.",
+        "citations": [
+          "9574a91d-4198-437c-9776-4604ecbe5fde",
+          "b9925f14-b374-4c82-a74c-454cd895e0d2",
+          "a0db6c9d-569b-4430-a452-d5de110f6910",
+          "8775d868-04f1-4443-babd-8c2fe89c8706",
+          "f82461fd-c6fb-4256-b555-297dcbc7cfa9"
+        ],
+        "has_context": true,
+        "latency_s": 5.1,
+        "faithfulness": 1.0
+      },
+      {
+        "id": "NEG-02",
+        "type": "negative",
+        "passed": true,
+        "failures": [],
+        "answer": "Contextul nu conține nicio informație despre PlastiAuto SRL sau numărul său de angajați în documentele de calitate.",
+        "citations": [
+          "036f8e3c-4ed1-449c-a288-e19b708df66d",
+          "f82461fd-c6fb-4256-b555-297dcbc7cfa9",
+          "5233ee4d-16aa-4bac-af02-537cf40c8ca0",
+          "30d95409-1e46-40d3-a3e7-62b85e8e4346",
+          "0da74bf3-cb9c-480b-a508-1d41d0ed1915"
+        ],
+        "has_context": true,
+        "latency_s": 5.2,
+        "faithfulness": 1.0
+      }
+    ]
+  },
+  "contradictions": {
+    "ground_truth": {
+      "C01": [
+        "csr-client-2023",
+        "il-nc-06-rev2",
+        "il-proc-12-rev1",
+        "pq-07-rev1",
+        "pq-07-rev3"
+      ],
+      "C02": [
+        "csr-client-2023",
+        "fp-inj-03",
+        "reg-evf-01"
+      ],
+      "C03": [
+        "csr-client-2023",
+        "il-ins-03-rev2",
+        "il-nc-06-rev2",
+        "il-proc-12-rev1",
+        "mc-01-s8-rev6",
+        "pai-proc-04",
+        "ppap-proc-01",
+        "pq-07-rev3",
+        "reg-eta-01",
+        "rfa-reg-01-rev5"
+      ],
+      "C04": [
+        "fp-inj-01",
+        "fp-inj-02",
+        "il-ins-03-rev2",
+        "il-proc-12-rev1",
+        "pc-comp-07-rev3"
+      ],
+      "C05": [
+        "csr-client-2023",
+        "rfa-reg-01-rev5"
+      ]
+    },
+    "clean_docs": [
+      "csr-client-2021",
+      "fp-pac-04",
+      "fp-ver-05",
+      "il-cal-05",
+      "il-exp-07",
+      "il-ins-03-rev4",
+      "il-men-08",
+      "pcal-proc-10",
+      "pfmea-01",
+      "pn-proc-05-rev1",
+      "pn-proc-05-rev3",
+      "ptrn-proc-13",
+      "reg-nc-01",
+      "spec-prod-01"
+    ],
+    "open_conflicts_total": 0,
+    "matches": {
+      "C01": [],
+      "C02": [],
+      "C03": [],
+      "C04": [],
+      "C05": []
+    },
+    "recall": 0.0,
+    "precision": 0.0,
+    "false_positive_conflicts": []
+  }
+}

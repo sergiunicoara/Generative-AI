@@ -40,8 +40,6 @@ USER app
 
 ENV PYTHONUNBUFFERED=1
 ENV PYTHONPATH=/app
-ENV HF_HOME=/tmp/huggingface
-ENV TRANSFORMERS_CACHE=/tmp/huggingface
 
 # Health check via the /health/ready readiness probe
 HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=5 \

@@ -10,9 +10,7 @@ python-docx>=1.1.0
 langchain-text-splitters>=0.2.0
 
 # ── Reranking + GNN (query worker) ────────────────────────────────────────────
---extra-index-url https://download.pytorch.org/whl/cpu
-torch==2.3.1+cpu
-sentence-transformers>=3.0.0,<4.0.0
+sentence-transformers>=3.0.0
 
 # ── RDF / Ontology ─────────────────────────────────────────────────────────────
 rdflib>=7.0.0

@@ -1,31 +1,19 @@
 {
-  "pass_rate": 0.3333,
-  "passed": 4,
-  "failed": 8,
+  "pass_rate": 0.1429,
+  "passed": 1,
+  "failed": 6,
   "errored": 0,
   "by_type": {
     "multi_hop": {
-      "passed": 1,
-      "total": 2
-    },
-    "temporal": {
       "passed": 0,
-      "total": 2
-    },
-    "inference": {
-      "passed": 1,
-      "total": 2
+      "total": 3
     },
     "authority_chain": {
       "passed": 0,
       "total": 2
     },
-    "negative": {
-      "passed": 2,
-      "total": 2
-    },
-    "calibration": {
-      "passed": 0,
+    "temporal": {
+      "passed": 1,
       "total": 1
     },
     "agentic": {
@@ -35,12 +23,38 @@
   },
   "questions": [
     {
-      "id": "MH-03",
+      "id": "MH-01",
+      "type": "multi_hop",
+      "passed": false,
+      "failures": [
+        "insufficient citation recall \u2014 missing: ['FAA-AD-2024-01-02']"
+      ],
+      "answer_snippet": "FAA-AD-2024-01-02 supersedes FAA-AD-2022-03-07, which in turn supersedes FAA-AD-2020-05-11. The chain therefore runs fro",
+      "citations": [
+        "G-ABCD_AD_compliance_2024-03",
+        "Boeing_MCAS_SWChangeRecord",
+        "FAA-AD-2022-03-07",
+        "14CFR_Part39_excerpt",
+        "FAA-AD-2020-05-11",
+        "EASA-AD-2024-0072",
+        "Airbus_A320neo_profile"
+      ],
+      "steps": [
+        "\ud83d\udcdd Query expanded \u2192 FAA-AD-2024-01-02 supersession chain 2020 directive",
+        "\ud83d\udd78\ufe0f Graph expansion (Leiden communities)...",
+        "\u270d\ufe0f Synthesising answer with LLM..."
+      ],
+      "latency_ms": 51803.96972900053
+    },
+    {
+      "id": "MH-05",
       "type": "multi_hop",
       "passed": false,
       "failures": [
         "answer missing required term: 'Southwest'",
-        "insufficient citation recall \u2014 missing: ['Boeing_MCAS_SWChangeRecord', 'SWA_fleet_registry_2024']"
+        "answer missing required term: 'MCAS'",
+        "answer missing required term: 'compliance'",
+        "insufficient citation recall \u2014 missing: ['SWA_fleet_registry_2024', 'Boeing_MCAS_SWChangeRecord', 'FAA-AD-2024-01-02']"
       ],
       "answer_snippet": "",
       "citations": [],
@@ -50,192 +64,95 @@
     {
       "id": "MH-06",
       "type": "multi_hop",
-      "passed": true,
-      "failures": [],
-      "answer_snippet": "FAA AD 2022-03-07 supersedes FAA AD 2020-05-11. AD 2020-05-11 was partially superseded by AD 2022-03-07 and is fully sup",
-      "citations": [
-        "FAA-AD-2024-01-02",
-        "14CFR_Part39_excerpt",
-        "FAA-AD-2022-03-07",
-        "FAA-AD-2020-05-11"
-      ],
-      "steps": [
-        "\ud83d\udd0d BM25 + vector search in graph...",
-        "\ud83d\udd78\ufe0f GNN scoring \u2014 2-hop traversal...",
-        "\ud83d\udd78\ufe0f Graph expansion (Leiden communities)...",
-        "\ud83d\udcca Cross-encoder reranking \u2192 top 5 chunks",
-        "\u26a0\ufe0f 1 unresolved conflict(s) flagged",
-        "\u270d\ufe0f Synthesising answer with LLM..."
-      ],
-      "latency_ms": 17544.46904500037
-    },
-    {
-      "id": "CON-01",
-      "type": "temporal",
       "passed": false,
       "failures": [
-        "answer missing any of required terms: ['not compliant', 'non-compliant', 'not yet compliant', 'noncompliant', 'not fully compliant']"
+        "answer missing required term: '2022'",
+        "answer missing required term: '2024'",
+        "answer missing any of required terms: ['superseded', 'supersedes', 'supersession']",
+        "insufficient citation recall \u2014 missing: ['FAA-AD-2024-01-02']"
       ],
-      "answer_snippet": "No. The March 5, 2024 G-ABCD compliance report lists compliance with FAA AD 2022-03-07 and FAA AD 2020-05-11, but it doe",
-      "citations": [
-        "G-ABCD_AD_compliance_2024-03",
-        "SWA_fleet_registry_2024",
-        "FAA-AD-2020-05-11",
-        "G-ABCD_inspection_2024-01"
-      ],
-      "steps": [
-        "\ud83d\udd0d BM25 + vector search in graph...",
-        "\ud83d\udd78\ufe0f GNN scoring \u2014 2-hop traversal...",
-        "\ud83d\udcca Cross-encoder reranking \u2192 top 5 chunks",
-        "\u26a0\ufe0f 1 unresolved conflict(s) flagged",
-        "\u270d\ufe0f Synthesising answer with LLM..."
-      ],
-      "latency_ms": 22235.68315600005
-    },
-    {
-      "id": "CON-02",
-      "type": "inference",
-      "passed": true,
-      "failures": [],
-      "answer_snippet": "No. The March 2024 report states that non-compliance with FAA AD 2024-01-02 was anticipated but the compliance deadline ",
-      "citations": [
-        "G-ABCD_AD_compliance_2024-03",
-        "FAA-AD-2024-01-02",
-        "G-ABCD_inspection_2024-01"
-      ],
-      "steps": [
-        "\ud83d\udd0d BM25 + vector search in graph...",
-        "\ud83d\udd78\ufe0f GNN scoring \u2014 2-hop traversal...",
-        "\ud83d\udcca Cross-encoder reranking \u2192 top 5 chunks",
-        "\u26a0\ufe0f 1 unresolved conflict(s) flagged",
-        "\u270d\ufe0f Synthesising answer with LLM..."
-      ],
-      "latency_ms": 7683.885725000437
+      "answer_snippet": "",
+      "citations": [],
+      "steps": [],
+      "latency_ms": null
     },
     {
       "id": "AUT-01",
       "type": "authority_chain",
       "passed": false,
       "failures": [
+        "answer missing any of required terms: ['FAA-AD-2024-01-02', 'FAA AD 2024-01-02', 'AD 2024-01-02']",
         "insufficient citation recall \u2014 missing: ['FAA-AD-2024-01-02', 'FAA-AD-2022-03-07']"
       ],
-      "answer_snippet": "The governing document is 737MAX_CMM_Engine_Mount, Chapter 71, Section 71-21-05, \u201cCFM LEAP-1B Engine Mount \u2014 Inspection ",
-      "citations": [
-        "737MAX_CMM_Engine_Mount",
-        "G-ABCD_inspection_2024-01",
-        "FAA-AD-2020-05-11"
-      ],
-      "steps": [
-        "\ud83d\udd0d BM25 + vector search in graph...",
-        "\ud83d\udd78\ufe0f GNN scoring \u2014 2-hop traversal...",
-        "\ud83d\udcca Cross-encoder reranking \u2192 top 5 chunks",
-        "\u26a0\ufe0f 1 unresolved conflict(s) flagged",
-        "\u270d\ufe0f Synthesising answer with LLM..."
-      ],
-      "latency_ms": 15214.766241000689
+      "answer_snippet": "",
+      "citations": [],
+      "steps": [],
+      "latency_ms": null
     },
     {
       "id": "AUT-03",
       "type": "authority_chain",
       "passed": false,
       "failures": [
-        "answer missing any of required terms: ['FAA-AD-2024', 'FAA AD 2024', 'AD 2024-01-02']"
+        "insufficient citation recall \u2014 missing: ['FAA-AD-2024-01-02', 'FAA-AD-2022-03-07', 'FAA-AD-2020-05-11']"
       ],
-      "answer_snippet": "The context does not contain any facts about Boeing 737 MAX engine inspections or a regulatory hierarchy for engine insp",
+      "answer_snippet": "Under 14 CFR Part 39, the FAA\u2019s AD framework is the legal basis for Boeing 737 MAX engine inspections. FAA AD 2024-01-02",
       "citations": [
-        "FAA-AD-2020-05-11",
-        "14CFR_Part39_excerpt",
         "Boeing_company_profile",
+        "14CFR_Part39_excerpt",
+        "737MAX_CMM_Engine_Mount",
+        "737 MAX Series",
+        "Boeing Flight Deck Document 737-MAX-FDD-0001, Revision 3",
+        "737-10",
+        "CFM International LEAP-1B",
+        "737-7",
+        "737-9",
+        "737-8",
+        "737 Next Generation",
+        "US service",
+        "737 family",
+        "Production rate"
+      ],
+      "steps": [
+        "\ud83d\udcdd Query expanded \u2192 Boeing 737 MAX engine inspections regulatory hierarchy",
+        "\ud83d\udd0d BM25 + vector search in graph...",
+        "\ud83d\udd78\ufe0f GNN scoring \u2014 2-hop traversal...",
+        "\ud83d\udcca Cross-encoder reranking \u2192 top 5 chunks",
+        "\u26a0\ufe0f 1 unresolved conflict(s) flagged",
+        "\u270d\ufe0f Synthesising answer with LLM..."
+      ],
+      "latency_ms": 8326.787729001808
+    },
+    {
+      "id": "TMP-01",
+      "type": "temporal",
+      "passed": true,
+      "failures": [],
+      "answer_snippet": "The earliest FAA airworthiness directive in the corpus is AD 2020-05-11, covering initial return-to-service requirements",
+      "citations": [
+        "FAA-AD-2024-01-02",
+        "FAA-AD-2020-05-11",
+        "G-ABCD_inspection_2024-01",
+        "G-ABCD_AD_compliance_2024-03",
+        "14CFR_Part39_excerpt",
+        "Federal Aviation Administration (FAA)",
+        "AD 2024-01-02",
+        "Department of Transportation",
+        "FAA Emergency Order of Airworthiness, November 18, 2020",
+        "AD 2020-05-11",
+        "Aircraft Certification Service",
+        "Washington, DC",
+        "Transport Standards Branch",
+        "This AD",
+        "AD 2022-03-07",
+        "SWA_fleet_registry_2024",
+        "Boeing_company_profile",
+        "737MAX_CMM_Engine_Mount",
+        "Boeing_MCAS_SWChangeRecord",
         "FAA-AD-2022-03-07"
       ],
       "steps": [
-        "\ud83d\udd0d BM25 + vector search in graph...",
-        "\ud83d\udd78\ufe0f GNN scoring \u2014 2-hop traversal...",
-        "\ud83d\udcca Cross-encoder reranking \u2192 top 5 chunks",
-        "\u26a0\ufe0f 1 unresolved conflict(s) flagged",
-        "\u270d\ufe0f Synthesising answer with LLM..."
-      ],
-      "latency_ms": 6156.88529199997
-    },
-    {
-      "id": "INF-01",
-      "type": "inference",
-      "passed": false,
-      "failures": [
-        "answer missing any of required terms: ['yes', 'does supersede', 'is superseded', 'superseded by']",
-        "insufficient citation recall \u2014 missing: ['FAA-AD-2022-03-07', 'FAA-AD-2020-05-11']"
-      ],
-      "answer_snippet": "No. The context states that FAA AD 2024-01-02 supersedes AD 2022-03-07. It does not state that it supersedes FAA AD 2020",
-      "citations": [
-        "FAA-AD-2024-01-02",
-        "14CFR_Part39_excerpt",
-        "737MAX_CMM_Engine_Mount"
-      ],
-      "steps": [
-        "\ud83d\udd0d BM25 + vector search in graph...",
-        "\ud83d\udd78\ufe0f GNN scoring \u2014 2-hop traversal...",
-        "\ud83d\udcca Cross-encoder reranking \u2192 top 5 chunks",
-        "\u26a0\ufe0f 1 unresolved conflict(s) flagged",
-        "\u270d\ufe0f Synthesising answer with LLM..."
-      ],
-      "latency_ms": 9584.83606199934
-    },
-    {
-      "id": "NEG-01",
-      "type": "negative",
-      "passed": true,
-      "failures": [],
-      "answer_snippet": "No. FAA AD 2024-01-02 applies to Boeing Model 737-8 and 737-9 airplanes, certificated in any category, as identified in ",
-      "citations": [
-        "FAA-AD-2024-01-02",
-        "Airbus_A320neo_profile",
-        "737MAX_CMM_Engine_Mount",
-        "G-ABCD_AD_compliance_2024-03"
-      ],
-      "steps": [
-        "\ud83d\udd0d BM25 + vector search in graph...",
-        "\ud83d\udd78\ufe0f GNN scoring \u2014 2-hop traversal...",
-        "\ud83d\udcca Cross-encoder reranking \u2192 top 5 chunks",
-        "\u26a0\ufe0f 1 unresolved conflict(s) flagged",
-        "\u270d\ufe0f Synthesising answer with LLM..."
-      ],
-      "latency_ms": 7490.624951000427
-    },
-    {
-      "id": "NEG-03",
-      "type": "negative",
-      "passed": true,
-      "failures": [],
-      "answer_snippet": "No. The context contains an EASA AD 2024-0072 for the Airbus A320neo family, but it is described as not applicable to th",
-      "citations": [
-        "14CFR_Part39_excerpt",
-        "G-ABCD_AD_compliance_2024-03",
-        "FAA-AD-2024-01-02"
-      ],
-      "steps": [
-        "\ud83d\udd0d BM25 + vector search in graph...",
-        "\ud83d\udd78\ufe0f GNN scoring \u2014 2-hop traversal...",
-        "\ud83d\udcca Cross-encoder reranking \u2192 top 5 chunks",
-        "\u26a0\ufe0f 1 unresolved conflict(s) flagged",
-        "\u270d\ufe0f Synthesising answer with LLM..."
-      ],
-      "latency_ms": 9247.899712999242
-    },
-    {
-      "id": "TMP-03",
-      "type": "temporal",
-      "passed": false,
-      "failures": [
-        "insufficient citation recall \u2014 missing: ['FAA-AD-2024-01-02', 'FAA-AD-2022-03-07']"
-      ],
-      "answer_snippet": "Two FAA airworthiness directives are listed as applying to LEAP-1B engine mount inspection between 2020 and 2024: FAA AD",
-      "citations": [
-        "737MAX_CMM_Engine_Mount",
-        "FAA-AD-2020-05-11",
-        "14CFR_Part39_excerpt",
-        "Boeing_company_profile"
-      ],
-      "steps": [
+        "\ud83d\udcdd Query expanded \u2192 FAA airworthiness directive earliest",
         "\ud83d\udd0d BM25 + vector search in graph...",
         "\ud83d\udd78\ufe0f GNN scoring \u2014 2-hop traversal...",
         "\ud83d\udd78\ufe0f Graph expansion (Leiden communities)...",
@@ -243,45 +160,32 @@
         "\u26a0\ufe0f 1 unresolved conflict(s) flagged",
         "\u270d\ufe0f Synthesising answer with LLM..."
       ],
-      "latency_ms": 14864.159751000443
-    },
-    {
-      "id": "CAL-01",
-      "type": "calibration",
-      "passed": false,
-      "failures": [
-        "answer missing required term: 'yes'"
-      ],
-      "answer_snippet": "No. The corpus contains compliance statuses for aircraft G-ABCD showing IS_COMPLIANT_WITH for FAA AD 2020-05-11, FAA AD ",
-      "citations": [
-        "14CFR_Part39_excerpt",
-        "G-ABCD_AD_compliance_2024-03",
-        "G-ABCD_inspection_2024-01"
-      ],
-      "steps": [
-        "\ud83d\udd0d BM25 + vector search in graph...",
-        "\ud83d\udd78\ufe0f GNN scoring \u2014 2-hop traversal...",
-        "\ud83d\udd78\ufe0f Graph expansion (Leiden communities)...",
-        "\ud83d\udcca Cross-encoder reranking \u2192 top 5 chunks",
-        "\u26a0\ufe0f 1 unresolved conflict(s) flagged",
-        "\u270d\ufe0f Synthesising answer with LLM..."
-      ],
-      "latency_ms": 11467.466040000545
+      "latency_ms": 12573.625192999316
     },
     {
       "id": "AGT-02",
       "type": "agentic",
       "passed": false,
       "failures": [
-        "answer missing required term: 'Southwest'",
-        "answer missing required term: '737 MAX'",
-        "answer missing any of required terms: ['FAA-AD-2024', 'FAA AD 2024', 'AD 2024-01-02']",
-        "insufficient citation recall \u2014 missing: ['FAA-AD-2024-01-02', 'SWA_fleet_registry_2024']"
+        "insufficient citation recall \u2014 missing: ['FAA-AD-2024-01-02']"
       ],
-      "answer_snippet": "",
-      "citations": [],
-      "steps": [],
-      "latency_ms": null
+      "answer_snippet": "The compliance chain runs from FAA AD 2024-01-02 as the current/effective directive, which follows the earlier AD 2020-0",
+      "citations": [
+        "SWA_fleet_registry_2024",
+        "Boeing_company_profile",
+        "737MAX_CMM_Engine_Mount",
+        "G-ABCD_AD_compliance_2024-03",
+        "Boeing_MCAS_SWChangeRecord",
+        "FAA-AD-2022-03-07",
+        "14CFR_Part39_excerpt",
+        "FAA-AD-2020-05-11"
+      ],
+      "steps": [
+        "\ud83d\udcdd Query expanded \u2192 FAA-AD-2024 Southwest Airlines 737 MAX compliance chain",
+        "\ud83d\udd78\ufe0f Graph expansion (Leiden communities)...",
+        "\u270d\ufe0f Synthesising answer with LLM..."
+      ],
+      "latency_ms": 21678.771107001012
     }
   ]
 }

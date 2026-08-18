@@ -95,6 +95,31 @@ def _normalize_regulatory(text: str) -> str:
     return _normalize(stripped)
 
 
+def canonical_document_key(name: str) -> str:
+    """Stable key for deciding whether two strings name the same document.
+
+    Public wrapper over the same normalization the alias registry uses
+    internally, exposed so citation-registration and evaluation code can ask
+    "do these two names refer to one document?" without reaching for a
+    private helper or re-implementing the rules and drifting from them.
+
+    Motivating case (2026-08-17, see docs/audit-2026-08-13.md): citations
+    reach the caller under two different naming systems — document-derived
+    ones use the source filename stem (``FAA-AD-2024-01-02``) while
+    entity-derived ones use the surface form the corpus text actually
+    writes (``AD 2024-01-02``). Both denote one document, and this function
+    is what lets the two be matched up:
+
+        canonical_document_key("FAA-AD-2024-01-02") == "ad 2024 01 02"
+        canonical_document_key("AD 2024-01-02")     == "ad 2024 01 02"
+
+    Non-regulatory names are unaffected by prefix stripping and simply
+    normalize on punctuation/case, so this is safe to apply to any citation
+    string: ``SWA_fleet_registry_2024`` -> ``swa fleet registry 2024``.
+    """
+    return _normalize_regulatory(name)
+
+
 # Conservative Romanian noun-suffix list (longest first) for merging
 # inflectional variants — e.g. "furnizor" / "furnizori" / "furnizorul" /
 # "furnizorii" / "furnizorilor" all stem to "furnizor".

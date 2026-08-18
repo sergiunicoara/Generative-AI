@@ -634,9 +634,24 @@ class HybridRetriever:
             policy_result = PolicyResult.ALLOW
             policy_reason_code = "evidence_captured"
 
+        # Corpus document names, so ContextBuilder can resolve entity-form
+        # citations ("AD 2024-01-02") back to the document they name
+        # ("FAA-AD-2024-01-02") — see its build() comment. Fetched per query
+        # rather than cached: the set changes on re-ingestion, and this
+        # mirrors the existing per-query fetch the named-document boost
+        # already does (local_search.py). Small indexed lookup. Fails open —
+        # citations simply keep their pre-2026-08-17 form if it errors, since
+        # a citation-naming refinement must never take down a query.
+        document_names: list[str] = []
+        try:
+            document_names = await get_neo4j().get_document_filenames(tenant=tenant)
+        except Exception as exc:  # noqa: BLE001 — cosmetic enrichment, never fatal
+            log.warning("hybrid_retriever.document_names_failed", error=str(exc)[:160])
+
         context, citations = self._context_builder.build(
             local_results=local_results,
             global_results=global_results,
+            document_names=document_names,
             weights=(
                 cfg.get("hybrid_weight_local", 0.6),
                 cfg.get("hybrid_weight_global", 0.4),

@@ -5,6 +5,8 @@ from __future__ import annotations
 import re
 from difflib import SequenceMatcher
 
+from graphrag.graph.alias_registry import canonical_document_key
+
 _NEAR_DUPLICATE_RATIO = 0.85
 
 
@@ -38,6 +40,7 @@ class ContextBuilder:
         conflicts: list[dict] | None = None,
         hop_reserved_slots: int = 0,
         hop_reserved_min_gnn: float = 0.3,
+        document_names: list[str] | None = None,
     ) -> tuple[str, list[str]]:
         sections: list[str] = []
         citations: list[str] = []
@@ -201,4 +204,39 @@ class ContextBuilder:
             citations.extend(community.get("source_documents", []))
 
         context = "\n\n---\n\n".join(sections)
+        # Resolve entity-form citations to their document's canonical name.
+        #
+        # Citations arrive under two naming systems: chunk-derived ones use the
+        # source filename stem ("FAA-AD-2024-01-02"), while entity/edge-derived
+        # ones use the surface form the corpus text actually writes
+        # ("AD 2024-01-02" — that's how the CMM cross-references it). Both name
+        # the same document, but a caller matching on the document name sees
+        # only the second form whenever the document is referenced transitively
+        # (i.e. named inside another document's text) rather than retrieved
+        # directly. Found 2026-08-17 tracing AUT-01: retrieval was working
+        # correctly -- the bridging chunk naming the AD ranked #1 -- yet the
+        # document could never appear in citations under its own name, because
+        # no chunk *from* it was retrieved and nothing mapped the entity form
+        # back to it. See docs/audit-2026-08-13.md.
+        #
+        # Additive by construction: this only ever appends the canonical form
+        # alongside what was already registered, never replaces or drops an
+        # entry, so no citation that resolved before can regress. Skipped
+        # entirely when `document_names` is not supplied (default), which
+        # leaves behavior byte-identical to before this change.
+        if document_names:
+            stem_by_key: dict[str, str] = {}
+            for filename in document_names:
+                stem = filename[:-4] if filename.endswith(".txt") else filename
+                # setdefault: first filename wins if two normalize alike, so
+                # this can't oscillate between equivalent names run to run.
+                stem_by_key.setdefault(canonical_document_key(stem), stem)
+            resolved = [
+                stem
+                for citation in citations
+                if (stem := stem_by_key.get(canonical_document_key(citation)))
+                and stem != citation
+            ]
+            citations.extend(resolved)
+
         return context, list(dict.fromkeys(citations))  # deduplicate preserving order

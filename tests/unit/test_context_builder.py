@@ -292,3 +292,73 @@ class TestContextBuilderHopReservedSlots:
         )
         admitted = sum(1 for p in passages if p in context)
         assert admitted == 2
+
+
+class TestContextBuilderDocumentNameCanonicalization:
+    """Regression tests for the citation naming-system mismatch found
+    2026-08-17 (see docs/audit-2026-08-13.md and build()'s inline comment).
+
+    Entity/edge-derived citations use the surface form the corpus text writes
+    ("AD 2024-01-02"); chunk-derived ones use the filename stem
+    ("FAA-AD-2024-01-02"). When a document is referenced transitively -- named
+    inside another document's text rather than retrieved directly -- only the
+    first form was ever registered, so the document never appeared in
+    citations under its own name.
+    """
+
+    def _edge_results(self):
+        # An edge naming the AD in its in-text surface form, as extraction
+        # produces it -- no chunk from that document is retrieved.
+        return {
+            "chunks": [],
+            "entity_edges": [
+                {"src": "AD 2024-01-02", "relation": "APPLIES_TO",
+                 "tgt": "LEAP-1B engine mount inspection"},
+            ],
+        }
+
+    def test_entity_form_citation_resolves_to_document_stem(self):
+        builder = ContextBuilder()
+        _, citations = builder.build(
+            local_results=self._edge_results(),
+            global_results={},
+            document_names=["FAA-AD-2024-01-02.txt", "737MAX_CMM_Engine_Mount.txt"],
+        )
+        assert "FAA-AD-2024-01-02" in citations
+        # additive: the original entity form is preserved, not replaced
+        assert "AD 2024-01-02" in citations
+
+    def test_no_document_names_leaves_citations_unchanged(self):
+        """Default (no document_names) must be byte-identical to pre-change."""
+        builder = ContextBuilder()
+        _, citations = builder.build(
+            local_results=self._edge_results(), global_results={},
+        )
+        assert "FAA-AD-2024-01-02" not in citations
+        assert "AD 2024-01-02" in citations
+
+    def test_unrelated_documents_are_not_pulled_in(self):
+        """Only a document whose name actually matches may be added."""
+        builder = ContextBuilder()
+        _, citations = builder.build(
+            local_results=self._edge_results(),
+            global_results={},
+            document_names=["Boeing_company_profile.txt", "EASA-AD-2024-0072.txt"],
+        )
+        assert "Boeing_company_profile" not in citations
+        assert "EASA-AD-2024-0072" not in citations
+
+    def test_no_duplicate_when_forms_already_agree(self):
+        builder = ContextBuilder()
+        _, citations = builder.build(
+            local_results={
+                "chunks": [],
+                "entity_edges": [
+                    {"src": "FAA-AD-2024-01-02", "relation": "SUPERSEDES",
+                     "tgt": "FAA-AD-2022-03-07"},
+                ],
+            },
+            global_results={},
+            document_names=["FAA-AD-2024-01-02.txt", "FAA-AD-2022-03-07.txt"],
+        )
+        assert citations.count("FAA-AD-2024-01-02") == 1

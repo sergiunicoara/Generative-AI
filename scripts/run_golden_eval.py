@@ -40,6 +40,10 @@ import structlog
 # Make project root importable
 sys.path.insert(0, str(Path(__file__).parents[1]))
 
+# Imported after the sys.path insert above — the project root isn't on the
+# path until then, so this cannot move up into the import block.
+from graphrag.graph.alias_registry import canonical_document_key  # noqa: E402
+
 log = structlog.get_logger("golden_eval")
 
 GOLDEN_SET       = Path(__file__).parents[1] / "evals" / "golden_set.json"
@@ -114,10 +118,34 @@ def _check(question_spec: dict, result: dict) -> tuple[bool, list[str]]:
             failures.append(f"answer contains forbidden term: {phrase!r}")
 
     # Citation recall
+    #
+    # Matched two ways, and a citation counts as present if EITHER matches:
+    #   1. Raw lowercased substring (the original check, kept as-is so nothing
+    #      that passed before can start failing).
+    #   2. Canonical document key — the same normalization the graph itself
+    #      uses to decide two names denote one document (see
+    #      alias_registry.canonical_document_key).
+    #
+    # (2) exists because the pipeline legitimately returns a document under
+    # more than one name: chunk-derived citations use the filename stem
+    # ("FAA-AD-2024-01-02") while entity-derived ones use the surface form the
+    # corpus text writes ("AD 2024-01-02"). Under (1) alone the second form
+    # never satisfies an expected citation written in the first, so a document
+    # that is only referenced transitively — named inside another document's
+    # text rather than retrieved directly — was structurally unable to pass
+    # this check no matter how well retrieval and synthesis performed. Found
+    # 2026-08-17 tracing AUT-01, where retrieval ranked the correct bridging
+    # chunk #1 and the check still reported the citation missing. See
+    # docs/audit-2026-08-13.md.
     expected_cits = question_spec.get("expected_citations", [])
     if expected_cits:
         cited_str = " ".join(citations).lower()
-        missing = [c for c in expected_cits if c.lower() not in cited_str]
+        cited_keys = {canonical_document_key(c) for c in citations}
+        missing = [
+            c for c in expected_cits
+            if c.lower() not in cited_str
+            and canonical_document_key(c) not in cited_keys
+        ]
         if missing:
             pct = len(missing) / len(expected_cits)
             threshold = question_spec.get("min_citation_recall",

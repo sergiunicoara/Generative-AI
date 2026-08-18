@@ -94,3 +94,55 @@ class TestCitationRecall:
         passed, failures = _check(spec, {"answer": "x", "citations": ["doc-a"]})
         assert not passed
         assert "citation recall" in failures[0]
+
+
+class TestCitationRecallCanonicalMatching:
+    """Regression tests for the citation naming-system mismatch found
+    2026-08-17 (see docs/audit-2026-08-13.md).
+
+    The pipeline returns a document under two different names depending on how
+    it was reached: chunk-derived citations use the source filename stem
+    ("FAA-AD-2024-01-02"), entity-derived ones use the surface form the corpus
+    text writes ("AD 2024-01-02"). Under the original raw-substring check the
+    second form could never satisfy an expected citation written in the first,
+    so a transitively-referenced document was structurally unable to pass
+    citation recall regardless of retrieval or synthesis quality.
+    """
+
+    def test_entity_form_citation_satisfies_filename_form_expectation(self):
+        # The exact AUT-01 case: only the bridging chunk was retrieved, so the
+        # AD is cited under its in-text surface form, not its filename stem.
+        spec = {"expected_citations": ["FAA-AD-2024-01-02"], "min_citation_recall": 1.0}
+        passed, failures = _check(
+            spec,
+            {"answer": "x", "citations": ["AD 2024-01-02", "737MAX_CMM_Engine_Mount"]},
+        )
+        assert passed, failures
+
+    def test_hyphenated_and_spaced_prefix_forms_both_match(self):
+        spec = {"expected_citations": ["FAA-AD-2022-03-07"], "min_citation_recall": 1.0}
+        for form in ("FAA AD 2022-03-07", "AD-2022-03-07", "AD 2022-03-07"):
+            passed, failures = _check(spec, {"answer": "x", "citations": [form]})
+            assert passed, f"{form!r} should satisfy the expectation: {failures}"
+
+    def test_filename_form_still_matches_unchanged(self):
+        # The original substring path must keep working exactly as before.
+        spec = {"expected_citations": ["FAA-AD-2024-01-02"], "min_citation_recall": 1.0}
+        passed, _ = _check(spec, {"answer": "x", "citations": ["FAA-AD-2024-01-02"]})
+        assert passed
+
+    def test_non_regulatory_document_names_unaffected(self):
+        # Prefix stripping must not change how ordinary document names match.
+        spec = {"expected_citations": ["SWA_fleet_registry_2024"], "min_citation_recall": 1.0}
+        passed, _ = _check(spec, {"answer": "x", "citations": ["SWA_fleet_registry_2024"]})
+        assert passed
+
+    def test_genuinely_absent_citation_still_fails(self):
+        # The check must not become a rubber stamp: an unrelated citation set
+        # must still fail, otherwise this "fix" would mask real recall gaps.
+        spec = {"expected_citations": ["FAA-AD-2024-01-02"], "min_citation_recall": 1.0}
+        passed, failures = _check(
+            spec, {"answer": "x", "citations": ["Boeing_company_profile", "AD 2020-05-11"]}
+        )
+        assert not passed
+        assert "citation recall" in failures[0]

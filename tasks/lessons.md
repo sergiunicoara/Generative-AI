@@ -1488,27 +1488,6 @@ a Windows guard. The error only manifested when running locally on Windows.
 
 ---
 
-## A61 — Cross-process result sharing requires Redis; in-process dict is silently broken
-
-**What happened:**
-The query worker computed an answer and stored it by importing a dict from the
-API module. The API polled the same dict and always returned `{"status": "queued"}`.
-After switching to Redis-backed `ResultStore`, both processes saw the same state.
-
-**Root cause:**
-In-process mutable state (`_results: dict`) is invisible across OS process
-boundaries. The import resolved to the worker's own address space, not the API's.
-No error was raised — the worker "successfully" wrote to its own copy.
-
-**Rule:**
-> Any state that must cross a process boundary (worker → API, replica A → replica B)
-> must live in an external store. Redis `SETEX/GET` with TTL is the standard pattern.
-> The smell: a worker importing from an API module to "write back" a result.
-> See also: L44 (the original lesson on this pattern). The symptom is always the
-> same — `status: queued` forever despite the worker completing successfully.
-
----
-
 ## A62 — Missing package + strict mode = silent startup failure
 
 **What happened:**
@@ -3065,6 +3044,14 @@ in this session's `tasks/lessons.md` entries — don't swap mid-validation.
 
 ## A113 — MH-02/AUTH-01 are structural retrieval-pool gaps, not tunable
 
+> **Partially superseded — restored, not deleted.** ~16 later entries
+> (A114–A128) cite this entry by name for content that was never overturned:
+> the MH-02 structural diagnosis, the raw BM25-fused/vector measurements, and
+> the CON-03/CON-04 LLM-sampling-flakiness pattern. Only the **AUTH-01**
+> conclusion and the **CON-04-as-"not tunable"** framing were corrected — see
+> A114 (AUTH-01 fixed) and A117 (CON-03 was a real bug, not flakiness). Do not
+> re-delete this entry; too much of it is still true and cited as fact.
+
 Spent this session trying non-destructive fixes for the 3 remaining automotive
 failures (MH-02, CON-04, AUTH-01) under a hard "no re-ingestion" constraint.
 Conclusion, with evidence:
@@ -3084,6 +3071,8 @@ Conclusion, with evidence:
   `all_chunks`/context at all. Fix A's RRF-floor only guarantees the #1 fused
   chunk a seed slot, not rank-8. No prompt-level or context-builder fix can
   recover a citation for a chunk that's never selected as a candidate.
+  **[Corrected by A114: this was two compounding bugs in
+  `get_best_chunk_for_document`, since fixed — AUTH-01 passes now.]**
 - **CON-03/CON-04**: NOT a retrieval problem — all expected citations ARE
   present in context every run. Root cause is **LLM sampling non-determinism**
   at temperature=0.0 on contradiction-heavy context (re-running identical
@@ -3092,6 +3081,9 @@ Conclusion, with evidence:
   a known characteristic of Groq's MoE-served Llama models (no determinism
   guarantee at temp=0 due to dynamic batching) — not something our retrieval
   or prompt config controls.
+  **[Corrected by A117 for CON-03: the real cause was cross-document context
+  pollution + community-synthesis override, not sampling noise — fixed. The
+  CON-04 sampling-non-determinism characterization stands.]**
 
 **Implication**: "retry until MH-02/CON-04/AUTH-01 all pass" cannot succeed —
 MH-02 and AUTH-01 fail 100% of the time (citations structurally absent from
@@ -4280,90 +4272,12 @@ reads, not just after changes to the scoring code itself. "The graph is now
 more accurate" and "retrieval got better" are different claims; measure both,
 independently, before landing either.
 
----
+## A133: CON-01/CON-02 are broken tests — the corpus contains no contradiction, so the contradiction-detection extraction fix (formerly a separate A129 entry, deleted as fully superseded by this entry) was scoped against a false premise
 
-## A129: Contradiction detection is non-functional end-to-end — the extractor never emits the ontology's vocabulary
-
-**Context:** A127 found that CON-01/02 (aerospace) couldn't be fixed by
-conflict co-retrieval because 94/95 aerospace conflicts were `multi_source`
-with zero `exclusive_state` / `positive_negative_pair`. Tracing *why* those
-strategies never fire exposed a complete, four-layer breakage of the designed
-contradiction-detection capability — affecting **every** tenant, not just
-aerospace.
-
-**The full causal chain (each layer verified against the live graph):**
-
-1. **The extraction prompt is domain-agnostic.** `graphrag/ingestion/extractor.py`
-   passes only generic `entity_types` (PERSON/ORG/PRODUCT/...) and specifies
-   relations as the placeholder `"relation": "VERB_RELATION"` — no vocabulary
-   at all. The domain ontology is consulted *only* post-hoc via
-   `registry.validate_extraction()`, never to guide extraction. So the LLM
-   invents free-form relations (`APPLIES_TO`, `IS_A`, `HAS_ENGINE`, `OPERATES`).
-
-2. **The designed vocabulary therefore never reaches any graph.** Every
-   ontology defines `exclusive_state_pairs` / `functional_relations` annotated
-   with the exact golden questions they power — automotive
-   `REQUIRES_THREE_OFFERS/REQUIRES_TWO_OFFERS` (C01),
-   `REEVALUATED_SEMESTRIAL/ANNUAL` (C03/C05); telecom
-   `CI_STATUS_DECOMMISSIONED/ACTIVE` (T01), `SLA_FIVE/TWO_BUSINESS_DAYS` (T02);
-   marketing `CATEGORY_EXCLUDED/LOCALLY_APPROVED` (WPP01),
-   `INFERENCE_PROHIBITED/PERMITTED` (WPP02); aerospace
-   `IS_AIRWORTHY/IS_UNAIRWORTHY`. **Measured: 0 of these exist in any tenant's
-   graph** (automotive 3013 entities, aerospace 338, marketing 66 — all zero).
-
-3. **The detector ignored the ontology anyway** (fixed here). Both
-   `_detect_exclusive_states` and `_detect_functional_violations` hardcoded
-   generic lists, despite every ontology documenting itself as "Extends the
-   default pairs in contradiction_strategies.py". The contract was written on
-   both sides and wired on neither.
-
-4. **`NEGATIVE_RELATES_TO`: 0 edges database-wide**, so
-   `_detect_positive_negative_pairs` can never fire either — negative-knowledge
-   extraction doesn't happen at ingestion.
-
-Net effect: only `multi_source` ever fires — and that's a *structural* signal
-(same triple from 2+ docs, i.e. agreement), not a semantic contradiction. The
-breakage was masked because multi_source produces plausible-looking conflict
-counts on the dashboard (95 aerospace / 63 automotive).
-
-**Why CON-01/02 specifically can't be fixed downstream:** the two G-ABCD
-documents state the contradiction in near-machine-readable form —
-`Status: IS_COMPLIANT_WITH` + `Aircraft Status: IS_AIRWORTHY` (inspection, Jan)
-vs `Status: IS_NON_COMPLIANT_WITH` (compliance, Mar). The corpus was authored to
-be detectable. But G-ABCD's *extracted* relations are purely structural
-(`IS_A`, `HAS_ENGINE`, `OPERATES`, `SUBJECT_TO`, `NOT_APPLICABLE_TO`) — no
-status assertion at all. There is nothing in the graph for any detector
-configuration to find.
-
-**Fixed here (layer 3 only):** `_ontology_lists(tenant)` merges the tenant's
-ontology `exclusive_state_pairs` / `functional_relations` over the generic
-defaults, fail-open (a missing/malformed ontology falls back to defaults rather
-than breaking a scan; `tenant=None` scan-all mode gets defaults only).
-Empirically safe: a full rescan of all three tenants produced **0 new
-conflicts** — no false positives, no graph mutation — because layer 1 means the
-vocabulary still isn't present. Correct and necessary, but inert until
-extraction is fixed.
-
-**Not fixed (layer 1 — the real blocker):** passing the domain ontology's
-relation vocabulary into the extraction prompt. That changes extraction for
-every tenant, so it requires re-ingesting automotive (3013 entities / 30 docs,
-LLM-heavy), aerospace and marketing, then re-validating all three golden sets —
-with automotive at 9/10 and marketing at 8/9 both at real risk since their
-entire entity/relation graph would change shape.
-
-**Rule:** when a subsystem produces output that *looks* healthy, check whether
-it's producing the *kind* of output it was designed for. 95 conflict nodes
-looked like working contradiction detection; every one of them was the one
-strategy that needed no domain knowledge. A capability can be 100% broken and
-0% visibly broken at the same time — the tell was the *type distribution*, not
-the count. Corollary: a config block documented as extending code ("Extends the
-defaults in X") is a claim to verify, not to trust — here four ontologies
-asserted a wiring that never existed.
-
-## A133: CON-01/CON-02 are broken tests — the corpus contains no contradiction, so the A129 extraction fix was scoped against a false premise
-
-**Trigger.** Approved to fix the A129 "layer 1" root cause (the extraction prompt
-never emits the ontology's contradiction vocabulary), on the stated grounds that
+**Trigger.** Approved to fix the "layer 1" root cause identified in the deleted
+A129 entry (the extraction prompt never emits the ontology's contradiction
+vocabulary — not to be confused with the unrelated `ingest_corpus.py` A129
+above, a duplicate number reused for a different lesson), on the stated grounds that
 it was the blocker for CON-01/CON-02. Before touching the prompt I re-read the
 two source documents end-to-end instead of grepping for the status tokens. The
 premise did not survive.
@@ -4388,7 +4302,7 @@ confirms *"Aircraft remains airworthy for operation"* (line 33). The only
 `unairworthy` in the corpus is a generic regulatory definition in
 `14CFR_Part39_excerpt.txt:101`, not about G-ABCD. Also no conflict.
 
-**Where the earlier diagnosis went wrong.** A129 recorded that the corpus "was
+**Where the earlier diagnosis went wrong.** The deleted A129 entry recorded that the corpus "was
 authored to be detectable" because `IS_COMPLIANT_WITH` and `IS_NON_COMPLIANT_WITH`
 both appear across the two G-ABCD documents. They do — but on **different ADs**.
 The March report's `IS_NON_COMPLIANT_WITH` is against **AD 2024-01-02**, a newer
@@ -4399,8 +4313,8 @@ they share a **target** manufactured a contradiction that was never there.
 
 Worse, had the vocabulary been wired as planned, the exclusive-state detector
 would have fired on `IS_COMPLIANT_WITH(AD-2022-03-07)` vs
-`IS_NON_COMPLIANT_WITH(AD-2024-01-02)` — a **false positive**. The A129 fix
-would have made the graph wrong, not right. (Note the aerospace ontology does
+`IS_NON_COMPLIANT_WITH(AD-2024-01-02)` — a **false positive**. The deleted A129
+fix would have made the graph wrong, not right. (Note the aerospace ontology does
 not even declare a COMPLIANT/NON_COMPLIANT exclusive pair; adding one would
 have been the actively harmful step.)
 
@@ -4594,7 +4508,9 @@ the two claims. Corrected to point at `functional_violation` /
 
 **Lessons.**
 1. **A capability can be 100% broken and 0% visibly broken.** This is the second
-   instance in the same subsystem (see A129). Both times the tell was the *type
+   instance in the same subsystem (see the deleted A129 entry, the
+   contradiction-detection one — not the unrelated `ingest_corpus.py` A129
+   still in this file). Both times the tell was the *type
    distribution*, not the count: one strategy producing ~99% of output means the
    other four are either dead or drowned, and nobody looks at a metric that has
    always been high.

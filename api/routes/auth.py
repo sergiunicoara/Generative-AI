@@ -31,6 +31,13 @@ from graphrag.core.config import get_settings, is_dev_env
 from graphrag.core.scopes import FIXED_SCOPES, tenant_scope, validate_scopes
 from api.auth.google import build_authorization_url, exchange_code_for_userinfo  # pop_state removed (was dead code)
 from api.auth.jwt import ACCESS_TOKEN_EXPIRE_MINUTES, create_access_token
+from api.auth.user_provisioning import (
+    delete_user_record,
+    get_user_record,
+    list_user_records,
+    normalize_email,
+    set_user_record,
+)
 
 router = APIRouter()
 
@@ -211,18 +218,33 @@ async def callback(request: Request, code: str, state: str):
     except Exception as exc:
         raise HTTPException(status_code=400, detail=f"Google token exchange failed: {exc}")
 
-    tenant = get_settings().default_tenant
-    # Real browser logins stay minimal (read write + this tenant only) --
-    # unlike the dev-only bootstrap credentials above, a real user does not
-    # get biz:*/admin scopes just by signing in. Elevating a real user needs
-    # a separate, explicit grant process -- out of scope for P0.
+    # Previously this accepted ANY Google account and unconditionally issued
+    # a token for settings.default_tenant — there was no persistent mapping
+    # from a Google identity to a tenant anywhere, so every real user landed
+    # in the same tenant and production multi-tenancy was never actually
+    # exercised by real users (only dev-token/M2M ever produced a non-default
+    # tenant). An unprovisioned account now gets NO access rather than
+    # shared access. See docs/context_graph_gap_plan.md F14.
+    email = normalize_email(userinfo["email"])
+    record = get_user_record(email)
+    if record is None:
+        raise HTTPException(
+            status_code=403,
+            detail="This Google account is not provisioned for any tenant. "
+                   "Contact an administrator to be added via POST /auth/users.",
+        )
+    tenant = record["tenant"]
+    # Scopes were already capped at provisioning time (set_user_records's
+    # caller intersects against the provisioning admin's own scopes — the
+    # same escalation guard register_client uses), so nothing further to
+    # intersect here; tenant_scope is always included by that same guard.
     token = create_access_token({
         "sub":     userinfo["sub"],
         "email":   userinfo["email"],
         "name":    userinfo.get("name", ""),
         "picture": userinfo.get("picture", ""),
         "type":    "browser",
-        "scope":   f"read write {tenant_scope(tenant)}",
+        "scope":   " ".join(record["scopes"]),
         "tenant":  tenant,
     })
 
@@ -389,3 +411,88 @@ async def token(request: Request, req: TokenRequest):
         access_token=access_token,
         scope=" ".join(sorted(granted)),
     )
+
+
+# ── User provisioning: email -> tenant mapping for OAuth login (F14) ──────────
+#
+# GET /auth/callback rejects any Google account not provisioned here (403),
+# rather than defaulting it into settings.default_tenant. See
+# docs/context_graph_gap_plan.md F14 and api/auth/user_provisioning.py.
+
+class UserProvisionRequest(BaseModel):
+    email: str
+    scopes: list[str] = ["read", "write"]
+
+
+class UserProvisionResponse(BaseModel):
+    email: str
+    tenant: str
+    scopes: list[str]
+    added_by: str
+    added_at: str
+
+
+@router.post(
+    "/users",
+    response_model=UserProvisionResponse,
+    summary="Provision a Google account for this tenant (admin only)",
+)
+async def provision_user(
+    req: UserProvisionRequest,
+    user: dict = Depends(require_scope("admin")),
+    tenant: str = Depends(get_tenant),
+):
+    """Provision `req.email` to sign in (via /auth/login) as this tenant.
+
+    `tenant` is deliberately NOT a body field — it comes from the caller's
+    own token (Depends(get_tenant)), exactly like the /kg/sources fix in F12:
+    an admin must not be able to provision a user into a tenant other than
+    their own just by naming it in the request body.
+
+    Scopes are intersected with the caller's own, same escalation guard as
+    register_client — an admin can never provision a user above their own
+    privilege. tenant_scope(tenant) is always included regardless of what was
+    requested, so the issued token can pass ToolPolicy's tenant guard.
+    """
+    caller_scopes = set(user.get("scope", "").split())
+    requested = set(validate_scopes(req.scopes))
+    granted = sorted((requested & caller_scopes) | {tenant_scope(tenant)})
+
+    record = set_user_record(
+        req.email,
+        tenant=tenant,
+        scopes=granted,
+        added_by=user.get("email", user.get("sub", "")),
+    )
+    return UserProvisionResponse(**record)
+
+
+@router.get(
+    "/users",
+    response_model=list[UserProvisionResponse],
+    summary="List Google accounts provisioned for this tenant (admin only)",
+)
+async def list_provisioned_users(
+    user: dict = Depends(require_scope("admin")),
+    tenant: str = Depends(get_tenant),
+):
+    records = list_user_records(tenant=tenant)
+    return [UserProvisionResponse(**r) for r in records]
+
+
+@router.delete(
+    "/users/{email}",
+    summary="Revoke a provisioned Google account (admin only)",
+)
+async def revoke_user(
+    email: str,
+    user: dict = Depends(require_scope("admin")),
+    tenant: str = Depends(get_tenant),
+):
+    # 404 rather than 403 on a cross-tenant match: don't confirm to caller A
+    # that some OTHER tenant provisioned this email at all.
+    record = get_user_record(email)
+    if record is None or record.get("tenant") != tenant:
+        raise HTTPException(status_code=404, detail="No provisioned user with that email in this tenant")
+    delete_user_record(email)
+    return {"status": "revoked", "email": normalize_email(email)}

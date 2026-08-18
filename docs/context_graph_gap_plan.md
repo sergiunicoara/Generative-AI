@@ -390,7 +390,60 @@ including 4 fixed by the trainer key-shape correction). 39 new tests across 3
 new/extended files — this class had zero prior coverage. ruff held at 49 (one
 new `F401` from an unused test import, caught and removed before commit).
 
-**Still NOT fixed** (needs its own iteration): **F14**.
+### F14 — fixed 2026-08-18 (follow-up pass)
+
+Unlike F11–F13, this was a missing **feature**, not a missing check: closing
+"any Google account gets `default_tenant`" requires *something* to decide
+which tenant an email belongs to before OAuth can issue a scoped token. Three
+shapes were weighed against the user (see the design note this fix followed):
+Google Workspace domain (`hd` claim) auto-mapping (doesn't cover personal
+accounts, so not a full fix on its own), an explicit admin-provisioned table
+(chosen), and self-service tenant creation (rejected outright — a "tenant" in
+this codebase is a whole isolated customer, not something a signup should be
+able to spin up unilaterally).
+
+**Implementation**, mirroring the M2M client registry (`register_client`)
+already shipped in `api/routes/auth.py` — same Redis-hash-with-in-memory-
+fallback storage shape, same scope-intersection escalation guard:
+
+- `api/auth/user_provisioning.py` — `graphrag:user_tenant_map` Redis hash,
+  keyed by normalized (lowercased, stripped) email.
+- `POST /auth/users` — `require_scope("admin")`-gated. **Tenant is not a body
+  field** — it comes from the caller's own `Depends(get_tenant)`, applying
+  the F12 lesson directly: an admin must not be able to provision a user into
+  a tenant other than their own by naming a different one in the request.
+  Granted scopes are intersected with the provisioning admin's own (same
+  guard `register_client` uses), so an admin can never grant a user privilege
+  they don't hold themselves.
+- `GET /auth/users`, `DELETE /auth/users/{email}` — both `admin`-gated and
+  tenant-scoped; revoking a record that belongs to a different tenant returns
+  404, not 403, so the caller can't confirm the email is provisioned
+  *somewhere else*.
+- `GET /auth/callback` rewritten: looks up the authenticated Google email in
+  the table. **Found → issues a token for that tenant with exactly the
+  provisioned scopes** (no widening at login time — they were already capped
+  at provisioning). **Not found → 403**, not a silent default. This is the
+  actual fix.
+
+**Named limitation, not solved by this fix**: bootstrapping the *first*
+admin-scoped token in a production deployment has no dedicated mechanism —
+that gap pre-dates F14 and is orthogonal to it. `POST /auth/dev-token`
+already grants the full scope set (including `admin`) but is `is_dev_env()`-
+gated, so it covers local development; a production bootstrap story is a
+separate, undecided piece of work.
+
+**Live-validated** against real Redis (not just mocked): set/get/list/delete
+round-tripped through the actual `graphrag:user_tenant_map` hash, confirmed
+present via a raw `HGET`, confirmed tenant-scoped listing excludes other
+tenants, confirmed cleanup.
+
+Tests: 1166 → 1191 passed, 1 skipped, 0 failures (measured, full suite). 25
+new tests across 2 new files — zero prior coverage existed for
+`/auth/callback` or the M2M registry it mirrors. ruff held at 49.
+
+**F11–F14 are all now fixed.** Remaining roadmap items are P2/P3/P8/P9
+documentation and the deferred P5 schema-touching work noted in the original
+plan (Priority 4/5 sections above).
 
 **F10 residual:** the allowlist removes identifier enumeration, but `/kpis/*`
 still returns **cross-tenant aggregate** latency/cost figures, because

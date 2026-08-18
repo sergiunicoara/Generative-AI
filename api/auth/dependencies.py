@@ -55,6 +55,33 @@ async def get_tenant(user: dict = Depends(get_current_user)) -> str:
     return tenant
 
 
+def assert_request_tenant(client_tenant: str, token_tenant: str) -> None:
+    """Reject a request whose client-supplied tenant disagrees with the token.
+
+    Some routes take a domain object as the request body (SourceSystem,
+    SourceMapping, CGAction, ...) and that object legitimately carries its own
+    ``tenant`` field, or name the tenant in the URL path. Either way the value
+    is client-controlled, and tenant is an *authorization* decision that must
+    come from the signed token (``get_tenant`` above).
+
+    Reject rather than silently overwriting with the token's tenant: an
+    overwrite turns both a genuine client bug and a deliberate cross-tenant
+    write attempt into an unremarkable 200, so neither is ever noticed.
+
+    403 (not 404) is right here — unlike a resource read, the caller already
+    told us which tenant they meant, so there is nothing to conceal by
+    pretending the route doesn't exist.
+    """
+    if client_tenant != token_tenant:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=(
+                f"Request tenant {client_tenant!r} does not match the "
+                f"authenticated tenant {token_tenant!r}"
+            ),
+        )
+
+
 def require_scope(scope: str):
     """Dependency factory — enforce a specific scope on ALL token types.
 

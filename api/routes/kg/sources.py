@@ -2,7 +2,7 @@
 
 from fastapi import APIRouter, Depends, HTTPException
 
-from api.auth.dependencies import get_tenant, require_scope
+from api.auth.dependencies import assert_request_tenant, get_tenant, require_scope
 from graphrag.graph.neo4j_client import get_neo4j
 from graphrag.graph.source_catalog import (
     SourceCatalogRepository,
@@ -15,7 +15,13 @@ router = APIRouter()
 
 
 @router.post("/sources", dependencies=[Depends(require_scope("write"))])
-async def upsert_source(source: SourceSystem):
+async def upsert_source(source: SourceSystem, tenant: str = Depends(get_tenant)):
+    # SourceSystem.tenant is a required model field, and it went straight into
+    # MERGE (s:KGSource {tenant: $tenant, id: $id}) — so a tenant-A token could
+    # plant catalog entries in tenant B's namespace just by setting it in the
+    # body. Note the read routes below always took tenant from the token; only
+    # the two write routes trusted the body.
+    assert_request_tenant(source.tenant, tenant)
     source_id = await SourceCatalogRepository(get_neo4j()).upsert_source(source)
     return {"source_id": source_id, "tenant": source.tenant}
 
@@ -34,7 +40,10 @@ async def get_source(source_id: str, tenant: str = Depends(get_tenant)):
 
 
 @router.post("/sources/{source_id}/mappings", dependencies=[Depends(require_scope("write"))])
-async def add_source_mapping(source_id: str, mapping: SourceMapping):
+async def add_source_mapping(
+    source_id: str, mapping: SourceMapping, tenant: str = Depends(get_tenant),
+):
+    assert_request_tenant(mapping.tenant, tenant)
     if mapping.source_id != source_id:
         raise HTTPException(status_code=422, detail="Path and mapping source IDs differ")
     try:

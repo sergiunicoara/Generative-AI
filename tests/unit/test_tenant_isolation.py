@@ -133,6 +133,116 @@ class TestTenantFromToken:
             "tenant is client-supplied at:\n  " + "\n  ".join(offenders)
         )
 
+    def test_route_signatures_resolve_tenant_from_the_token_ast(self):
+        """AST version of the check above — the regex form cannot see the shapes
+        that actually shipped.
+
+        `tenant: str = "literal"` is only one way to take tenant from the
+        client. The regex missed all three real holes found 2026-08-18:
+          - a bare PATH parameter (`tenant: str`) on
+            DELETE /kg/cache/flush/{tenant};
+          - `tenant: str = Query(default=None)`;
+          - a tenant nested inside a Pydantic request-body model
+            (SourceSystem / SourceMapping on POST /kg/sources).
+
+        Rule enforced here, per route handler:
+          - a parameter named tenant/token_tenant must default to
+            Depends(get_tenant), OR the handler must call the reject helper;
+          - a parameter annotated with a model that declares a `tenant` field
+            must be accompanied by a call to the reject helper.
+
+        Dev-only handlers are exempt, but the exemption is derived from the
+        code (the handler calls is_dev_env and refuses outside dev) rather than
+        from a hand-maintained name list — so deleting a dev gate re-arms this
+        test instead of silently widening the exemption.
+
+        See docs/context_graph_gap_plan.md F12.
+        """
+        import ast
+
+        _ASSERT_HELPERS = {"assert_request_tenant", "_assert_body_tenant"}
+        _HTTP_METHODS = {"get", "post", "put", "patch", "delete"}
+
+        def _tenant_bearing_models() -> set[str]:
+            names: set[str] = set()
+            for src in (REPO_ROOT / "graphrag", REPO_ROOT / "api"):
+                for p in src.rglob("*.py"):
+                    if "__pycache__" in p.parts:
+                        continue
+                    try:
+                        tree = ast.parse(p.read_text(encoding="utf-8"))
+                    except SyntaxError:
+                        continue
+                    for node in ast.walk(tree):
+                        if not isinstance(node, ast.ClassDef):
+                            continue
+                        for stmt in node.body:
+                            if (isinstance(stmt, ast.AnnAssign)
+                                    and isinstance(stmt.target, ast.Name)
+                                    and stmt.target.id == "tenant"):
+                                names.add(node.name)
+            return names
+
+        def _is_depends_get_tenant(default) -> bool:
+            return (isinstance(default, ast.Call)
+                    and getattr(default.func, "id", None) == "Depends"
+                    and bool(default.args)
+                    and getattr(default.args[0], "id", None) == "get_tenant")
+
+        def _calls(fn, names: set[str]) -> bool:
+            return any(isinstance(n, ast.Call) and getattr(n.func, "id", "") in names
+                       for n in ast.walk(fn))
+
+        def _is_route(fn) -> bool:
+            for dec in fn.decorator_list:
+                target = dec.func if isinstance(dec, ast.Call) else dec
+                if isinstance(target, ast.Attribute) and target.attr in _HTTP_METHODS:
+                    return True
+            return False
+
+        models = _tenant_bearing_models()
+        assert models, "found no tenant-bearing models — the scan is broken, not the code"
+
+        offenders: list[str] = []
+        for path in (REPO_ROOT / "api" / "routes").rglob("*.py"):
+            if "__pycache__" in path.parts:
+                continue
+            tree = ast.parse(path.read_text(encoding="utf-8"))
+            rel = path.relative_to(REPO_ROOT)
+            for fn in ast.walk(tree):
+                if not isinstance(fn, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                    continue
+                if not _is_route(fn):
+                    continue
+                if _calls(fn, {"is_dev_env"}):
+                    continue   # dev-gated; refuses outside development
+                guarded = _calls(fn, _ASSERT_HELPERS)
+
+                args = fn.args
+                params = args.posonlyargs + args.args + args.kwonlyargs
+                pad = len(args.posonlyargs) + len(args.args) - len(args.defaults)
+                defaults = [None] * pad + list(args.defaults) + list(args.kw_defaults)
+
+                for param, default in zip(params, defaults):
+                    annotation = getattr(param.annotation, "id", None)
+                    if param.arg in ("tenant", "token_tenant"):
+                        if not _is_depends_get_tenant(default) and not guarded:
+                            offenders.append(
+                                f"{rel}:{fn.lineno} {fn.name}(): parameter "
+                                f"{param.arg!r} is client-supplied and neither "
+                                f"Depends(get_tenant) nor reject-checked"
+                            )
+                    elif annotation in models and not guarded:
+                        offenders.append(
+                            f"{rel}:{fn.lineno} {fn.name}(): body model "
+                            f"{annotation!r} carries a tenant field but the "
+                            f"handler never calls assert_request_tenant"
+                        )
+
+        assert not offenders, (
+            "route(s) take tenant from the client:\n  " + "\n  ".join(offenders)
+        )
+
 
 class TestRequireTenant:
     @pytest.mark.parametrize("missing", [None, "", "   "])
@@ -682,3 +792,68 @@ class TestSPARQLPerTenantExport:
         from api.routes.kg.knowledge import _TENANT_PATH_RE
 
         assert _TENANT_PATH_RE.fullmatch(bad_tenant) is None
+
+
+# ── 12. Body/path-supplied tenant is rejected, not honoured (F12) ─────────────
+
+class TestClientSuppliedTenantRejected:
+    """Three write routes took tenant from client-controlled input rather than
+    the token, so a tenant-A token could act on tenant B:
+
+      - DELETE /kg/cache/flush/{tenant}  (PATH param) — flush B's answer cache,
+        forcing every later query there to re-run full retrieval at real LLM
+        cost: a cross-tenant availability/billing attack.
+      - POST /kg/sources                 (BODY field) — plant catalog entries
+        in B's namespace (MERGE (s:KGSource {tenant: $tenant, id: $id})).
+      - POST /kg/sources/{id}/mappings   (BODY field) — same.
+
+    All three now reject a mismatch (403) rather than silently honouring it,
+    matching the convention the Context Graph routes already used.
+    See docs/context_graph_gap_plan.md F12.
+    """
+
+    def test_helper_rejects_mismatch_and_allows_match(self):
+        from fastapi import HTTPException
+
+        from api.auth.dependencies import assert_request_tenant
+
+        with pytest.raises(HTTPException) as exc:
+            assert_request_tenant("victim-tenant", "attacker-tenant")
+        assert exc.value.status_code == 403
+
+        assert_request_tenant("acme", "acme")  # must not raise
+
+    def test_mismatch_message_does_not_invent_a_silent_overwrite(self):
+        """Reject, don't overwrite: an overwrite turns both a client bug and a
+        deliberate cross-tenant write into an unremarkable 200."""
+        from fastapi import HTTPException
+
+        from api.auth.dependencies import assert_request_tenant
+
+        with pytest.raises(HTTPException) as exc:
+            assert_request_tenant("evil", "real")
+        assert "evil" in str(exc.value.detail) and "real" in str(exc.value.detail)
+
+    @pytest.mark.parametrize(
+        "module_name,func_name",
+        [
+            ("api.routes.kg.health", "cache_flush_tenant"),
+            ("api.routes.kg.sources", "upsert_source"),
+            ("api.routes.kg.sources", "add_source_mapping"),
+        ],
+    )
+    def test_route_resolves_tenant_from_token(self, module_name, func_name):
+        """Each previously-vulnerable handler must now depend on get_tenant."""
+        import importlib
+        import inspect
+
+        mod = importlib.import_module(module_name)
+        sig = inspect.signature(getattr(mod, func_name))
+        depends_params = [
+            p for p in sig.parameters.values()
+            if getattr(p.default, "dependency", None) is not None
+        ]
+        assert depends_params, f"{func_name} has no Depends(...) tenant parameter"
+        assert any(
+            p.default.dependency.__name__ == "get_tenant" for p in depends_params
+        ), f"{func_name} does not resolve tenant via get_tenant"

@@ -2,10 +2,10 @@
 
 from datetime import datetime
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends
 from pydantic import BaseModel, Field
 
-from api.auth.dependencies import get_tenant, require_scope
+from api.auth.dependencies import assert_request_tenant, get_tenant, require_scope
 from graphrag.context_graph.models import (
     CGAction, CGApproval, CGCorrection, CGExceptionGrant, CGFeedback, CGOutcome,
     DecisionTrace,
@@ -23,23 +23,14 @@ router = APIRouter(prefix="/context-graph", tags=["Context Graph P0"])
 def _assert_body_tenant(body_tenant: str, token_tenant: str) -> None:
     """Reject a request body whose tenant disagrees with the caller's token.
 
-    Several routes below take a domain object (CGAction, CGOutcome, ...)
-    directly as the request body, and that object carries its own `tenant`
-    field (needed for validation, defaults, etc.) -- but tenant is an
-    *authorization* decision and must come from the signed token
-    (api/auth/dependencies.py::get_tenant), never from anything client-
-    supplied. Silently overwriting body.tenant with the token's tenant would
-    hide a real bug (or attack) behind an unremarkable-looking 200; reject
-    instead so a mismatch is visible.
+    Thin alias kept for the call sites below and their tests. The rule this
+    enforces is not specific to the Context Graph — the same body/path-tenant
+    hole existed on /kg/sources and /kg/cache/flush/{tenant} — so the
+    implementation now lives in api/auth/dependencies.py next to get_tenant,
+    where a route author looking for the tenant dependency will actually find
+    it. See docs/context_graph_gap_plan.md F12.
     """
-    if body_tenant != token_tenant:
-        raise HTTPException(
-            status_code=403,
-            detail=(
-                f"Request tenant {body_tenant!r} does not match the "
-                f"authenticated tenant {token_tenant!r}"
-            ),
-        )
+    assert_request_tenant(body_tenant, token_tenant)
 
 
 def _proactive_service() -> ProactiveContextService:

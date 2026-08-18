@@ -5,7 +5,7 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
-from api.auth.dependencies import get_tenant, require_scope
+from api.auth.dependencies import assert_request_tenant, get_tenant, require_scope
 from graphrag.graph.neo4j_client import get_neo4j
 
 router = APIRouter()
@@ -101,7 +101,18 @@ async def cache_invalidate(request: CacheInvalidateRequest, tenant: str = Depend
     dependencies=[Depends(require_scope("write"))],
     summary="Remove all cached results for a tenant (use after bulk re-ingestion)",
 )
-async def cache_flush_tenant(tenant: str):
+async def cache_flush_tenant(tenant: str, token_tenant: str = Depends(get_tenant)):
+    # `tenant` here is a PATH parameter — client-controlled. Without this check
+    # any caller holding a "write" scope could flush any other tenant's answer
+    # cache, forcing every subsequent query there to re-run full retrieval at
+    # real LLM cost: a cross-tenant availability and billing attack. (The
+    # sibling /cache/invalidate route directly above always took tenant from
+    # the token; only this one didn't.)
+    #
+    # The path parameter is kept rather than dropped so the published URL shape
+    # doesn't change — it now has to agree with the token instead of overriding
+    # it. See docs/context_graph_gap_plan.md F12.
+    assert_request_tenant(tenant, token_tenant)
     from graphrag.retrieval.query_cache import get_query_cache
     cache = await get_query_cache()
     count = await cache.flush_tenant(tenant=tenant)

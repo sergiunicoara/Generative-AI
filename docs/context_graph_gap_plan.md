@@ -290,7 +290,41 @@ history intact, and the two land in separate keys
 7 new adversarial unit tests (read leak, write poisoning, tenant-scoped
 `clear`, key shape, colon-aliasing, required-kwarg enforcement).
 
-**Still NOT fixed** (each needs its own iteration): **F12**, **F13**, **F14**.
+### F12 — fixed 2026-08-18 (follow-up pass)
+
+All three routes now reject a client-supplied tenant that disagrees with the
+token, rather than honouring it:
+
+| Route | Was | Now |
+|---|---|---|
+| `DELETE /kg/cache/flush/{tenant}` | tenant from **path** | path kept (URL shape unchanged), checked against token |
+| `POST /kg/sources` | tenant from **body** (`SourceSystem.tenant`) | `Depends(get_tenant)` + reject on mismatch |
+| `POST /kg/sources/{id}/mappings` | tenant from **body** (`SourceMapping.tenant`) | same |
+
+The reject-don't-overwrite helper already existed as
+`context_graph._assert_body_tenant`; it moved to
+`api/auth/dependencies.assert_request_tenant` (next to `get_tenant`, where a
+route author looking for the tenant dependency will find it) and the old
+private name is now a thin delegating alias so existing call sites and tests
+are untouched.
+
+**The guard test that missed all three is rewritten.** The old check was a
+regex for `tenant: str = "literal"`, which structurally cannot see a bare path
+param, a `Query(default=…)`, or a tenant nested in a request-body model — i.e.
+it could never have caught any of these. The replacement walks the AST of every
+route handler and requires: a `tenant`/`token_tenant` parameter to default to
+`Depends(get_tenant)` or the handler to call the reject helper; and any
+parameter annotated with a **tenant-bearing model** (30 such models found by
+scanning `graphrag/` and `api/` for classes declaring a `tenant` field) to be
+accompanied by that call. Dev-only handlers are exempt, but the exemption is
+**derived from the code** (the handler calls `is_dev_env`) rather than a
+hand-maintained name list, so deleting a dev gate re-arms the test instead of
+silently widening the exemption. The old regex test is kept alongside it.
+
+Tests: 1140 → 1146 passed, 1 skipped, 0 failures. ruff held at 49 (one new
+`F401` introduced by the delegation was found and removed before commit).
+
+**Still NOT fixed** (each needs its own iteration): **F13**, **F14**.
 
 **F10 residual:** the allowlist removes identifier enumeration, but `/kpis/*`
 still returns **cross-tenant aggregate** latency/cost figures, because

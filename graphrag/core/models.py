@@ -52,6 +52,19 @@ class Document(BaseModel):
     valid_to: datetime | None = None
     tenant: str = "default"
     source_id: str | None = None   # optional KGSource catalog reference
+    # sha256 of raw_text (graphrag/core/content_hash.py). Lets ingestion tell
+    # whether a re-ingested file actually changed instead of re-chunking,
+    # re-embedding and re-extracting an unchanged document every run. Empty
+    # string means "not computed" (data predating this field) and is treated
+    # as "assume changed", never as a real hash.
+    content_hash: str = ""
+    # Soft-delete markers, set when a source document disappears from the
+    # corpus. Deliberately NOT a physical delete — that is GDPR erasure's job
+    # (graphrag/graph/gdpr.py). A tombstoned document's chunks are excluded
+    # from retrieval but stay recoverable, matching how `quarantined` already
+    # works for entities.
+    is_deleted: bool = False
+    deleted_at: datetime | None = None
 
 
 class Chunk(BaseModel):

@@ -149,6 +149,7 @@ class GraphWriter:
             valid_to=doc.valid_to.isoformat() if doc.valid_to else None,
             tenant=doc.tenant,
             source_id=doc.source_id,
+            content_hash=doc.content_hash,
         )
         doc.id = canonical_id
 

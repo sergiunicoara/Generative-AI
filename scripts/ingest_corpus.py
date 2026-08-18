@@ -284,6 +284,7 @@ async def ingest_all(
     from graphrag.graph.neo4j_client import get_neo4j
     from graphrag.graph.inference_engine import ForwardChainingEngine
     from graphrag.graph.graph_snapshots import GraphSnapshotService
+    from graphrag.core.content_hash import compute_content_hash, content_changed
     from graphrag.ingestion.document_loader import load_document
 
     # Groq/OpenAI SDK calls run synchronously inside loop.run_in_executor(),
@@ -357,23 +358,63 @@ async def ingest_all(
         await neo4j.close()
         return 0
 
-    # ── Checkpoint — skip documents already fully ingested ─────────────────────
+    # ── Incremental checkpoint — content-hash comparison ──────────────────────
     # (only meaningful when not --wipe, since --wipe just cleared everything).
-    # A document is "complete" once write() finished without raising — marked
-    # by ingest_complete=true on its Document node (set further below).
+    # Content-hash comparison replaces the old BINARY ingest_complete check,
+    # which skipped a document forever once ingested -- so a source file that
+    # had been EDITED was never re-ingested without a full --wipe. The stored
+    # hash is now compared against the file on disk: unchanged -> skip,
+    # changed -> re-ingest, new -> ingest. See graphrag/core/content_hash.py.
+    #
+    # Deletion reconciliation runs first and unconditionally: a corpus whose
+    # only change is a REMOVED file still needs that document tombstoned.
     if not wipe:
-        done_rows = await neo4j.run(
-            "MATCH (d:Document {tenant: $tenant, ingest_complete: true}) "
-            "RETURN d.filename AS filename",
-            tenant=tenant,
-        )
-        already_done = {r["filename"] for r in done_rows}
-        if already_done:
-            skipped = [p for p in paths if p.name in already_done]
-            paths = [p for p in paths if p.name not in already_done]
-            print(f"  [checkpoint] Skipping {len(skipped)} already-ingested document(s)\n")
+        states = await neo4j.get_document_states(tenant=tenant)
+
+        present = {q.name for q in paths}
+        vanished = [
+            fname for fname, st in states.items()
+            if fname not in present and not st["is_deleted"]
+        ]
+        if vanished:
+            n_tomb = await neo4j.tombstone_documents(vanished, tenant=tenant)
+            preview = ", ".join(sorted(vanished)[:5]) + (" ..." if len(vanished) > 5 else "")
+            print(f"  [tombstone] {n_tomb} document(s) gone from the corpus - "
+                  f"excluded from retrieval, recoverable: {preview}")
+
+        unchanged, changed = [], []
+        for path in paths:
+            state = states.get(path.name, {})
+            stored = state.get("content_hash", "")
+            try:
+                current = compute_content_hash(load_document(path).raw_text)
+            except Exception as exc:
+                # Unreadable here -> let the real ingest loop surface the error
+                # rather than silently skipping the document.
+                log.warning("ingest_corpus.hash_failed", doc=path.name, error=str(exc))
+                changed.append(path)
+                continue
+            # BOTH conditions required. merge_document stores content_hash at
+            # the start of a document's write, so a crash midway leaves a hash
+            # that already matches disk -- skipping on hash alone would freeze
+            # a half-ingested document permanently.
+            safe_to_skip = (
+                not content_changed(stored, current)
+                and state.get("ingest_complete", False)
+            )
+            (unchanged if safe_to_skip else changed).append(path)
+
+        if unchanged:
+            print(f"  [checkpoint] Skipping {len(unchanged)} unchanged document(s)")
+        rehashed = [q for q in changed if q.name in states]
+        if rehashed:
+            preview = ", ".join(sorted(q.name for q in rehashed)[:5]) + (" ..." if len(rehashed) > 5 else "")
+            print(f"  [checkpoint] Re-ingesting {len(rehashed)} CHANGED document(s): {preview}")
+        paths = changed
+        print()
+
         if not paths:
-            print("  Nothing left to ingest — all documents already complete.\n")
+            print("  Nothing left to ingest — all documents unchanged.\n")
             await neo4j.close()
             return 0
 

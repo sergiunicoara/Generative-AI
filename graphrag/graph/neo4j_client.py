@@ -208,6 +208,7 @@ class Neo4jClient:
         valid_to: str | None = None,
         tenant: str = "default",
         source_id: str | None = None,
+        content_hash: str = "",
     ) -> str:
         """MERGE on the document's real identity, (tenant, filename) — not on
         doc_id, which is a fresh uuid4() every ingestion run and so can never
@@ -232,7 +233,15 @@ class Neo4jClient:
                 d.authority_level = $authority_level,
                 d.valid_from      = $valid_from,
                 d.valid_to        = $valid_to,
-                d.source_id       = $source_id
+                d.source_id       = $source_id,
+                d.content_hash    = $content_hash,
+                // Re-ingesting a file that had been tombstoned resurrects it:
+                // the source reappeared on disk, so its chunks must become
+                // retrievable again. Clearing here (rather than leaving the
+                // operator to notice) keeps tombstone state derived from the
+                // corpus rather than drifting from it.
+                d.is_deleted      = false,
+                d.deleted_at      = null
             FOREACH (_ IN CASE WHEN source IS NULL THEN [] ELSE [1] END |
               MERGE (d)-[:INGESTED_FROM]->(source))
             RETURN d.id AS doc_id
@@ -245,10 +254,78 @@ class Neo4jClient:
             valid_to=valid_to,
             tenant=tenant,
             source_id=source_id,
+            content_hash=content_hash,
         )
         if source_id and not rows:
             raise ValueError("document source is missing or belongs to another tenant")
         return rows[0]["doc_id"] if rows else doc_id
+
+    async def get_document_states(self, tenant: str = "default") -> dict[str, dict]:
+        """Return {filename: {"content_hash": str, "is_deleted": bool}} for a tenant.
+
+        Feeds the bulk ingest CLI's incremental decision: skip a file whose
+        stored hash matches what is on disk, re-ingest one whose hash differs,
+        ingest one that is absent. Replaces the old binary `ingest_complete`
+        checkpoint, which skipped a document forever once ingested — so an
+        EDITED source file was never re-ingested without a full --wipe.
+
+        `ingest_complete` is still returned and still matters: merge_document
+        writes content_hash at the START of a document's write, so a run that
+        crashes midway leaves a hash that already matches the file on disk.
+        Hash alone would then mark a PARTIALLY ingested document as
+        "unchanged" and skip it forever. A document is only safely skippable
+        when its hash matches AND its previous write actually completed.
+        """
+        rows = await self.run(
+            """
+            MATCH (d:Document {tenant: $tenant})
+            RETURN d.filename AS filename,
+                   coalesce(d.content_hash, '') AS content_hash,
+                   coalesce(d.is_deleted, false) AS is_deleted,
+                   coalesce(d.ingest_complete, false) AS ingest_complete
+            """,
+            tenant=tenant,
+        )
+        return {
+            r["filename"]: {
+                "content_hash": r["content_hash"],
+                "is_deleted": r["is_deleted"],
+                "ingest_complete": r["ingest_complete"],
+            }
+            for r in rows if r.get("filename")
+        }
+
+    async def tombstone_documents(
+        self, filenames: list[str], tenant: str = "default",
+    ) -> int:
+        """Soft-delete documents whose source file has disappeared.
+
+        Deliberately NOT a physical delete. Erasing data is GDPR erasure's job
+        (graphrag/graph/gdpr.py) and is irreversible; a source file vanishing
+        from a corpus directory is far more often a sync glitch, a partial
+        checkout, or a rename than a genuine deletion request. Tombstoning
+        excludes the document's chunks from retrieval while leaving every node
+        recoverable — and merge_document clears the flag automatically if the
+        file comes back.
+
+        Returns the number of documents newly tombstoned (already-tombstoned
+        ones are not recounted, so this is safe to run on every ingest).
+        """
+        if not filenames:
+            return 0
+        rows = await self.run(
+            """
+            UNWIND $filenames AS fname
+            MATCH (d:Document {tenant: $tenant, filename: fname})
+            WHERE coalesce(d.is_deleted, false) = false
+            SET d.is_deleted = true,
+                d.deleted_at = datetime()
+            RETURN count(d) AS tombstoned
+            """,
+            filenames=filenames,
+            tenant=tenant,
+        )
+        return rows[0]["tombstoned"] if rows else 0
 
     async def merge_chunk(self, chunk: Chunk, tenant: str = "default"):
         """MERGE on (document_id, chunk_index) — stable across re-ingestion and
@@ -774,7 +851,8 @@ class Neo4jClient:
                     LIMIT $top_k
                   ) SCORE AS score
                 OPTIONAL MATCH (c)-[:PART_OF]->(d:Document {tenant: $tenant})
-                WHERE ($valid_at IS NULL OR (
+                WHERE (d IS NULL OR coalesce(d.is_deleted, false) = false)
+                  AND ($valid_at IS NULL OR (
                     d IS NOT NULL
                     AND (d.valid_from IS NULL OR d.valid_from <= datetime($valid_at))
                     AND (d.valid_to IS NULL OR d.valid_to > datetime($valid_at))))
@@ -801,6 +879,7 @@ class Neo4jClient:
             YIELD node AS c, score
             OPTIONAL MATCH (c)-[:PART_OF]->(d:Document)
             WHERE (c.tenant = $tenant)
+              AND (d IS NULL OR coalesce(d.is_deleted, false) = false)
               AND ($valid_at IS NULL OR (
                   d IS NOT NULL
                   AND (d.valid_from IS NULL OR d.valid_from <= datetime($valid_at))
@@ -886,6 +965,7 @@ class Neo4jClient:
                   <-[:MEMBER_OF]-(e:Entity {tenant: $tenant})
                   <-[:MENTIONS]-(chunk:Chunk {tenant: $tenant})
                   -[:PART_OF]->(d:Document)
+            WHERE coalesce(d.is_deleted, false) = false
             WITH cid, d.filename AS filename, count(*) AS mentions
             ORDER BY cid, mentions DESC
             WITH cid, collect(filename)[0..$limit] AS filenames
@@ -917,6 +997,7 @@ class Neo4jClient:
             """
             MATCH (c:Chunk)-[:PART_OF]->(d:Document {filename: $filename})
             WHERE (c.tenant = $tenant)
+              AND coalesce(d.is_deleted, false) = false
               AND c.embedding IS NOT NULL
               AND ($valid_at IS NULL OR (
                   (d.valid_from IS NULL OR d.valid_from <= datetime($valid_at))
@@ -1219,6 +1300,7 @@ class Neo4jClient:
             YIELD node AS c, score
             OPTIONAL MATCH (c)-[:PART_OF]->(d:Document)
             WHERE (c.tenant = $tenant)
+              AND (d IS NULL OR coalesce(d.is_deleted, false) = false)
               AND ($valid_at IS NULL OR (
                   d IS NOT NULL
                   AND (d.valid_from IS NULL OR d.valid_from <= datetime($valid_at))
@@ -1263,6 +1345,7 @@ class Neo4jClient:
             OPTIONAL MATCH (c:Chunk)-[:MENTIONS]->(e)
             OPTIONAL MATCH (c)-[:PART_OF]->(d:Document)
             WHERE (c.tenant = $tenant)
+              AND (d IS NULL OR coalesce(d.is_deleted, false) = false)
               AND ($valid_at IS NULL OR (
                   d IS NOT NULL
                   AND (d.valid_from IS NULL OR d.valid_from <= datetime($valid_at))

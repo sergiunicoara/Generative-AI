@@ -6,6 +6,7 @@ from pathlib import Path
 
 import structlog
 
+from graphrag.core.content_hash import compute_content_hash
 from graphrag.core.models import Document
 
 log = structlog.get_logger(__name__)
@@ -31,6 +32,10 @@ def load_document(file_path: str | Path) -> Document:
         source_path=str(path.resolve()),
         raw_text=text,
         metadata={"extension": suffix, "size_bytes": path.stat().st_size},
+        # Computed here, at the single point every format converges to str,
+        # so the whole pipeline downstream can compare "is this the same
+        # document as last run?" without re-reading the file.
+        content_hash=compute_content_hash(text),
     )
     log.info("document_loader.loaded", filename=doc.filename, chars=len(text))
     return doc

@@ -581,3 +581,105 @@ regressed something else.
 **Explicitly not changed:** retrieval (P7). The evidence ledger in
 `docs/audit-2026-08-13.md` and lessons A157–A159 show unmeasured tuning here
 regresses quality; there is no new premise to justify another attempt.
+
+
+---
+
+## Step 4 — P5 incremental ingestion (content hashing + tombstones), 2026-08-18
+
+Scoped deliberately to the two items the plan named. **P3 and P4 were NOT
+done here** — see "Scope correction" below.
+
+### Content hashing — fixes a correctness bug, not just cost
+
+The bulk ingest CLI's checkpoint was **binary**: a `Document` carrying
+`ingest_complete = true` was skipped on every later run, so a source file
+that had been **edited** was never re-ingested at all without a full
+`--wipe`. Hashing turns that into the correct three-way decision:
+unchanged → skip, changed → re-ingest, new → ingest.
+
+- `graphrag/core/content_hash.py` — `compute_content_hash` (sha256 of the
+  decoded text, not raw bytes: the same document re-saved with different
+  line endings is the same document, and re-running a multi-minute LLM
+  extraction over a CRLF change would be a false positive) and
+  `content_changed`, where an **absent** stored hash means "re-ingest",
+  never "assume unchanged".
+- `Document.content_hash`, computed once in `document_loader.load_document`
+  at the single point every format (PDF/DOCX/TXT/MD) converges to `str`.
+- Persisted by `merge_document`; read back by the new
+  `Neo4jClient.get_document_states`.
+
+**Subtle guard, nearly missed:** `merge_document` writes the hash at the
+*start* of a document's write, so a run that crashes midway leaves a hash
+already matching disk. Skipping on hash **alone** would freeze a
+half-ingested document out of every future run — a worse bug than the one
+being fixed. The CLI therefore requires hash-match **AND**
+`ingest_complete`; `ingest_complete` is kept, not removed. Pinned by
+`TestPartialIngestIsNotSkipped`.
+
+### Tombstones — soft delete, never physical
+
+`Document.is_deleted` / `deleted_at`, set by
+`Neo4jClient.tombstone_documents` when a source file disappears from the
+corpus. Deliberately **not** a physical delete: erasing data is GDPR
+erasure's job (`graphrag/graph/gdpr.py`) and is irreversible, whereas a file
+vanishing from a corpus directory is far more often a sync glitch, partial
+checkout, or rename than a genuine deletion. Tombstoning hides the
+document's chunks from retrieval while leaving everything recoverable — the
+same shape `quarantined` already uses for entities.
+
+Filters added to the **six** query sites that feed retrieval or citations
+(both `vector_search_chunks` branches, `bm25_search_chunks`, the BM25 entity
+search, `get_best_chunk_for_document`, and community source documents). The
+`OPTIONAL MATCH` sites use `(d IS NULL OR ...)` so a chunk with no
+`PART_OF` edge still passes — filtering those out would silently drop
+legitimately orphaned chunks, a behaviour change beyond this feature.
+
+Resurrection is automatic: `merge_document` clears `is_deleted`/`deleted_at`,
+so a file reappearing on disk becomes retrievable again rather than needing
+an operator to notice.
+
+### Verification
+
+**Live-validated against real Neo4j** on a scratch tenant: hash written and
+read back; tombstone applied; re-tombstoning returns 0 (idempotent, safe to
+run every ingest); tombstoned document still present in the graph
+(recoverable); its chunk correctly excluded from a retrieval-shaped query
+while the sibling chunk remained visible; resurrection cleared the flag and
+updated the hash.
+
+Every modified Cypher query was `EXPLAIN`-checked against live Neo4j.
+**One exception, stated rather than glossed:** the native-vector branch of
+`vector_search_chunks` uses Neo4j 2026.x `SEARCH ... IN (VECTOR INDEX ...)`
+syntax and cannot be parsed by the local Neo4j 5.20 — a pre-existing
+limitation of the dev environment, not something this change introduced. That
+branch's edit was verified by inspection only.
+
+Tests: 1205 → **1221 passed**, 1 skipped, 0 failures (measured, full suite).
+ruff held at 49.
+
+### Scope correction — P3/P4 belong to a different repository
+
+Work on P3 (Conversation/Utterance/Mention) and P4 (`Mention` node,
+`POSSIBLY_REFERS_TO`, resolution-rejection durability) was **started and then
+deliberately reverted** after checking the sibling `sales-context-graph`
+repository, which already implements that entire vocabulary natively:
+
+| Brief item | Already exists in `sales-context-graph` |
+|---|---|
+| Conversation, Mention | `src/domain/conversation.py` |
+| Objection, Commitment | `src/domain/knowledge.py` |
+| Claims / assertions | `src/domain/assertion.py` |
+| Entity resolution + review queue | `src/resolution/`, `src/review/` |
+
+That repo's own README states the brief's use case almost verbatim
+("identify the objection raised by a stakeholder in the latest relevant
+call... with an explainable entity-resolution decision"), over Gong-shaped
+transcripts and Salesforce-shaped CRM. This platform's domain is regulatory
+compliance Q&A (aerospace ADs, IATF, pharma, adtech) and its
+`graphrag/context_graph/` module already has a fit-for-purpose vocabulary
+(`Decision`, `Action`, `Outcome`, `ToolCall`, `CGEpisode`).
+
+Building `Need`/`Objection`/`Commitment` here would have imported another
+product's ontology into a codebase with nothing to produce or consume it.
+P5 was kept because it is genuinely domain-neutral and a real gap here.

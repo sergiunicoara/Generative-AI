@@ -212,3 +212,93 @@ class TestAddDomainRangeRules:
             "MANDATED_BY": {"domain": ["REGULATION"], "target": ["ORG"]}
         })
         assert "MANDATED_BY" in registry._known_relations
+
+
+# ── F13: tenant scoping of relation vocabulary and version history ────────────
+
+class TestKnownRelationsScopedByTenant:
+    """load()'s "known relation types from existing graph" query used to scan
+    ALL tenants' RELATES_TO edges, so tenant A's vocabulary silently
+    suppressed validate_extraction's "new relation" drift signal for tenant B.
+    See docs/context_graph_gap_plan.md F13."""
+
+    async def test_relation_scan_filters_by_tenant(self):
+        neo4j = AsyncMock()
+        neo4j.run = AsyncMock(side_effect=[
+            [],                            # MATCH existing relations
+            [{"version_id": "v-1"}],       # MERGE OntologyVersion
+        ])
+        registry = OntologyRegistry(neo4j, tenant="acme")
+        await registry.load(["ORG"])
+
+        relation_scan_call = neo4j.run.await_args_list[0]
+        query = relation_scan_call.args[0]
+        assert "tenant: $tenant" in query
+        assert relation_scan_call.kwargs["tenant"] == "acme"
+
+
+class TestOntologyVersionScopedByTenant:
+    async def test_version_merge_includes_tenant_in_key(self):
+        neo4j = AsyncMock()
+        neo4j.run = AsyncMock(side_effect=[[], [{"version_id": "v-1"}]])
+        registry = OntologyRegistry(neo4j, tenant="acme")
+        await registry.load(["ORG"])
+
+        merge_call = neo4j.run.await_args_list[1]
+        assert "MERGE (o:OntologyVersion {schema_hash: $hash, tenant: $tenant})" in merge_call.args[0]
+        assert merge_call.kwargs["tenant"] == "acme"
+
+    async def test_two_tenants_with_identical_ontology_get_separate_versions(self):
+        """Same schema_hash must not collapse two tenants into one shared
+        OntologyVersion node — that would merge their governance histories."""
+        neo4j = AsyncMock()
+        neo4j.run = AsyncMock(side_effect=[
+            [], [{"version_id": "v-acme"}],
+            [], [{"version_id": "v-other"}],
+        ])
+        acme = OntologyRegistry(neo4j, tenant="acme")
+        await acme.load(["ORG"])
+        other = OntologyRegistry(neo4j, tenant="other")
+        await other.load(["ORG"])
+
+        acme_merge = neo4j.run.await_args_list[1]
+        other_merge = neo4j.run.await_args_list[3]
+        assert acme_merge.kwargs["tenant"] == "acme"
+        assert other_merge.kwargs["tenant"] == "other"
+
+
+class TestGetSchemaHistoryRequiresTenant:
+    async def test_tenant_is_required_positional(self):
+        neo4j = AsyncMock()
+        registry = OntologyRegistry(neo4j, tenant="acme")
+        with pytest.raises(TypeError):
+            await registry.get_schema_history()
+
+    async def test_query_filters_by_tenant(self):
+        neo4j = AsyncMock()
+        neo4j.run = AsyncMock(return_value=[])
+        registry = OntologyRegistry(neo4j, tenant="acme")
+
+        await registry.get_schema_history("acme")
+
+        call = neo4j.run.await_args
+        assert "MATCH (o:OntologyVersion {tenant: $tenant})" in call.args[0]
+        assert call.kwargs["tenant"] == "acme"
+
+    async def test_other_tenants_versions_not_returned(self):
+        """Adversarial: a caller passing tenant B must not see tenant A's
+        history, regardless of what the fake Neo4j layer would return for an
+        unscoped query."""
+        neo4j = AsyncMock()
+        neo4j.run = AsyncMock(return_value=[
+            {"version_id": "v-1", "hash": "h1", "entity_types": [], "created_at": "t", "event_count": 0},
+        ])
+        registry = OntologyRegistry(neo4j, tenant="attacker")
+        result = await registry.get_schema_history("attacker")
+
+        # The mock always returns the same row regardless of query text, so
+        # this test's real assertion is on the query sent, not the result --
+        # covered by test_query_filters_by_tenant above. This test documents
+        # the call contract an integration/live test would also need to hold.
+        assert result[0]["version_id"] == "v-1"
+        assert neo4j.run.await_args.kwargs["tenant"] == "attacker"

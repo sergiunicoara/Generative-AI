@@ -157,9 +157,19 @@ class OntologyRegistry:
             log.warning("ontology_registry.config_load_error", error=str(exc))
             self._migration_map = {}
 
-        # Load known relation types from existing graph
+        # Load known relation types from existing graph, scoped to this
+        # tenant. Unscoped, this fed _known_relations from every tenant's
+        # RELATES_TO edges, so tenant A's vocabulary silently suppressed
+        # "new relation" drift warnings (validate_extraction's new_relations
+        # signal) for tenant B — a real relation could be genuinely new to B
+        # and never get flagged, just because A had used the same name.
+        # See docs/context_graph_gap_plan.md F13.
         rows = await self._neo4j.run(
-            "MATCH ()-[r:RELATES_TO]->() RETURN DISTINCT r.relation AS rel"
+            "MATCH (:Entity {tenant: $tenant})"
+            "-[r:RELATES_TO {tenant: $tenant}]->"
+            "(:Entity {tenant: $tenant}) "
+            "RETURN DISTINCT r.relation AS rel",
+            tenant=self._tenant,
         )
         self._known_relations = {r["rel"] for r in rows if r.get("rel")}
 
@@ -172,10 +182,15 @@ class OntologyRegistry:
             },
         }, sort_keys=True).encode()).hexdigest()[:16]
 
-        # Upsert OntologyVersion node
+        # Upsert OntologyVersion node. Keyed on (schema_hash, tenant) rather
+        # than schema_hash alone: two tenants that happen to load a
+        # byte-identical ontology are still separate governance histories —
+        # keying on the hash alone would silently merge them into one shared
+        # OntologyVersion node the moment their schemas matched.
+        # See docs/context_graph_gap_plan.md F13.
         result = await self._neo4j.run(
             """
-            MERGE (o:OntologyVersion {schema_hash: $hash})
+            MERGE (o:OntologyVersion {schema_hash: $hash, tenant: $tenant})
             ON CREATE SET o.id           = $id,
                           o.entity_types = $types,
                           o.created_at   = datetime(),
@@ -183,6 +198,7 @@ class OntologyRegistry:
             RETURN o.id AS version_id
             """,
             hash=schema_hash,
+            tenant=self._tenant,
             id=str(uuid4()),
             types=entity_types,
         )
@@ -410,11 +426,19 @@ class OntologyRegistry:
             source_doc_id=source_doc_id,
         )
 
-    async def get_schema_history(self) -> list[dict]:
-        """Return all ontology versions ordered by creation date."""
+    async def get_schema_history(self, tenant: str) -> list[dict]:
+        """Return this tenant's ontology versions ordered by creation date.
+
+        `tenant` is required (previously this returned every tenant's
+        versions and event counts unfiltered — unwired to any route today,
+        but a governance-history read is exactly the kind of method that
+        should not default to "everyone's", so it's fixed the same way as the
+        rest of F13 rather than left as a trap for whoever wires it in next).
+        See docs/context_graph_gap_plan.md F13.
+        """
         return await self._neo4j.run(
             """
-            MATCH (o:OntologyVersion)
+            MATCH (o:OntologyVersion {tenant: $tenant})
             OPTIONAL MATCH (o)-[:HAS_EVENT]->(e:OntologyEvent)
             RETURN o.id          AS version_id,
                    o.schema_hash AS hash,
@@ -422,7 +446,8 @@ class OntologyRegistry:
                    o.created_at  AS created_at,
                    count(e)      AS event_count
             ORDER BY o.created_at DESC
-            """
+            """,
+            tenant=tenant,
         )
 
     # ── Entity type rename / migration ─────────────────────────────────────────

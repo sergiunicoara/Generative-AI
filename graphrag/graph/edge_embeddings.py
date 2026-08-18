@@ -64,6 +64,23 @@ log = structlog.get_logger(__name__)
 DEFAULT_EMBED_DIM = 768
 TRANSX_MARGIN = 1.0   # margin for scoring; lower = more permissive
 
+# Scope marker for relation embeddings that are NOT tenant-specific.
+#
+# RelationEmbedding nodes have two sources with different ownership:
+#   - 'derived'  — _derive_relation_embedding(), a pure function of the
+#                  relation NAME (SHA-256 seed -> fixed RNG draw). Identical
+#                  for every tenant, so storing one shared copy is a cache,
+#                  not a leak.
+#   - 'trained'  — TransE fitted to ONE tenant's edges. Tenant-specific.
+#
+# Both used to MERGE on {relation} alone, so a tenant that trained embeddings
+# silently overwrote the vector every other tenant's link prediction reads.
+# Tenant is now part of node identity in both cases; derived nodes carry this
+# sentinel so a MERGE for the shared copy can never accidentally match (and
+# overwrite) some tenant's trained node that happens to share the name.
+# See docs/context_graph_gap_plan.md F13.
+DERIVED_SCOPE = "__derived__"
+
 
 class EdgeEmbeddingService:
     """
@@ -97,8 +114,9 @@ class EdgeEmbeddingService:
     def __init__(self, neo4j_client, embed_dim: int = DEFAULT_EMBED_DIM):
         self._neo4j     = neo4j_client
         self._embed_dim = embed_dim
-        # In-memory cache for relation embeddings (populated by seed / load)
-        self._rel_emb: dict[str, list[float]] = {}
+        # In-memory cache for relation embeddings, keyed (tenant, relation).
+        # Derived (tenant-independent) entries are cached under DERIVED_SCOPE.
+        self._rel_emb: dict[tuple[str, str], list[float]] = {}
 
     # ── Relation embeddings ────────────────────────────────────────────────────
 
@@ -119,34 +137,49 @@ class EdgeEmbeddingService:
         norm = math.sqrt(sum(x * x for x in raw)) or 1.0
         return [x / norm for x in raw]
 
-    async def get_relation_embedding(self, relation: str) -> list[float]:
+    async def get_relation_embedding(self, relation: str, *, tenant: str) -> list[float]:
         """
-        Return the embedding for a relation name.
+        Return the embedding for a relation name, as seen by one tenant.
 
         Priority:
-        1. In-memory cache (populated at startup or via seed_relation_embeddings)
-        2. Stored RelationEmbedding node in Neo4j
-        3. Deterministically derived from relation name (fallback)
+        1. In-memory cache, keyed by (tenant, relation)
+        2. This tenant's own TRAINED RelationEmbedding node
+        3. The shared DERIVED node (identical for every tenant by construction)
+        4. Deterministically derived in-process (fallback)
+
+        `tenant` is keyword-only and required: step 2 is the whole point of
+        the fix, and a caller that omits it would silently read whatever
+        happened to be stored under the bare relation name — which is exactly
+        the cross-tenant read this replaced.
         """
         relation = relation.upper()
-        if relation in self._rel_emb:
-            return self._rel_emb[relation]
+        cache_key = (tenant, relation)
+        if cache_key in self._rel_emb:
+            return self._rel_emb[cache_key]
 
+        # A tenant's own trained vector wins over the shared derived one.
+        # ORDER BY puts the tenant-scoped row first when both exist, so this
+        # stays a single round-trip rather than two sequential queries.
         rows = await self._neo4j.run(
             """
             MATCH (re:RelationEmbedding {relation: $rel})
-            RETURN re.embedding AS embedding
+            WHERE re.tenant IN [$tenant, $derived]
+            RETURN re.embedding AS embedding, re.tenant AS tenant
+            ORDER BY CASE WHEN re.tenant = $tenant THEN 0 ELSE 1 END
+            LIMIT 1
             """,
             rel=relation,
+            tenant=tenant,
+            derived=DERIVED_SCOPE,
         )
         if rows and rows[0].get("embedding"):
             emb = list(rows[0]["embedding"])
-            self._rel_emb[relation] = emb
+            self._rel_emb[cache_key] = emb
             return emb
 
         # Fallback: derive deterministically
         emb = self._derive_relation_embedding(relation)
-        self._rel_emb[relation] = emb
+        self._rel_emb[cache_key] = emb
         return emb
 
     async def seed_relation_embeddings(
@@ -160,29 +193,38 @@ class EdgeEmbeddingService:
         If ``overwrite=False`` (default), existing stored embeddings are not
         replaced.  Returns a dict of {relation: was_seeded}.
         """
+        # Derived embeddings are a pure function of the relation name, so one
+        # shared node per relation is correct — this is a global cache, not a
+        # per-tenant store. It is written under DERIVED_SCOPE, never a real
+        # tenant name, so it can never be mistaken for (or overwritten by) a
+        # tenant's trained node with the same relation name.
         results: dict[str, bool] = {}
         for rel in relations:
             rel_upper = rel.upper()
+            cache_key = (DERIVED_SCOPE, rel_upper)
             if not overwrite:
                 rows = await self._neo4j.run(
-                    "MATCH (re:RelationEmbedding {relation: $rel}) RETURN count(re) AS n",
+                    "MATCH (re:RelationEmbedding {relation: $rel, tenant: $tenant}) "
+                    "RETURN count(re) AS n",
                     rel=rel_upper,
+                    tenant=DERIVED_SCOPE,
                 )
                 if rows and rows[0].get("n", 0) > 0:
                     results[rel_upper] = False
                     continue
 
             emb = self._derive_relation_embedding(rel_upper)
-            self._rel_emb[rel_upper] = emb
+            self._rel_emb[cache_key] = emb
             await self._neo4j.run(
                 """
-                MERGE (re:RelationEmbedding {relation: $rel})
+                MERGE (re:RelationEmbedding {relation: $rel, tenant: $tenant})
                 SET re.embedding   = $embedding,
                     re.embed_dim   = $dim,
                     re.source      = 'derived',
                     re.updated_at  = datetime()
                 """,
                 rel=rel_upper,
+                tenant=DERIVED_SCOPE,
                 embedding=emb,
                 dim=self._embed_dim,
             )
@@ -258,7 +300,7 @@ class EdgeEmbeddingService:
         if not head_emb or not tail_emb:
             return False
 
-        rel_emb      = await self.get_relation_embedding(relation)
+        rel_emb      = await self.get_relation_embedding(relation, tenant=tenant)
         triple_emb   = self._combine_triple(head_emb, rel_emb, tail_emb)
         transx_score = self._transx_score(head_emb, rel_emb, tail_emb)
 
@@ -358,7 +400,7 @@ class EdgeEmbeddingService:
         if not src_rows or not src_rows[0].get("embedding"):
             return []
         head_emb = list(src_rows[0]["embedding"])
-        rel_emb  = await self.get_relation_embedding(relation)
+        rel_emb  = await self.get_relation_embedding(relation, tenant=tenant)
 
         candidates = await self._neo4j.run(
             """
@@ -427,7 +469,7 @@ class EdgeEmbeddingService:
         if not head_emb or not tail_emb:
             return None
 
-        rel_emb = await self.get_relation_embedding(relation)
+        rel_emb = await self.get_relation_embedding(relation, tenant=tenant)
         return round(self._transx_score(head_emb, rel_emb, tail_emb), 4)
 
     # ── TransE training (delegates to TransXTrainer) ───────────────────────────

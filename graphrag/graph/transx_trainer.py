@@ -47,7 +47,7 @@ class TransXTrainer:
         Embedding dimension; must match entity embeddings.
     """
 
-    def __init__(self, neo4j_client, rel_emb: dict[str, list[float]], embed_dim: int):
+    def __init__(self, neo4j_client, rel_emb: dict[tuple[str, str], list[float]], embed_dim: int):
         self._neo4j    = neo4j_client
         self._rel_emb  = rel_emb   # shared reference — mutations are visible to caller
         self._embed_dim = embed_dim
@@ -131,17 +131,24 @@ class TransXTrainer:
             margin=margin,
         )
 
-        # Ensure relation embeddings are loaded into the shared cache
+        # Ensure relation embeddings are loaded into the shared cache.
+        #
+        # Keyed (tenant, relation) — matching EdgeEmbeddingService's own cache
+        # shape, since this dict IS that cache (shared by reference). A plain
+        # relation-name key here would be silently invisible to
+        # get_relation_embedding()'s tuple-keyed lookups after training, and
+        # the persist loop below would have no tenant to attach to the write.
         unique_rels = {rel for _, rel, _ in triples}
         for rel in unique_rels:
-            if rel.upper() not in self._rel_emb:
+            cache_key = (tenant, rel.upper())
+            if cache_key not in self._rel_emb:
                 # Derive deterministically if not already cached
                 import hashlib
                 seed_val = int(hashlib.sha256(rel.upper().encode()).hexdigest(), 16) % (2 ** 32)
                 r_rng = random.Random(seed_val)
                 raw   = [r_rng.gauss(0.0, 1.0) for _ in range(self._embed_dim)]
                 norm  = math.sqrt(sum(x * x for x in raw)) or 1.0
-                self._rel_emb[rel.upper()] = [x / norm for x in raw]
+                self._rel_emb[cache_key] = [x / norm for x in raw]
 
         # ── Epoch loop ────────────────────────────────────────────────────
         epoch_losses: list[float] = []
@@ -158,7 +165,7 @@ class TransXTrainer:
                 rel_count: dict[str, int] = {}
 
                 for head, rel, tail in batch:
-                    r_vec = self._rel_emb[rel.upper()]
+                    r_vec = self._rel_emb[(tenant, rel.upper())]
                     d_pos = self._score(head, r_vec, tail) + 1e-8
 
                     for _ in range(neg_samples):
@@ -190,11 +197,12 @@ class TransXTrainer:
 
                 for rel_key, grad_acc in rel_grad.items():
                     n = rel_count[rel_key] or 1
-                    r_vec   = self._rel_emb[rel_key]
+                    cache_key = (tenant, rel_key)
+                    r_vec   = self._rel_emb[cache_key]
                     dim     = len(r_vec)
                     updated = [r_vec[i] - lr * (grad_acc[i] / n) for i in range(dim)]
                     norm    = math.sqrt(sum(x * x for x in updated)) or 1.0
-                    self._rel_emb[rel_key] = [x / norm for x in updated]
+                    self._rel_emb[cache_key] = [x / norm for x in updated]
 
             avg_loss = epoch_loss / max(n_updates, 1)
             epoch_losses.append(avg_loss)
@@ -208,17 +216,29 @@ class TransXTrainer:
                 )
 
         # ── Persist learned embeddings ─────────────────────────────────────
+        # Node identity now includes tenant: MERGE on {relation} alone let one
+        # tenant's training overwrite the vector every other tenant's link
+        # prediction reads, because relation names are shared vocabulary
+        # (e.g. "SUPERSEDES") but the LEARNED weights are specific to this
+        # tenant's edges. See docs/context_graph_gap_plan.md F13.
+        #
+        # This service is constructed fresh per API call (no cache reuse
+        # across requests — see api/routes/kg/embeddings.py), so every entry
+        # in self._rel_emb at this point belongs to the (tenant, relation)
+        # pairs this training run touched; there is nothing else in the dict
+        # to accidentally persist under the wrong tenant.
         stored = 0
-        for rel_key, emb in self._rel_emb.items():
+        for (rel_tenant, rel_name), emb in self._rel_emb.items():
             await self._neo4j.run(
                 """
-                MERGE (re:RelationEmbedding {relation: $rel})
+                MERGE (re:RelationEmbedding {relation: $rel, tenant: $tenant})
                 SET re.embedding   = $embedding,
                     re.embed_dim   = $dim,
                     re.source      = 'trained',
                     re.updated_at  = datetime()
                 """,
-                rel=rel_key,
+                rel=rel_name,
+                tenant=rel_tenant,
                 embedding=emb,
                 dim=self._embed_dim,
             )

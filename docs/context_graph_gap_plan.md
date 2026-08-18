@@ -324,7 +324,73 @@ silently widening the exemption. The old regex test is kept alongside it.
 Tests: 1140 → 1146 passed, 1 skipped, 0 failures. ruff held at 49 (one new
 `F401` introduced by the delegation was found and removed before commit).
 
-**Still NOT fixed** (each needs its own iteration): **F13**, **F14**.
+### F13 — fixed 2026-08-18 (follow-up pass)
+
+The audit lumped three node types into one item; code inspection found three
+different problems of three different severities, so the fix is scoped
+accordingly rather than uniformly:
+
+**`RelationEmbedding` — the real corruption, the only one needing a data
+migration.** Two sources have different ownership: `source='derived'` is a
+pure function of the relation name (SHA-256 seed → fixed RNG draw — identical
+for every tenant, safe to share); `source='trained'` is TransE fitted to one
+tenant's edges. Both used to `MERGE` on `{relation}` alone. Now: derived
+embeddings are cached under a `DERIVED_SCOPE` sentinel tenant value so a
+shared-cache write can never collide with (and overwrite) a real tenant's
+trained node of the same name; trained embeddings key on
+`{relation, tenant}`. Reads prefer the caller's own trained vector, fall back
+to the shared derived one, then to in-process derivation.
+`EdgeEmbeddingService`'s cache and `TransXTrainer`'s shared working dict (the
+same object, passed by reference) both moved from bare `relation` string keys
+to `(tenant, relation)` tuples — the trainer needed matching changes or its
+persist loop would have bound a tuple as a Cypher string parameter.
+
+Migration (`scripts/migrate_relation_embeddings.py`, dry-run by default):
+existing `trained` nodes carry no tenant — there was never a property to
+read, so attributing them to any specific tenant would be inference, not
+fact. **Deleted** rather than migrated; nothing breaks, since the code already
+falls back to the deterministic derived vector, so this only degrades
+retrieval to the documented fallback until each tenant re-runs
+`POST /kg/edge-embeddings/train`. Existing `derived` nodes are backfilled
+with `tenant = DERIVED_SCOPE` in place. **Live-validated** against real
+Neo4j: seeded legacy-shaped (no-tenant) probe data, ran the migration, and
+confirmed idempotency (a second `--apply` run finds nothing left to do).
+
+**`OntologyVersion` — disclosure, not corruption, and unwired today.**
+`get_schema_history()` had no route calling it (checked before fixing —
+lower severity than the initial audit implied), but its unfiltered read and
+the version node's `{schema_hash}`-only merge key were both fixed the same
+way as the rest of F13 rather than left as a trap for whoever wires it in
+next: the merge key is now `{schema_hash, tenant}` (two tenants loading a
+byte-identical ontology must not collapse into one shared governance
+history), and `get_schema_history(tenant)` now takes tenant as a required
+parameter.
+
+**New finding, not in the original audit:** `load()`'s "known relation types
+from existing graph" query scanned every tenant's `RELATES_TO` edges
+unfiltered, feeding `_known_relations` — which drives `validate_extraction`'s
+drift detection. Unscoped, tenant A's vocabulary silently suppressed
+"new relation" drift warnings for tenant B. Fixed with the same
+belt-and-suspenders tenant filter (both endpoint entities and the edge's own
+`tenant` property) used elsewhere in `neo4j_client.py`.
+
+**`EntityType` — left alone**, per the approved scope: `MERGE` over a
+module-level hierarchy constant is a shared vocabulary by design, and the
+audit's own finding was that tenant-specific `extra_pairs` are only ever
+passed from a demo script, not a production path.
+
+**Live-validated** end-to-end against real Neo4j (not just mocked): a
+simulated tenant-A training write followed by a tenant-B read confirms zero
+leakage, tenant A reads its own vector correctly, the fallback matches direct
+derivation, and the shared derived cache stays genuinely shared and correctly
+tagged.
+
+Tests: 1146 → 1166 passed, 1 skipped, 0 failures (measured, full suite,
+including 4 fixed by the trainer key-shape correction). 39 new tests across 3
+new/extended files — this class had zero prior coverage. ruff held at 49 (one
+new `F401` from an unused test import, caught and removed before commit).
+
+**Still NOT fixed** (needs its own iteration): **F14**.
 
 **F10 residual:** the allowlist removes identifier enumeration, but `/kpis/*`
 still returns **cross-tenant aggregate** latency/cost figures, because

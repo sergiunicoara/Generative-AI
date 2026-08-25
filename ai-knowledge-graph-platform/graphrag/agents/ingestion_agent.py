@@ -13,6 +13,8 @@ from graphrag.ingestion.chunker import chunk_document
 from graphrag.ingestion.embedder import Embedder
 from graphrag.ingestion.extractor import Extractor
 from graphrag.ingestion.graph_writer import GraphWriter
+from graphrag.enterprise.lineage import LineageService
+from graphrag.enterprise.metadata_governance import MetadataGovernanceService
 
 log = structlog.get_logger(__name__)
 
@@ -22,6 +24,8 @@ class IngestionAgent(BaseGraphRAGAgent):
         self._embedder = Embedder()
         self._extractor = Extractor()
         self._writer = GraphWriter()
+        self._metadata_governance = MetadataGovernanceService(self._writer.neo4j_client)
+        self._lineage = LineageService(self._writer.neo4j_client)
         super().__init__("ingestion_agent")
 
     def _model(self) -> str:
@@ -102,6 +106,10 @@ class IngestionAgent(BaseGraphRAGAgent):
         doc    = extracted["doc"]
         chunks = extracted["chunks"]
 
+        # Validate before opening the corpus mutation. A collection-specific
+        # contract failure must not leave a partial graph revision behind.
+        await self._metadata_governance.validate(doc.metadata_envelope, doc.tenant)
+
         # Cache readers fail open to live retrieval while this tenant is being
         # mutated. The revision is advanced only after all writes and checks
         # below complete, so no answer can be cached against a partial ingest.
@@ -131,6 +139,20 @@ class IngestionAgent(BaseGraphRAGAgent):
 
         # 2. Write chunks to Neo4j
         await self._writer.write_chunks(chunks)
+        await self._metadata_governance.record_document(
+            doc.id, doc.metadata_envelope, doc.tenant,
+        )
+
+        # High-stakes lineage and obligations are intentionally not written as
+        # active graph facts by ingestion. Their text evidence is captured in a
+        # tenant-scoped review queue; a human approval materialises the edge or
+        # obligation register record later.
+        lineage_reviews = []
+        obligation_reviews = []
+        for assertion in doc.lineage_assertions:
+            lineage_reviews.append(await self._lineage.submit_lineage(doc.id, assertion, doc.tenant))
+        for draft in doc.obligation_drafts:
+            obligation_reviews.append(await self._lineage.submit_obligation(doc.id, draft, doc.tenant))
 
         # 3. Write entities + relations, in chunk order, so AliasRegistry /
         # OntologyRegistry / contradiction-detection see chunks in document order.
@@ -207,4 +229,6 @@ class IngestionAgent(BaseGraphRAGAgent):
             "wikidata_links": wikidata_links,
             "maintenance": maintenance_report,
             "corpus_revision": corpus_revision,
+            "lineage_reviews": lineage_reviews,
+            "obligation_reviews": obligation_reviews,
         }

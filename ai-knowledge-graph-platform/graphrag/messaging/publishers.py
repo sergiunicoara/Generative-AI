@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from graphrag.core.models import Document, EvalJob, IngestMessage, QueryMessage
+from graphrag.enterprise.models import AccessContext
 from graphrag.messaging.exchanges import (
     EVAL_EXCHANGE,
     INGEST_EXCHANGE,
@@ -33,6 +34,7 @@ async def publish_query(
     transaction_at: str | None = None,
     query_id: str = "",
     correlation_id: str = "",
+    access_context: AccessContext | None = None,
 ) -> str:
     mq = await get_rabbitmq()
     msg = QueryMessage(
@@ -44,6 +46,7 @@ async def publish_query(
         valid_at=valid_at,
         transaction_at=transaction_at,
         correlation_id=correlation_id,
+        access_context=access_context or AccessContext(),
         **({"query_id": query_id} if query_id else {}),
     )
     await mq.publish(

@@ -249,6 +249,22 @@ context_graph:
     critical_expiry_days: 7
     minimum_policy_uses: 1
 
+# Enterprise content controls are opt-in so existing demo corpora remain
+# backwards-compatible. Production deployments should enable ACL enforcement
+# only after every source has supplied known permission metadata.
+access_control:
+  enabled: false
+  deny_on_unresolved: true
+  group_resolution_source: token_claims
+
+metadata_governance:
+  require_active_collection_schema: false
+  discovery_metadata_max_fields: 100
+
+content_sync:
+  reconcile_missing_after_seconds: 86400
+  full_review_interval_seconds: 604800
+
 ontology:
   enforce_domain_range: true        # reject relations that violate domain/range rules
   allow_migration_renames: true     # auto-rename deprecated relation names on ingestion

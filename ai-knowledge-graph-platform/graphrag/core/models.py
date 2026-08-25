@@ -9,6 +9,14 @@ from uuid import uuid4
 
 from pydantic import BaseModel, Field
 
+from graphrag.enterprise.models import (
+    AccessContext,
+    DocumentAccessPolicy,
+    LineageAssertion,
+    MetadataEnvelope,
+    ObligationDraft,
+)
+
 
 # ── Enums ──────────────────────────────────────────────────────────────────────
 
@@ -52,6 +60,18 @@ class Document(BaseModel):
     valid_to: datetime | None = None
     tenant: str = "default"
     source_id: str | None = None   # optional KGSource catalog reference
+    # Governed three-tier metadata: universal envelope, per-collection schema
+    # fields, and bounded open-discovery metadata.  Kept separate from legacy
+    # ``metadata`` so older API callers remain compatible while new sources get
+    # a stable, versioned contract.
+    metadata_envelope: MetadataEnvelope = Field(default_factory=MetadataEnvelope)
+    # Document ACL is written with the document and inherited by every chunk at
+    # query time.  It is never accepted from a query request.
+    access_policy: DocumentAccessPolicy = Field(default_factory=DocumentAccessPolicy)
+    # Only explicit, source-backed claims enter these lists.  The ingestion
+    # writer turns them into pending human-review items by default.
+    lineage_assertions: list[LineageAssertion] = Field(default_factory=list)
+    obligation_drafts: list[ObligationDraft] = Field(default_factory=list)
     # sha256 of raw_text (graphrag/core/content_hash.py). Lets ingestion tell
     # whether a re-ingested file actually changed instead of re-chunking,
     # re-embedding and re-extracting an unchanged document every run. Empty
@@ -347,3 +367,7 @@ class QueryMessage(BaseModel):
     valid_at: str | None = Field(default=None, max_length=64)
     transaction_at: str | None = Field(default=None, max_length=64)
     correlation_id: str = Field(default="", max_length=128)
+    # Constructed from authenticated claims by the API before queueing.  It is
+    # part of the durable message because workers must not reconstruct identity
+    # from untrusted request input or ambient process state.
+    access_context: AccessContext = Field(default_factory=AccessContext)

@@ -15,6 +15,7 @@ from __future__ import annotations
 import structlog
 
 from graphrag.graph.neo4j_client import get_neo4j
+from graphrag.enterprise.models import AccessContext
 
 log = structlog.get_logger(__name__)
 
@@ -71,6 +72,7 @@ class HybridBM25Search:
         tenant: str = "default",
         valid_at: str | None = None,
         transaction_at: str | None = None,
+        access_context: AccessContext | None = None,
     ) -> list[dict]:
         """
         Args:
@@ -88,6 +90,7 @@ class HybridBM25Search:
             tenant=tenant,
             valid_at=valid_at,
             transaction_at=transaction_at,
+            access_context=access_context,
         )
 
         # BM25 on entity names/descriptions → back to chunks
@@ -97,6 +100,7 @@ class HybridBM25Search:
             tenant=tenant,
             valid_at=valid_at,
             transaction_at=transaction_at,
+            access_context=access_context,
         )
 
         # Merge entity BM25 into chunk BM25 (same RRF pass)

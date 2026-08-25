@@ -64,7 +64,10 @@ class QueryCacheContext:
     ontology_version: str
     valid_at: str | None = None
     transaction_at: str | None = None
-    cache_schema_version: str = "2"
+    # Entitlements are part of an answer's identity: a tenant-wide cache entry
+    # must never be reused by a caller with a different document ACL.
+    access_fingerprint: str = "tenant-default"
+    cache_schema_version: str = "3"
 
     def canonical_content(self) -> dict[str, Any]:
         return asdict(self)

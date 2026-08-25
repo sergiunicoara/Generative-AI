@@ -30,6 +30,7 @@ from graphrag.graph.gnn_scorer import GNNScorer
 from graphrag.graph.neo4j_client import get_neo4j
 from graphrag.ingestion.embedder import Embedder
 from graphrag.retrieval.bm25_search import HybridBM25Search
+from graphrag.enterprise.models import AccessContext
 from graphrag.retrieval.reranker import CrossEncoderReranker
 from graphrag.retrieval.session_context import get_session_context
 
@@ -124,6 +125,7 @@ class LocalSearch:
         valid_at: str | None = None,
         transaction_at: str | None = None,
         config_overrides: dict | None = None,
+        access_context: AccessContext | None = None,
     ) -> dict:
         """Run the 6-step retrieval pipeline.
 
@@ -155,6 +157,17 @@ class LocalSearch:
         use_gnn    = cfg.get("gnn_enabled", True)
         use_entity_context = cfg.get("entity_context_enabled", True)
         use_named_document_boost = cfg.get("named_document_boost_enabled", True)
+        acl_enforced = bool(get_settings().access_control.get("enabled", False))
+        if acl_enforced:
+            # Graph structures and community/entity summaries can encode facts
+            # from a protected source even when the final chunk is public. Until
+            # those derived artifacts have independent ACL materialisation, use
+            # only document-filtered lexical/vector evidence. This is an
+            # intentional availability trade-off for denial-on-uncertainty.
+            hops = 0
+            use_gnn = False
+            use_entity_context = False
+            log.info("local_search.acl_safe_mode", tenant=tenant)
         temporal_kwargs = {
             **({"valid_at": valid_at} if valid_at else {}),
             **({"transaction_at": transaction_at} if transaction_at else {}),
@@ -182,6 +195,7 @@ class LocalSearch:
                 top_k=top_k,
                 tenant=tenant,
                 **temporal_kwargs,
+                access_context=access_context,
             )
         else:
             log.info("local_search.vector_skipped", reason="vector_search_enabled=false")
@@ -195,6 +209,7 @@ class LocalSearch:
                 top_k=top_k,
                 tenant=tenant,
                 **temporal_kwargs,
+                access_context=access_context,
             )
         else:
             fused_chunks = vector_chunks
@@ -248,7 +263,8 @@ class LocalSearch:
             min_seed_docs = cfg.get("lexical_seed_min_documents", 0)
             if min_seed_docs > 1 and len(seed_chunks) > 1:
                 fused_filenames = await self._neo4j.get_chunk_filenames(
-                    [c["chunk_id"] for c in fused_chunks], tenant=tenant
+                    [c["chunk_id"] for c in fused_chunks], tenant=tenant,
+                    access_context=access_context,
                 )
                 lexical_diverse: list[dict] = []
                 seen_docs: set[str] = set()
@@ -294,7 +310,9 @@ class LocalSearch:
             doc_codes = _DOC_CODE_RE.findall(enriched_question)
             if doc_codes:
                 seed_id_set = {c["chunk_id"] for c in seed_chunks}
-                filenames = await self._neo4j.get_document_filenames(tenant=tenant)
+                filenames = await self._neo4j.get_document_filenames(
+                    tenant=tenant, access_context=access_context,
+                )
 
                 # Prefer a chunk already proven relevant by BM25/RRF fusion
                 # (fused_chunks) over a fresh whole-document cosine search:
@@ -305,7 +323,8 @@ class LocalSearch:
                     c for c in fused_chunks if c["chunk_id"] not in seed_id_set
                 ]
                 fused_filenames = await self._neo4j.get_chunk_filenames(
-                    [c["chunk_id"] for c in non_seed_fused], tenant=tenant
+                    [c["chunk_id"] for c in non_seed_fused], tenant=tenant,
+                    access_context=access_context,
                 )
 
                 for code in doc_codes:
@@ -324,7 +343,8 @@ class LocalSearch:
                     if best is None:
                         for filename in matched_filenames:
                             best = await self._neo4j.get_best_chunk_for_document(
-                                filename, embedding, tenant=tenant, **temporal_kwargs,
+                                filename, embedding, tenant=tenant,
+                                access_context=access_context, **temporal_kwargs,
                             )
                             if best:
                                 break
@@ -512,7 +532,9 @@ class LocalSearch:
         # a specific document/revision — needed for cross-document questions
         # (e.g. "which revision of X is referenced in Y, and is it current?")
         # where the answer hinges on knowing which chunk came from which doc.
-        chunk_filenames = await self._neo4j.get_chunk_filenames(all_ids, tenant=tenant)
+        chunk_filenames = await self._neo4j.get_chunk_filenames(
+            all_ids, tenant=tenant, access_context=access_context,
+        )
         needs_source_labels = _needs_source_labels(enriched_question)
         for chunk in all_chunks:
             filename = chunk_filenames.get(chunk["chunk_id"])

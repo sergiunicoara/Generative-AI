@@ -1,0 +1,66 @@
+# Enterprise content governance
+
+This platform has a provider-neutral content plane for enterprise repositories.
+It deliberately does not bundle a privileged SharePoint client: a connector
+adapts Microsoft Graph (or another content system) webhooks and delta responses
+to the API contracts below, while ingestion, extraction, graph writes and
+retrieval remain identical for every source.
+
+## Permission-aware retrieval
+
+Each `Document` stores a normalised access policy:
+
+- `tenant`: every authenticated caller in the document tenant may retrieve it;
+- `restricted`: `allow_principals` is checked against `user:<subject>` and
+  `group:<group>` identities from signed claims;
+- explicit `deny_principals` always win;
+- a restricted policy with unknown ACL state, or a policy requiring groups when
+  the token has no resolved `groups` claim, is denied.
+
+Set `access_control.enabled: true` only once ACL metadata has been loaded for a
+source. At that point document/chunk vector and BM25 retrieval are filtered in
+Neo4j, and answer-cache keys include the entitlement fingerprint. Community
+summaries, graph expansion, and direct MCP graph fact/entity tools are withheld
+until derived graph artifacts have their own ACL materialisation. This is
+intentional denial on uncertainty, not a partial filtering claim.
+
+## Metadata governance
+
+`metadata_envelope` is the three-tier source contract:
+
+1. Universal envelope: collection, source system, source/external ID and URL,
+   version, content type, classification, effective-from/effective-to dates.
+2. Governed collection tier: `collection_metadata`, validated against a
+   versioned `CollectionMetadataSchema`.
+3. Open discovery tier: bounded `discovery_metadata` for fields that have not
+   yet been promoted into a collection schema.
+
+Register a schema through `POST /governance/schemas`, then monitor field and ACL
+coverage through `GET /governance/coverage`. Set
+`metadata_governance.require_active_collection_schema: true` to reject content
+without an active collection/version contract.
+
+## Synchronisation plane
+
+Use `POST /sync/{source_id}/changes` for webhook or delta batches. An upsert is
+published through the normal ingestion queue; a delete tombstones the matching
+`(tenant, source_id, external_id)` document without physically erasing evidence.
+The service persists the latest delta cursor and a `ContentSyncRun` audit node.
+
+Call `POST /sync/{source_id}/reconcile` with external IDs from a periodic full
+source scan. Missing IDs are tombstoned, and the source receives its next review
+time. `GET /sync/due-full-reviews` exposes sources due for an external scheduler
+or connector worker. This supports Graph API delta polling and scheduled full
+reconciliation without coupling the knowledge graph to a single vendor.
+
+## Lineage and obligations
+
+An ingestion request may carry `lineage_assertions` (`SUPERSEDES` or `AMENDS`)
+and `obligation_drafts`. Every assertion must name its source chunk and include
+the exact evidence quote. Ingestion writes a pending `LineageReview` or
+`ObligationReview`; it does not create a live supersession/amendment edge or
+active obligation.
+
+Review via `/lineage/reviews/{id}/approve` or `/reject`. Approval creates the
+provenance-carrying relation or an active bitemporal `Obligation`. Query the
+approved register with `GET /obligations?as_of=<ISO-8601>`.

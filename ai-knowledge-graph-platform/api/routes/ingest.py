@@ -1,6 +1,7 @@
 """POST /ingest — publish document to the ingestion queue."""
 
 from typing import Any, Literal
+from datetime import datetime
 
 import structlog
 from fastapi import APIRouter, Depends, HTTPException, Request
@@ -10,6 +11,12 @@ from api.auth.dependencies import get_tenant, require_scope
 from api.quota import enforce_tenant_quota
 from api.limiter import INGEST_LIMIT, rate_limit
 from graphrag.core.models import Document
+from graphrag.enterprise.models import (
+    DocumentAccessPolicy,
+    LineageAssertion,
+    MetadataEnvelope,
+    ObligationDraft,
+)
 from graphrag.messaging.publishers import publish_document
 
 router = APIRouter()
@@ -21,6 +28,12 @@ class IngestRequest(BaseModel):
     text: str = Field(min_length=1, max_length=8_000_000)
     priority: Literal["normal", "high"] = "normal"
     metadata: dict[str, Any] = Field(default_factory=dict, max_length=100)
+    metadata_envelope: MetadataEnvelope = Field(default_factory=MetadataEnvelope)
+    access_policy: DocumentAccessPolicy = Field(default_factory=DocumentAccessPolicy)
+    lineage_assertions: list[LineageAssertion] = Field(default_factory=list, max_length=100)
+    obligation_drafts: list[ObligationDraft] = Field(default_factory=list, max_length=500)
+    valid_from: datetime | None = None
+    valid_to: datetime | None = None
     source_id: str | None = Field(default=None, max_length=256)
 
 
@@ -54,6 +67,12 @@ async def ingest_document(request: Request, body: IngestRequest, tenant: str = D
         source_path=body.filename,
         raw_text=body.text,
         metadata=body.metadata,
+        metadata_envelope=body.metadata_envelope,
+        access_policy=body.access_policy,
+        lineage_assertions=body.lineage_assertions,
+        obligation_drafts=body.obligation_drafts,
+        valid_from=body.valid_from or body.metadata_envelope.effective_from,
+        valid_to=body.valid_to or body.metadata_envelope.effective_to,
         tenant=tenant,
         source_id=body.source_id,
     )

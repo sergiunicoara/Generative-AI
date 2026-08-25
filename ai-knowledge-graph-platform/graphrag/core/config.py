@@ -396,6 +396,21 @@ class Settings(BaseSettings):
         """
         return self._yaml.get("maintenance", {})
 
+    @property
+    def access_control(self) -> dict:
+        """Document ACL enforcement configuration (disabled for legacy corpora)."""
+        return self._yaml.get("access_control", {})
+
+    @property
+    def metadata_governance(self) -> dict:
+        """Three-tier metadata governance configuration."""
+        return self._yaml.get("metadata_governance", {})
+
+    @property
+    def content_sync(self) -> dict:
+        """Provider-neutral content synchronisation configuration."""
+        return self._yaml.get("content_sync", {})
+
 
 @lru_cache(maxsize=1)
 def get_settings() -> Settings:

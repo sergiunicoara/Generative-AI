@@ -37,6 +37,7 @@ from graphrag.graph.ontology_registry import get_ontology_registry
 from graphrag.graph.pagerank import PageRankComputer
 from graphrag.graph.quarantine import QuarantineService
 from graphrag.graph.review_queue import ReviewQueueService
+from graphrag.enterprise.access import normalise_policy
 
 log = structlog.get_logger(__name__)
 
@@ -150,6 +151,8 @@ class GraphWriter:
             tenant=doc.tenant,
             source_id=doc.source_id,
             content_hash=doc.content_hash,
+            metadata_envelope=doc.metadata_envelope.model_dump(mode="json"),
+            access_policy=normalise_policy(doc.access_policy),
         )
         doc.id = canonical_id
 

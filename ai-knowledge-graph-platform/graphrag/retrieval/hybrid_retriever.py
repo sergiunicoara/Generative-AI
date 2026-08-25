@@ -13,6 +13,7 @@ from graphrag.core.config import get_settings, resolve_tenant_config
 from graphrag.core.llm_client import get_generation_route, get_llm
 from graphrag.core.llm_utils import normalize_dashes
 from graphrag.core.models import QueryResult
+from graphrag.enterprise.models import AccessContext
 from graphrag.core.prompt_security import escape_prompt_data
 from graphrag.context_graph.models import (
     AgentRun, Case, CGEpisode, ConditionOperator, ContextManifest, Decision,
@@ -418,6 +419,7 @@ class HybridRetriever:
         transaction_at: str | None = None,
         retrieval_profile: str = "full",
         correlation_id: str = "",
+        access_context: AccessContext | None = None,
     ) -> QueryResult:
         t0 = time.monotonic()
         requested_mode = mode
@@ -430,6 +432,13 @@ class HybridRetriever:
         # claim verification, agentic fallback. Empty tenant_overrides ⇒ global.
         profile_overrides = retrieval_profile_overrides(retrieval_profile)
         cfg = {**resolve_tenant_config(self._cfg, tenant), **profile_overrides}
+        access_context = access_context or AccessContext()
+        acl_enforced = bool(get_settings().access_control.get("enabled", False))
+        if acl_enforced:
+            # Community summaries and agentic graph expansion are derived
+            # artifacts. Until ACLs are materialized on them, avoid a
+            # structural side channel and keep only filtered local retrieval.
+            cfg = {**cfg, "agentic_fallback": False}
         if retrieval_profile == "vector_only":
             mode = "local"
             routing_reason = "retrieval_profile"
@@ -507,6 +516,7 @@ class HybridRetriever:
                         ontology_version=_ONTOLOGY_VERSION,
                         valid_at=valid_at,
                         transaction_at=transaction_at,
+                        access_fingerprint=(access_context.fingerprint if acl_enforced else "tenant-default"),
                     )
                     answer_cache = await get_query_cache()
                     cached = await answer_cache.get(question, tenant, cache_context)
@@ -581,6 +591,7 @@ class HybridRetriever:
                             valid_at=valid_at,
                             transaction_at=transaction_at,
                             config_overrides=profile_overrides,
+                            access_context=access_context,
                         )
                     )
                     global_task = tg.create_task(
@@ -590,6 +601,7 @@ class HybridRetriever:
                             valid_at=valid_at,
                             transaction_at=transaction_at,
                             config_overrides=profile_overrides,
+                            access_context=access_context,
                         )
                     )
             except ExceptionGroup as eg:
@@ -617,6 +629,7 @@ class HybridRetriever:
                 valid_at=valid_at,
                 transaction_at=transaction_at,
                 config_overrides=profile_overrides,
+                access_context=access_context,
             )
             n_reranked = cfg.get("rerank_top_k", 5)
             await _step(f"📊 Cross-encoder reranking → top {n_reranked} chunks")
@@ -628,6 +641,7 @@ class HybridRetriever:
                 valid_at=valid_at,
                 transaction_at=transaction_at,
                 config_overrides=profile_overrides,
+                access_context=access_context,
             )
 
         await self._apply_retrieval_feedback(local_results, tenant, cfg)
@@ -651,7 +665,11 @@ class HybridRetriever:
         evidence_count = len(local_results.get("referenced_chunks", []))
         if evidence_count <= 0 or conflicts:
             policy_result = PolicyResult.ESCALATE
-            policy_reason_code = "missing_evidence" if evidence_count <= 0 else "unresolved_conflict"
+            policy_reason_code = (
+                "no_authorized_evidence" if evidence_count <= 0 and acl_enforced
+                else "missing_evidence" if evidence_count <= 0
+                else "unresolved_conflict"
+            )
         else:
             policy_result = PolicyResult.ALLOW
             policy_reason_code = "evidence_captured"
@@ -666,7 +684,9 @@ class HybridRetriever:
         # a citation-naming refinement must never take down a query.
         document_names: list[str] = []
         try:
-            document_names = await get_neo4j().get_document_filenames(tenant=tenant)
+            document_names = await get_neo4j().get_document_filenames(
+                tenant=tenant, access_context=access_context,
+            )
         except Exception as exc:  # noqa: BLE001 — cosmetic enrichment, never fatal
             log.warning("hybrid_retriever.document_names_failed", error=str(exc)[:160])
 

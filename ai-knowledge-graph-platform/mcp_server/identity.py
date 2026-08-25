@@ -43,6 +43,8 @@ class CallerIdentity:
     scopes: frozenset[str] = field(default_factory=frozenset)
     token_type: str = ""
     authenticated: bool = False
+    groups: tuple[str, ...] = ()
+    groups_resolved: bool = False
 
     def has_scope(self, scope: str) -> bool:
         return scope in self.scopes
@@ -110,12 +112,17 @@ class CallerIdentity:
             return cls.anonymous()
         raw_scopes = claims.get("scope", "")
         scopes = frozenset(raw_scopes.split() if isinstance(raw_scopes, str) else raw_scopes or ())
+        raw_groups = claims.get("groups")
+        groups_resolved = isinstance(raw_groups, list)
+        groups = tuple(sorted({str(group).strip() for group in (raw_groups or []) if str(group).strip()}))
         return cls(
             subject=subject,
             tenant=effective_tenant,
             scopes=scopes,
             token_type=str(claims.get("type") or ""),
             authenticated=True,
+            groups=groups,
+            groups_resolved=groups_resolved,
         )
 
     @classmethod

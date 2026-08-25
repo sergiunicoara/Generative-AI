@@ -1,5 +1,9 @@
 # AI Knowledge Graph & Ontology Platform
 
+See [enterprise content governance](docs/enterprise-content-governance.md) for
+ACL-aware retrieval, governed metadata, synchronization and reviewed document
+lineage/obligations.
+
 A production-grade platform for building, querying, and reasoning over enterprise knowledge graphs — with formal OWL ontology enforcement, SPARQL querying, OWL-RL reasoning, TransE link prediction, forward-chaining inference, and an LLM-augmented retrieval pipeline.
 
 Built for domains where **graph quality is a first-class requirement**: regulatory compliance, aerospace engineering, and other knowledge-intensive fields where facts must be provenance-tracked, time-aware, and semantically consistent across sources.

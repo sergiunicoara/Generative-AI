@@ -18,6 +18,7 @@ from graphrag.core.config import get_settings, resolve_tenant_config
 from graphrag.core.llm_client import get_llm
 from graphrag.graph.neo4j_client import get_neo4j
 from graphrag.ingestion.embedder import Embedder
+from graphrag.enterprise.models import AccessContext
 
 log = structlog.get_logger(__name__)
 
@@ -79,11 +80,18 @@ class GlobalSearch:
         valid_at: str | None = None,
         transaction_at: str | None = None,
         config_overrides: dict | None = None,
+        access_context: AccessContext | None = None,
     ) -> dict:
         # Per-tenant config: merge this tenant's overrides over the global
         # retrieval defaults (mirrors LocalSearch.search — resolved from
         # self._cfg). Empty tenant_overrides ⇒ global dict unchanged.
         cfg = {**resolve_tenant_config(self._cfg, tenant), **(config_overrides or {})}
+        if get_settings().access_control.get("enabled", False):
+            # Community summaries are derived artifacts and are not yet
+            # re-materialised per ACL. Returning none is safer than allowing a
+            # summary to disclose protected evidence through a public member.
+            log.info("global_search.acl_denied", tenant=tenant)
+            return {"communities": [], "synthesized_answer": ""}
 
         # Skip global search when vector_search_enabled=false (e.g. OpenAI quota exhausted)
         if not cfg.get("vector_search_enabled", True):

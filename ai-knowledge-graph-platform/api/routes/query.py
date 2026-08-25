@@ -12,7 +12,8 @@ import structlog
 from fastapi import APIRouter, Depends, HTTPException, Path, Request
 from pydantic import BaseModel, Field
 
-from api.auth.dependencies import get_tenant, require_scope
+from api.auth.dependencies import get_current_user, get_tenant, require_scope
+from graphrag.enterprise.models import AccessContext
 from api.quota import enforce_tenant_quota
 from api.limiter import QUERY_LIMIT, rate_limit
 from graphrag.messaging.publishers import publish_query
@@ -56,7 +57,12 @@ class QueryResponse(BaseModel):
         Depends(enforce_tenant_quota),
     ],
 )
-async def submit_query(request: Request, body: QueryRequest, tenant: str = Depends(get_tenant)):
+async def submit_query(
+    request: Request,
+    body: QueryRequest,
+    tenant: str = Depends(get_tenant),
+    user: dict = Depends(get_current_user),
+):
     """Submit a question to the async query pipeline.
 
     Rate-limited to prevent LLM quota exhaustion.
@@ -112,6 +118,7 @@ async def submit_query(request: Request, body: QueryRequest, tenant: str = Depen
             transaction_at=body.transaction_at,
             query_id=query_id,
             correlation_id=request.state.correlation_id,
+            access_context=AccessContext.from_claims(user),
         )
     except Exception as exc:
         # The caller never receives query_id on a failed POST, so leaving its

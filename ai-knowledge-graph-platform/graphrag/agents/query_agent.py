@@ -42,6 +42,7 @@ class QueryAgent(BaseGraphRAGAgent):
             valid_at=message.valid_at,
             transaction_at=message.transaction_at,
             correlation_id=message.correlation_id,
+            access_context=message.access_context,
         )
         result.query_id = message.query_id
         result.correlation_id = message.correlation_id

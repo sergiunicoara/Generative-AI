@@ -17,6 +17,8 @@ import structlog
 from graphrag.graph.alias_registry import AmbiguousMatch, load_alias_registry
 from graphrag.graph.controlled_query import ControlledQueryError, execute_controlled_query
 from graphrag.graph.neo4j_client import get_neo4j
+from graphrag.core.config import get_settings
+from graphrag.enterprise.models import AccessContext
 
 log = structlog.get_logger(__name__)
 
@@ -27,10 +29,14 @@ async def query_knowledge_graph(
     mode: str = "hybrid",
     tenant: str = "default",
     session_id: str = "",
+    access_context: AccessContext | None = None,
 ) -> dict:
-    result = await retriever.retrieve_and_answer(
-        question=question, mode=mode, tenant=tenant, session_id=session_id,
-    )
+    kwargs = {"question": question, "mode": mode, "tenant": tenant, "session_id": session_id}
+    # Preserve the legacy capability call shape when no identity adapter is
+    # involved; the registered MCP capability always supplies a context.
+    if access_context is not None:
+        kwargs["access_context"] = access_context
+    result = await retriever.retrieve_and_answer(**kwargs)
     return result.model_dump(mode="json")
 
 
@@ -40,6 +46,12 @@ async def lookup_entity(
     as_of: str | None = None,
     limit: int = 25,
 ) -> dict:
+    if get_settings().access_control.get("enabled", False):
+        return {
+            "resolved": False,
+            "message": "Entity lookup is unavailable while document ACL enforcement is active.",
+            "reason": "acl_derived_graph_not_materialized",
+        }
     registry = await load_alias_registry(tenant=tenant)
     resolved = registry.resolve(name)
 
@@ -85,6 +97,13 @@ async def query_graph_facts(question: str, tenant: str = "default", limit: int =
     fixed, parameterized and tenant-scoped query template selected by the
     deterministic controlled-query planner.
     """
+    if get_settings().access_control.get("enabled", False):
+        return {
+            "supported": False,
+            "tenant": tenant,
+            "message": "Controlled fact queries are unavailable while document ACL enforcement is active.",
+            "reason": "acl_derived_graph_not_materialized",
+        }
     try:
         return await execute_controlled_query(
             get_neo4j(), question, tenant=tenant, limit=limit,

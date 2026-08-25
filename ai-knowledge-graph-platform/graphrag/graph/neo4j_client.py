@@ -18,6 +18,8 @@ from neo4j.exceptions import ServiceUnavailable, TransientError
 from graphrag.core.config import get_settings
 from graphrag.core.models import Chunk, Community, Entity, Relation
 from graphrag.core.retry import with_retry
+from graphrag.enterprise.access import access_params, document_access_predicate
+from graphrag.enterprise.models import AccessContext
 
 log = structlog.get_logger(__name__)
 
@@ -30,6 +32,12 @@ class Neo4jClient:
     # a gauge alongside in-flight count so saturation is visible as a ratio
     # before it shows up as latency.
     MAX_CONNECTION_POOL_SIZE = 50
+
+    @staticmethod
+    def _content_access_params(access_context: AccessContext | None = None) -> dict:
+        """Build trusted ACL query parameters once per graph call."""
+        enabled = bool(get_settings().access_control.get("enabled", False))
+        return access_params(access_context, enabled=enabled)
 
     def __init__(self):
         cfg = get_settings()
@@ -231,6 +239,8 @@ class Neo4jClient:
         tenant: str = "default",
         source_id: str | None = None,
         content_hash: str = "",
+        metadata_envelope: dict | None = None,
+        access_policy: dict | None = None,
     ) -> str:
         """MERGE on the document's real identity, (tenant, filename) — not on
         doc_id, which is a fresh uuid4() every ingestion run and so can never
@@ -243,6 +253,8 @@ class Neo4jClient:
         every downstream write (chunks, relations, supersession) instead of the
         id they passed in.
         """
+        metadata_envelope = metadata_envelope or {}
+        access_policy = access_policy or {}
         rows = await self.run(
             """
             OPTIONAL MATCH (source:KGSource {tenant: $tenant, id: $source_id})
@@ -257,6 +269,26 @@ class Neo4jClient:
                 d.valid_to        = $valid_to,
                 d.source_id       = $source_id,
                 d.content_hash    = $content_hash,
+                // Three-tier governed metadata. Neo4j node properties cannot
+                // hold a nested map, so the full envelope is retained as
+                // canonical JSON while queryable universal fields are flat.
+                d.metadata_envelope_json = $metadata_envelope_json,
+                d.collection      = $collection,
+                d.metadata_schema_version = $metadata_schema_version,
+                d.source_system   = $source_system,
+                d.external_id     = $external_id,
+                d.source_url      = $source_url,
+                d.source_version  = $source_version,
+                d.content_type    = $content_type,
+                d.classification  = $classification,
+                // ACL fields are document-owned and used by every retrieval
+                // query. A missing/unknown ACL is denied once enforcement is
+                // enabled; enforcement itself is a deployment configuration.
+                d.access_mode     = $access_mode,
+                d.acl_state       = $acl_state,
+                d.allow_principals = $allow_principals,
+                d.deny_principals = $deny_principals,
+                d.requires_group_resolution = $requires_group_resolution,
                 // A queue retry must never mistake an interrupted write for a
                 // completed document merely because the content hash landed.
                 d.ingest_complete = false,
@@ -280,6 +312,20 @@ class Neo4jClient:
             tenant=tenant,
             source_id=source_id,
             content_hash=content_hash,
+            metadata_envelope_json=json.dumps(metadata_envelope, sort_keys=True, default=str),
+            collection=str(metadata_envelope.get("collection") or "default"),
+            metadata_schema_version=str(metadata_envelope.get("schema_version") or "v1"),
+            source_system=str(metadata_envelope.get("source_system") or "manual"),
+            external_id=str(metadata_envelope.get("external_id") or ""),
+            source_url=str(metadata_envelope.get("source_url") or ""),
+            source_version=str(metadata_envelope.get("source_version") or ""),
+            content_type=str(metadata_envelope.get("content_type") or "text/plain"),
+            classification=str(metadata_envelope.get("classification") or ""),
+            access_mode=str(access_policy.get("access_mode") or "tenant"),
+            acl_state=str(access_policy.get("acl_state") or "known"),
+            allow_principals=list(access_policy.get("allow_principals") or []),
+            deny_principals=list(access_policy.get("deny_principals") or []),
+            requires_group_resolution=bool(access_policy.get("requires_group_resolution", False)),
         )
         if source_id and not rows:
             raise ValueError("document source is missing or belongs to another tenant")
@@ -730,7 +776,7 @@ class Neo4jClient:
         if not rows:
             return
         await self.run(
-            """
+            f"""
             UNWIND $rows AS row
             MATCH (s:Entity {name: row.src_name, type: row.src_type, tenant: $tenant})
             MATCH (t:Entity {name: row.tgt_name, type: row.tgt_type, tenant: $tenant})
@@ -772,7 +818,7 @@ class Neo4jClient:
 
     async def merge_community(self, community: Community):
         await self.run(
-            """
+            f"""
             MERGE (c:Community {id: $id, tenant: $tenant})
             SET c.level = $level,
                 c.summary = $summary,
@@ -803,7 +849,7 @@ class Neo4jClient:
     async def _snapshot_community_summary(self, community: Community) -> str:
         """Append an immutable summary version and its evidence lineage."""
         rows = await self.run(
-            """
+            f"""
             MATCH (c:Community {tenant: $tenant, id: $community_id})
             OPTIONAL MATCH (e:Entity {tenant: $tenant})-[:MEMBER_OF]->(c)
             OPTIONAL MATCH (ch:Chunk {tenant: $tenant})-[:MENTIONS]->(e)
@@ -843,7 +889,7 @@ class Neo4jClient:
         )
         now = datetime.now(timezone.utc).isoformat()
         await self.run(
-            """
+            f"""
             MATCH (c:Community {tenant: $tenant, id: $community_id})
             OPTIONAL MATCH (c)-[:HAS_SUMMARY_VERSION]->(current:CommunitySummarySnapshot)
             WHERE current.transaction_to IS NULL
@@ -914,6 +960,7 @@ class Neo4jClient:
         tenant: str = "default",
         valid_at: str | None = None,
         transaction_at: str | None = None,
+        access_context: AccessContext | None = None,
     ) -> list[dict]:
         """ANN search over Chunk.embedding using Neo4j vector index.
         Filters by tenant, source-document temporal boundaries, and excludes
@@ -946,6 +993,7 @@ class Neo4jClient:
                     MATCH (c)-[:MENTIONS]->(e:Entity {tenant: $tenant})
                     WHERE e.quarantined = true
                   }
+                  """ + document_access_predicate("d") + """
                 RETURN c.id AS chunk_id, c.text AS text, score
                 ORDER BY score DESC LIMIT $top_k
                 """,
@@ -954,6 +1002,7 @@ class Neo4jClient:
                 top_k=top_k,
                 valid_at=valid_at,
                 transaction_at=transaction_at,
+                **self._content_access_params(access_context),
             )
         fetch_k = max(top_k * 20, 100)
         return await self.run(
@@ -977,6 +1026,7 @@ class Neo4jClient:
                   MATCH (c)-[:MENTIONS]->(e:Entity)
                   WHERE e.quarantined = true
               }
+              """ + document_access_predicate("d") + """
             RETURN c.id AS chunk_id, c.text AS text, score
             ORDER BY score DESC
             LIMIT $top_k
@@ -987,21 +1037,25 @@ class Neo4jClient:
             top_k=top_k,
             valid_at=valid_at,
             transaction_at=transaction_at,
+            **self._content_access_params(access_context),
         )
 
-    async def get_document_filenames(self, tenant: str = "default") -> list[str]:
+    async def get_document_filenames(
+        self, tenant: str = "default", access_context: AccessContext | None = None,
+    ) -> list[str]:
         """List distinct document filenames for a tenant (for named-document
         matching against question text — see local_search's named-doc boost).
         """
         rows = await self.run(
-            "MATCH (d:Document) WHERE (d.tenant = $tenant) "
+            f"MATCH (d:Document) WHERE (d.tenant = $tenant) {document_access_predicate('d')} "
             "RETURN DISTINCT d.filename AS filename",
             tenant=tenant,
+            **self._content_access_params(access_context),
         )
         return [r["filename"] for r in rows if r.get("filename")]
 
     async def get_chunk_filenames(
-        self, chunk_ids: list[str], tenant: str = "default"
+        self, chunk_ids: list[str], tenant: str = "default", access_context: AccessContext | None = None,
     ) -> dict[str, str]:
         """Map chunk_id -> source document filename for a set of chunks.
 
@@ -1012,14 +1066,16 @@ class Neo4jClient:
         if not chunk_ids:
             return {}
         rows = await self.run(
-            """
+            f"""
             MATCH (c:Chunk)-[:PART_OF]->(d:Document)
             WHERE c.id IN $chunk_ids
               AND (c.tenant = $tenant)
+              {document_access_predicate('d')}
             RETURN c.id AS chunk_id, d.filename AS filename
             """,
             chunk_ids=chunk_ids,
             tenant=tenant,
+            **self._content_access_params(access_context),
         )
         return {r["chunk_id"]: r["filename"] for r in rows if r.get("filename")}
 
@@ -1042,7 +1098,7 @@ class Neo4jClient:
         if not community_ids:
             return {}
         rows = await self.run(
-            """
+            f"""
             UNWIND $community_ids AS cid
             MATCH (c:Community {id: cid, tenant: $tenant})
                   <-[:MEMBER_OF]-(e:Entity {tenant: $tenant})
@@ -1070,6 +1126,7 @@ class Neo4jClient:
         tenant: str = "default",
         valid_at: str | None = None,
         transaction_at: str | None = None,
+        access_context: AccessContext | None = None,
     ) -> dict | None:
         """Best chunk (by cosine similarity to `embedding`) belonging to the
         document with this exact filename. Used by the named-document boost:
@@ -1077,8 +1134,8 @@ class Neo4jClient:
         relevant chunk a seed slot even if it didn't survive fused-ranking.
         """
         rows = await self.run(
-            """
-            MATCH (c:Chunk)-[:PART_OF]->(d:Document {filename: $filename})
+            f"""
+            MATCH (c:Chunk)-[:PART_OF]->(d:Document {{filename: $filename}})
             WHERE (c.tenant = $tenant)
               AND coalesce(d.is_deleted, false) = false
               AND c.embedding IS NOT NULL
@@ -1090,6 +1147,7 @@ class Neo4jClient:
                   coalesce(d.recorded_at, d.created_at) IS NULL
                   OR coalesce(d.recorded_at, d.created_at) <= datetime($transaction_at)
               ))
+              {document_access_predicate('d')}
             RETURN c.id AS chunk_id, c.text AS text,
                    vector.similarity.cosine(c.embedding, $embedding) AS score
             ORDER BY score DESC
@@ -1100,6 +1158,7 @@ class Neo4jClient:
             tenant=tenant,
             valid_at=valid_at,
             transaction_at=transaction_at,
+            **self._content_access_params(access_context),
         )
         return rows[0] if rows else None
 
@@ -1199,7 +1258,7 @@ class Neo4jClient:
             )
         fetch_k = max(top_k * 20, 100)
         return await self.run(
-            """
+            f"""
             CALL db.index.vector.queryNodes('community_embeddings', $fetch_k, $embedding)
             YIELD node AS c, score
             WHERE (c.tenant = $tenant)
@@ -1373,6 +1432,7 @@ class Neo4jClient:
         tenant: str = "default",
         valid_at: str | None = None,
         transaction_at: str | None = None,
+        access_context: AccessContext | None = None,
     ) -> list[dict]:
         """BM25 fulltext search over Chunk.text using Neo4j fulltext index.
         Filters by tenant and excludes quarantined entity chunks.
@@ -1398,6 +1458,7 @@ class Neo4jClient:
                   MATCH (c)-[:MENTIONS]->(e:Entity)
                   WHERE e.quarantined = true
               }
+              """ + document_access_predicate("d") + """
             RETURN c.id AS chunk_id, c.text AS text, score
             ORDER BY score DESC
             LIMIT $k
@@ -1407,6 +1468,7 @@ class Neo4jClient:
             tenant=tenant,
             valid_at=valid_at,
             transaction_at=transaction_at,
+            **self._content_access_params(access_context),
         )
 
     async def bm25_search_entities(
@@ -1416,12 +1478,13 @@ class Neo4jClient:
         tenant: str = "default",
         valid_at: str | None = None,
         transaction_at: str | None = None,
+        access_context: AccessContext | None = None,
     ) -> list[dict]:
         """BM25 fulltext search over Entity name + description.
         Excludes quarantined entities.
         """
         return await self.run(
-            """
+            f"""
             CALL db.index.fulltext.queryNodes('entity_fulltext', $query)
             YIELD node AS e, score
             WHERE coalesce(e.quarantined, false) = false
@@ -1439,6 +1502,7 @@ class Neo4jClient:
                   AND (coalesce(d.recorded_at, d.created_at) IS NULL
                        OR coalesce(d.recorded_at, d.created_at) <= datetime($transaction_at))
               ))
+              {document_access_predicate('d')}
             RETURN DISTINCT c.id AS chunk_id, c.text AS text, score
             ORDER BY score DESC
             LIMIT $k
@@ -1448,6 +1512,7 @@ class Neo4jClient:
             tenant=tenant,
             valid_at=valid_at,
             transaction_at=transaction_at,
+            **self._content_access_params(access_context),
         )
 
     async def get_chunk_entity_embeddings(

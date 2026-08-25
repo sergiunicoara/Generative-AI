@@ -18,6 +18,12 @@ CREATE CONSTRAINT kg_source_id IF NOT EXISTS FOR (s:KGSource) REQUIRE (s.tenant,
 CREATE CONSTRAINT kg_source_mapping_id IF NOT EXISTS FOR (m:KGSourceMapping) REQUIRE (m.tenant, m.id) IS UNIQUE;
 CREATE CONSTRAINT kg_source_mapping_version_unique IF NOT EXISTS FOR (m:KGSourceMapping) REQUIRE (m.tenant, m.source_id, m.version) IS UNIQUE;
 CREATE CONSTRAINT kg_route_stat_id IF NOT EXISTS FOR (s:KGRetrievalRouteStat) REQUIRE (s.tenant, s.query_class, s.mode) IS UNIQUE;
+CREATE CONSTRAINT collection_metadata_schema_version IF NOT EXISTS FOR (s:CollectionMetadataSchema) REQUIRE (s.tenant, s.collection, s.version) IS UNIQUE;
+CREATE CONSTRAINT content_sync_source IF NOT EXISTS FOR (s:ContentSyncSource) REQUIRE (s.tenant, s.id) IS UNIQUE;
+CREATE CONSTRAINT content_sync_run_id IF NOT EXISTS FOR (s:ContentSyncRun) REQUIRE s.id IS UNIQUE;
+CREATE CONSTRAINT lineage_review_id IF NOT EXISTS FOR (r:LineageReview) REQUIRE r.id IS UNIQUE;
+CREATE CONSTRAINT obligation_review_id IF NOT EXISTS FOR (r:ObligationReview) REQUIRE r.id IS UNIQUE;
+CREATE CONSTRAINT obligation_id IF NOT EXISTS FOR (o:Obligation) REQUIRE o.id IS UNIQUE;
 
 -- ── Vector indexes ─────────────────────────────────────────────────────────────
 CREATE VECTOR INDEX chunk_embeddings IF NOT EXISTS
@@ -59,6 +65,13 @@ CREATE CONSTRAINT pagerank_snapshot_id IF NOT EXISTS FOR (s:PageRankSnapshot) RE
 -- ── Tenant + quarantine indexes ───────────────────────────────────────────────
 CREATE INDEX chunk_tenant IF NOT EXISTS FOR (c:Chunk) ON (c.tenant);
 CREATE INDEX doc_tenant IF NOT EXISTS FOR (d:Document) ON (d.tenant);
+CREATE INDEX doc_external_source IF NOT EXISTS FOR (d:Document) ON (d.tenant, d.source_id, d.external_id);
+CREATE INDEX doc_acl_state IF NOT EXISTS FOR (d:Document) ON (d.tenant, d.acl_state);
+CREATE INDEX doc_collection IF NOT EXISTS FOR (d:Document) ON (d.tenant, d.collection);
+CREATE INDEX sync_source_due_review IF NOT EXISTS FOR (s:ContentSyncSource) ON (s.tenant, s.next_full_review_at);
+CREATE INDEX lineage_review_status IF NOT EXISTS FOR (r:LineageReview) ON (r.tenant, r.status);
+CREATE INDEX obligation_review_status IF NOT EXISTS FOR (r:ObligationReview) ON (r.tenant, r.status);
+CREATE INDEX obligation_effective_time IF NOT EXISTS FOR (o:Obligation) ON (o.tenant, o.effective_from, o.effective_to);
 CREATE INDEX community_summary_snapshot_time IF NOT EXISTS FOR (s:CommunitySummarySnapshot) ON (s.tenant, s.valid_from, s.transaction_from);
 CREATE INDEX kg_source_status IF NOT EXISTS FOR (s:KGSource) ON (s.tenant, s.status);
 CREATE INDEX kg_source_mapping_version IF NOT EXISTS FOR (m:KGSourceMapping) ON (m.tenant, m.source_id, m.version);

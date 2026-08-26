@@ -1,0 +1,82 @@
+# Legal and contract-document ontology.
+#
+# This is a controlled vocabulary for contracts, amendments, obligations and
+# fund-facing documentation. Facts must remain text-backed and high-stakes
+# lineage/obligation assertions continue through the human-review workflow.
+
+ontology:
+  id: legal-contracts
+  version: "1.0.0"
+  status: active
+  compatible_with: ">=1.0.0"
+  deprecated_types: []
+  deprecated_relations: []
+
+type_hierarchy:
+  - [CONTRACT,                CONCEPT]
+  - [CONTRACT_VERSION,        CONTRACT]
+  - [AMENDMENT,               CONTRACT]
+  - [STATEMENT_OF_WORK,       CONTRACT]
+  - [FUND_DOCUMENT,           CONCEPT]
+  - [PROSPECTUS,              FUND_DOCUMENT]
+  - [SIDE_LETTER,             CONTRACT]
+  - [CLAUSE,                  CONCEPT]
+  - [OBLIGATION,              CONCEPT]
+  - [RIGHT,                   CONCEPT]
+  - [PAYMENT_TERM,            CONCEPT]
+  - [NOTICE,                  CONCEPT]
+  - [GOVERNING_LAW,           CONCEPT]
+  - [LEGAL_PARTY,             ORG]
+  - [SIGNATORY,               PERSON]
+  - [JURISDICTION,            LOCATION]
+
+relation_rules:
+  SUPERSEDES:
+    domain: [CONTRACT, CONTRACT_VERSION, AMENDMENT, FUND_DOCUMENT]
+    target: [CONTRACT, CONTRACT_VERSION, AMENDMENT, FUND_DOCUMENT]
+    note: "Only assert when the source text expressly states supersession."
+  AMENDS:
+    domain: [AMENDMENT, SIDE_LETTER]
+    target: [CONTRACT, CONTRACT_VERSION, CLAUSE]
+  HAS_CLAUSE:
+    domain: [CONTRACT, CONTRACT_VERSION, AMENDMENT, FUND_DOCUMENT]
+    target: [CLAUSE]
+    inverse: CLAUSE_OF
+  IMPOSES:
+    domain: [CONTRACT, CONTRACT_VERSION, AMENDMENT, CLAUSE]
+    target: [OBLIGATION]
+    inverse: IMPOSED_BY
+  GRANTS:
+    domain: [CONTRACT, CONTRACT_VERSION, AMENDMENT, CLAUSE]
+    target: [RIGHT]
+  OWES_PAYMENT_UNDER:
+    domain: [LEGAL_PARTY]
+    target: [PAYMENT_TERM, CONTRACT]
+  GOVERNED_BY:
+    domain: [CONTRACT, CONTRACT_VERSION, AMENDMENT, FUND_DOCUMENT]
+    target: [GOVERNING_LAW, JURISDICTION]
+  PARTY_TO:
+    domain: [LEGAL_PARTY]
+    target: [CONTRACT, FUND_DOCUMENT]
+    inverse: HAS_PARTY
+  SIGNED_BY:
+    domain: [CONTRACT, AMENDMENT, FUND_DOCUMENT]
+    target: [SIGNATORY, LEGAL_PARTY]
+  REQUIRES_NOTICE:
+    domain: [CONTRACT, CLAUSE, OBLIGATION]
+    target: [NOTICE]
+
+inference_rules:
+  - name: contract_supersession_transitivity
+    relation: SUPERSEDES
+    rule_type: transitivity
+    max_depth: 5
+    confidence_decay: 0.95
+    note: "Derived links remain inferred and do not replace reviewed source evidence."
+
+exclusive_state_pairs:
+  - [TERMINATED, ACTIVE]
+  - [EXPIRED, ACTIVE]
+
+functional_relations:
+  - GOVERNED_BY

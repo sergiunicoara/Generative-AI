@@ -41,6 +41,10 @@ class IngestionAgent(BaseGraphRAGAgent):
 
     async def run(self, message: IngestMessage) -> dict:
         """Full ingestion pipeline: document → chunks → entities → Neo4j."""
+        # This bootstrap is deliberately before extraction: otherwise a cold
+        # worker would skip the strict ontology + SHACL mutation gates for its
+        # first document and only load the vocabulary at write time.
+        await self._writer.ensure_ontology_schema(message.document.tenant)
         extracted = await self.extract(message)
         return await self.write(extracted)
 

@@ -1,4 +1,4 @@
-"""Export the knowledge graph to Turtle (RDF) using rdflib.
+"""Export the knowledge graph to Turtle or JSON-LD using rdflib.
 
 Produces a standards-compliant Turtle file that can be loaded into:
   - Protégé (ontology editor / OWL reasoner)
@@ -17,7 +17,7 @@ Mapping
   confidence            → :confidence annotation (xsd:float)
   valid_from / valid_to → :validFrom / :validTo annotations
 
-Uses rdflib for guaranteed valid Turtle output (handles unicode, quotes,
+Uses rdflib for guaranteed valid RDF serialization (handles unicode, quotes,
 special characters that hand-rolled string concatenation cannot).
 
 Usage
@@ -27,6 +27,8 @@ Usage
       # reads for a caller authenticated as tenant "acme"
   python scripts/export_rdf.py --tenant acme --output custom/path.ttl
       # explicit --output bypasses the per-tenant default entirely
+  python scripts/export_rdf.py --tenant acme --format json-ld
+      # writes exports/acme/graph_export.jsonld for linked-data interchange
   python scripts/export_rdf.py --tenant default --limit 10000
 """
 
@@ -142,7 +144,14 @@ def _init_graph() -> Graph:
     return g
 
 
-async def export(tenant: str, output: Path, limit: int, infer: bool = False, validate: bool = False) -> None:
+async def export(
+    tenant: str,
+    output: Path,
+    limit: int,
+    infer: bool = False,
+    validate: bool = False,
+    rdf_format: str = "turtle",
+) -> None:
     from graphrag.graph.neo4j_client import get_neo4j
 
     neo4j = get_neo4j()
@@ -331,8 +340,10 @@ async def export(tenant: str, output: Path, limit: int, infer: bool = False, val
 
     await neo4j.close()
 
+    if rdf_format not in {"turtle", "json-ld"}:
+        raise ValueError("rdf_format must be 'turtle' or 'json-ld'")
     output.parent.mkdir(parents=True, exist_ok=True)
-    g.serialize(destination=str(output), format="turtle")
+    g.serialize(destination=str(output), format=rdf_format)
 
     # ── Optional SHACL shape validation ────────────────────────────────────────
     if validate:
@@ -354,6 +365,7 @@ async def export(tenant: str, output: Path, limit: int, infer: bool = False, val
     log.info(
         "export_rdf.complete",
         output=str(output),
+        rdf_format=rdf_format,
         entities=entity_count,
         edges=edge_count,
         triples=triple_count,
@@ -364,9 +376,7 @@ async def export(tenant: str, output: Path, limit: int, infer: bool = False, val
 
 
 def main():
-    parser = argparse.ArgumentParser(
-        description="Export knowledge graph to Turtle (RDF) using rdflib"
-    )
+    parser = argparse.ArgumentParser(description="Export knowledge graph RDF using rdflib")
     parser.add_argument("--tenant",  default="default",
                         help="Tenant to export (default: default)")
     # No static default -- POST /kg/sparql reads exports/<tenant>/graph_export.ttl
@@ -375,8 +385,9 @@ def main():
     # tenant's export. A single shared file meant whichever tenant exported
     # last silently became the data every tenant's SPARQL queries saw.
     parser.add_argument("--output",  default=None,
-                        help="Output Turtle file path "
-                             "(default: <GRAPHRAG_RDF_EXPORT_DIR>/<tenant>/graph_export.ttl)")
+                        help="Output RDF file path (default is derived from --format)")
+    parser.add_argument("--format", choices=("turtle", "json-ld"), default="turtle",
+                        help="RDF serialization format (default: turtle)")
     parser.add_argument("--limit",   type=int, default=50_000,
                         help="Max entities and edges per query (default: 50000)")
     parser.add_argument("--infer", action="store_true",
@@ -392,7 +403,8 @@ def main():
         output = Path(args.output)
     else:
         export_dir = Path(os.getenv("GRAPHRAG_RDF_EXPORT_DIR", "exports"))
-        output = export_dir / args.tenant / "graph_export.ttl"
+        suffix = ".ttl" if args.format == "turtle" else ".jsonld"
+        output = export_dir / args.tenant / f"graph_export{suffix}"
 
     asyncio.run(export(
         tenant=args.tenant,
@@ -400,6 +412,7 @@ def main():
         limit=args.limit,
         infer=args.infer,
         validate=args.validate,
+        rdf_format=args.format,
     ))
 
 

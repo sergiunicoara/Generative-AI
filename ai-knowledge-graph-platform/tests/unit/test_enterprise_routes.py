@@ -86,3 +86,15 @@ def test_review_approval_uses_authenticated_reviewer_and_tenant():
 
 def test_read_endpoints_require_read_scope():
     assert _client(scope="write").get("/governance/coverage").status_code == 403
+
+
+def test_sharepoint_run_is_tenant_bound():
+    connector = MagicMock()
+    connector.config.tenant = "acme"
+    connector.sync_once = AsyncMock(return_value={"queued": 2, "source_id": "legal-sharepoint"})
+
+    with patch("api.routes.enterprise.SharePointSyncConnector.from_settings", return_value=connector):
+        response = _client().post("/sync/sharepoint/legal-sharepoint/run")
+
+    assert response.status_code == 200
+    connector.sync_once.assert_awaited_once()

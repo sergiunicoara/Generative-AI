@@ -1,7 +1,9 @@
-"""Load PDF, DOCX, TXT, and MD files into Document objects."""
+"""Load PDF, DOCX, TXT, Markdown, JSON, and Excel files into Documents."""
 
 from __future__ import annotations
 
+import json
+from io import BytesIO
 from pathlib import Path
 
 import structlog
@@ -18,14 +20,7 @@ def load_document(file_path: str | Path) -> Document:
         raise FileNotFoundError(f"Document not found: {path}")
 
     suffix = path.suffix.lower()
-    if suffix == ".pdf":
-        text = _load_pdf(path)
-    elif suffix == ".docx":
-        text = _load_docx(path)
-    elif suffix in (".txt", ".md"):
-        text = path.read_text(encoding="utf-8")
-    else:
-        raise ValueError(f"Unsupported file type: {suffix}")
+    text = load_document_content(path.name, path.read_bytes())
 
     doc = Document(
         filename=path.name,
@@ -54,3 +49,28 @@ def _load_docx(path: Path) -> str:
 
     doc = DocxDocument(str(path))
     return "\n".join(para.text for para in doc.paragraphs)
+
+
+def load_document_content(filename: str, content: bytes) -> str:
+    """Extract text from a local or remotely downloaded document payload."""
+    suffix = Path(filename).suffix.lower()
+    if suffix == ".pdf":
+        from pypdf import PdfReader
+        return "\n\n".join(page.extract_text() or "" for page in PdfReader(BytesIO(content)).pages)
+    if suffix == ".docx":
+        from docx import Document as DocxDocument
+        return "\n".join(para.text for para in DocxDocument(BytesIO(content)).paragraphs)
+    if suffix == ".json":
+        return json.dumps(json.loads(content.decode("utf-8")), ensure_ascii=False, indent=2, sort_keys=True)
+    if suffix == ".xlsx":
+        from openpyxl import load_workbook
+        workbook = load_workbook(BytesIO(content), read_only=True, data_only=True)
+        rows: list[str] = []
+        for sheet in workbook.worksheets:
+            rows.append(f"# Sheet: {sheet.title}")
+            rows.extend(" | ".join("" if value is None else str(value) for value in row)
+                        for row in sheet.iter_rows(values_only=True))
+        return "\n".join(rows)
+    if suffix in {".txt", ".md", ".csv"}:
+        return content.decode("utf-8")
+    raise ValueError(f"Unsupported file type: {suffix}")

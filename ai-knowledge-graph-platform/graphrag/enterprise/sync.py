@@ -121,6 +121,18 @@ class ContentSyncService:
             tenant=tenant,
         )
 
+    async def current_cursor(self, source_id: str, tenant: str) -> str:
+        """Return the durable provider cursor without exposing Neo4j to connectors."""
+        rows = await self._neo4j.run(
+            """
+            MATCH (s:ContentSyncSource {id: $source_id, tenant: $tenant})
+            RETURN coalesce(s.delta_cursor, '') AS cursor
+            LIMIT 1
+            """,
+            source_id=source_id, tenant=tenant,
+        )
+        return str(rows[0].get("cursor", "")) if rows else ""
+
     async def sources(self, tenant: str) -> list[dict]:
         return await self._neo4j.run(
             """

@@ -76,6 +76,7 @@ limits>=5.0.0
 rdflib>=7.0.0
 owlrl>=6.0.0
 pyshacl>=0.29.0
+openpyxl>=3.1.0
 
 # ── MCP server (exposes hybrid retrieval + entity lookup to MCP clients) ───────
 mcp>=1.8.0,<2.0

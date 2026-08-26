@@ -1,9 +1,8 @@
 # Enterprise content governance
 
 This platform has a provider-neutral content plane for enterprise repositories.
-It deliberately does not bundle a privileged SharePoint client: a connector
-adapts Microsoft Graph (or another content system) webhooks and delta responses
-to the API contracts below, while ingestion, extraction, graph writes and
+The built-in SharePoint connector adapts Microsoft Graph delta responses into
+the API contracts below, while ingestion, extraction, graph writes and
 retrieval remain identical for every source.
 
 ## Permission-aware retrieval
@@ -52,6 +51,28 @@ source scan. Missing IDs are tombstoned, and the source receives its next review
 time. `GET /sync/due-full-reviews` exposes sources due for an external scheduler
 or connector worker. This supports Graph API delta polling and scheduled full
 reconciliation without coupling the knowledge graph to a single vendor.
+
+### SharePoint / Microsoft Graph
+
+Configure `content_sync.sharepoint_sources.<source_id>` with the Microsoft
+Entra directory/client IDs, site/drive IDs, tenant, and the **name** of an
+environment variable holding the client secret. Run
+`POST /sync/sharepoint/{source_id}/run` with a tenant-scoped write token. The
+connector follows Graph `nextLink`/`deltaLink` pagination, downloads changed
+file content, persists the opaque delta cursor, maps deletes to tombstones, and
+normalises user/group permissions into document ACLs. Link-based or unresolvable
+permissions are stored as unknown and therefore denied when ACL enforcement is
+enabled.
+
+## Semantic interchange and spreadsheets
+
+`scripts/export_rdf.py --format json-ld` emits JSON-LD; Turtle remains the
+default for the in-process SPARQL bridge. External ontology linking accepts
+Turtle and JSON-LD. Excel workbooks are supported through
+`ExcelWorkbookConnector`: each worksheet is mapped as a table with the same
+declarative entity/relation mapping, source lineage, and pre-write SHACL gate
+used by relational imports. The first worksheet row must contain unique,
+identifier-safe column names.
 
 ## Lineage and obligations
 

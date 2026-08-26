@@ -37,7 +37,8 @@ log = structlog.get_logger("link_external_ontology")
 
 async def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("--external", required=True, help="Path to the external Turtle (.ttl) file")
+    parser.add_argument("--external", required=True, help="Path to an external Turtle or JSON-LD file")
+    parser.add_argument("--format", default=None, help="Optional rdflib input format override (e.g. json-ld)")
     parser.add_argument("--tenant", default="default", help="Tenant to resolve entities against")
     parser.add_argument("--embed", action="store_true",
                          help="Also attempt embedding-similarity matching for labels with no exact/fuzzy candidate")
@@ -61,7 +62,7 @@ async def main() -> int:
     print(f"  External: {args.external}")
     print(f"{'='*60}\n")
 
-    result = await linker.link(args.external)
+    result = await linker.link(args.external, rdf_format=args.format)
     print(result.summary())
 
     if result.auto_linked:

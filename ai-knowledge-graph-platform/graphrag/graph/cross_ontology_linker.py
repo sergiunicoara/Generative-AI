@@ -68,6 +68,7 @@ from pathlib import Path
 import structlog
 from rdflib import Graph, Namespace, URIRef
 from rdflib.namespace import OWL, RDF, RDFS
+from rdflib.util import guess_format
 
 from graphrag.graph.alias_registry import AmbiguousMatch, get_alias_registry
 
@@ -125,15 +126,15 @@ class CrossOntologyLinker:
 
     # ── Extraction ───────────────────────────────────────────────────────────
 
-    def _extract_candidates(self, external_ttl_path: str | Path) -> list[LinkCandidate]:
-        """Pull labelled RDF/SKOS resources out of an external Turtle file.
+    def _extract_candidates(self, external_path: str | Path, rdf_format: str | None = None) -> list[LinkCandidate]:
+        """Pull labelled RDF/SKOS resources out of an external RDF file.
 
         A SKOS preferred label wins over an RDFS label, with an alternate
         label as a useful fallback.  One candidate per URI prevents a synonym
         from creating duplicate review-queue entries.
         """
         g = Graph()
-        g.parse(str(external_ttl_path), format="turtle")
+        g.parse(str(external_path), format=rdf_format or guess_format(str(external_path)) or "turtle")
 
         candidates: list[LinkCandidate] = []
         seen_uris: set[str] = set()
@@ -162,20 +163,22 @@ class CrossOntologyLinker:
             candidates.append(LinkCandidate(external_uri=uri, label=str(label), type_hint=type_hint))
 
         log.info("cross_ontology_linker.candidates_extracted",
-                  path=str(external_ttl_path), count=len(candidates))
+                  path=str(external_path), count=len(candidates))
         return candidates
 
     # ── Linking ──────────────────────────────────────────────────────────────
 
-    async def link(self, external_ttl_path: str | Path, source_label: str | None = None) -> LinkResult:
+    async def link(
+        self, external_path: str | Path, source_label: str | None = None, rdf_format: str | None = None,
+    ) -> LinkResult:
         """
-        Resolve every rdfs:label'd entity in the external Turtle file against
+        Resolve every rdfs:label'd entity in an external Turtle or JSON-LD file against
         this tenant's graph. Returns a LinkResult with owl:sameAs triples for
         confident matches and human-review-queue entries for ambiguous ones.
         """
         await self._registry.load()
-        candidates = self._extract_candidates(external_ttl_path)
-        source_doc = source_label or Path(external_ttl_path).name
+        candidates = self._extract_candidates(external_path, rdf_format)
+        source_doc = source_label or Path(external_path).name
 
         result = LinkResult()
         result.same_as_graph.bind("owl", OWL)
@@ -284,18 +287,18 @@ class CrossOntologyLinker:
     # ── Merge ────────────────────────────────────────────────────────────────
 
     @staticmethod
-    def merge_graphs(*ttl_paths: str | Path, extra: Graph | None = None) -> Graph:
+    def merge_graphs(*rdf_paths: str | Path, extra: Graph | None = None) -> Graph:
         """
-        Union multiple Turtle files (and an optional extra in-memory Graph,
+        Union multiple RDF files (Turtle or JSON-LD) and an optional extra Graph,
         typically the ``same_as_graph`` produced by ``link()``) into one
         rdflib Graph, ready for ``SPARQLBridge`` queries spanning both
         ontologies via the owl:sameAs bridges.
         """
         merged = Graph()
-        for path in ttl_paths:
-            merged.parse(str(path), format="turtle")
+        for path in rdf_paths:
+            merged.parse(str(path), format=guess_format(str(path)) or "turtle")
         if extra is not None:
             for triple in extra:
                 merged.add(triple)
-        log.info("cross_ontology_linker.merged", sources=len(ttl_paths), triples=len(merged))
+        log.info("cross_ontology_linker.merged", sources=len(rdf_paths), triples=len(merged))
         return merged

@@ -109,12 +109,8 @@ class GraphWriter:
         """Return the tenant-scoped alias registry (cached pool)."""
         return get_alias_registry(self._neo4j, tenant=tenant)
 
-    async def _ensure_registry(self, tenant: str = "default") -> None:
-        """Load the tenant alias registry and ontology on first use per tenant."""
-        registry = self._get_registry(tenant)
-        if tenant not in self._registry_loaded_tenants:
-            await registry.load()
-            self._registry_loaded_tenants.add(tenant)
+    async def ensure_ontology_schema(self, tenant: str = "default") -> None:
+        """Load the tenant ontology before untrusted LLM extraction begins."""
         if self._ontology_tenant != tenant:
             self._ontology = get_ontology_registry(self._neo4j, tenant=tenant)
             self._ontology_tenant = tenant
@@ -126,6 +122,14 @@ class GraphWriter:
                 )
             )
             self._ontology_loaded_tenants.add(tenant)
+
+    async def _ensure_registry(self, tenant: str = "default") -> None:
+        """Load the tenant alias registry and ontology on first use per tenant."""
+        registry = self._get_registry(tenant)
+        if tenant not in self._registry_loaded_tenants:
+            await registry.load()
+            self._registry_loaded_tenants.add(tenant)
+        await self.ensure_ontology_schema(tenant)
 
     # ── Document ───────────────────────────────────────────────────────────────
 

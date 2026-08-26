@@ -210,10 +210,71 @@ class PostgreSQLSourceConnector:
             self._engine = None
 
 
+class ExcelWorkbookConnector:
+    """Read an Excel workbook through the same mapping contract as databases.
+
+    A worksheet is treated as a table and its first row as identifier-safe
+    column names.  This keeps spreadsheet ingestion declarative, SHACL-gated,
+    and provenance-preserving instead of introducing a separate ad-hoc path.
+    """
+
+    kind = SourceKind.FILE
+
+    def __init__(self, path: str | Path):
+        self.path = Path(path)
+
+    @property
+    def uri(self) -> str:
+        return self.path.resolve().as_uri()
+
+    def _read_table(self, sheet_name: str) -> list[dict[str, Any]]:
+        if not self.path.exists():
+            raise FileNotFoundError(self.path)
+        from openpyxl import load_workbook
+
+        workbook = load_workbook(self.path, read_only=True, data_only=True)
+        if sheet_name not in workbook.sheetnames:
+            raise ValueError(f"worksheet not found: {sheet_name}")
+        rows = workbook[sheet_name].iter_rows(values_only=True)
+        headers = next(rows, None)
+        if not headers:
+            return []
+        names = [str(header or "").strip() for header in headers]
+        if not all(names) or len(set(names)) != len(names):
+            raise ValueError(f"{sheet_name}: headers must be non-empty and unique")
+        for name in names:
+            _identifier(name, f"{sheet_name} header")
+        return [
+            dict(zip(names, row, strict=True))
+            for row in rows
+            if any(value is not None and value != "" for value in row)
+        ]
+
+    async def read_table(self, table: str) -> list[dict[str, Any]]:
+        loop = asyncio.get_running_loop()
+        return await loop.run_in_executor(None, self._read_table, table)
+
+    async def records(
+        self, source: SourceSystem, mapping: SourceMapping, *, cursor: str = ""
+    ):
+        spec = mapping.mapping
+        sheets = list(spec.get("entities", [])) + list(spec.get("relations", []))
+        for sheet_spec in sheets:
+            sheet = str(sheet_spec["table"])
+            for index, row in enumerate(await self.read_table(sheet)):
+                yield SourceEnvelope(
+                    external_id=f"{sheet}:{row.get('id', index)}",
+                    content=json.dumps(row, sort_keys=True, default=str),
+                    content_type="application/json",
+                    metadata={"worksheet": sheet, "source_id": source.id},
+                    cursor=str(index + 1),
+                )
+
+
 class RelationalGraphIngestor:
     """Validate and persist mapped relational rows through ``GraphWriter``."""
 
-    def __init__(self, connector: SQLiteSourceConnector | PostgreSQLSourceConnector, graph_writer):
+    def __init__(self, connector: SQLiteSourceConnector | PostgreSQLSourceConnector | ExcelWorkbookConnector, graph_writer):
         self.connector = connector
         self.graph_writer = graph_writer
 
@@ -318,7 +379,7 @@ class RelationalGraphIngestor:
             id=mapping.source_id,
             tenant=mapping.tenant,
             name=mapping.source_id,
-            kind=SourceKind.DATABASE,
+            kind=self.connector.kind,
             uri=self.connector.uri,
             owner="relational-ingestion",
             classification="synthetic" if mapping.tenant == "sustainability" else "internal",
@@ -365,5 +426,5 @@ class RelationalGraphIngestor:
 __all__ = [
     "EntityTableMapping", "RelationTableMapping", "RelationalGraphMapping",
     "MappingValidationReport", "SQLiteSourceConnector", "PostgreSQLSourceConnector",
-    "RelationalGraphIngestor",
+    "ExcelWorkbookConnector", "RelationalGraphIngestor",
 ]

@@ -264,6 +264,9 @@ metadata_governance:
 content_sync:
   reconcile_missing_after_seconds: 86400
   full_review_interval_seconds: 604800
+  # Credentials stay in environment variables. Configure real sources only in
+  # deployment configuration; never commit a client secret here.
+  sharepoint_sources: {}
 
 ontology:
   enforce_domain_range: true        # reject relations that violate domain/range rules

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import Literal
 
+import httpx
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
@@ -12,6 +13,7 @@ from graphrag.enterprise.lineage import LineageService
 from graphrag.enterprise.metadata_governance import MetadataGovernanceService
 from graphrag.enterprise.models import CollectionSchema, SyncChange
 from graphrag.enterprise.sync import ContentSyncService
+from graphrag.enterprise.sharepoint import SharePointSyncConnector
 
 router = APIRouter()
 
@@ -73,6 +75,17 @@ async def list_sync_sources(tenant: str = Depends(get_tenant)):
 @router.get("/sync/due-full-reviews", dependencies=[Depends(require_scope("read"))])
 async def due_full_reviews(tenant: str = Depends(get_tenant)):
     return {"sources": await ContentSyncService().due_full_reviews(tenant)}
+
+
+@router.post("/sync/sharepoint/{source_id}/run", dependencies=[Depends(require_scope("write"))])
+async def sync_sharepoint_source(source_id: str, tenant: str = Depends(get_tenant)):
+    connector = SharePointSyncConnector.from_settings(source_id)
+    if connector.config.tenant != tenant:
+        raise HTTPException(status_code=403, detail="SharePoint source does not match authenticated tenant")
+    try:
+        return await connector.sync_once()
+    except (httpx.HTTPError, ValueError) as exc:
+        raise HTTPException(status_code=502, detail="SharePoint synchronization failed") from exc
 
 
 @router.get("/lineage/reviews", dependencies=[Depends(require_scope("read"))])

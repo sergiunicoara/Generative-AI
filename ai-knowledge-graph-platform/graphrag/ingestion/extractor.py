@@ -123,6 +123,7 @@ class Extractor:
                 source_doc_id=chunk.document_id,
                 extraction_model=self._model_name,
                 prompt_version="v1",
+                tenant=chunk.tenant,
             )
             for e in data.get("entities", [])
             if e.get("name")
@@ -159,6 +160,7 @@ class Extractor:
                         source_chunk_id=chunk.id,
                         extraction_model=self._model_name,
                         prompt_version="v1",
+                        tenant=chunk.tenant,
                         chunk_span_start=span_start,
                         chunk_span_end=span_end,
                     )
@@ -199,6 +201,27 @@ class Extractor:
                         tenant=chunk.tenant,
                         **report,
                     )
+                # Domain/range validation protects semantic meaning.  Run the
+                # shared SHACL mutation gate as well so malformed identifiers,
+                # tenants, endpoints, or confidence values cannot take a
+                # different route into the graph than structured imports.
+                from graphrag.graph.shacl_validator import SHACLValidator
+                shacl_report = SHACLValidator.validate_relational_batch_report(
+                    entities, relations, tenant=chunk.tenant,
+                )
+                if not shacl_report.conforms:
+                    await registry.record_schema_event(
+                        event_type="extraction_shacl_rejected",
+                        detail=shacl_report.text[:2_000],
+                        source_doc_id=chunk.document_id,
+                    )
+                    log.warning(
+                        "extractor.shacl_rejected",
+                        chunk_id=chunk.id,
+                        tenant=chunk.tenant,
+                        **shacl_report.counts,
+                    )
+                    entities, relations = [], []
                 if report and report.get("drift_detected"):
                     log.warning("extractor.ontology_drift", chunk_id=chunk.id, **report)
             else:

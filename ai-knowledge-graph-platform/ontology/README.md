@@ -151,11 +151,7 @@ live pre-write mutation gate for the relational-ingestion path
 (`graphrag/ingestion/relational.py`) — a non-conformant relational mapping is
 rejected before any Neo4j write, not merely logged.
 
-**Known gap, not covered by SHACL today**: the LLM-extraction ingestion path
-(`graphrag/ingestion/extractor.py` → `ontology_registry.validate_extraction`)
-coerces ontology violations (unknown type → `CONCEPT`, invalid relation →
-`RELATED_TO`) rather than rejecting or quarantining them. SHACL only gates
-the relational-import path today. Extending it to the LLM path is tracked
-separately in the platform roadmap — it would be a new mutation gate on the
-main ingestion pipeline and needs its own live-verified iteration, not a
-documentation-only fix.
+The LLM-extraction path first rejects ontology-invalid entity types and
+domain/range violations, then runs this same SHACL batch gate before any graph
+write. Rejected facts are recorded as an `extraction_shacl_rejected` schema
+event; they are not coerced into plausible graph facts.

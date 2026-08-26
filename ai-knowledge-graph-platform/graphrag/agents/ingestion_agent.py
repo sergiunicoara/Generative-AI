@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 from datetime import datetime, timezone
+from inspect import isawaitable
 from time import perf_counter
 
 import structlog
@@ -254,8 +255,21 @@ class IngestionAgent(BaseGraphRAGAgent):
         all_relations = []
         all_artifacts = []
         explicit_aliases = 0
+        ontology_proposals = 0
         for index, (chunk, (entities, relations)) in enumerate(zip(chunks, extracted["extraction_results"])):
             entity_map = {e.id: e for e in entities}
+
+            proposal_payload = list(chunk.metadata.get("ontology_proposals", []))
+            proposal_writer = getattr(self._writer, "write_ontology_proposals", None)
+            if proposal_payload and callable(proposal_writer):
+                proposal_result = proposal_writer(proposal_payload, chunk)
+                # Older minimal writer test doubles predate this optional
+                # governance stage and return a plain MagicMock.  Production
+                # GraphWriter returns an awaitable list of proposal ids.
+                if isawaitable(proposal_result):
+                    proposal_result = await proposal_result
+                if isinstance(proposal_result, list):
+                    ontology_proposals += len(proposal_result)
 
             await self._writer.write_entities(entities, chunk)
             await self._writer.write_relations(
@@ -327,6 +341,7 @@ class IngestionAgent(BaseGraphRAGAgent):
                 "items": len(chunks) + len(all_entities) + len(all_relations) + len(all_artifacts) + len(structured_tables),
                 "artifacts": len(all_artifacts),
                 "aliases": explicit_aliases,
+                "ontology_proposals": ontology_proposals,
                 "tables": len(structured_tables),
                 "cost_usd": None,
             }
@@ -341,6 +356,7 @@ class IngestionAgent(BaseGraphRAGAgent):
             relations=len(all_relations),
             artifacts=len(all_artifacts),
             explicit_aliases=explicit_aliases,
+            ontology_proposals=ontology_proposals,
             structured_tables=len(structured_tables),
             wikidata_links=wikidata_links,
             validation_issues=maintenance_report["validation"]["total_issues"],
@@ -355,6 +371,7 @@ class IngestionAgent(BaseGraphRAGAgent):
             "relations": len(all_relations),
             "artifacts": len(all_artifacts),
             "explicit_aliases": explicit_aliases,
+            "ontology_proposals": ontology_proposals,
             "structured_tables": len(structured_tables),
             "wikidata_links": wikidata_links,
             "maintenance": maintenance_report,

@@ -60,6 +60,7 @@ CREATE FULLTEXT INDEX alias_fulltext IF NOT EXISTS FOR (a:Alias) ON EACH [a.valu
 CREATE CONSTRAINT conflict_id IF NOT EXISTS FOR (c:Conflict) REQUIRE c.id IS UNIQUE;
 CREATE CONSTRAINT ontology_version_id IF NOT EXISTS FOR (o:OntologyVersion) REQUIRE o.id IS UNIQUE;
 CREATE CONSTRAINT ontology_migration_id IF NOT EXISTS FOR (m:OntologyMigration) REQUIRE m.id IS UNIQUE;
+CREATE CONSTRAINT ontology_proposal_tenant_fingerprint IF NOT EXISTS FOR (p:OntologyProposal) REQUIRE (p.tenant, p.fingerprint) IS UNIQUE;
 CREATE CONSTRAINT community_snapshot_id IF NOT EXISTS FOR (s:CommunitySnapshot) REQUIRE s.id IS UNIQUE;
 CREATE CONSTRAINT community_summary_snapshot_id IF NOT EXISTS FOR (s:CommunitySummarySnapshot) REQUIRE (s.tenant, s.id) IS UNIQUE;
 CREATE CONSTRAINT quarantine_log_id IF NOT EXISTS FOR (q:QuarantineLog) REQUIRE q.id IS UNIQUE;
@@ -91,6 +92,7 @@ CREATE INDEX intelligence_artifact_document IF NOT EXISTS FOR (a:IntelligenceArt
 CREATE INDEX ingestion_run_manifest_document IF NOT EXISTS FOR (m:IngestionRunManifest) ON (m.tenant, m.document_id, m.started_at);
 CREATE INDEX structured_table_document IF NOT EXISTS FOR (t:StructuredTable) ON (t.tenant, t.document_id);
 CREATE INDEX time_period_kind IF NOT EXISTS FOR (p:TimePeriod) ON (p.tenant, p.kind);
+CREATE INDEX ontology_proposal_status IF NOT EXISTS FOR (p:OntologyProposal) ON (p.tenant, p.status, p.last_seen_at);
 
 -- ── Ingestion idempotency (natural-key MERGE targets) ─────────────────────────
 -- merge_document/merge_chunk now MERGE on these composite keys instead of a

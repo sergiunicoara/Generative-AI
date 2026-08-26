@@ -179,6 +179,15 @@ class IngestionRunManifest(BaseModel):
 
 
 class Entity(BaseModel):
+    """An extraction-local entity mention.
+
+    ``id`` binds relations produced in the same extraction response; it is not
+    a durable graph identifier.  The canonical graph identity is the scoped
+    ``(tenant, canonical_name, canonical_type)`` natural key.  This replaces
+    the unused ``canonical_id`` field, whose meaning conflicted with document
+    canonical IDs and Neo4j node IDs.
+    """
+
     id: str = Field(default_factory=lambda: str(uuid4()))
     name: str
     type: str   # PERSON | ORG | PRODUCT | CONCEPT | LOCATION | EVENT
@@ -190,12 +199,25 @@ class Entity(BaseModel):
     embedding: list[float] = Field(default_factory=list)
     source_chunk_ids: list[str] = Field(default_factory=list)
     source_type: SourceType = SourceType.DOCUMENT
-    canonical_id: str | None = None   # set when this is a duplicate of another entity
     tenant: str = "default"           # tenant scope — entities are isolated per tenant
+    canonical_name: str = ""          # resolver-approved canonical entity name
+    canonical_type: str = ""          # resolver-approved canonical entity type
     # ── Deep provenance ────────────────────────────────────────────────────────
     source_doc_id: str = ""           # first document to introduce this entity
     extraction_model: str = ""        # LLM model that extracted this entity
     prompt_version: str = "v1"        # prompt template version at extraction time
+
+    @property
+    def canonical_identity(self) -> tuple[str, str] | None:
+        """Resolved `(name, type)` used for graph writes, if this mention redirected."""
+        if not self.canonical_name:
+            return None
+        return self.canonical_name, self.canonical_type or self.type
+
+    def redirect_to(self, name: str, entity_type: str) -> None:
+        """Record the resolver's canonical natural key on this transient mention."""
+        self.canonical_name = name
+        self.canonical_type = entity_type
 
 
 class Relation(BaseModel):

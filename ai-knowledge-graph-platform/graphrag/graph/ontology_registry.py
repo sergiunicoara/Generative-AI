@@ -221,6 +221,11 @@ class OntologyRegistry:
         """
         return self._loaded
 
+    @property
+    def version_id(self) -> str:
+        """Active tenant-scoped ontology version, or an empty value before load."""
+        return self._version_id
+
     def validate_extraction(
         self,
         entities: list,
@@ -283,13 +288,23 @@ class OntologyRegistry:
                 else:
                     relation.relation = "RELATED_TO"   # compatibility fallback
 
-            if relation.relation not in self._known_relations:
+            approved_relations = (
+                self._known_relations
+                | set(_RELATION_RULES)
+                | set(self._domain_rules)
+                | set(self._migration_map.values())
+            )
+            if relation.relation not in approved_relations:
                 new_relations.append(relation.relation)
-                self._known_relations.add(relation.relation)
+                # An untrusted extraction must not promote its own vocabulary.
+                # Strict ingestion rejects it and queues a human proposal; only
+                # an applied ontology migration makes it an approved relation.
+                if strict:
+                    rejected_relation_ids.append(relation.id)
 
             src = next((e for e in entities if e.id == relation.source_entity_id), None)
             tgt = next((e for e in entities if e.id == relation.target_entity_id), None)
-            if src and tgt:
+            if src and tgt and relation.id not in rejected_relation_ids:
                 # Check built-in rules first, then domain-specific rules
                 allowed_pairs = _RELATION_RULES.get(relation.relation, set())
                 domain_pairs  = self._domain_rules.get(relation.relation, set())
@@ -336,6 +351,14 @@ class OntologyRegistry:
         normalized = self._migration_map.get(normalized, normalized)
         if not _RELATION_RE.match(normalized):
             normalized = "RELATED_TO"
+        approved_relations = (
+            self._known_relations
+            | set(_RELATION_RULES)
+            | set(self._domain_rules)
+            | set(self._migration_map.values())
+        )
+        if normalized not in approved_relations:
+            return False, normalized
         # Merge built-in and domain-specific constraints
         allowed_pairs = _RELATION_RULES.get(normalized, set()) | self._domain_rules.get(normalized, set())
         if not allowed_pairs:

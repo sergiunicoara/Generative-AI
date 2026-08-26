@@ -70,6 +70,7 @@ interoperability and second-backend work is deliberately evaluation-led:
 | RDF / SKOS | RDF export and SKOS vocabularies are implemented | Review external-source mappings before creating auditable equivalence links. |
 | GQL | Not a production runtime dependency | Keep the bounded read-query contract for conformance tests. |
 | Ultipa / other graph backends | Not integrated | Consider only a same-dataset, read-only benchmark. |
+| PostgreSQL SQL/PGQ | Track as a possible lightweight deployment tier | Consider only after a standards-compliant release is available and the same-dataset read-only benchmark meets the second-backend gate. |
 
 Second-backend results must use the same dataset fingerprint, scenario, and
 query count as Neo4j. They require at least 99.9% result equivalence, tenant

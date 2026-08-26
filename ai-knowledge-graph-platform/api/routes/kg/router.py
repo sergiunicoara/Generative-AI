@@ -13,6 +13,7 @@ from api.routes.kg import (
     health,
     inference,
     knowledge,
+    ontology_proposals,
     pagerank,
     review_queue,
     feedback,
@@ -29,6 +30,7 @@ router.include_router(embeddings.router)
 router.include_router(health.router)
 router.include_router(inference.router)
 router.include_router(knowledge.router)
+router.include_router(ontology_proposals.router)
 router.include_router(pagerank.router)
 router.include_router(review_queue.router)
 router.include_router(feedback.router)

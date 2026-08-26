@@ -177,6 +177,21 @@ class Extractor:
                 report = registry.validate_extraction(entities, relations, strict=True)
                 rejected_entities = set(report.get("rejected_entity_ids", []))
                 rejected_relations = set(report.get("rejected_relation_ids", []))
+                if report.get("drift_detected") and get_settings().ingestion.get(
+                    "ontology_proposals_enabled", True,
+                ):
+                    # Defer persistence until GraphWriter has stored the source
+                    # chunk.  The proposal stays attached to this in-memory
+                    # chunk, retaining the rejected assertion's provenance
+                    # without letting it enter the active graph vocabulary.
+                    from graphrag.graph.ontology_proposals import build_ontology_proposals
+                    chunk.metadata["ontology_proposals"] = build_ontology_proposals(
+                        report,
+                        entities,
+                        relations,
+                        chunk,
+                        limit=get_settings().ingestion.get("ontology_proposal_max_per_chunk", 8),
+                    )
                 if rejected_entities or rejected_relations:
                     entities = [e for e in entities if e.id not in rejected_entities]
                     valid_entity_ids = {e.id for e in entities}

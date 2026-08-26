@@ -42,6 +42,7 @@ from graphrag.graph.cycle_detector import CycleDetector
 from graphrag.graph.ingestion_validator import IngestionValidator
 from graphrag.graph.neo4j_client import get_neo4j
 from graphrag.graph.ontology_registry import get_ontology_registry
+from graphrag.graph.ontology_proposals import OntologyProposalService
 from graphrag.graph.pagerank import PageRankComputer
 from graphrag.graph.quarantine import QuarantineService
 from graphrag.graph.review_queue import ReviewQueueService
@@ -243,6 +244,18 @@ class GraphWriter:
         if periods:
             await self._neo4j.merge_temporal_periods(chunk.id, periods, tenant=chunk.tenant)
 
+    async def write_ontology_proposals(self, proposals: list[dict], chunk: Chunk) -> list[str]:
+        """Persist rejected schema candidates after their source chunk exists."""
+        if not proposals or not self._cfg.ingestion.get("ontology_proposals_enabled", True):
+            return []
+        await self.ensure_ontology_schema(chunk.tenant)
+        service = OntologyProposalService(self._neo4j)
+        return await service.submit(
+            proposals,
+            chunk,
+            ontology_version_id=self._ontology.version_id,
+        )
+
     async def register_explicit_aliases(
         self,
         aliases: list[tuple[str, str, str, str]],
@@ -327,6 +340,7 @@ class GraphWriter:
                     type=canonical[1],
                     tenant=tenant,
                 )
+                entity.redirect_to(*canonical)
                 # Register the new variant as an alias and use the canonical
                 await registry.register_alias(
                     raw_value=entity.name,
@@ -356,6 +370,7 @@ class GraphWriter:
                         similarity=round(similarity, 4),
                         tenant=tenant,
                     )
+                    entity.redirect_to(dup_name, dup_type)
                     await registry.register_alias(
                         raw_value=entity.name,
                         canonical_name=dup_name,
@@ -395,6 +410,7 @@ class GraphWriter:
             # neither is written until the batched merge at the end) — not
             # worth a round-trip per entity for a best-effort label.
             to_merge.append(entity)
+            entity.redirect_to(entity.name, entity.type)
             to_mention.append((entity.name, entity.type))
 
             # Register canonical name in alias registry in-memory cache.
@@ -498,8 +514,8 @@ class GraphWriter:
             # agree on what a below-threshold match means. Resolving it to the
             # candidate instead would auto-merge at a confidence the entity path
             # deliberately refused.
-            src_canonical = _resolved_pair(registry.resolve(src.name))
-            tgt_canonical = _resolved_pair(registry.resolve(tgt.name))
+            src_canonical = src.canonical_identity or _resolved_pair(registry.resolve(src.name))
+            tgt_canonical = tgt.canonical_identity or _resolved_pair(registry.resolve(tgt.name))
             src_name = src_canonical[0] if src_canonical else src.name
             src_type = src_canonical[1] if src_canonical else src.type
             tgt_name = tgt_canonical[0] if tgt_canonical else tgt.name

@@ -1,4 +1,31 @@
-# Current: Provenance-backed intelligence ingestion (2026-08-26)
+# Current: Ontology governance and scalable entity resolution (2026-08-26)
+
+## Scope
+
+- [x] Add a tenant-scoped ontology-proposal queue for unknown extracted entity
+      types and relation predicates; proposals require an explicit human decision.
+- [x] Validate extraction against the active ontology before graph persistence;
+      retain source provenance and quarantine unapproved schema assertions.
+- [x] Add length-bucket candidate selection to alias fuzzy matching
+      without changing thresholds or ambiguous-match review behaviour.
+- [x] Replace `Entity.canonical_id` with an explicit canonical-resolution contract
+      than an unused duplicate-identity field.
+- [x] Add regression and performance-shape tests, API routes, documentation, and
+      a SQL/PGQ-on-Postgres roadmap note only (no graph-backend migration).
+
+## Review
+
+- [x] Implemented: strict ingestion rejects unknown types/predicates and invalid
+      domain/range pairs; bounded, deduplicated proposals retain document/chunk/
+      ontology-version provenance and require review before any versioned schema change.
+- [x] Verification: 121 focused ontology, alias, writer, review-queue, and
+      idempotency tests pass. The full repository sweep completed with 26
+      pre-existing failures in unrelated provider/cache/legacy-fixture paths;
+      none are in the new proposal or canonical-identity coverage.
+
+---
+
+# Previous: Provenance-backed intelligence ingestion (2026-08-26)
 
 ## Scope
 

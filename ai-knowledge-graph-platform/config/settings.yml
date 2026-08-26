@@ -9,6 +9,10 @@ ingestion:
   intelligence_artifacts_enabled: true
   # Materialise explicit day/month/quarter/year references and parent links.
   temporal_hierarchy_enabled: true
+  # Unknown entity types and relation predicates are rejected from active
+  # ingestion and stored as tenant-scoped, human-reviewed ontology proposals.
+  ontology_proposals_enabled: true
+  ontology_proposal_max_per_chunk: 8
   entity_types:
     - PERSON
     - ORG

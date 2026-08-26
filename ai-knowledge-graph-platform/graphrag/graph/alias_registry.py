@@ -209,6 +209,12 @@ class AliasRegistry:
         # Keyed per-tenant so the registry is safe for single-tenant usage
         # (multi-tenant deployments should use one registry instance per tenant)
         self._exact: dict[str, tuple[str, str]] = {}
+        # Fuzzy matching remains an exact rapidfuzz comparison, but candidates
+        # are indexed by normalized length.  A name outside the mathematically
+        # possible length range for the review threshold cannot affect either
+        # auto-merge or the ambiguous-review band, so it is safe to skip.
+        self._fuzzy_by_length: dict[int, list[str]] = {}
+        self._fuzzy_index_size = 0
         # Romanian-noun-stem fallback table — see _normalize_ro(). First-wins
         # (setdefault) so the earliest-seen canonical for a given stem wins.
         self._stemmed: dict[str, tuple[str, str]] = {}
@@ -240,6 +246,7 @@ class AliasRegistry:
 
         self._exact.clear()
         self._stemmed.clear()
+        self._fuzzy_by_length.clear()
         for row in rows:
             cname = row["canonical_name"]
             ctype = row["canonical_type"]
@@ -255,6 +262,7 @@ class AliasRegistry:
                     self._stemmed.setdefault(_normalize_ro(alias), (cname, ctype))
                     if ctype in _REGULATION_TYPES:
                         self._exact[_normalize_regulatory(alias)] = (cname, ctype)
+        self._rebuild_fuzzy_index()
         self._loaded = True
         log.info("alias_registry.loaded", tenant=self._tenant, entries=len(self._exact))
 
@@ -311,12 +319,17 @@ class AliasRegistry:
                       canonical=self._stemmed[stem_key][0])
             return self._stemmed[stem_key]
 
-        # 2. Fuzzy match (optional, requires rapidfuzz)
+        # 2. Fuzzy match (optional, requires rapidfuzz).  Candidate selection
+        # uses only a score upper bound derived from string lengths, therefore
+        # preserves all matches that can reach the review threshold.
         try:
             from rapidfuzz import fuzz
+            from graphrag.core.config import get_settings
+            review_min = get_settings().ingestion.get("review_fuzzy_min", 70)
             best_score = 0
             best_match = None
-            for stored_key, canonical in self._exact.items():
+            for stored_key in self._fuzzy_candidates(key, minimum_score=review_min):
+                canonical = self._exact[stored_key]
                 score = fuzz.ratio(key, stored_key)
                 if score > best_score:
                     best_score = score
@@ -330,9 +343,7 @@ class AliasRegistry:
                 )
                 return best_match
             # Ambiguous band — close but not confident enough to auto-merge
-            from graphrag.core.config import get_settings
-            _review_min = get_settings().ingestion.get("review_fuzzy_min", 70)
-            if _review_min <= best_score < self._fuzzy_threshold and best_match:
+            if review_min <= best_score < self._fuzzy_threshold and best_match:
                 log.debug(
                     "alias_registry.fuzzy_ambiguous",
                     raw=raw_name,
@@ -391,11 +402,52 @@ class AliasRegistry:
         )
         self._exact[_normalize(raw_value)] = (canonical_name, canonical_type)
         self._stemmed.setdefault(_normalize_ro(raw_value), (canonical_name, canonical_type))
+        self._index_fuzzy_key(_normalize(raw_value))
         log.info(
             "alias_registry.alias_added",
             raw=raw_value,
             canonical=canonical_name,
         )
+
+    def _rebuild_fuzzy_index(self) -> None:
+        """Build normalized-length buckets after a full alias-table refresh."""
+        self._fuzzy_by_length.clear()
+        for key in self._exact:
+            self._fuzzy_by_length.setdefault(len(key), []).append(key)
+        self._fuzzy_index_size = len(self._exact)
+
+    def _index_fuzzy_key(self, key: str) -> None:
+        """Add a newly registered key without rebuilding the whole index."""
+        bucket = self._fuzzy_by_length.setdefault(len(key), [])
+        if key not in bucket:
+            bucket.append(key)
+        self._fuzzy_index_size = len(self._exact)
+
+    def _fuzzy_candidates(self, key: str, minimum_score: float) -> list[str]:
+        """Return all keys that can still reach ``minimum_score``.
+
+        For two strings of lengths ``n`` and ``m``, even the best possible
+        edit-distance ratio is ``2 * min(n, m) / (n + m)``.  The resulting
+        bounds exclude only impossible fuzzy candidates, not merely unlikely
+        ones, so matching semantics and the human-review band are unchanged.
+        """
+        if self._fuzzy_index_size != len(self._exact):
+            # Tests and a few legacy writers populate _exact directly.  Keep
+            # the index self-healing until those callers migrate to the public
+            # registration path.
+            self._rebuild_fuzzy_index()
+        if not key:
+            return []
+        threshold = max(0.0, min(100.0, float(minimum_score))) / 100.0
+        if threshold <= 0.0:
+            return list(self._exact)
+        key_length = len(key)
+        min_length = max(1, int((threshold * key_length) / (2.0 - threshold)))
+        max_length = int(key_length * ((2.0 / threshold) - 1.0))
+        candidates: list[str] = []
+        for length in range(min_length, max_length + 1):
+            candidates.extend(self._fuzzy_by_length.get(length, ()))
+        return candidates
 
     async def find_duplicate_by_embedding(
         self,

@@ -40,6 +40,7 @@ The graph is not a RAG index. It is a formally modeled knowledge base:
 - [`docs/ontology-model.md`](docs/ontology-model.md) — formal type hierarchy, relation schema, inference rules, design decisions
 - [`docs/entity-resolution.md`](docs/entity-resolution.md) — 4-stage resolution pipeline with examples
 - [`docs/intelligence-ingestion.md`](docs/intelligence-ingestion.md) — source-grounded Claims, Observations, Events, Findings, deterministic aliases, tables, temporal hierarchy, and ingestion receipts
+- [`docs/ontology-governance.md`](docs/ontology-governance.md) — human-reviewed ontology-drift proposals, active-schema enforcement, and canonical entity identity
 - [`docs/cypher-patterns.md`](docs/cypher-patterns.md) — 6 production Cypher patterns: multi-hop traversal, bitemporal as-of, transitive supersession, contradiction scan, community ANN search, entity resolution audit
 - [`docs/runbook.md`](docs/runbook.md) — operations: startup order, common failures, backup/restore, schema migration
 - [`docs/graphrag-terminology.md`](docs/graphrag-terminology.md) — every GraphRAG term defined, with examples and file references

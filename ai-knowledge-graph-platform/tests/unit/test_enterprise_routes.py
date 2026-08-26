@@ -22,7 +22,7 @@ def _client(scope: str = "write", tenant: str = "acme") -> TestClient:
     return TestClient(app)
 
 
-def test_register_schema_binds_schema_to_authenticated_tenant():
+def test_register_schema_accepts_and_binds_the_authenticated_tenant():
     service = MagicMock()
     service.register_schema = AsyncMock(return_value={"id": "schema-1", "tenant": "acme"})
 
@@ -31,7 +31,7 @@ def test_register_schema_binds_schema_to_authenticated_tenant():
             "collection": "contracts",
             "version": "v1",
             "status": "active",
-            "tenant": "default",
+            "tenant": "acme",
         })
 
     assert response.status_code == 200

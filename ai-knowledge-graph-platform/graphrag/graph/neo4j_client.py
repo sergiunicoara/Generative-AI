@@ -1500,7 +1500,7 @@ class Neo4jClient:
             if transaction_at else ""
         )
         return await self.run(
-            """
+            f"""
             UNWIND $chunk_ids AS cid
             MATCH (c:Chunk {{id: cid}})-[:MENTIONS]->(e:Entity)
             WHERE coalesce(e.quarantined, false) = false
@@ -1576,7 +1576,7 @@ class Neo4jClient:
             if use_semantic else "NULL"
         )
         results = await self.run(
-            """
+            f"""
             UNWIND $chunk_ids AS cid
             CALL {{
                 WITH cid
@@ -1838,7 +1838,7 @@ class Neo4jClient:
         # Build a set-membership key of the form "name:type" for the target
         # side filter so both dimensions are checked without a subquery.
         return await self.run(
-            """
+            f"""
             UNWIND $entities AS pair
             MATCH (s:Entity {{name: pair.name, type: pair.type, tenant: $tenant}})
                   -[r:RELATES_TO]->
@@ -1889,7 +1889,7 @@ class Neo4jClient:
             if as_of else ""
         )
         return await self.run(
-            """
+            f"""
             MATCH (e:Entity {{name: $name, type: $type, tenant: $tenant}})
                   -[r:RELATES_TO]-(other:Entity {{tenant: $tenant}})
             WHERE coalesce(e.quarantined, false) = false

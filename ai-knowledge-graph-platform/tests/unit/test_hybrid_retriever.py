@@ -123,6 +123,42 @@ class TestModeGating:
         hr._local.search.assert_not_awaited()
 
 
+class TestRetrievalTrajectory:
+    async def test_standard_query_returns_structural_route_and_evidence_trace(self) -> None:
+        hr = _make_hybrid_retriever({"trajectory_capture_enabled": True})
+        hr._local.search = AsyncMock(return_value={
+            "chunks": [{"chunk_id": "chunk-a", "text": "evidence"}],
+            "referenced_chunks": ["chunk-a"],
+            "referenced_entities": ["SpaceX"],
+            "entity_edges": [{"src": "SpaceX", "relation": "LAUNCHED", "tgt": "Falcon 9"}],
+        })
+        hr._global.search = AsyncMock(return_value={})
+
+        result = await hr.retrieve_and_answer("What did SpaceX launch?", mode="local")
+
+        trajectory = result.retrieval_trajectory
+        assert trajectory is not None
+        assert trajectory.planned_mode == "local"
+        assert trajectory.selected_surfaces == ["text", "vector", "graph"]
+        assert trajectory.evidence_ids == ["chunk-a"]
+        assert trajectory.graph_edges == ["SpaceX|LAUNCHED|Falcon 9"]
+        assert trajectory.tool_calls == 1
+
+    async def test_vector_only_profile_reports_only_the_vector_surface(self) -> None:
+        hr = _make_hybrid_retriever({"trajectory_capture_enabled": True})
+        hr._local.search = AsyncMock(return_value={
+            "chunks": [{"chunk_id": "chunk-a", "text": "evidence"}],
+            "referenced_chunks": ["chunk-a"],
+        })
+
+        result = await hr.retrieve_and_answer(
+            "What did SpaceX launch?", retrieval_profile="vector_only",
+        )
+
+        assert result.retrieval_trajectory is not None
+        assert result.retrieval_trajectory.selected_surfaces == ["vector"]
+
+
 class TestExceptionTypePreservation:
     """TaskGroup wraps every failure in an ExceptionGroup, even a single one.
     rabbitmq_client.py's DLQ handler logs type(exc).__name__ — without the

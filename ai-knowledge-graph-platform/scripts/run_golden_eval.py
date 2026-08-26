@@ -43,6 +43,11 @@ sys.path.insert(0, str(Path(__file__).parents[1]))
 # Imported after the sys.path insert above — the project root isn't on the
 # path until then, so this cannot move up into the import block.
 from graphrag.graph.alias_registry import canonical_document_key  # noqa: E402
+from graphrag.core.models import RetrievalTrajectory  # noqa: E402
+from graphrag.evaluation.retrieval_trajectory import (  # noqa: E402
+    RetrievalTrajectoryExpectation,
+    evaluate_retrieval_trajectory,
+)
 
 log = structlog.get_logger("golden_eval")
 
@@ -156,6 +161,31 @@ def _check(question_spec: dict, result: dict) -> tuple[bool, list[str]]:
     return len(failures) == 0, failures
 
 
+def _score_structural_trajectory(
+    question_spec: dict, result: dict, *, answer_score: float,
+) -> dict | None:
+    """Score optional route/evidence expectations without changing legacy cases."""
+    structural_fields = {
+        "expected_surfaces", "expected_evidence_ids", "expected_graph_edges", "tool_budget",
+    }
+    if not structural_fields.intersection(question_spec):
+        return None
+    raw_trajectory = result.get("retrieval_trajectory")
+    if not raw_trajectory:
+        raise ValueError("retrieval trajectory missing from query result")
+    expectation = RetrievalTrajectoryExpectation(
+        expected_surfaces=question_spec.get("expected_surfaces", []),
+        expected_evidence_ids=question_spec.get("expected_evidence_ids", []),
+        expected_graph_edges=question_spec.get("expected_graph_edges", []),
+        tool_budget=question_spec.get("tool_budget", 1),
+    )
+    return evaluate_retrieval_trajectory(
+        RetrievalTrajectory.model_validate(raw_trajectory),
+        expectation,
+        answer_score=answer_score,
+    ).model_dump()
+
+
 def run(
     questions: list[dict],
     tenant: str,
@@ -196,6 +226,25 @@ def run(
             try:
                 result = _submit_query(client, q["question"], tenant)
                 ok, failures = _check(q, result)
+                trajectory_score = None
+                try:
+                    trajectory_score = _score_structural_trajectory(
+                        q, result, answer_score=1.0 if ok else 0.0,
+                    )
+                    minimum = q.get("min_trajectory_score")
+                    if (
+                        trajectory_score is not None
+                        and minimum is not None
+                        and trajectory_score["aggregate"] < minimum
+                    ):
+                        failures.append(
+                            "retrieval trajectory score "
+                            f"{trajectory_score['aggregate']:.3f} below {minimum:.3f}"
+                        )
+                        ok = False
+                except (TypeError, ValueError) as exc:
+                    failures.append(f"invalid retrieval trajectory: {exc}")
+                    ok = False
 
                 if ok:
                     passed += 1
@@ -212,6 +261,8 @@ def run(
                     "answer_snippet": (result.get("answer") or "")[:120],
                     "citations": result.get("citations", []),
                     "steps": result.get("steps", []),
+                    "retrieval_trajectory": result.get("retrieval_trajectory"),
+                    "trajectory_score": trajectory_score,
                     "latency_ms": result.get("latency_ms"),
                 })
             except Exception as exc:

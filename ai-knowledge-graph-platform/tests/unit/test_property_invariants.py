@@ -44,7 +44,17 @@ from graphrag.retrieval.query_cache import (
 FAST = settings(max_examples=60, deadline=None)
 
 # Tenants follow the same shape the tenant: scope regex already enforces.
-tenants = st.from_regex(r"\A[a-z0-9][a-z0-9_-]{0,20}\Z", fullmatch=True)
+# Build the shape directly instead of asking Hypothesis to synthesize strings
+# from a regex. The regex strategy can occasionally consume excessive entropy
+# for this simple finite alphabet and trip HealthCheck.too_slow before the
+# property itself runs (observed after two otherwise clean full-suite passes).
+_TENANT_HEAD = tuple("abcdefghijklmnopqrstuvwxyz0123456789")
+_TENANT_ALPHABET = _TENANT_HEAD + ("_", "-")
+tenants = st.builds(
+    lambda head, tail: head + tail,
+    st.sampled_from(_TENANT_HEAD),
+    st.text(alphabet=_TENANT_ALPHABET, min_size=0, max_size=20),
+)
 queries = st.text(min_size=1, max_size=200)
 any_text = st.text(max_size=300)
 

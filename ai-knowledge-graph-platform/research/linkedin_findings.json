@@ -1,0 +1,131 @@
+{
+  "schema_version": "1.0",
+  "researched_at": "2026-08-26",
+  "source": {
+    "group_url": "https://www.linkedin.com/groups/8659061/",
+    "status": "PARTIAL",
+    "accessible_top_level_posts": 109,
+    "newest_relative_age": "1d",
+    "oldest_relative_age": "3mo",
+    "technical_posts": 102,
+    "posts_with_external_links": 83,
+    "posts_with_collapsed_text_affordance": 94,
+    "crawl_cycles": 17,
+    "show_more_activations_without_growth": 5,
+    "primary_sources_inspected": 8,
+    "limitation": "An enabled pagination control remained but repeated activation produced no new top-level records."
+  },
+  "decision_policy": {
+    "linkedin_is_discovery_only": true,
+    "primary_source_required_for_implementation": true,
+    "experimental_or_self_benchmarked_work_defaults_to": "PROTOTYPE_OR_RESEARCH"
+  },
+  "findings": [
+    {
+      "id": "LI-001",
+      "topic": "Multi-surface retrieval trajectory evaluation",
+      "status": "IMPLEMENTED_NOW",
+      "confidence": "high",
+      "primary_source": "https://github.com/haolpku/WorkSurface-Bench",
+      "project_gap": "Answer and citation evaluation existed, but route selection, graph-edge evidence, and tool efficiency were not scored as one trace.",
+      "implementation": [
+        "graphrag/core/models.py",
+        "graphrag/retrieval/trajectory.py",
+        "graphrag/evaluation/retrieval_trajectory.py",
+        "graphrag/retrieval/hybrid_retriever.py",
+        "graphrag/retrieval/agentic_retriever.py",
+        "scripts/run_golden_eval.py",
+        "api/routes/evaluation.py"
+      ]
+    },
+    {
+      "id": "LI-002",
+      "topic": "Agentic graph retrieval and structural rewards",
+      "status": "PARTIALLY_ADOPTED",
+      "confidence": "medium",
+      "primary_source": "https://arxiv.org/abs/2507.21892",
+      "adopted": "Observable multi-step graph retrieval and structural evaluation.",
+      "deferred": "RL training and learned reward optimization until expert-labelled trajectories exist."
+    },
+    {
+      "id": "LI-003",
+      "topic": "Graph-native agent tools",
+      "status": "RESEARCH",
+      "confidence": "medium",
+      "primary_source": "https://arxiv.org/abs/2604.05846",
+      "reason": "Preliminary work; current query planner, graph traversal, and agentic fallback already cover the immediate operational need."
+    },
+    {
+      "id": "LI-004",
+      "topic": "Schema-derived graph benchmark cases",
+      "status": "PARTIALLY_ADOPTED",
+      "confidence": "medium",
+      "primary_source": "https://github.com/haolpku/K12-KGraph",
+      "adopted": "Golden-set schema now accepts expected retrieval surfaces, evidence IDs, graph edges, and tool budgets.",
+      "deferred": "Importing the specialized K-12 dataset as a general production benchmark."
+    },
+    {
+      "id": "LI-005",
+      "topic": "Governed ontology lifecycle",
+      "status": "ALREADY_IMPLEMENTED_DIFFERENTLY",
+      "confidence": "high",
+      "primary_source": "https://github.com/databrickslabs/ontobricks",
+      "project_evidence": "Ontology proposals, migration, SHACL mutation gates, versioning, review, semantic export, and MCP are already native capabilities."
+    },
+    {
+      "id": "LI-006",
+      "topic": "Declarative epistemic contexts",
+      "status": "PROTOTYPE",
+      "confidence": "medium",
+      "primary_source": "https://arxiv.org/abs/2606.15246",
+      "reason": "Potentially useful for source stance, but confidence, contradictions, named provenance, and claim evidence already cover most current use cases."
+    },
+    {
+      "id": "LI-007",
+      "topic": "Trait-node graph modelling",
+      "status": "REJECTED_NOW",
+      "confidence": "medium",
+      "primary_source": "https://arxiv.org/abs/2606.18297",
+      "reason": "Illustrative validation does not justify migrating the explicit provenance-bound production schema."
+    },
+    {
+      "id": "LI-008",
+      "topic": "Low-memory Bolt-compatible graph backend",
+      "status": "BENCHMARK_ONLY",
+      "confidence": "low",
+      "primary_source": "https://github.com/Hikari-Systems/slater",
+      "reason": "Claims are primarily self-benchmarked; backend adoption requires independent correctness and operations evidence."
+    },
+    {
+      "id": "LI-009",
+      "topic": "End-to-end GraphRAG deployment toolkit",
+      "status": "ALREADY_IMPLEMENTED",
+      "confidence": "high",
+      "primary_source": "https://github.com/vvr-rao/your-end-to-end-graphrag-implementation",
+      "project_evidence": "The platform already exposes API, UI/MCP surfaces, ingestion, identity resolution, ontology, intelligence artifacts, temporal/geographic expansion, JSON-LD tables, evaluation, and deployment assets."
+    },
+    {
+      "id": "LI-010",
+      "topic": "RDF provenance granularity",
+      "status": "ALREADY_IMPLEMENTED",
+      "confidence": "high",
+      "primary_source": "https://www.w3.org/TR/prov-overview/",
+      "project_evidence": "Claims and graph elements carry source provenance; semantic interchange supports RDF/JSON-LD and provenance-aware controlled graphs."
+    },
+    {
+      "id": "LI-011",
+      "topic": "Persistent graph-based agent memory",
+      "status": "ALREADY_IMPLEMENTED",
+      "confidence": "high",
+      "primary_source": "https://neo4j.com/",
+      "project_evidence": "Context Graph records decisions, episodes, observations, tool calls, policy versions, evidence, and replayable traces."
+    },
+    {
+      "id": "LI-012",
+      "topic": "GraphRAG ranking skepticism and third-hop expansion risk",
+      "status": "ALREADY_MITIGATED",
+      "confidence": "high",
+      "project_evidence": "Depth is bounded, multi-hop candidates are capped and semantically blended, graph weight is conservative, and retrieval changes are evaluation-gated."
+    }
+  ]
+}

@@ -7,7 +7,33 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "scripts"))
 
-from run_golden_eval import _check  # noqa: E402
+from run_golden_eval import _check, _score_structural_trajectory  # noqa: E402
+
+
+class TestStructuralTrajectoryScoring:
+    def test_legacy_case_without_structural_fields_is_unchanged(self):
+        assert _score_structural_trajectory(
+            {"expected_citations": ["doc-a"]}, {}, answer_score=1.0,
+        ) is None
+
+    def test_structural_case_scores_runtime_trajectory(self):
+        spec = {
+            "expected_surfaces": ["text", "graph"],
+            "expected_evidence_ids": ["chunk-a"],
+            "expected_graph_edges": ["SpaceX|LAUNCHED|Falcon 9"],
+            "tool_budget": 1,
+        }
+        result = {"retrieval_trajectory": {
+            "selected_surfaces": ["text", "graph"],
+            "evidence_ids": ["chunk-a"],
+            "graph_edges": ["SpaceX|LAUNCHED|Falcon 9"],
+            "tool_calls": 1,
+        }}
+
+        score = _score_structural_trajectory(spec, result, answer_score=1.0)
+
+        assert score is not None
+        assert score["aggregate"] == 1.0
 
 
 class TestRequiredAnswerTerms:

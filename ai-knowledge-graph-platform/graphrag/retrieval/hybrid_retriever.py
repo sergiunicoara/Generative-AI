@@ -12,7 +12,7 @@ import structlog
 from graphrag.core.config import get_settings, resolve_tenant_config
 from graphrag.core.llm_client import get_generation_route, get_llm
 from graphrag.core.llm_utils import normalize_dashes
-from graphrag.core.models import QueryResult
+from graphrag.core.models import QueryResult, RetrievalStep
 from graphrag.enterprise.models import AccessContext
 from graphrag.core.prompt_security import escape_prompt_data
 from graphrag.context_graph.models import (
@@ -43,6 +43,12 @@ from graphrag.retrieval.query_cache import (
     build_cache_key,
     get_query_cache,
 )
+from graphrag.retrieval.trajectory import (
+    evidence_ids,
+    graph_edge_ids,
+    surfaces_for_mode,
+    trajectory_from_steps,
+)
 
 log = structlog.get_logger(__name__)
 
@@ -61,6 +67,7 @@ _NON_SEMANTIC_RETRIEVAL_KEYS = {
     "session_store",
     "session_store_strict",
     "session_ttl_seconds",
+    "trajectory_capture_enabled",
 }
 
 _RETRIEVAL_PROFILE_OVERRIDES: dict[str, dict] = {
@@ -432,6 +439,7 @@ class HybridRetriever:
         # claim verification, agentic fallback. Empty tenant_overrides ⇒ global.
         profile_overrides = retrieval_profile_overrides(retrieval_profile)
         cfg = {**resolve_tenant_config(self._cfg, tenant), **profile_overrides}
+        capture_trajectory = bool(cfg.get("trajectory_capture_enabled", True))
         access_context = access_context or AccessContext()
         acl_enforced = bool(get_settings().access_control.get("enabled", False))
         if acl_enforced:
@@ -572,6 +580,7 @@ class HybridRetriever:
             if search_query != question:
                 await _step(f"📝 Query expanded → {search_query[:60]}")
 
+        retrieval_t0 = time.monotonic()
         if mode == "hybrid":
             # Local and global search share no data dependency, so run them
             # concurrently instead of back-to-back — this hides global
@@ -642,6 +651,39 @@ class HybridRetriever:
                 transaction_at=transaction_at,
                 config_overrides=profile_overrides,
                 access_context=access_context,
+            )
+
+        primary_step: RetrievalStep | None = None
+        if capture_trajectory:
+            local_evidence = evidence_ids(local_results)
+            community_evidence = [
+                f"community:{identifier}"
+                for community in global_results.get("communities", [])
+                if (identifier := (
+                    community.get("community_id")
+                    or community.get("id")
+                    or community.get("title")
+                ))
+            ]
+            observed_evidence = list(dict.fromkeys(local_evidence + community_evidence))
+            primary_step = RetrievalStep(
+                step=1,
+                action="search",
+                query=search_query,
+                surfaces=surfaces_for_mode(
+                    mode, has_global=bool(global_results.get("communities")),
+                    text_enabled=bool(cfg.get("bm25_enabled", True)),
+                    graph_enabled=bool(
+                        cfg.get("multihop_depth", 2) > 0
+                        or cfg.get("entity_context_enabled", True)
+                        or cfg.get("gnn_enabled", True)
+                    ),
+                ),
+                evidence_ids=observed_evidence,
+                new_evidence_ids=observed_evidence,
+                graph_edges=graph_edge_ids(local_results),
+                outcome="evidence_found" if observed_evidence else "no_evidence",
+                latency_ms=(time.monotonic() - retrieval_t0) * 1000,
             )
 
         await self._apply_retrieval_feedback(local_results, tenant, cfg)
@@ -796,6 +838,26 @@ class HybridRetriever:
             result.routing_reason = routing_reason
             result.policy_result = policy_result.value
             result.policy_reason_code = policy_reason_code
+            if capture_trajectory:
+                agentic_steps = (
+                    result.retrieval_trajectory.steps
+                    if result.retrieval_trajectory else []
+                )
+                combined_steps = ([primary_step] if primary_step else []) + agentic_steps
+                combined_steps = [
+                    step.model_copy(update={"step": index})
+                    for index, step in enumerate(combined_steps, start=1)
+                ]
+                result.retrieval_trajectory = trajectory_from_steps(
+                    query_class=plan["query_class"],
+                    planned_mode=mode,
+                    routing_reason=routing_reason,
+                    steps=combined_steps,
+                    completed_by=(
+                        result.retrieval_trajectory.completed_by
+                        if result.retrieval_trajectory else "agentic_fallback"
+                    ),
+                )
             trace_id = await self._record_context_trace(
                 question=question, answer=result.answer, tenant=tenant, query_id=query_id,
                 mode=result.retrieval_mode, model_version=result.model_version,
@@ -840,6 +902,16 @@ class HybridRetriever:
             routing_reason=routing_reason,
             policy_result=policy_result.value,
             policy_reason_code=policy_reason_code,
+            retrieval_trajectory=(
+                trajectory_from_steps(
+                    query_class=plan["query_class"],
+                    planned_mode=mode,
+                    routing_reason=routing_reason,
+                    steps=[primary_step] if primary_step else [],
+                    completed_by="synthesis",
+                )
+                if capture_trajectory else None
+            ),
         )
         if query_id:
             result.query_id = query_id

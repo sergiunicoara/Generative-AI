@@ -363,6 +363,34 @@ class GraphSnapshot(BaseModel):
 
 # ── Query / retrieval models ───────────────────────────────────────────────────
 
+class RetrievalStep(BaseModel):
+    """One observable retrieval action and the evidence it produced."""
+
+    step: int = Field(ge=1)
+    action: str
+    query: str
+    surfaces: list[str] = Field(default_factory=list)
+    evidence_ids: list[str] = Field(default_factory=list)
+    new_evidence_ids: list[str] = Field(default_factory=list)
+    graph_edges: list[str] = Field(default_factory=list)
+    outcome: str = "completed"
+    latency_ms: float = Field(default=0.0, ge=0.0)
+
+
+class RetrievalTrajectory(BaseModel):
+    """Machine-readable route/evidence trace for one answer."""
+
+    query_class: str = "factoid"
+    planned_mode: str = "hybrid"
+    routing_reason: str = ""
+    steps: list[RetrievalStep] = Field(default_factory=list)
+    selected_surfaces: list[str] = Field(default_factory=list)
+    evidence_ids: list[str] = Field(default_factory=list)
+    graph_edges: list[str] = Field(default_factory=list)
+    tool_calls: int = Field(default=0, ge=0)
+    completed_by: str = "synthesis"
+
+
 class QueryResult(BaseModel):
     query_id: str = Field(default_factory=lambda: str(uuid4()))
     question: str
@@ -382,6 +410,7 @@ class QueryResult(BaseModel):
     routing_reason: str = ""
     policy_result: str = ""
     policy_reason_code: str = ""
+    retrieval_trajectory: RetrievalTrajectory | None = None
 
 
 class SessionTurn(BaseModel):

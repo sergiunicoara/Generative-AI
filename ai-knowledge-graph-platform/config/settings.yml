@@ -76,6 +76,7 @@ graph:
   superseded_confidence_penalty: 0.5  # confidence multiplier for superseded doc edges
 
 retrieval:
+  trajectory_capture_enabled: true  # route/evidence telemetry; no ranking behavior change
   local_top_k: 10          # validated baseline — precision 0.907 measured at this value
   temporal_query_expansion_enabled: true  # January 2024 -> 2024-Q1 + 2024 lexical bridge
   multihop_depth: 2        # validated baseline — depth 3 diluted retrieval and caused refusals on answerable questions

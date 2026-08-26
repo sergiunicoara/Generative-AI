@@ -554,3 +554,19 @@ live Neo4j (aerospace tenant, 368 entities / 422 edges).
 **Verified:** 739 passed, 6 skipped, 0 failed; live Neo4j Context Graph
 trace/replay/approval-expiry/retention passed; both Compose configurations are
 valid; targeted Ruff checks passed.
+
+---
+
+## LinkedIn Knowledge Graph research and implementation pass (2026-08-26)
+
+- [x] Capture clean Git state, architecture graph, and pre-change test/evaluation baseline.
+- [x] Exhaust the accessible LinkedIn group feed with measured scroll/load termination.
+- [x] Expand relevant posts, inspect primary sources, deduplicate, and classify the corpus.
+- [x] Build a repository capability matrix and evidence-backed gap analysis.
+- [x] Create `docs/linkedin-group-research.md` and `research/linkedin_findings.json`.
+- [x] Create/update the prioritized roadmap without duplicating implemented capabilities.
+- [x] Implement only high-confidence `IMPLEMENT NOW` findings, behind flags where uncertain.
+- [x] Run targeted tests, the deterministic full suite, and applicable before/after evaluations.
+- [x] Update Graphify and document verified outcomes, limitations, and residual risks.
+
+**Verified:** 1,712 passed, 7 skipped, 0 failed; changed-file Ruff passed.

@@ -8,7 +8,12 @@ import httpx
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
-from api.auth.dependencies import get_current_user, get_tenant, require_scope
+from api.auth.dependencies import (
+    assert_request_tenant,
+    get_current_user,
+    get_tenant,
+    require_scope,
+)
 from graphrag.enterprise.lineage import LineageService
 from graphrag.enterprise.metadata_governance import MetadataGovernanceService
 from graphrag.enterprise.models import CollectionSchema, SyncChange
@@ -32,8 +37,7 @@ class ReconciliationRequest(BaseModel):
 async def register_metadata_schema(
     schema: CollectionSchema, tenant: str = Depends(get_tenant),
 ):
-    if schema.tenant not in {"default", tenant}:
-        raise HTTPException(status_code=403, detail="Schema tenant does not match authenticated tenant")
+    assert_request_tenant(schema.tenant, tenant)
     return await MetadataGovernanceService().register_schema(schema.model_copy(update={"tenant": tenant}))
 
 

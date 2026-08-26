@@ -20,13 +20,20 @@ from graphrag.graph.alias_registry import canonical_document_key
 from graphrag.graph.neo4j_client import get_neo4j
 from graphrag.core.llm_client import get_fast_llm, get_llm
 from graphrag.core.llm_utils import normalize_dashes
-from graphrag.core.models import QueryResult
+from graphrag.core.models import QueryResult, RetrievalStep
 from graphrag.core.prompt_security import escape_prompt_data
 from graphrag.retrieval.local_search import LocalSearch
 from graphrag.retrieval.context_builder import ContextBuilder
 from graphrag.retrieval.claim_verifier import ClaimVerifier
 from graphrag.retrieval.answer_grounding import ground_regulatory_identifiers
 from graphrag.retrieval.fallback_policy import is_low_confidence as _is_low_confidence  # noqa: F401
+from graphrag.retrieval.query_planner import retrieval_plan
+from graphrag.retrieval.trajectory import (
+    evidence_ids,
+    graph_edge_ids,
+    surfaces_for_mode,
+    trajectory_from_steps,
+)
 
 log = structlog.get_logger(__name__)
 
@@ -151,6 +158,21 @@ class AgenticRetriever:
         session_id: str = "",
     ) -> QueryResult:
         t0 = time.monotonic()
+        cfg = get_settings().retrieval
+        plan = retrieval_plan(question)
+        capture_trajectory = bool(cfg.get("trajectory_capture_enabled", True))
+        trajectory_steps: list[RetrievalStep] = []
+
+        def _trajectory(completed_by: str):
+            if not capture_trajectory:
+                return None
+            return trajectory_from_steps(
+                query_class=plan["query_class"],
+                planned_mode="agentic",
+                routing_reason="agentic_fallback",
+                steps=trajectory_steps,
+                completed_by=completed_by,
+            )
 
         all_chunks: list[dict] = []
         all_citations: list[str] = list(initial_citations or [])
@@ -165,6 +187,7 @@ class AgenticRetriever:
             context_sections.append(initial_context)
 
         # Initial search on the original question
+        search_t0 = time.monotonic()
         seed_results = await self._local.search(
             question,
             session_id=session_id,
@@ -172,6 +195,27 @@ class AgenticRetriever:
         )
         seed_chunks = seed_results.get("chunks", [])
         all_chunks.extend(seed_chunks)
+        if capture_trajectory:
+            seed_evidence = evidence_ids(seed_results)
+            trajectory_steps.append(RetrievalStep(
+                step=1,
+                action="search",
+                query=question,
+                surfaces=surfaces_for_mode(
+                    "agentic",
+                    text_enabled=bool(cfg.get("bm25_enabled", True)),
+                    graph_enabled=bool(
+                        cfg.get("multihop_depth", 2) > 0
+                        or cfg.get("entity_context_enabled", True)
+                        or cfg.get("gnn_enabled", True)
+                    ),
+                ),
+                evidence_ids=seed_evidence,
+                new_evidence_ids=seed_evidence,
+                graph_edges=graph_edge_ids(seed_results),
+                outcome="evidence_found" if seed_evidence else "no_evidence",
+                latency_ms=(time.monotonic() - search_t0) * 1000,
+            ))
 
         ctx, cits = self._ctx_builder.build(
             local_results=seed_results,
@@ -213,7 +257,6 @@ class AgenticRetriever:
                 # _synthesize() path already fixed.
                 answer = normalize_dashes(reasoning[7:].strip())
                 current_context = "\n\n---\n\n".join(context_sections)
-                cfg = get_settings().retrieval
                 if cfg.get("claim_verification", False):
                     answer, n_removed = await self._verifier.verify(answer, current_context)
                     if n_removed:
@@ -231,6 +274,13 @@ class AgenticRetriever:
                 answer, citations = ground_regulatory_identifiers(
                     answer, current_context, question, citations, document_names,
                 )
+                if capture_trajectory:
+                    trajectory_steps.append(RetrievalStep(
+                        step=len(trajectory_steps) + 1,
+                        action="answer",
+                        query=question,
+                        outcome="accepted",
+                    ))
                 return QueryResult(
                     question=question,
                     answer=answer,
@@ -239,6 +289,7 @@ class AgenticRetriever:
                     latency_ms=latency_ms,
                     retrieval_mode="agentic",
                     model_version=get_settings().groq_model,  # final synthesis model
+                    retrieval_trajectory=_trajectory("reasoning_answer"),
                 )
 
             elif reasoning.upper().startswith("SEARCH:"):
@@ -246,6 +297,7 @@ class AgenticRetriever:
                 sub_query = reasoning[7:].strip()
                 log.info("agentic_retriever.sub_search", query=sub_query)
 
+                search_t0 = time.monotonic()
                 sub_results = await self._local.search(
                     sub_query,
                     session_id=session_id,
@@ -257,6 +309,30 @@ class AgenticRetriever:
                 seen_ids = {c.get("chunk_id") for c in all_chunks}
                 new_chunks = [c for c in sub_chunks if c.get("chunk_id") not in seen_ids]
                 all_chunks.extend(new_chunks)
+                if capture_trajectory:
+                    sub_evidence = evidence_ids(sub_results)
+                    trajectory_steps.append(RetrievalStep(
+                        step=len(trajectory_steps) + 1,
+                        action="sub_search",
+                        query=sub_query,
+                        surfaces=surfaces_for_mode(
+                            "agentic",
+                            text_enabled=bool(cfg.get("bm25_enabled", True)),
+                            graph_enabled=bool(
+                                cfg.get("multihop_depth", 2) > 0
+                                or cfg.get("entity_context_enabled", True)
+                                or cfg.get("gnn_enabled", True)
+                            ),
+                        ),
+                        evidence_ids=sub_evidence,
+                        new_evidence_ids=[
+                            str(chunk["chunk_id"])
+                            for chunk in new_chunks if chunk.get("chunk_id")
+                        ],
+                        graph_edges=graph_edge_ids(sub_results),
+                        outcome="new_evidence" if new_chunks else "no_new_evidence",
+                        latency_ms=(time.monotonic() - search_t0) * 1000,
+                    ))
 
                 if new_chunks:
                     sub_ctx, sub_cits = self._ctx_builder.build(
@@ -304,6 +380,13 @@ class AgenticRetriever:
         final_answer, citations = ground_regulatory_identifiers(
             final_answer, final_context, question, citations, document_names,
         )
+        if capture_trajectory:
+            trajectory_steps.append(RetrievalStep(
+                step=len(trajectory_steps) + 1,
+                action="synthesize",
+                query=question,
+                outcome="max_steps_reached",
+            ))
         return QueryResult(
             question=question,
             answer=final_answer.strip(),
@@ -312,4 +395,5 @@ class AgenticRetriever:
             latency_ms=latency_ms,
             retrieval_mode="agentic",
             model_version=get_settings().groq_model,
+            retrieval_trajectory=_trajectory("final_synthesis"),
         )

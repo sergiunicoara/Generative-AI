@@ -97,6 +97,87 @@ class Chunk(BaseModel):
     tenant: str = "default"
 
 
+class IntelligenceArtifact(BaseModel):
+    """A source-grounded assertion extracted during ingestion.
+
+    This is deliberately distinct from :class:`ClaimNode` in
+    ``graphrag.evidence.claim_graph``: the latter represents a sentence in an
+    answer, while this model represents an assertion the *source document*
+    made.  ``evidence_quote`` must be a verbatim span from ``source_chunk_id``.
+    """
+
+    id: str = Field(default_factory=lambda: str(uuid4()))
+    artifact_type: Literal["CLAIM", "OBSERVATION", "EVENT", "FINDING"]
+    text: str
+    evidence_quote: str
+    confidence: float = Field(default=1.0, ge=0.0, le=1.0)
+    source_chunk_id: str
+    source_doc_id: str
+    entity_names: list[str] = Field(default_factory=list)
+    event_start: datetime | None = None
+    event_end: datetime | None = None
+    extraction_model: str = ""
+    prompt_version: str = "intelligence-v1"
+    tenant: str = "default"
+
+
+class StructuredTable(BaseModel):
+    """A source table retained as a queryable JSON-LD-shaped graph artifact."""
+
+    id: str = Field(default_factory=lambda: str(uuid4()))
+    document_id: str
+    table_index: int
+    caption: str = ""
+    columns: list[str] = Field(default_factory=list)
+    rows: list[list[str]] = Field(default_factory=list)
+    source_page: int | None = None
+    extraction_method: str = "structured_source"
+    source_chunk_id: str = ""
+    tenant: str = "default"
+
+    def as_jsonld(self) -> dict[str, Any]:
+        return {
+            "@context": {"schema": "https://schema.org/"},
+            "@type": "schema:Table",
+            "@id": f"urn:graphrag:table:{self.id}",
+            "schema:name": self.caption,
+            "columns": self.columns,
+            "rows": self.rows,
+            "sourcePage": self.source_page,
+            "extractionMethod": self.extraction_method,
+        }
+
+
+class IngestionRunManifest(BaseModel):
+    """Durable, integrity-protected receipt for one document ingestion run."""
+
+    id: str = Field(default_factory=lambda: str(uuid4()))
+    job_id: str
+    tenant: str
+    document_id: str = ""
+    filename: str
+    content_hash: str = ""
+    correlation_id: str = ""
+    model_provider: str = ""
+    model_version: str = ""
+    prompt_versions: dict[str, str] = Field(default_factory=dict)
+    stage_metrics: dict[str, dict[str, float | int | str | None]] = Field(default_factory=dict)
+    status: Literal["running", "completed", "failed"] = "running"
+    started_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    completed_at: datetime | None = None
+    error: str = ""
+    integrity_hash: str = ""
+
+    def compute_integrity_hash(self) -> str:
+        import hashlib
+        import json
+
+        payload = self.model_dump(mode="json", exclude={"integrity_hash", "completed_at", "status", "error"})
+        return hashlib.sha256(
+            json.dumps(payload, sort_keys=True, separators=(",", ":"), default=str).encode("utf-8")
+        ).hexdigest()
+
+
 class Entity(BaseModel):
     id: str = Field(default_factory=lambda: str(uuid4()))
     name: str

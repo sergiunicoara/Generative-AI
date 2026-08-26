@@ -3,6 +3,12 @@ ingestion:
   chunk_overlap: 64  # Phase 5 Fix C (64->128) reverted — regressed automotive 10/13->9/13 (below 70% gate) without fixing MH-02, see tasks/lessons.md A109
   embedding_batch_size: 100
   extraction_concurrency: 5         # max concurrent LLM extract+embed calls per document
+  # Source-grounded Claim/Observation/Event/Finding nodes.  Each is rejected
+  # unless its evidence quote is a verbatim chunk span; Insights and
+  # Recommendations intentionally remain a separate, reviewed synthesis step.
+  intelligence_artifacts_enabled: true
+  # Materialise explicit day/month/quarter/year references and parent links.
+  temporal_hierarchy_enabled: true
   entity_types:
     - PERSON
     - ORG
@@ -67,6 +73,7 @@ graph:
 
 retrieval:
   local_top_k: 10          # validated baseline — precision 0.907 measured at this value
+  temporal_query_expansion_enabled: true  # January 2024 -> 2024-Q1 + 2024 lexical bridge
   multihop_depth: 2        # validated baseline — depth 3 diluted retrieval and caused refusals on answerable questions
   multihop_top_k: 50       # max hop chunks fed to GNN — prevents full-corpus scoring on dense graphs (bug fix: 21min→30s)
   multihop_semantic_weight: 0.5  # blend hop ranking: (1-w)·path_score + w·cos(chunk,query), cosine computed in Neo4j. 0 = pure path score (pre-2026-06 behavior). Gated on retrieval eval — see scripts/eval_hop_ranking.py. Phase 5 Fix B tried 0.8 (no effect on CON-04/AUTH-01, reverted — see tasks/lessons.md A105)

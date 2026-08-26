@@ -351,9 +351,12 @@ class AliasRegistry:
         canonical_name: str,
         canonical_type: str,
         source_doc_id: str = "",
+        source_chunk_id: str = "",
+        evidence_kind: str = "resolution",
+        evidence_quote: str = "",
         confidence: float = 1.0,
     ) -> None:
-        """Persist a new alias to Neo4j (tenant-scoped) and update in-memory cache."""
+        """Persist a tenant-scoped alias and its best available provenance."""
         from uuid import uuid4
         await self._neo4j.run(
             """
@@ -362,8 +365,16 @@ class AliasRegistry:
             ON CREATE SET a.id           = $alias_id,
                           a.normalized   = $normalized,
                           a.source_doc   = $source_doc,
+                          a.source_chunk_id = $source_chunk_id,
+                          a.evidence_kind = $evidence_kind,
+                          a.evidence_quote = $evidence_quote,
                           a.confidence   = $confidence,
                           a.created_at   = datetime()
+            ON MATCH SET a.source_doc = CASE WHEN $evidence_kind <> 'resolution' THEN $source_doc ELSE a.source_doc END,
+                         a.source_chunk_id = CASE WHEN $evidence_kind <> 'resolution' THEN $source_chunk_id ELSE a.source_chunk_id END,
+                         a.evidence_kind = CASE WHEN $evidence_kind <> 'resolution' THEN $evidence_kind ELSE a.evidence_kind END,
+                         a.evidence_quote = CASE WHEN $evidence_kind <> 'resolution' THEN $evidence_quote ELSE a.evidence_quote END,
+                         a.confidence = CASE WHEN $confidence > coalesce(a.confidence, 0.0) THEN $confidence ELSE a.confidence END
             MERGE (a)-[:ALIAS_OF]->(e)
             """,
             canonical_name=canonical_name,
@@ -373,6 +384,9 @@ class AliasRegistry:
             alias_id=str(uuid4()),
             normalized=_normalize(raw_value),
             source_doc=source_doc_id,
+            source_chunk_id=source_chunk_id,
+            evidence_kind=evidence_kind,
+            evidence_quote=evidence_quote,
             confidence=confidence,
         )
         self._exact[_normalize(raw_value)] = (canonical_name, canonical_type)

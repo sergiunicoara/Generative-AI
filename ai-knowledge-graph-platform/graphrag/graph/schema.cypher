@@ -24,6 +24,10 @@ CREATE CONSTRAINT content_sync_run_id IF NOT EXISTS FOR (s:ContentSyncRun) REQUI
 CREATE CONSTRAINT lineage_review_id IF NOT EXISTS FOR (r:LineageReview) REQUIRE r.id IS UNIQUE;
 CREATE CONSTRAINT obligation_review_id IF NOT EXISTS FOR (r:ObligationReview) REQUIRE r.id IS UNIQUE;
 CREATE CONSTRAINT obligation_id IF NOT EXISTS FOR (o:Obligation) REQUIRE o.id IS UNIQUE;
+CREATE CONSTRAINT intelligence_artifact_tenant_id IF NOT EXISTS FOR (a:IntelligenceArtifact) REQUIRE (a.tenant, a.id) IS UNIQUE;
+CREATE CONSTRAINT ingestion_run_manifest_tenant_id IF NOT EXISTS FOR (m:IngestionRunManifest) REQUIRE (m.tenant, m.id) IS UNIQUE;
+CREATE CONSTRAINT structured_table_tenant_document_index IF NOT EXISTS FOR (t:StructuredTable) REQUIRE (t.tenant, t.document_id, t.table_index) IS UNIQUE;
+CREATE CONSTRAINT time_period_tenant_value IF NOT EXISTS FOR (p:TimePeriod) REQUIRE (p.tenant, p.value) IS UNIQUE;
 
 -- ── Vector indexes ─────────────────────────────────────────────────────────────
 CREATE VECTOR INDEX chunk_embeddings IF NOT EXISTS
@@ -82,6 +86,11 @@ CREATE INDEX relation_source_doc_ids IF NOT EXISTS FOR ()-[r:RELATES_TO]-() ON (
 CREATE INDEX relation_tenant IF NOT EXISTS FOR ()-[r:RELATES_TO]-() ON (r.tenant);
 CREATE INDEX conflict_status IF NOT EXISTS FOR (c:Conflict) ON (c.status);
 CREATE INDEX conflict_tenant IF NOT EXISTS FOR (c:Conflict) ON (c.tenant);
+CREATE INDEX intelligence_artifact_type IF NOT EXISTS FOR (a:IntelligenceArtifact) ON (a.tenant, a.artifact_type);
+CREATE INDEX intelligence_artifact_document IF NOT EXISTS FOR (a:IntelligenceArtifact) ON (a.tenant, a.source_doc_id);
+CREATE INDEX ingestion_run_manifest_document IF NOT EXISTS FOR (m:IngestionRunManifest) ON (m.tenant, m.document_id, m.started_at);
+CREATE INDEX structured_table_document IF NOT EXISTS FOR (t:StructuredTable) ON (t.tenant, t.document_id);
+CREATE INDEX time_period_kind IF NOT EXISTS FOR (p:TimePeriod) ON (p.tenant, p.kind);
 
 -- ── Ingestion idempotency (natural-key MERGE targets) ─────────────────────────
 -- merge_document/merge_chunk now MERGE on these composite keys instead of a

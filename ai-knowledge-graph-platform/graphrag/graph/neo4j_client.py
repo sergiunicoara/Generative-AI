@@ -16,7 +16,15 @@ from graphrag.observability.operational_metrics import (
 from neo4j.exceptions import ServiceUnavailable, TransientError
 
 from graphrag.core.config import get_settings
-from graphrag.core.models import Chunk, Community, Entity, Relation
+from graphrag.core.models import (
+    Chunk,
+    Community,
+    Entity,
+    IngestionRunManifest,
+    IntelligenceArtifact,
+    Relation,
+    StructuredTable,
+)
 from graphrag.core.retry import with_retry
 from graphrag.enterprise.access import access_params, document_access_predicate
 from graphrag.enterprise.models import AccessContext
@@ -468,6 +476,175 @@ class Neo4jClient:
             tenant=tenant,
         )
 
+    async def merge_intelligence_artifacts(
+        self, artifacts: list[IntelligenceArtifact], tenant: str = "default",
+    ) -> None:
+        """Persist source-grounded artifact nodes and their evidence links."""
+        if not artifacts:
+            return
+        rows = [
+            {
+                "id": artifact.id,
+                "artifact_type": artifact.artifact_type,
+                "text": artifact.text,
+                "evidence_quote": artifact.evidence_quote,
+                "confidence": artifact.confidence,
+                "source_chunk_id": artifact.source_chunk_id,
+                "source_doc_id": artifact.source_doc_id,
+                "entity_names": artifact.entity_names,
+                "event_start": artifact.event_start.isoformat() if artifact.event_start else None,
+                "event_end": artifact.event_end.isoformat() if artifact.event_end else None,
+                "extraction_model": artifact.extraction_model,
+                "prompt_version": artifact.prompt_version,
+            }
+            for artifact in artifacts
+        ]
+        await self.run(
+            """
+            UNWIND $rows AS row
+            MERGE (a:IntelligenceArtifact {tenant: $tenant, id: row.id})
+            ON CREATE SET a.created_at = datetime()
+            SET a.artifact_type = row.artifact_type,
+                a.text = row.text,
+                a.evidence_quote = row.evidence_quote,
+                a.confidence = row.confidence,
+                a.source_chunk_id = row.source_chunk_id,
+                a.source_doc_id = row.source_doc_id,
+                a.event_start = row.event_start,
+                a.event_end = row.event_end,
+                a.extraction_model = row.extraction_model,
+                a.prompt_version = row.prompt_version,
+                a.updated_at = datetime()
+            WITH a, row
+            MATCH (chunk:Chunk {tenant: $tenant, id: row.source_chunk_id})
+            MERGE (a)-[:DERIVED_FROM]->(chunk)
+            WITH a, row
+            MATCH (document:Document {tenant: $tenant, id: row.source_doc_id})
+            MERGE (a)-[:ASSERTED_IN]->(document)
+            WITH a, row
+            UNWIND row.entity_names AS entity_name
+            MATCH (entity:Entity {tenant: $tenant, name: entity_name})
+            MERGE (a)-[:ASSERTS_ABOUT]->(entity)
+            """,
+            rows=rows,
+            tenant=tenant,
+        )
+
+    async def merge_structured_tables(
+        self, tables: list[StructuredTable], tenant: str = "default",
+    ) -> None:
+        """Persist structured table payloads without flattening away cell structure."""
+        if not tables:
+            return
+        rows = [
+            {
+                "id": table.id,
+                "document_id": table.document_id,
+                "table_index": table.table_index,
+                "caption": table.caption,
+                "columns": table.columns,
+                "rows_json": json.dumps(table.rows, ensure_ascii=False),
+                "jsonld": json.dumps(table.as_jsonld(), ensure_ascii=False),
+                "source_page": table.source_page,
+                "extraction_method": table.extraction_method,
+                "source_chunk_id": table.source_chunk_id,
+            }
+            for table in tables
+        ]
+        await self.run(
+            """
+            UNWIND $rows AS row
+            MERGE (table:StructuredTable {tenant: $tenant, document_id: row.document_id, table_index: row.table_index})
+            ON CREATE SET table.id = row.id, table.created_at = datetime()
+            SET table.caption = row.caption,
+                table.columns = row.columns,
+                table.rows_json = row.rows_json,
+                table.jsonld = row.jsonld,
+                table.source_page = row.source_page,
+                table.extraction_method = row.extraction_method,
+                table.source_chunk_id = row.source_chunk_id,
+                table.updated_at = datetime()
+            WITH table, row
+            MATCH (document:Document {tenant: $tenant, id: row.document_id})
+            MERGE (table)-[:EXTRACTED_FROM]->(document)
+            """,
+            rows=rows,
+            tenant=tenant,
+        )
+
+    async def merge_temporal_periods(
+        self, chunk_id: str, periods: list[dict[str, str]], tenant: str = "default",
+    ) -> None:
+        """Materialise explicit time mentions and their calendar hierarchy."""
+        if not periods:
+            return
+        await self.run(
+            """
+            MATCH (chunk:Chunk {tenant: $tenant, id: $chunk_id})
+            UNWIND $periods AS period
+            MERGE (node:TimePeriod {tenant: $tenant, value: period.value})
+            ON CREATE SET node.kind = period.kind, node.created_at = datetime()
+            SET node.kind = period.kind, node.updated_at = datetime()
+            MERGE (chunk)-[:MENTIONS_TIME]->(node)
+            WITH node, period
+            FOREACH (_ IN CASE WHEN period.parent = '' THEN [] ELSE [1] END |
+                MERGE (parent:TimePeriod {tenant: $tenant, value: period.parent})
+                ON CREATE SET parent.kind = CASE
+                    WHEN period.parent CONTAINS '-Q' THEN 'quarter'
+                    WHEN period.parent CONTAINS '-' THEN 'month'
+                    ELSE 'year' END,
+                    parent.created_at = datetime()
+                MERGE (node)-[:IN_PERIOD]->(parent))
+            """,
+            chunk_id=chunk_id,
+            periods=periods,
+            tenant=tenant,
+        )
+
+    async def upsert_ingestion_manifest(self, manifest: IngestionRunManifest) -> None:
+        """Persist an ingestion receipt; unknown provider cost stays explicitly unknown."""
+        await self.run(
+            """
+            MERGE (manifest:IngestionRunManifest {tenant: $tenant, id: $id})
+            ON CREATE SET manifest.created_at = datetime()
+            SET manifest.job_id = $job_id,
+                manifest.document_id = $document_id,
+                manifest.filename = $filename,
+                manifest.content_hash = $content_hash,
+                manifest.correlation_id = $correlation_id,
+                manifest.model_provider = $model_provider,
+                manifest.model_version = $model_version,
+                manifest.prompt_versions_json = $prompt_versions_json,
+                manifest.stage_metrics_json = $stage_metrics_json,
+                manifest.status = $status,
+                manifest.started_at = $started_at,
+                manifest.completed_at = $completed_at,
+                manifest.error = $error,
+                manifest.integrity_hash = $integrity_hash,
+                manifest.updated_at = datetime()
+            WITH manifest
+            OPTIONAL MATCH (document:Document {tenant: $tenant, id: $document_id})
+            FOREACH (_ IN CASE WHEN document IS NULL THEN [] ELSE [1] END |
+                MERGE (manifest)-[:INGESTS]->(document))
+            """,
+            id=manifest.id,
+            tenant=manifest.tenant,
+            job_id=manifest.job_id,
+            document_id=manifest.document_id,
+            filename=manifest.filename,
+            content_hash=manifest.content_hash,
+            correlation_id=manifest.correlation_id,
+            model_provider=manifest.model_provider,
+            model_version=manifest.model_version,
+            prompt_versions_json=json.dumps(manifest.prompt_versions, sort_keys=True),
+            stage_metrics_json=json.dumps(manifest.stage_metrics, sort_keys=True),
+            status=manifest.status,
+            started_at=manifest.started_at.isoformat(),
+            completed_at=manifest.completed_at.isoformat() if manifest.completed_at else None,
+            error=manifest.error,
+            integrity_hash=manifest.integrity_hash,
+        )
+
     async def delete_stale_chunks(self, doc_id: str, keep_count: int, tenant: str = "default") -> int:
         """Delete chunks left over from a previous ingestion of doc_id whose
         chunk_index no longer has a counterpart in the current chunk set —
@@ -538,10 +715,30 @@ class Neo4jClient:
             doc_id=doc_id,
             tenant=tenant,
         )
+        artifact_rows = await self.run(
+            """
+            MATCH (a:IntelligenceArtifact {tenant: $tenant, source_doc_id: $doc_id})
+            DETACH DELETE a
+            RETURN count(*) AS deleted_artifacts
+            """,
+            doc_id=doc_id,
+            tenant=tenant,
+        )
+        table_rows = await self.run(
+            """
+            MATCH (table:StructuredTable {tenant: $tenant, document_id: $doc_id})
+            DETACH DELETE table
+            RETURN count(*) AS deleted_tables
+            """,
+            doc_id=doc_id,
+            tenant=tenant,
+        )
         return {
             "removed_mentions": int(mention_rows[0].get("removed_mentions", 0)) if mention_rows else 0,
             "deleted_relations": int(deleted_rows[0].get("deleted_relations", 0)) if deleted_rows else 0,
             "retained_relations": int(updated_rows[0].get("retained_relations", 0)) if updated_rows else 0,
+            "deleted_artifacts": int(artifact_rows[0].get("deleted_artifacts", 0)) if artifact_rows else 0,
+            "deleted_tables": int(table_rows[0].get("deleted_tables", 0)) if table_rows else 0,
         }
 
     async def merge_entity(self, entity: Entity, tenant: str = "default"):
@@ -776,7 +973,7 @@ class Neo4jClient:
         if not rows:
             return
         await self.run(
-            f"""
+            """
             UNWIND $rows AS row
             MATCH (s:Entity {name: row.src_name, type: row.src_type, tenant: $tenant})
             MATCH (t:Entity {name: row.tgt_name, type: row.tgt_type, tenant: $tenant})
@@ -818,7 +1015,7 @@ class Neo4jClient:
 
     async def merge_community(self, community: Community):
         await self.run(
-            f"""
+            """
             MERGE (c:Community {id: $id, tenant: $tenant})
             SET c.level = $level,
                 c.summary = $summary,
@@ -849,7 +1046,7 @@ class Neo4jClient:
     async def _snapshot_community_summary(self, community: Community) -> str:
         """Append an immutable summary version and its evidence lineage."""
         rows = await self.run(
-            f"""
+            """
             MATCH (c:Community {tenant: $tenant, id: $community_id})
             OPTIONAL MATCH (e:Entity {tenant: $tenant})-[:MEMBER_OF]->(c)
             OPTIONAL MATCH (ch:Chunk {tenant: $tenant})-[:MENTIONS]->(e)
@@ -889,7 +1086,7 @@ class Neo4jClient:
         )
         now = datetime.now(timezone.utc).isoformat()
         await self.run(
-            f"""
+            """
             MATCH (c:Community {tenant: $tenant, id: $community_id})
             OPTIONAL MATCH (c)-[:HAS_SUMMARY_VERSION]->(current:CommunitySummarySnapshot)
             WHERE current.transaction_to IS NULL
@@ -1066,7 +1263,7 @@ class Neo4jClient:
         if not chunk_ids:
             return {}
         rows = await self.run(
-            f"""
+            """
             MATCH (c:Chunk)-[:PART_OF]->(d:Document)
             WHERE c.id IN $chunk_ids
               AND (c.tenant = $tenant)
@@ -1098,7 +1295,7 @@ class Neo4jClient:
         if not community_ids:
             return {}
         rows = await self.run(
-            f"""
+            """
             UNWIND $community_ids AS cid
             MATCH (c:Community {id: cid, tenant: $tenant})
                   <-[:MEMBER_OF]-(e:Entity {tenant: $tenant})
@@ -1134,7 +1331,7 @@ class Neo4jClient:
         relevant chunk a seed slot even if it didn't survive fused-ranking.
         """
         rows = await self.run(
-            f"""
+            """
             MATCH (c:Chunk)-[:PART_OF]->(d:Document {{filename: $filename}})
             WHERE (c.tenant = $tenant)
               AND coalesce(d.is_deleted, false) = false
@@ -1258,7 +1455,7 @@ class Neo4jClient:
             )
         fetch_k = max(top_k * 20, 100)
         return await self.run(
-            f"""
+            """
             CALL db.index.vector.queryNodes('community_embeddings', $fetch_k, $embedding)
             YIELD node AS c, score
             WHERE (c.tenant = $tenant)
@@ -1303,7 +1500,7 @@ class Neo4jClient:
             if transaction_at else ""
         )
         return await self.run(
-            f"""
+            """
             UNWIND $chunk_ids AS cid
             MATCH (c:Chunk {{id: cid}})-[:MENTIONS]->(e:Entity)
             WHERE coalesce(e.quarantined, false) = false
@@ -1379,7 +1576,7 @@ class Neo4jClient:
             if use_semantic else "NULL"
         )
         results = await self.run(
-            f"""
+            """
             UNWIND $chunk_ids AS cid
             CALL {{
                 WITH cid
@@ -1484,7 +1681,7 @@ class Neo4jClient:
         Excludes quarantined entities.
         """
         return await self.run(
-            f"""
+            """
             CALL db.index.fulltext.queryNodes('entity_fulltext', $query)
             YIELD node AS e, score
             WHERE coalesce(e.quarantined, false) = false
@@ -1641,7 +1838,7 @@ class Neo4jClient:
         # Build a set-membership key of the form "name:type" for the target
         # side filter so both dimensions are checked without a subquery.
         return await self.run(
-            f"""
+            """
             UNWIND $entities AS pair
             MATCH (s:Entity {{name: pair.name, type: pair.type, tenant: $tenant}})
                   -[r:RELATES_TO]->
@@ -1692,7 +1889,7 @@ class Neo4jClient:
             if as_of else ""
         )
         return await self.run(
-            f"""
+            """
             MATCH (e:Entity {{name: $name, type: $type, tenant: $tenant}})
                   -[r:RELATES_TO]-(other:Entity {{tenant: $tenant}})
             WHERE coalesce(e.quarantined, false) = false

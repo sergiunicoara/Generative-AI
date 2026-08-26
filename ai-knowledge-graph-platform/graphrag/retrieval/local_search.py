@@ -29,6 +29,7 @@ from graphrag.graph.document_authority import DocumentAuthorityService
 from graphrag.graph.gnn_scorer import GNNScorer
 from graphrag.graph.neo4j_client import get_neo4j
 from graphrag.ingestion.embedder import Embedder
+from graphrag.ingestion.intelligence import expand_temporal_query
 from graphrag.retrieval.bm25_search import HybridBM25Search
 from graphrag.enterprise.models import AccessContext
 from graphrag.retrieval.reranker import CrossEncoderReranker
@@ -184,6 +185,16 @@ class LocalSearch:
             )
             if enriched_question != question:
                 log.info("local_search.query_enriched", session_id=session_id)
+
+        # This is a narrow lexical bridge, not a date filter: a query for
+        # "January 2024" also probes the parent quarter/year that ingestion
+        # materialised, while explicit valid/transaction-time filtering below
+        # remains governed solely by ``valid_at`` / ``transaction_at``.
+        if cfg.get("temporal_query_expansion_enabled", True):
+            temporal_question = expand_temporal_query(enriched_question)
+            if temporal_question != enriched_question:
+                log.info("local_search.temporal_query_expanded", tenant=tenant)
+                enriched_question = temporal_question
 
         # Step 1 — vector ANN (skipped when vector_search_enabled=false, e.g. OpenAI quota exhausted)
         use_vector = cfg.get("vector_search_enabled", True)

@@ -17,7 +17,15 @@ import uuid
 import structlog
 
 from graphrag.core.config import get_settings
-from graphrag.core.models import Chunk, Document, Entity, Relation
+from graphrag.core.models import (
+    Chunk,
+    Document,
+    Entity,
+    IngestionRunManifest,
+    IntelligenceArtifact,
+    Relation,
+    StructuredTable,
+)
 from graphrag.graph.embedding_cache import get_embedding_cache
 from graphrag.graph.alias_registry import (
     AmbiguousMatch,
@@ -204,6 +212,73 @@ class GraphWriter:
 
     async def mark_document_ingest_complete(self, doc_id: str, tenant: str) -> None:
         await self._neo4j.mark_document_ingest_complete(doc_id, tenant=tenant)
+
+    async def write_ingestion_manifest(self, manifest: IngestionRunManifest) -> None:
+        await self._neo4j.upsert_ingestion_manifest(manifest)
+
+    async def write_intelligence_artifacts(
+        self, artifacts: list[IntelligenceArtifact], chunk: Chunk,
+    ) -> None:
+        """Write source assertions only after their chunk and entities exist."""
+        if not artifacts:
+            return
+        # Entity writes resolve approved aliases to their canonical graph node.
+        # Resolve artifact references through the same registry so ASSERTS_ABOUT
+        # never points at an alias node that was intentionally not persisted.
+        await self._ensure_registry(chunk.tenant)
+        registry = self._get_registry(chunk.tenant)
+        for artifact in artifacts:
+            canonical_names: list[str] = []
+            for name in artifact.entity_names:
+                resolved = _resolved_pair(registry.resolve(name))
+                canonical_names.append(resolved[0] if resolved else name)
+            artifact.entity_names = list(dict.fromkeys(canonical_names))
+        await self._neo4j.merge_intelligence_artifacts(artifacts, tenant=chunk.tenant)
+
+    async def write_structured_tables(self, tables: list[StructuredTable], tenant: str) -> None:
+        if tables:
+            await self._neo4j.merge_structured_tables(tables, tenant=tenant)
+
+    async def write_temporal_periods(self, chunk: Chunk, periods: list[dict[str, str]]) -> None:
+        if periods:
+            await self._neo4j.merge_temporal_periods(chunk.id, periods, tenant=chunk.tenant)
+
+    async def register_explicit_aliases(
+        self,
+        aliases: list[tuple[str, str, str, str]],
+        entities: list[Entity],
+        chunk: Chunk,
+    ) -> int:
+        """Register only source-explicit equivalences as aliases.
+
+        This does not collapse two nodes from the current batch: that would be
+        an irreversible merge before the normal review/correction path can
+        inspect it. It makes the verified mapping available to subsequent
+        chunks and re-ingestions, with its exact source span retained.
+        """
+        if not aliases:
+            return 0
+        await self._ensure_registry(chunk.tenant)
+        registry = self._get_registry(chunk.tenant)
+        types_by_name = {entity.name: entity.type for entity in entities}
+        registered = 0
+        for canonical, alias, evidence_kind, evidence_quote in aliases:
+            canonical_type = types_by_name.get(canonical)
+            alias_type = types_by_name.get(alias)
+            if not canonical_type or canonical_type != alias_type:
+                continue
+            await registry.register_alias(
+                raw_value=alias,
+                canonical_name=canonical,
+                canonical_type=canonical_type,
+                source_doc_id=chunk.document_id,
+                source_chunk_id=chunk.id,
+                evidence_kind=evidence_kind,
+                evidence_quote=evidence_quote,
+                confidence=1.0,
+            )
+            registered += 1
+        return registered
 
     # ── Entities ───────────────────────────────────────────────────────────────
 

@@ -6192,3 +6192,13 @@ external scoring function whose failure mode is "returns a numeric
 non-value" rather than "raises," explicitly check for that non-value
 (`math.isnan`) before it enters an aggregate; do not assume a missing score
 looks like an exception.
+
+## A172 - A model recommendation is not evidence of the active picker selection
+
+The task-start model check must distinguish three facts: the task's recommended
+model/effort, the standing comparison baseline (`5.6 Luna @ light`), and the
+picker selection actually verified by Codex. A recommendation such as
+`5.6 Terra @ high` must never be phrased as "current model @ high is fine"
+unless the runtime has reported that exact active selection. If picker state is
+not exposed, give the recommendation and say that the active setting is
+unverified; do not convert a recommendation into an assertion about state.

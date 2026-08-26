@@ -1,3 +1,38 @@
+# Current: Provenance-backed intelligence ingestion (2026-08-26)
+
+## Scope
+
+- [x] Add deterministic, evidence-backed alias mining to complement the existing
+      exact/fuzzy/embedding resolver; ambiguous aliases remain reviewable.
+- [x] Persist typed ingestion artifacts (`Claim`, `Observation`, `Event`, then
+      `Finding`) with source chunk/document/entity/time provenance.
+- [x] Persist a tenant-scoped ingestion-run manifest: corpus identity, model and
+      prompt versions, stage counts, durations, retries, costs, and integrity hash.
+- [x] Add safe natural-language period hierarchy expansion for retrieval.
+- [x] Add structured-table artifacts only where a document extractor yields table data.
+- [x] Add focused regression tests, documentation, and a review of the benchmark gate
+      for dual summary/original chunks; do not enable dual chunks by default.
+
+## Design constraints
+
+- Reuse Neo4j, `GraphWriter`, `IngestionAgent`, `ClaimEvidenceGraph`, Context Graph,
+  and cost telemetry; do not create a parallel Postgres-style graph path.
+- All generated assertions are provenance-bound and retain confidence/review status.
+- Insight and Recommendation synthesis are explicitly out of this ingestion slice;
+  they require a reviewed policy for derived conclusions.
+
+## Review
+
+- Implemented through the existing Neo4j `GraphWriter` / `IngestionAgent` path;
+  no parallel database or retrieval path was introduced.
+- Targeted regression suite: 46 passed. The only skipped check is Excel-specific
+  because this local Python interpreter lacks the already-declared `openpyxl`
+  dependency; it needs the project dependency environment for collection.
+- Dual raw/summary chunks remain off: an evidence-fidelity and cost benchmark is
+  required before changing the current raw-chunk behaviour.
+
+---
+
 # Current: Deterministic ingestion via LLM extraction cache (2026-06-07)
 
 ## Context

@@ -9,7 +9,7 @@ from pathlib import Path
 import structlog
 
 from graphrag.core.content_hash import compute_content_hash
-from graphrag.core.models import Document
+from graphrag.core.models import Document, StructuredTable
 
 log = structlog.get_logger(__name__)
 
@@ -32,6 +32,9 @@ def load_document(file_path: str | Path) -> Document:
         # document as last run?" without re-reading the file.
         content_hash=compute_content_hash(text),
     )
+    tables = load_structured_tables(path.name, path.read_bytes(), document_id=doc.id, tenant=doc.tenant)
+    if tables:
+        doc.metadata["structured_tables"] = [table.model_dump(mode="json") for table in tables]
     log.info("document_loader.loaded", filename=doc.filename, chars=len(text))
     return doc
 
@@ -74,3 +77,45 @@ def load_document_content(filename: str, content: bytes) -> str:
     if suffix in {".txt", ".md", ".csv"}:
         return content.decode("utf-8")
     raise ValueError(f"Unsupported file type: {suffix}")
+
+
+def load_structured_tables(
+    filename: str,
+    content: bytes,
+    *,
+    document_id: str,
+    tenant: str = "default",
+) -> list[StructuredTable]:
+    """Return tables when a loader can extract them without inventing cells.
+
+    Excel is already a structured source, so each worksheet becomes one table.
+    PDF table extraction is intentionally not guessed from plain text; a future
+    layout-aware extractor can supply the same ``structured_tables`` metadata
+    contract and the ingestion writer will persist it unchanged.
+    """
+    if Path(filename).suffix.lower() != ".xlsx":
+        return []
+    from openpyxl import load_workbook
+
+    workbook = load_workbook(BytesIO(content), read_only=True, data_only=True)
+    tables: list[StructuredTable] = []
+    for index, sheet in enumerate(workbook.worksheets):
+        values = [
+            ["" if value is None else str(value) for value in row]
+            for row in sheet.iter_rows(values_only=True)
+        ]
+        while values and not any(values[-1]):
+            values.pop()
+        if not values:
+            continue
+        columns, *rows = values
+        tables.append(StructuredTable(
+            document_id=document_id,
+            table_index=index,
+            caption=sheet.title,
+            columns=columns,
+            rows=rows,
+            extraction_method="xlsx_native",
+            tenant=tenant,
+        ))
+    return tables

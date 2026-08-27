@@ -36,7 +36,7 @@ The graph is not a RAG index. It is a formally modeled knowledge base:
 
 **Further reading:**
 - [`docs/roadmap.md`](docs/roadmap.md) — current implementation status, Context Graph evaluation gate, and scaling path
-- [`docs/audit-2026-08-21.md`](docs/audit-2026-08-21.md) — current architecture, security, dependency, scalability, and state-of-the-art audit
+- [`docs/archive/audits/audit-2026-08-21.md`](docs/archive/audits/audit-2026-08-21.md) — historical architecture, security, dependency, scalability, and state-of-the-art audit
 - [`docs/adr/ADR-Context-Graph-Decision-Trace.md`](docs/adr/ADR-Context-Graph-Decision-Trace.md) — decision trace, manifest, governance, and integrity contract
 - [`docs/knowledge-graph-architecture.md`](docs/knowledge-graph-architecture.md) — architectural decisions, data model, LLM routing, cross-process result store
 - [`docs/ontology-model.md`](docs/ontology-model.md) — formal type hierarchy, relation schema, inference rules, design decisions

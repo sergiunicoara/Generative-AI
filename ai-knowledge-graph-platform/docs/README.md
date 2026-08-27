@@ -6,8 +6,7 @@ The specification-to-implementation runner is documented in
 ## Canonical technical docs
 
 - `roadmap.md` — implementation status and remaining work
-- `audit-2026-08-21.md` — architecture, security, dependency, and production-readiness audit
-- `audit-2026-08-21-second-pass.md` — follow-up audit: OAuth resource-server
+- `archive/audits/` — dated audit snapshots and follow-up evidence
   conformance, cache and rate-limit resource safety, and what was checked and
   found clean
 - `knowledge-graph-architecture.md` — system architecture and data flow

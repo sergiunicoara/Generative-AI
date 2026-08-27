@@ -645,8 +645,9 @@ is about MMR *stacked on top of* that mechanism, not MMR in isolation.
 
 # 2026-08-21 Audit Follow-ons
 
-The implementation and evidence are recorded in `docs/audit-2026-08-21.md`
-and `docs/audit-2026-08-21-second-pass.md`. Remaining work is ordered by
+The implementation and evidence are recorded in
+`docs/archive/audits/audit-2026-08-21.md` and
+`docs/archive/audits/audit-2026-08-21-second-pass.md`. Remaining work is ordered by
 production value, not trend visibility.
 
 ## Production-critical

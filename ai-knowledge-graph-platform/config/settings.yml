@@ -101,8 +101,8 @@ retrieval:
                                         # 0/5 contradiction recall (was tested together with
                                         # authority_as_edge_weight=true, not isolated -- causation
                                         # not proven, but the burden of proof is on keeping a flag
-                                        # on, not on reverting it). See docs/audit-2026-08-13.md.
-                                        # Change B, MH-03 design proposal (docs/audit-2026-08-13.md,
+                                        # on, not on reverting it). See docs/roadmap.md.
+                                        # Change B, MH-03 design proposal (docs/roadmap.md,
                                         # 2026-08-17): opt-in, additive-only extra context slots for
                                         # hop-only chunks (no rerank_score -- GNNScorer's seed-floor
                                         # dampening makes them provably always score below the
@@ -185,7 +185,7 @@ retrieval:
                                         # (tested together with context_hop_reserved_slots=1, not
                                         # isolated -- causation not proven, but the burden of proof
                                         # is on keeping a flag on, not on reverting it). See
-                                        # docs/audit-2026-08-13.md.
+                                        # docs/roadmap.md.
                                         # False (default): authority multiplier is folded into
                                        # edge confidence, which is ALSO a hard drop threshold
                                        # (gnn_edge_confidence_threshold) -- for a superseded

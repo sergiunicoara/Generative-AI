@@ -14,5 +14,5 @@ research; it avoids duplicating capabilities already delivered.
 | P3 | Benchmark a low-memory Bolt backend | Independent parity on tenancy, temporal semantics, backup/restore, recovery, and latency/cost | Conditional |
 | Research | Learned graph routing / structural reward optimization | Sufficient expert-labelled trajectories; offline policy beats deterministic routing with no safety regression | Deferred |
 
-Detailed source analysis and corpus limitations: `docs/linkedin-group-research.md`.
+Detailed source analysis and corpus limitations: `docs/archive/research/linkedin-group-research.md`.
 Machine-readable decisions: `research/linkedin_findings.json`.

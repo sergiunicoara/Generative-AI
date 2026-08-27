@@ -1,5 +1,13 @@
 # Remaining Gaps to 10/10 — Status as of 2026-08-22
 
+> **Current implementation addendum (2026-08-27):** this historical snapshot
+> is reconciled with commit `597a9b5`. The aerospace answer policy is now
+> tenant-configured outside the retriever; controlled GraphRAG-Benchmark
+> routes, the stateless MCP 2026-07-28 adapter, R2RML/same-tenant OBDA, and
+> fuzz/property plus opt-in mutation targets are implemented. Remaining gaps
+> are live-evidence items: golden retrieval quality, external IdP integration,
+> DR/load drills, branch protection, and a measured mutation score.
+
 This is a status check against the audit scorecard in
 [audit-2026-08-21-second-pass.md](audit-2026-08-21-second-pass.md), recording
 what has closed since that pass and what is honestly still open. It is a
@@ -69,16 +77,14 @@ three still need live infrastructure this session cannot provide. Unit-testing
 the federation *code* does not by itself constitute "tested disaster
 recovery" — that claim is not being made here.
 
-### 4. Architecture — aerospace-prompt separation
+### 4. Architecture — aerospace-prompt separation (closed 2026-08-27)
 
-The one concretely-scoped item left in this row, and the one deliberately
-**not** touched, for the same reason as item 2: `hybrid_retriever.py`'s
-answer-synthesis prompt hardcodes aerospace-specific rules (revision-number
-formatting, `doc_id` conventions) with a documented regression history
-(`tasks/lessons.md` A124/A125). Changing it without a live golden eval to
-verify against would mean trading a measured pass rate for an unmeasured one
-— not an improvement, a gamble. Multi-region/multi-tenant architecture
-documentation is otherwise unwritten.
+The historical audit deliberately deferred this because
+`hybrid_retriever.py`'s answer-synthesis prompt hardcoded aerospace-specific
+rules. Commit `597a9b5` moved synthesis into a tenant-configured answer policy,
+kept aerospace formatting opt-in, and documented the multi-region/tenant
+target architecture. A live golden comparison is still useful evidence, but it
+is no longer a missing implementation.
 
 ### 5. Testing — CI gate integration — closed (this session)
 
@@ -102,9 +108,9 @@ initially repeated.
 branch-protection rule on `main` actually requires this workflow to pass
 before merge. That's a repo-settings toggle on GitHub, not a file in the
 repo — checking it needs authenticated `gh`/GitHub API access, which this
-session does not have. Fuzz/mutation-testing tooling beyond the manual,
-one-off mutation checks performed by hand during earlier session work is
-still absent.
+session does not have. Fuzz/property checks now run through `make test-fuzz`;
+`make mutation` provides the opt-in Mutmut campaign. A complete mutation score
+still needs a CI run.
 
 ## Bottom line
 
@@ -121,8 +127,8 @@ Get Docker Desktop running and provide a `.env` with live LLM keys. That
 alone unlocks:
 
 - running the golden eval (item 2),
-- then safely attempting the aerospace-prompt decoupling with a real
-  before/after comparison (item 4).
+- then measuring the already-implemented answer-policy separation with a real
+  before/after golden comparison (item 4).
 
 Item 5 (CI gate integration) is now closed as of this session — see above.
 The one loose end left on it, branch-protection enforcement, needs

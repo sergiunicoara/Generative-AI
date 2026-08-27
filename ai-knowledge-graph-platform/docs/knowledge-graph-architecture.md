@@ -422,8 +422,28 @@ only tenant-scoped suppliers that have no `REPORTED` emissions record linked to
 `tests/e2e/test_relational_postgres_neo4j.py` independently verifies this
 PostgreSQL-to-Neo4j-to-MCP path with isolated containers.
 
-This is not yet an RML/R2RML engine, an OBDA federation layer, or a live
-GLEIF/Copernicus connector.
+The platform now includes a validated R2RML subset adapter and a same-tenant
+OBDA federation coordinator in `graphrag/ingestion/r2rml.py`. Unsupported
+mapping constructs fail closed before connector reads; this is not a claim of a
+live GLEIF/Copernicus connector or of cross-region virtual joins.
+
+### Multi-region and multi-tenant deployment
+
+The graph's required tenant boundary remains the authorization invariant in
+every region: request, MCP argument, cache key, retrieval query, source
+catalog, and KPI event are tenant-scoped. Production assigns each tenant a
+home region, residency policy, key reference, and failover mode in a signed
+placement registry. Writes stay in the home region; read replicas must meet
+the requested corpus revision or return an updating/retry result. Shared
+regional graphs suit compatible tenants; dedicated graphs suit regulated or
+high-volume tenants. Backups and restore drills are tenant-scoped and must
+record measured RPO/RTO rather than treating planning targets as SLO evidence.
+
+MCP 2026-07-28 requests use the stateless transport adapter and do not need
+load-balancer affinity. Affinity remains only for legacy session clients during
+the migration window. Cross-region virtual joins and active-active graph writes
+remain deliberately unsupported until ordering, residency, and recovery are
+measured.
 
 ### Controlled agent graph facts
 

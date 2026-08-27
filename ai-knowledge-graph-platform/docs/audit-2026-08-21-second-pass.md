@@ -79,10 +79,11 @@ Four things were deliberately **not** changed:
 The previous audit targeted MCP 2025-06-18. The current specification is
 **2026-07-28**, which adds a stateless protocol core, multi-round-trip
 requests, header-based routing, cacheable list results, and a formal extensions
-framework alongside the authorization hardening implemented here. Only the
-authorization requirements were adopted in this pass; the transport-level
-changes need an SDK upgrade and a client-compatibility review, and are on the
-roadmap rather than being taken piecemeal.
+framework alongside the authorization hardening implemented here. At the time
+of this audit only authorization was adopted; the current implementation also
+provides a compatibility adapter for stateless `tools/list` and `tools/call`
+in `mcp_server/transport_20260728.py`. The legacy SDK session path remains
+during migration, and full client interoperability still needs live coverage.
 
 ## Verification
 

@@ -257,11 +257,26 @@ described as:
 | Domain eval harness (`graphrag/evaluation/domain_eval.py`) | **Implemented, wired to a script only** | Used by `scripts/validate_eval_datasets.py`; not part of the running application. |
 | Observability (`graphrag/observability/`) | **Implemented and wired** | Prometheus cost/latency and budget metrics are exposed at `/metrics`; HTTP/RabbitMQ/worker correlation is preserved, W3C trace context is propagated, and optional OTLP spans activate from environment configuration. |
 | Source catalog (`graphrag/graph/source_catalog.py`) | **Implemented and API-wired** | `/kg/sources` owns tenant-scoped sources and immutable mapping versions; connector implementations use a provider-neutral protocol and credentials are prohibited from persisted mappings. |
-| Local relational-to-KG ingestion (`graphrag/ingestion/relational.py`) | **Implemented and live-validated** | Read-only SQLite and PostgreSQL adapters share declarative entity/relation mappings; an in-memory SHACL candidate-batch gate rejects invalid imports before any Neo4j write. Imports retain deterministic source-document provenance. `tests/e2e/test_relational_postgres_neo4j.py` writes synthetic PostgreSQL data and reads it back through Neo4j. The synthetic sustainability demo also runs the PostgreSQL-to-MCP evidence-gap path. RML/R2RML and OBDA federation remain future work. |
+| Local relational-to-KG ingestion (`graphrag/ingestion/relational.py`) | **Implemented and live-validated** | Read-only SQLite and PostgreSQL adapters share declarative entity/relation mappings; an in-memory SHACL candidate-batch gate rejects invalid imports before any Neo4j write. Imports retain deterministic source-document provenance. `tests/e2e/test_relational_postgres_neo4j.py` writes synthetic PostgreSQL data and reads it back through Neo4j. The synthetic sustainability demo also runs the PostgreSQL-to-MCP evidence-gap path. R2RML conversion and same-tenant OBDA federation are now implemented and unit-tested in `graphrag/ingestion/r2rml.py`; live external federation remains an evidence task. |
 | Controlled MCP graph facts (`graphrag/graph/controlled_query.py`) | **Implemented and MCP-wired** | `query_graph_facts_tool` maps a small allowlist of natural-language fact intents, including supplier evidence gaps, to fixed read-only Cypher templates. It is parameterized, tenant-scoped, result-bounded and rejects raw Cypher or unsupported questions. |
 | Synthetic supply-chain entity-resolution benchmark | **Implemented and repeatable** | `scripts/benchmark_sustainability_entity_resolution.py` runs seven synthetic name variants through the real alias registry: automatic matches, an ambiguous case quarantined for review, and a new-entity case. It is a threshold-regression check, not a production accuracy claim. |
 | PROV-O RDF alignment (`scripts/export_rdf.py`) | **Implemented** | Exported entities and reified assertions retain the existing platform annotations and add standard `prov:wasDerivedFrom` and `prov:generatedAtTime` links when provenance is available. |
 | Ops exercises (`graphrag/ops/`, `scripts/run_production_exercises.py`) | **Implemented and executable** | Load, security, backup/restore digest, and cost exercises have a CLI and deterministic tests. Results still describe the environment in which the command was run; they are not evidence of customer-scale traffic. |
+
+### Evaluation and controlled route benchmarking
+
+`graphrag.evaluation.graphrag_benchmark` accepts GraphRAG-Benchmark-compatible
+JSONL (`question`/`query` plus an ID), preserves unknown task fields, and emits
+dataset and route fingerprints with measured latency, answers, and citations.
+Run identical tenant questions through named profiles with
+`scripts/run_graphrag_benchmark.py`; official leaderboard scoring remains an
+external, version-pinned evaluation step. The configured RAGAS backend falls
+back to the deterministic `reference` evaluator when upstream imports, calls,
+or timeouts fail, and persists the score source explicitly.
+
+Fuzz/property checks cover prompt policy, tenant, protocol, and mapping
+boundaries. `make mutation` is an opt-in Mutmut target for the high-risk
+adapters; a complete mutation score still requires CI execution.
 
 ## Part I long-term scale path (3–12 months)
 

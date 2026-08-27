@@ -203,6 +203,12 @@ retrieval:
                                       # silently state a disputed fact as settled
   feedback_ranking_enabled: true     # blend tenant-scoped citation feedback into final ranking
   feedback_ranking_weight: 0.10      # conservative signal; retrieval evidence remains dominant
+  # Explicit HTML/SharePoint/Markdown document topology. Only source-observed
+  # LINKS_TO edges participate; semantic similarity never invents a document
+  # link. One bounded target slot protects ordinary retrieval from regression.
+  document_link_traversal_enabled: true
+  document_link_top_k: 5
+  document_link_context_slots: 1
   # ─────────────────────────────────────────────────────────────────────────
   agentic_fallback: true   # trigger iterative agent when hybrid answer is weak
   agentic_max_steps: 4     # max sub-searches before forced synthesis

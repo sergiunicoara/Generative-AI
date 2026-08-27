@@ -51,6 +51,38 @@ def document_access_predicate(alias: str = "d") -> str:
     """
 
 
+def link_access_predicate(alias: str = "link") -> str:
+    """The same fail-closed ACL rule applied to a persisted link snapshot.
+
+    A document-link traversal must be authorised at three levels: source
+    document, the source ACL captured when the explicit link was observed, and
+    target document.  Keeping this predicate independent avoids assuming that
+    a later source ACL update retroactively authorises a stale edge.
+    """
+
+    return f"""
+      AND (
+        NOT $acl_enabled
+        OR (
+          coalesce({alias}.acl_state, 'unknown') = 'known'
+          AND NOT any(principal IN $acl_principals
+                      WHERE principal IN coalesce({alias}.deny_principals, []))
+          AND (
+            coalesce({alias}.access_mode, 'restricted') = 'tenant'
+            OR (
+              any(principal IN $acl_principals
+                  WHERE principal IN coalesce({alias}.allow_principals, []))
+              AND (
+                NOT coalesce({alias}.requires_group_resolution, false)
+                OR $acl_groups_resolved
+              )
+            )
+          )
+        )
+      )
+    """
+
+
 def normalise_policy(policy: DocumentAccessPolicy) -> dict:
     """Return Neo4j-safe scalar/list fields for a document node."""
 

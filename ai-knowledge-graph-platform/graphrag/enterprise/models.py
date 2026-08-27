@@ -10,9 +10,18 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from enum import Enum
 from typing import Any, Literal
+from urllib.parse import urlsplit, urlunsplit
 from uuid import uuid4
 
 from pydantic import BaseModel, Field, field_validator, model_validator
+
+
+def normalise_document_url(value: str) -> str:
+    """Canonicalise an http(s) document identity while leaving local paths alone."""
+    parsed = urlsplit(value.strip())
+    if parsed.scheme in {"http", "https"} and parsed.netloc:
+        return urlunsplit((parsed.scheme.lower(), parsed.netloc.lower(), parsed.path, parsed.query, ""))
+    return value.strip()
 
 
 class ACLState(str, Enum):
@@ -133,6 +142,31 @@ class MetadataEnvelope(BaseModel):
         return self
 
 
+class DocumentLink(BaseModel):
+    """An explicit, source-observed reference from one document to another.
+
+    This is intentionally a transport contract rather than an inferred graph
+    edge.  The source document supplies the provenance and ACL snapshot when it
+    is persisted; a target document is connected only after its URL resolves in
+    the same tenant.
+    """
+
+    target_url: str = Field(min_length=1, max_length=4_096)
+    anchor_text: str = Field(default="", max_length=1_024)
+    source_locator: str = Field(default="", max_length=512)
+    observed_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    source_system: str = Field(default="manual", min_length=1, max_length=128)
+    source_version: str = Field(default="", max_length=256)
+
+    @field_validator("target_url")
+    @classmethod
+    def _normalise_target_url(cls, value: str) -> str:
+        parsed = urlsplit(normalise_document_url(value))
+        if parsed.scheme not in {"http", "https"} or not parsed.netloc:
+            raise ValueError("document link target_url must be an absolute http(s) URL")
+        return normalise_document_url(value)
+
+
 class CollectionSchema(BaseModel):
     """Versioned, collection-specific governed metadata contract."""
 
@@ -202,6 +236,7 @@ class SyncChange(BaseModel):
     cursor: str = Field(default="", max_length=2_048)
     metadata: MetadataEnvelope = Field(default_factory=MetadataEnvelope)
     access_policy: DocumentAccessPolicy = Field(default_factory=DocumentAccessPolicy)
+    document_links: list[DocumentLink] = Field(default_factory=list, max_length=10_000)
     lineage: list[LineageAssertion] = Field(default_factory=list, max_length=100)
     obligations: list[ObligationDraft] = Field(default_factory=list, max_length=500)
 

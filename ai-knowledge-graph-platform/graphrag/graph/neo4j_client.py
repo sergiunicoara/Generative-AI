@@ -26,8 +26,8 @@ from graphrag.core.models import (
     StructuredTable,
 )
 from graphrag.core.retry import with_retry
-from graphrag.enterprise.access import access_params, document_access_predicate
-from graphrag.enterprise.models import AccessContext
+from graphrag.enterprise.access import access_params, document_access_predicate, link_access_predicate
+from graphrag.enterprise.models import AccessContext, DocumentLink, normalise_document_url
 
 log = structlog.get_logger(__name__)
 
@@ -325,7 +325,7 @@ class Neo4jClient:
             metadata_schema_version=str(metadata_envelope.get("schema_version") or "v1"),
             source_system=str(metadata_envelope.get("source_system") or "manual"),
             external_id=str(metadata_envelope.get("external_id") or ""),
-            source_url=str(metadata_envelope.get("source_url") or ""),
+            source_url=normalise_document_url(str(metadata_envelope.get("source_url") or "")),
             source_version=str(metadata_envelope.get("source_version") or ""),
             content_type=str(metadata_envelope.get("content_type") or "text/plain"),
             classification=str(metadata_envelope.get("classification") or ""),
@@ -529,6 +529,149 @@ class Neo4jClient:
             rows=rows,
             tenant=tenant,
         )
+
+    async def merge_document_links(
+        self,
+        doc_id: str,
+        links: list[DocumentLink],
+        *,
+        tenant: str = "default",
+        access_policy: dict | None = None,
+    ) -> int:
+        """Persist explicit link references and materialise resolved LINKS_TO edges.
+
+        ``DocumentLinkReference`` makes the import order harmless: a source can
+        arrive before its target, retain its source-backed provenance, and be
+        resolved after a later target ingestion.  The query only links documents
+        in the same tenant and carries the source policy snapshot onto the edge.
+        """
+        policy = access_policy or {}
+        rows = [
+            {
+                "target_url": link.target_url,
+                "anchor_text": link.anchor_text,
+                "source_locator": link.source_locator,
+                "observed_at": link.observed_at.isoformat(),
+                "source_system": link.source_system,
+                "source_version": link.source_version,
+                "link_key": hashlib.sha256(
+                    f"{link.target_url}\0{link.anchor_text}\0{link.source_locator}".encode()
+                ).hexdigest(),
+            }
+            for link in links
+        ]
+        link_keys = [row["link_key"] for row in rows]
+        # A re-ingest is a replacement of the source document revision, not an
+        # append-only crawl. Remove links that disappeared from that revision
+        # before adding current observations; otherwise an obsolete HTML anchor
+        # would remain a retrievable path indefinitely.
+        await self.run(
+            """
+            MATCH (source:Document {id: $doc_id, tenant: $tenant})-[link:LINKS_TO {tenant: $tenant}]->()
+            WHERE NOT link.link_key IN $link_keys
+            DELETE link
+            """,
+            doc_id=doc_id,
+            tenant=tenant,
+            link_keys=link_keys,
+        )
+        await self.run(
+            """
+            MATCH (source:Document {id: $doc_id, tenant: $tenant})-[declaration:DECLARES_LINK {tenant: $tenant}]->(ref:DocumentLinkReference {tenant: $tenant})
+            WHERE NOT ref.link_key IN $link_keys
+            DETACH DELETE ref
+            """,
+            doc_id=doc_id,
+            tenant=tenant,
+            link_keys=link_keys,
+        )
+        if not rows:
+            return 0
+        result = await self.run(
+            """
+            MATCH (source:Document {id: $doc_id, tenant: $tenant})
+            UNWIND $links AS row
+            MERGE (ref:DocumentLinkReference {
+                tenant: $tenant, source_document_id: $doc_id, link_key: row.link_key
+            })
+            ON CREATE SET ref.created_at = datetime(), ref.recorded_at = datetime()
+            SET ref.target_url = row.target_url,
+                ref.anchor_text = row.anchor_text,
+                ref.source_locator = row.source_locator,
+                ref.observed_at = datetime(row.observed_at),
+                ref.source_system = row.source_system,
+                ref.source_version = row.source_version,
+                ref.access_mode = $access_mode,
+                ref.acl_state = $acl_state,
+                ref.allow_principals = $allow_principals,
+                ref.deny_principals = $deny_principals,
+                ref.requires_group_resolution = $requires_group_resolution,
+                ref.updated_at = datetime()
+            MERGE (source)-[:DECLARES_LINK {tenant: $tenant, link_key: row.link_key}]->(ref)
+            WITH source, ref, row
+            OPTIONAL MATCH (target:Document {tenant: $tenant, source_url: row.target_url})
+            WHERE coalesce(target.is_deleted, false) = false AND target.id <> source.id
+            FOREACH (_ IN CASE WHEN target IS NULL THEN [] ELSE [1] END |
+              MERGE (source)-[link:LINKS_TO {tenant: $tenant, link_key: row.link_key}]->(target)
+              ON CREATE SET link.recorded_at = datetime()
+              SET link.target_url = row.target_url,
+                  link.anchor_text = row.anchor_text,
+                  link.source_locator = row.source_locator,
+                  link.observed_at = datetime(row.observed_at),
+                  link.source_system = row.source_system,
+                  link.source_version = row.source_version,
+                  link.provenance_ref = ref.link_key,
+                  link.access_mode = $access_mode,
+                  link.acl_state = $acl_state,
+                  link.allow_principals = $allow_principals,
+                  link.deny_principals = $deny_principals,
+                  link.requires_group_resolution = $requires_group_resolution,
+                  link.updated_at = datetime()
+            )
+            RETURN count(ref) AS references
+            """,
+            doc_id=doc_id,
+            tenant=tenant,
+            links=rows,
+            access_mode=str(policy.get("access_mode") or "tenant"),
+            acl_state=str(policy.get("acl_state") or "known"),
+            allow_principals=list(policy.get("allow_principals") or []),
+            deny_principals=list(policy.get("deny_principals") or []),
+            requires_group_resolution=bool(policy.get("requires_group_resolution", False)),
+        )
+        return int(result[0].get("references", 0)) if result else 0
+
+    async def reconcile_document_links(self, doc_id: str, tenant: str = "default") -> int:
+        """Resolve any durable explicit reference whose source or target just landed."""
+        rows = await self.run(
+            """
+            MATCH (target:Document {id: $doc_id, tenant: $tenant})
+            MATCH (source:Document {tenant: $tenant})-[:DECLARES_LINK]->(ref:DocumentLinkReference {tenant: $tenant})
+            WHERE ref.target_url = target.source_url
+              AND source.id <> target.id
+              AND coalesce(source.is_deleted, false) = false
+              AND coalesce(target.is_deleted, false) = false
+            MERGE (source)-[link:LINKS_TO {tenant: $tenant, link_key: ref.link_key}]->(target)
+            ON CREATE SET link.recorded_at = datetime()
+            SET link.target_url = ref.target_url,
+                link.anchor_text = ref.anchor_text,
+                link.source_locator = ref.source_locator,
+                link.observed_at = ref.observed_at,
+                link.source_system = ref.source_system,
+                link.source_version = ref.source_version,
+                link.provenance_ref = ref.link_key,
+                link.access_mode = ref.access_mode,
+                link.acl_state = ref.acl_state,
+                link.allow_principals = ref.allow_principals,
+                link.deny_principals = ref.deny_principals,
+                link.requires_group_resolution = ref.requires_group_resolution,
+                link.updated_at = datetime()
+            RETURN count(link) AS resolved
+            """,
+            doc_id=doc_id,
+            tenant=tenant,
+        )
+        return int(rows[0].get("resolved", 0)) if rows else 0
 
     async def merge_structured_tables(
         self, tables: list[StructuredTable], tenant: str = "default",
@@ -1276,6 +1419,70 @@ class Neo4jClient:
         )
         return {r["chunk_id"]: r["filename"] for r in rows if r.get("filename")}
 
+    async def get_linked_document_chunks(
+        self,
+        seed_chunk_ids: list[str],
+        *,
+        top_k: int = 5,
+        tenant: str = "default",
+        query_embedding: list[float] | None = None,
+        valid_at: str | None = None,
+        transaction_at: str | None = None,
+        access_context: AccessContext | None = None,
+    ) -> list[dict]:
+        """Follow explicit document links from seed evidence to authorised chunks.
+
+        This is a bounded, one-hop topology expansion. It never invents a link
+        from similarity, and it evaluates the source document, the ACL snapshot
+        captured on ``LINKS_TO``, and the target document before returning any
+        target text.
+        """
+        if not seed_chunk_ids:
+            return []
+        rows = await self.run(
+            """
+            UNWIND $seed_chunk_ids AS seed_id
+            MATCH (seed:Chunk {id: seed_id, tenant: $tenant})-[:PART_OF]->(source:Document {tenant: $tenant})
+                  -[link:LINKS_TO {tenant: $tenant}]->(target:Document {tenant: $tenant})
+            MATCH (chunk:Chunk {tenant: $tenant})-[:PART_OF]->(target)
+            WHERE coalesce(source.is_deleted, false) = false
+              AND coalesce(target.is_deleted, false) = false
+              AND ($valid_at IS NULL OR (
+                (target.valid_from IS NULL OR target.valid_from <= datetime($valid_at))
+                AND (target.valid_to IS NULL OR target.valid_to > datetime($valid_at))
+              ))
+              AND ($transaction_at IS NULL OR (
+                (coalesce(source.recorded_at, source.created_at) IS NULL
+                  OR coalesce(source.recorded_at, source.created_at) <= datetime($transaction_at))
+                AND (coalesce(target.recorded_at, target.created_at) IS NULL
+                  OR coalesce(target.recorded_at, target.created_at) <= datetime($transaction_at))
+                AND (link.recorded_at IS NULL OR link.recorded_at <= datetime($transaction_at))
+              ))
+              """ + document_access_predicate("source") + document_access_predicate("target") + link_access_predicate("link") + """
+            WITH chunk, source, target, link,
+                 CASE WHEN $query_embedding IS NULL OR chunk.embedding IS NULL
+                           OR size(chunk.embedding) = 0 THEN 0.0
+                      ELSE vector.similarity.cosine(chunk.embedding, $query_embedding)
+                 END AS semantic_score
+            RETURN chunk.id AS chunk_id, chunk.text AS text,
+                   semantic_score AS score, semantic_score AS path_score,
+                   source.filename AS link_source, target.filename AS link_target,
+                   link.anchor_text AS anchor_text, link.target_url AS target_url,
+                   link.source_system AS source_system,
+                   toString(link.observed_at) AS observed_at
+            ORDER BY semantic_score DESC, link.observed_at DESC
+            LIMIT $top_k
+            """,
+            seed_chunk_ids=list(dict.fromkeys(seed_chunk_ids)),
+            top_k=top_k,
+            tenant=tenant,
+            query_embedding=query_embedding,
+            valid_at=valid_at,
+            transaction_at=transaction_at,
+            **self._content_access_params(access_context),
+        )
+        return rows
+
     async def get_community_source_documents(
         self, community_ids: list[str], tenant: str = "default", limit_per_community: int = 3
     ) -> dict[str, list[str]]:
@@ -1756,6 +1963,78 @@ class Neo4jClient:
             chunk_ids=chunk_ids,
             tenant=tenant,
         )
+
+    async def merge_contextual_entity_representations(
+        self,
+        chunk_id: str,
+        entities: list[Entity],
+        *,
+        source_system: str,
+        source_doc_id: str,
+        tenant: str = "default",
+    ) -> int:
+        """Attach source-system representations to canonical entities.
+
+        The canonical entity remains tenant scoped for approved aliases, but
+        every assertion is written through a ``SystemRepresentation`` keyed by
+        source system. Thus ``Customer`` mentioned in CRM and ERP has separate
+        representations and assertion paths even when an explicit resolver has
+        intentionally mapped both surface forms to one canonical entity.
+        """
+        if not entities:
+            return 0
+        rows = [
+            {
+                "canonical_name": entity.canonical_name or entity.name,
+                "canonical_type": entity.canonical_type or entity.type,
+                "raw_name": entity.name,
+                "raw_type": entity.type,
+            }
+            for entity in entities
+        ]
+        result = await self.run(
+            """
+            MATCH (chunk:Chunk {id: $chunk_id, tenant: $tenant})
+            UNWIND $rows AS row
+            MATCH (entity:Entity {
+                name: row.canonical_name, type: row.canonical_type, tenant: $tenant
+            })
+            MERGE (representation:SystemRepresentation {
+                tenant: $tenant,
+                source_system: $source_system,
+                canonical_name: row.canonical_name,
+                canonical_type: row.canonical_type
+            })
+            ON CREATE SET representation.id = randomUUID(),
+                          representation.created_at = datetime(),
+                          representation.recorded_at = datetime()
+            SET representation.raw_names = CASE
+                  WHEN row.raw_name IN coalesce(representation.raw_names, [])
+                  THEN representation.raw_names
+                  ELSE coalesce(representation.raw_names, []) + row.raw_name
+                END,
+                representation.updated_at = datetime()
+            MERGE (entity)-[:HAS_SYSTEM_REPRESENTATION {tenant: $tenant, source_system: $source_system}]->(representation)
+            MERGE (assertion:ContextualAssertion {
+                tenant: $tenant, chunk_id: $chunk_id,
+                canonical_name: row.canonical_name, canonical_type: row.canonical_type,
+                source_system: $source_system
+            })
+            ON CREATE SET assertion.id = randomUUID(), assertion.created_at = datetime(),
+                          assertion.source_doc_id = $source_doc_id
+            SET assertion.raw_name = row.raw_name, assertion.raw_type = row.raw_type,
+                assertion.updated_at = datetime()
+            MERGE (chunk)-[:ASSERTS_IN_CONTEXT {tenant: $tenant}]->(assertion)
+            MERGE (assertion)-[:ASSERTS_REPRESENTATION {tenant: $tenant}]->(representation)
+            RETURN count(assertion) AS assertions
+            """,
+            chunk_id=chunk_id,
+            rows=rows,
+            source_system=source_system,
+            source_doc_id=source_doc_id,
+            tenant=tenant,
+        )
+        return int(result[0].get("assertions", 0)) if result else 0
         if not rows:
             return []
 

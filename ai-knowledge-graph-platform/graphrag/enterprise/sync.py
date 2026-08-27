@@ -48,6 +48,7 @@ class ContentSyncService:
                 raw_text=change.text,
                 metadata_envelope=metadata,
                 access_policy=change.access_policy,
+                outbound_links=change.document_links,
                 lineage_assertions=change.lineage,
                 obligation_drafts=change.obligations,
                 valid_from=metadata.effective_from,

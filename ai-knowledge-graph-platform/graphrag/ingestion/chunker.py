@@ -134,6 +134,7 @@ def chunk_document(document: Document) -> list[Chunk]:
             text=text,
             chunk_index=i,
             tenant=document.tenant,
+            metadata={"source_system": document.metadata_envelope.source_system},
         )
         for i, text in enumerate(texts)
     ]

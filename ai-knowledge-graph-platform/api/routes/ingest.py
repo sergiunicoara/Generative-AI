@@ -12,6 +12,7 @@ from api.quota import enforce_tenant_quota
 from api.limiter import INGEST_LIMIT, rate_limit
 from graphrag.core.models import Document
 from graphrag.enterprise.models import (
+    DocumentLink,
     DocumentAccessPolicy,
     LineageAssertion,
     MetadataEnvelope,
@@ -30,6 +31,7 @@ class IngestRequest(BaseModel):
     metadata: dict[str, Any] = Field(default_factory=dict, max_length=100)
     metadata_envelope: MetadataEnvelope = Field(default_factory=MetadataEnvelope)
     access_policy: DocumentAccessPolicy = Field(default_factory=DocumentAccessPolicy)
+    outbound_links: list[DocumentLink] = Field(default_factory=list, max_length=10_000)
     lineage_assertions: list[LineageAssertion] = Field(default_factory=list, max_length=100)
     obligation_drafts: list[ObligationDraft] = Field(default_factory=list, max_length=500)
     valid_from: datetime | None = None
@@ -69,6 +71,7 @@ async def ingest_document(request: Request, body: IngestRequest, tenant: str = D
         metadata=body.metadata,
         metadata_envelope=body.metadata_envelope,
         access_policy=body.access_policy,
+        outbound_links=body.outbound_links,
         lineage_assertions=body.lineage_assertions,
         obligation_drafts=body.obligation_drafts,
         valid_from=body.valid_from or body.metadata_envelope.effective_from,

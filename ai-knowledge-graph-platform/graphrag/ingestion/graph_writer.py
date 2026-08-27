@@ -12,6 +12,7 @@ Enhanced with:
 
 from __future__ import annotations
 
+import inspect
 import uuid
 
 import structlog
@@ -169,6 +170,22 @@ class GraphWriter:
         )
         doc.id = canonical_id
 
+        # Persist source-observed document links separately from extraction.
+        # A target may be ingested later, so the Neo4j layer retains an
+        # unresolved reference and reconciles both inbound/outbound links on
+        # every document write.
+        link_write = self._neo4j.merge_document_links(
+            doc.id,
+            doc.outbound_links,
+            tenant=doc.tenant,
+            access_policy=normalise_policy(doc.access_policy),
+        )
+        if inspect.isawaitable(link_write):
+            await link_write
+        link_reconcile = self._neo4j.reconcile_document_links(doc.id, tenant=doc.tenant)
+        if inspect.isawaitable(link_reconcile):
+            await link_reconcile
+
         # Register supersession chains
         if doc.supersedes:
             from graphrag.graph.document_authority import DocumentAuthorityService
@@ -318,6 +335,7 @@ class GraphWriter:
         # "update" — harmless (audit metadata only), and rare (duplicate
         # entities within one chunk).
         to_merge: list[Entity] = []
+        contextual_entities: list[Entity] = []
         to_mention: list[tuple[str, str]] = []
         to_audit: list[dict] = []
 
@@ -352,6 +370,7 @@ class GraphWriter:
                 await self._neo4j.merge_mentions(
                     chunk.id, canonical[0], canonical[1], tenant=tenant
                 )
+                contextual_entities.append(entity)
                 continue   # don't create a duplicate node
 
             # 2. Embedding deduplication — catches aliases that slipped through
@@ -380,6 +399,7 @@ class GraphWriter:
                     await self._neo4j.merge_mentions(
                         chunk.id, dup_name, dup_type, tenant=tenant
                     )
+                    contextual_entities.append(entity)
                     continue
 
             # 2b. Embedding near-miss — ambiguous band, queue for human review
@@ -411,6 +431,7 @@ class GraphWriter:
             # worth a round-trip per entity for a best-effort label.
             to_merge.append(entity)
             entity.redirect_to(entity.name, entity.type)
+            contextual_entities.append(entity)
             to_mention.append((entity.name, entity.type))
 
             # Register canonical name in alias registry in-memory cache.
@@ -445,6 +466,15 @@ class GraphWriter:
         get_embedding_cache().invalidate(tenant, [(e.name, e.type) for e in to_merge])
 
         await self._neo4j.merge_mentions_batch(chunk.id, to_mention, tenant=tenant)
+        representation_write = self._neo4j.merge_contextual_entity_representations(
+            chunk.id,
+            contextual_entities,
+            source_system=str(chunk.metadata.get("source_system") or "manual"),
+            source_doc_id=chunk.document_id,
+            tenant=tenant,
+        )
+        if inspect.isawaitable(representation_write):
+            await representation_write
         await self._audit.log_entities_batch(to_audit, tenant=tenant)
 
         # Flag possible name collisions: same (name, type, tenant) MERGE key

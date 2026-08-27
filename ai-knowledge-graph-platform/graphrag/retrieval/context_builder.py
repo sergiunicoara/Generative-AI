@@ -115,6 +115,38 @@ class ContextBuilder:
             doc_name = chunk.get("_doc_name") or (source.replace(".txt", "") if source else None)
             citations.append(doc_name if doc_name else chunk["chunk_id"])
 
+        # A topology-reached document can be relevant precisely because it was
+        # linked, not because it independently won textual ranking. Reserve a
+        # small additive slot so that link-dependent multi-hop answers see the
+        # target evidence without displacing ordinary top-k retrieval.
+        link_slots = int(local_results.get("document_link_context_slots", 1))
+        if link_slots > 0:
+            for chunk in (c for c in chunks_sorted if c.get("document_link")):
+                if link_slots <= 0 or chunk["chunk_id"] in seen_chunk_ids:
+                    continue
+                if _is_near_duplicate(chunk["text"], seen_texts):
+                    continue
+                seen_chunk_ids.add(chunk["chunk_id"])
+                seen_texts.append(_normalize(chunk["text"])[:300])
+                source = chunk.get("source")
+                header = f"[Linked chunk {chunk['chunk_id']} | Source: {source}]" if source else f"[Linked chunk {chunk['chunk_id']}]"
+                sections.append(f"{header}\n{chunk['text']}")
+                doc_name = chunk.get("_doc_name") or (source.replace(".txt", "") if source else None)
+                citations.append(doc_name if doc_name else chunk["chunk_id"])
+                link_slots -= 1
+
+        document_link_edges = local_results.get("document_link_edges", [])
+        if document_link_edges:
+            lines = []
+            for edge in document_link_edges[:10]:
+                line = f"{edge['src']} —LINKS_TO→ {edge['tgt']}"
+                if edge.get("anchor_text"):
+                    line += f" (anchor: {edge['anchor_text']})"
+                lines.append(line)
+                citations.extend([edge["src"], edge["tgt"]])
+            if lines:
+                sections.append("Explicit document links:\n" + "\n".join(lines))
+
         # Local: entity context
         entities = local_results.get("entities", [])
         if entities:

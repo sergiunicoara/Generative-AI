@@ -372,6 +372,34 @@ class LocalSearch:
 
         seed_ids = [c["chunk_id"] for c in seed_chunks]
 
+        # Explicit document topology expansion. This is deliberately distinct
+        # from entity multi-hop traversal: only source-observed LINKS_TO edges
+        # are eligible, and the Neo4j query enforces source, edge-snapshot and
+        # target ACLs before any target chunk reaches reranking or synthesis.
+        document_link_chunks: list[dict] = []
+        document_link_edges: list[dict] = []
+        if cfg.get("document_link_traversal_enabled", True) and seed_ids:
+            document_link_chunks = await self._neo4j.get_linked_document_chunks(
+                seed_ids,
+                top_k=cfg.get("document_link_top_k", 5),
+                tenant=tenant,
+                query_embedding=embedding,
+                valid_at=valid_at,
+                transaction_at=transaction_at,
+                access_context=access_context,
+            )
+            for chunk in document_link_chunks:
+                chunk["document_link"] = True
+                document_link_edges.append({
+                    "src": chunk.get("link_source", ""),
+                    "relation": "LINKS_TO",
+                    "tgt": chunk.get("link_target", ""),
+                    "anchor_text": chunk.get("anchor_text", ""),
+                    "target_url": chunk.get("target_url", ""),
+                    "source_system": chunk.get("source_system", ""),
+                    "observed_at": chunk.get("observed_at", ""),
+                })
+
         # Step 4 — multi-hop graph traversal
         # Semantic blend: rank hop chunks by (1-w)·path_score + w·cos(chunk, query)
         # BEFORE the multihop_top_k cap, so the cap keeps query-relevant chunks
@@ -414,7 +442,13 @@ class LocalSearch:
             extra_chunks.append(c)
             if len(extra_chunks) >= hop_top_k:  # cap before GNN — prevents full-corpus scoring
                 break
-        all_chunks   = seed_chunks + extra_chunks
+        link_seen = {chunk["chunk_id"] for chunk in seed_chunks + extra_chunks}
+        link_extra = []
+        for chunk in document_link_chunks:
+            if chunk["chunk_id"] not in link_seen:
+                link_seen.add(chunk["chunk_id"])
+                link_extra.append(chunk)
+        all_chunks   = seed_chunks + extra_chunks + link_extra
         all_ids      = [c["chunk_id"] for c in all_chunks]
 
         # Populated inside the GNN branch below (needs an embedding + chunks
@@ -589,6 +623,11 @@ class LocalSearch:
             "chunks": all_chunks,
             "entities": entities,
             "entity_edges": entity_edges,
+            "document_link_edges": list({
+                (edge["src"], edge["relation"], edge["tgt"], edge["target_url"]): edge
+                for edge in document_link_edges if edge["src"] and edge["tgt"]
+            }.values()),
+            "document_link_context_slots": cfg.get("document_link_context_slots", 1),
             # Returned so hybrid_retriever can record the turn with the real answer
             "referenced_entities": referenced_entities,
             "referenced_chunks": all_ids,

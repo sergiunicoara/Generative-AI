@@ -29,6 +29,12 @@ def graph_edge_ids(results: dict) -> list[str]:
         relation = edge.get("relation") or "RELATES_TO"
         if source and target:
             edge_ids.append(f"{source}|{relation}|{target}")
+    for edge in results.get("document_link_edges", []):
+        source = edge.get("src")
+        target = edge.get("tgt")
+        relation = edge.get("relation") or "LINKS_TO"
+        if source and target:
+            edge_ids.append(f"{source}|{relation}|{target}")
     return _unique(edge_ids)
 
 

@@ -201,6 +201,12 @@ class IngestionAgent(BaseGraphRAGAgent):
         # silently create a duplicate (see tasks/lessons.md A136).
         original_id = doc.id
         canonical_id = await self._writer.write_document(doc)  # mutates doc.id in place
+        for chunk in chunks:
+            # Carries source context into entity assertions without trusting a
+            # client-supplied query value. Chunker already sets this for normal
+            # ingestion; this also covers older queued documents and custom
+            # connectors that construct chunks directly.
+            chunk.metadata.setdefault("source_system", doc.metadata_envelope.source_system)
         is_reingest = canonical_id != original_id
         if is_reingest:
             for c in chunks:

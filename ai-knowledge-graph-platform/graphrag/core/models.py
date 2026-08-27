@@ -11,6 +11,7 @@ from pydantic import BaseModel, Field
 
 from graphrag.enterprise.models import (
     AccessContext,
+    DocumentLink,
     DocumentAccessPolicy,
     LineageAssertion,
     MetadataEnvelope,
@@ -68,6 +69,10 @@ class Document(BaseModel):
     # Document ACL is written with the document and inherited by every chunk at
     # query time.  It is never accepted from a query request.
     access_policy: DocumentAccessPolicy = Field(default_factory=DocumentAccessPolicy)
+    # Explicit outgoing document references observed in the source.  They are
+    # never inferred from semantic similarity; ingestion resolves them to
+    # tenant-scoped Document-[:LINKS_TO]->Document edges when a target exists.
+    outbound_links: list[DocumentLink] = Field(default_factory=list, max_length=10_000)
     # Only explicit, source-backed claims enter these lists.  The ingestion
     # writer turns them into pending human-review items by default.
     lineage_assertions: list[LineageAssertion] = Field(default_factory=list)

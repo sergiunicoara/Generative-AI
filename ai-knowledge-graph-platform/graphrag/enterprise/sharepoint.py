@@ -10,7 +10,7 @@ import httpx
 
 from graphrag.enterprise.models import ACLState, DocumentAccessPolicy, MetadataEnvelope, SyncChange, SyncChangeType
 from graphrag.enterprise.sync import ContentSyncService
-from graphrag.ingestion.document_loader import load_document_content
+from graphrag.ingestion.document_loader import extract_document_links, load_document_content
 
 
 @dataclass(frozen=True)
@@ -130,7 +130,10 @@ class SharePointSyncConnector:
         filename = str(item.get("name") or "")
         if not filename:
             return None
-        text = load_document_content(filename, await self._graph.content(item_id))
+        content = await self._graph.content(item_id)
+        source_url = str(item.get("webUrl") or "")
+        source_version = str(item.get("eTag") or item.get("cTag") or "")
+        text = load_document_content(filename, content)
         try:
             policy = _access_policy(await self._graph.permissions(item_id))
         except (httpx.HTTPError, ValueError):
@@ -142,11 +145,15 @@ class SharePointSyncConnector:
             text=text,
             metadata=MetadataEnvelope(
                 collection="sharepoint", schema_version="v1", source_system="sharepoint",
-                external_id=item_id, source_url=str(item.get("webUrl") or ""),
-                source_version=str(item.get("eTag") or item.get("cTag") or ""),
+                external_id=item_id, source_url=source_url,
+                source_version=source_version,
                 content_type=str(item.get("file", {}).get("mimeType") or "text/plain"),
             ),
             access_policy=policy,
+            document_links=extract_document_links(
+                filename, content, base_url=source_url,
+                source_system="sharepoint", source_version=source_version,
+            ),
         )
 
 

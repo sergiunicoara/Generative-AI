@@ -3,13 +3,17 @@
 from __future__ import annotations
 
 import json
+import re
 from io import BytesIO
 from pathlib import Path
+from html.parser import HTMLParser
+from urllib.parse import urljoin
 
 import structlog
 
 from graphrag.core.content_hash import compute_content_hash
 from graphrag.core.models import Document, StructuredTable
+from graphrag.enterprise.models import DocumentLink
 
 log = structlog.get_logger(__name__)
 
@@ -32,6 +36,7 @@ def load_document(file_path: str | Path) -> Document:
         # document as last run?" without re-reading the file.
         content_hash=compute_content_hash(text),
     )
+    doc.outbound_links = extract_document_links(path.name, path.read_bytes())
     tables = load_structured_tables(path.name, path.read_bytes(), document_id=doc.id, tenant=doc.tenant)
     if tables:
         doc.metadata["structured_tables"] = [table.model_dump(mode="json") for table in tables]
@@ -74,9 +79,104 @@ def load_document_content(filename: str, content: bytes) -> str:
             rows.extend(" | ".join("" if value is None else str(value) for value in row)
                         for row in sheet.iter_rows(values_only=True))
         return "\n".join(rows)
+    if suffix in {".html", ".htm"}:
+        parser = _HTMLTextAndLinks()
+        parser.feed(content.decode("utf-8", errors="replace"))
+        parser.close()
+        return "\n".join(part for part in parser.text if part).strip()
     if suffix in {".txt", ".md", ".csv"}:
         return content.decode("utf-8")
     raise ValueError(f"Unsupported file type: {suffix}")
+
+
+class _HTMLTextAndLinks(HTMLParser):
+    """Small dependency-free HTML reader for visible text and explicit anchors."""
+
+    def __init__(self) -> None:
+        super().__init__(convert_charrefs=True)
+        self.text: list[str] = []
+        self.links: list[tuple[str, str, int]] = []
+        self._ignored_depth = 0
+        self._current_href = ""
+        self._current_anchor: list[str] = []
+        self._link_index = 0
+
+    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        if tag in {"script", "style", "noscript"}:
+            self._ignored_depth += 1
+        if tag == "a" and not self._ignored_depth:
+            self._current_href = dict(attrs).get("href") or ""
+            self._current_anchor = []
+
+    def handle_endtag(self, tag: str) -> None:
+        if tag == "a" and self._current_href:
+            self._link_index += 1
+            self.links.append((self._current_href, " ".join(self._current_anchor).strip(), self._link_index))
+            self._current_href = ""
+            self._current_anchor = []
+        if tag in {"script", "style", "noscript"} and self._ignored_depth:
+            self._ignored_depth -= 1
+
+    def handle_data(self, data: str) -> None:
+        if self._ignored_depth:
+            return
+        value = " ".join(data.split())
+        if value:
+            self.text.append(value)
+            if self._current_href:
+                self._current_anchor.append(value)
+
+
+_MARKDOWN_LINK_RE = re.compile(r"\[[^\]]*\]\(([^)\s]+)(?:\s+[^)]*)?\)")
+
+
+def extract_document_links(
+    filename: str,
+    content: bytes,
+    *,
+    base_url: str = "",
+    source_system: str = "manual",
+    source_version: str = "",
+) -> list[DocumentLink]:
+    """Return explicit http(s) document references without network access.
+
+    HTML is the primary pilot surface. Markdown is included because its links
+    are equally explicit and commonly arrives through SharePoint document
+    libraries. Unsupported formats deliberately return no links rather than
+    attempting extraction from rendered text or semantic similarity.
+    """
+    suffix = Path(filename).suffix.lower()
+    raw = content.decode("utf-8", errors="replace")
+    candidates: list[tuple[str, str, int]] = []
+    if suffix in {".html", ".htm"}:
+        parser = _HTMLTextAndLinks()
+        parser.feed(raw)
+        parser.close()
+        candidates = parser.links
+    elif suffix == ".md":
+        candidates = [(href, "", index) for index, href in enumerate(_MARKDOWN_LINK_RE.findall(raw), start=1)]
+
+    links: list[DocumentLink] = []
+    seen: set[tuple[str, str, int]] = set()
+    for href, anchor, index in candidates:
+        target = urljoin(base_url, href).strip()
+        try:
+            link = DocumentLink(
+                target_url=target,
+                anchor_text=anchor,
+                source_locator=f"anchor:{index}",
+                source_system=source_system,
+                source_version=source_version,
+            )
+        except ValueError:
+            # Skip page fragments, mailto/javascript URLs and malformed values;
+            # a document graph only accepts resolvable document identities.
+            continue
+        key = (link.target_url, link.anchor_text, index)
+        if key not in seen:
+            links.append(link)
+            seen.add(key)
+    return links
 
 
 def load_structured_tables(

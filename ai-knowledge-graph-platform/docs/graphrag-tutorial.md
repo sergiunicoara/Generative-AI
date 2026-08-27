@@ -61,6 +61,9 @@ available via `scripts/export_rdf.py` + `graphrag/graph/sparql_bridge.py`.
 
 ```
 (:Document) -[:HAS_CHUNK]-> (:Chunk) -[:MENTIONS]-> (:Entity)
+(:Document) -[:LINKS_TO {tenant, provenance, ACL snapshot, observed_at}]-> (:Document)
+(:Entity) -[:HAS_SYSTEM_REPRESENTATION]-> (:SystemRepresentation)
+(:Chunk) -[:ASSERTS_IN_CONTEXT]-> (:ContextualAssertion)
 (:Entity) -[:RELATES_TO {relation, confidence, source_type, ...}]-> (:Entity)
 (:Alias {value}) -[:ALIAS_OF]-> (:Entity)
 (:Conflict) — contradiction records
@@ -81,6 +84,12 @@ Design choices worth defending in an interview:
 - **Multi-tenancy by property, not by database** — every node/edge carries
   `tenant`; every query filters on it. Verified by
   `scripts/verify_tenant_isolation.py`.
+
+Explicit HTML/Markdown/SharePoint references are the only inputs to
+`LINKS_TO`; similarity never invents document links. LocalSearch follows these
+edges with a bounded, ACL-aware expansion for link-dependent multi-hop queries.
+System representations keep CRM and ERP contextual assertions separate beneath
+the canonical tenant-scoped entity.
 
 ### 2.2 Ontology-driven validation
 
@@ -294,7 +303,7 @@ Six stages, each addressing a failure mode of the previous:
 | 1. Vector ANN | HNSW over 3072-d OpenAI embeddings | semantic recall |
 | 2. BM25 | Neo4j full-text | exact identifiers ("AD-2024-01-02") embeddings blur |
 | 3. RRF fusion + cross-encoder rerank | `ms-marco-MiniLM-L-6-v2` | precision on the fused pool |
-| 4. Multi-hop traversal | 2-hop entity walk with confidence decay | facts no single chunk contains |
+| 4. Multi-hop traversal | 2-hop entity walk plus bounded explicit-document-link traversal | facts no single chunk contains; link-dependent questions |
 | 5. GNN re-scoring | GCN/GAT over the query subgraph | structural relevance |
 | 6. LLM synthesis | Groq by default (DeepSeek fallback), cited chunks + graph facts + open-conflict warnings | grounded, auditable answer |
 

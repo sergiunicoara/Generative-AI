@@ -18,6 +18,10 @@ The specification-to-implementation runner is documented in
 - `local-evidence-runbook.md` — reproducible local MCP, retrieval, write, cost, and load evidence
 - `public-local-evaluation-report.md` — bounded results from the checked-in synthetic local run
 - `entity-resolution.md`, `ontology-model.md`, `cypher-patterns.md` — focused KG references
+- `enterprise-content-governance.md` — provider-neutral ACL, SharePoint sync,
+  explicit document-link topology, and late-target reconciliation
+- `entity-resolution.md` — tenant-scoped aliases plus source-system
+  representations and contextual assertions
 - `performance-metrics-inventory.md` — metric definitions and verification queries
 - `../monitoring/prometheus/alerts.yml` — alerting rules, with the action an
   operator should take in each rule's annotations

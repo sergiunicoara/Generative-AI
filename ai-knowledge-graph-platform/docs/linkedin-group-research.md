@@ -67,12 +67,11 @@ vendor claims. Two leads had independently inspectable primary sources.
 - **WebRAG / document-link structure:** the [CASCON 2025 paper](https://doi.org/10.1109/CASCON66301.2025.00112)
   and [public implementation](https://github.com/saramazaheri/Multi-hop-WebRAG)
   evaluate using a hyperlink graph alongside text retrieval for multi-hop web
-  questions. This is a credible *pilot* candidate for sources
-  that expose explicit document-to-document links. The platform does not yet
-  ingest an HTML/SharePoint link graph, so a future pilot should model typed
-  `LINKS_TO` evidence edges, apply access and provenance gates, and measure the
-  gain only on link-dependent questions. It should not be enabled for ordinary
-  PDFs or inferred from similarity.
+  questions. The bounded pilot is now implemented for HTML, Markdown and
+  SharePoint content: explicit links become typed `LINKS_TO` edges, with
+  durable unresolved references, provenance, tenant and ACL snapshots. Retrieval
+  follows only authorised source-to-target links and never infers links from
+  similarity. It is not applied to ordinary PDFs without explicit link metadata.
 - **[RAGU](https://arxiv.org/abs/2607.11683):** the July 2026 preprint reports a
   two-stage typed extraction and consolidation flow plus a compact extractor
   model. Its engineering lesson is
@@ -84,9 +83,9 @@ vendor claims. Two leads had independently inspectable primary sources.
   new requirement: the platform already has PageRank retrieval and incremental
   community rebuild controls.
 
-The global-search pass therefore adds one bounded roadmap item—**explicit
-document-link topology for link-bearing sources**—rather than a new graph
-backend, extraction model, or ranking algorithm.
+The global-search pass therefore resulted in one bounded implementation—
+**explicit document-link topology for link-bearing sources**—rather than a new
+graph backend, extraction model, or ranking algorithm.
 
 ## Evidence policy
 
@@ -134,6 +133,8 @@ Primary sources used in the decision include:
 | Tables as first-class JSON-LD objects | semantic interchange and intelligence ingestion | Already implemented |
 | Persistent agent/context memory | Context Graph decisions, episodes, observations, tool calls and policy versions | Already implemented |
 | Structural route/evidence evaluation | Existing evals measured answers/citations but not the chosen multi-surface trajectory | **Implemented now** |
+| Explicit document-link topology | HTML/SharePoint references were not persisted as a retrieval surface | **Implemented now** |
+| Context-scoped entity representations | Canonical aliases lacked an explicit source-system assertion layer | **Implemented now** |
 | Epistemic worlds/stances | Confidence, contradiction and source provenance exist; no general cognitive-world model | Prototype only |
 | Alternative low-memory graph backend | Backend benchmark harness exists; no independent production proof for Slater | Benchmark only |
 | RL-trained graph retrieval policy | Deterministic/adaptive routing exists; no stable reward dataset or training operations | Research only |
@@ -161,6 +162,37 @@ Primary sources used in the decision include:
    compatibility.
 6. The feature is controlled by `retrieval.trajectory_capture_enabled` and does
    not alter ranking or answer generation.
+
+## Document-link topology pilot
+
+HTML and Markdown anchors, SharePoint HTML references, and explicitly supplied
+API link metadata are persisted as durable source observations. Once the target
+document's canonical `source_url` exists in the same tenant, the graph contains:
+
+```text
+Document A -[:LINKS_TO {tenant, provenance, ACL snapshot, observed_at}]-> Document B
+```
+
+The edge also retains target URL, anchor/locator, source system and source
+version. A missing target is reconciled later without losing the observation.
+Re-ingestion replaces the outgoing link set so removed anchors do not remain as
+stale retrieval paths. `LocalSearch` performs bounded one-hop expansion and
+checks source-document, edge-snapshot and target-document permissions before
+returning target chunks. Similarity never creates `LINKS_TO` edges.
+
+## Context-scoped entity representations
+
+Ingestion now writes source-system context beneath the tenant-scoped canonical
+entity:
+
+```text
+Entity -[:HAS_SYSTEM_REPRESENTATION]-> SystemRepresentation
+Chunk -[:ASSERTS_IN_CONTEXT]-> ContextualAssertion
+ContextualAssertion -[:ASSERTS_REPRESENTATION]-> SystemRepresentation
+```
+
+CRM and ERP observations therefore retain separate assertion paths and raw
+names, even when a canonical mapping has been deliberately approved.
 
 ## Correctness defects found during baseline
 

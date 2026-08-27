@@ -10,6 +10,9 @@ evaluating the system for integration or extension.
 
 ```
 (Document)-[:PART_OF]-(Chunk)-[:MENTIONS]->(Entity)
+(:Document)-[:LINKS_TO {tenant, provenance, ACL snapshot, observed_at}]->(:Document)
+(:Entity)-[:HAS_SYSTEM_REPRESENTATION]->(:SystemRepresentation)
+(:Chunk)-[:ASSERTS_IN_CONTEXT]->(:ContextualAssertion)
                                                │
                               (Entity)-[:RELATES_TO {
                                   relation,          ← UPPER_SNAKE_CASE, ontology-validated
@@ -30,6 +33,9 @@ evaluating the system for integration or extension.
 
 Every node and edge carries `tenant` for strict multi-tenant isolation.
 The composite key `(name, type, tenant)` is the canonical entity identifier.
+Explicit document links are source-observed only; similarity never creates
+`LINKS_TO` edges. System representations preserve source-system context beneath
+the tenant-scoped canonical entity.
 
 ---
 
@@ -50,6 +56,8 @@ implemented as a focused module:
 | Graph health | `graph_evaluator.py` | 6 semantic metrics; trend snapshots |
 | Community structure | `community_builder.py` | Leiden communities; global search summaries |
 | Calibration | `confidence_calibration.py` | Brier score; isotonic confidence correction |
+| Document topology | `document_loader.py`, `neo4j_client.py` | Explicit HTML/Markdown/SharePoint links, ACL-aware bounded traversal, late-target reconciliation |
+| Contextual identity | `graph_writer.py`, `neo4j_client.py` | Tenant/source-system representations and chunk-backed contextual assertions |
 
 ---
 

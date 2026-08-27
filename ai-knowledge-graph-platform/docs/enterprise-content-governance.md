@@ -61,8 +61,22 @@ environment variable holding the client secret. Run
 connector follows Graph `nextLink`/`deltaLink` pagination, downloads changed
 file content, persists the opaque delta cursor, maps deletes to tombstones, and
 normalises user/group permissions into document ACLs. Link-based or unresolvable
-permissions are stored as unknown and therefore denied when ACL enforcement is
-enabled.
+ permissions are stored as unknown and therefore denied when ACL enforcement is
+ enabled.
+
+### Explicit document links
+
+HTML and Markdown links, including HTML synchronized from SharePoint, are
+treated as source-observed document topology. When a target's canonical URL is
+present in the same tenant, ingestion materializes `Document A -[:LINKS_TO]->
+Document B`. The edge retains URL, anchor/locator, source system and version,
+observation/recording timestamps, tenant, and the source ACL snapshot.
+
+Missing targets are reconciled later; re-ingestion removes links deleted from
+the source revision. Retrieval follows only explicit links and checks the
+source document, link snapshot, and target document permissions before returning
+target chunks. Similarity never creates `LINKS_TO` edges. The bounded traversal
+is controlled by `retrieval.document_link_traversal_enabled`.
 
 ## Semantic interchange and spreadsheets
 

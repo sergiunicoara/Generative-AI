@@ -25,6 +25,8 @@ The graph is not a RAG index. It is a formally modeled knowledge base:
 | **Reification** | `Statement` nodes for meta-assertions (endorsements, epistemic annotations) |
 | **Confidence model** | Bayesian accumulation across sources: `1−(1−c₁)(1−c₂)`; authority-weighted decay; temporal half-life; isotonic calibration correction |
 | **Document authority** | 4-level hierarchy (Regulatory → Manufacturer → Internal → Informal); `SUPERSEDES` chains penalise outdated sources |
+| **Document-link topology** | Explicit HTML/Markdown/SharePoint references become ACL-aware, tenant-scoped `LINKS_TO` edges with provenance, timestamps, late-target reconciliation, and bounded multi-hop retrieval |
+| **Context-scoped entity identity** | Canonical tenant entities retain separate `SystemRepresentation` and `ContextualAssertion` paths for CRM and ERP source context |
 | **Graph health metrics** | 6 semantic indicators (alias coverage, contradiction rate, orphan rate, community coherence…) with per-tenant trend snapshots and alert thresholds |
 | **RDF / OWL / SKOS export** | `scripts/export_rdf.py` serialises to Turtle or JSON-LD with `owl:NamedIndividual`, `owl:ObjectProperty`, `rdfs:subClassOf`, reified confidence annotations, and tenant-scoped `skos:ConceptScheme` navigation; `--infer` applies OWL-RL closure before writing |
 | **OWL-RL reasoning** | `OWLRLReasoner` (owlrl) materialises subClassOf chains, symmetric/inverse properties; `is_consistent()` detects owl:Nothing entailments |

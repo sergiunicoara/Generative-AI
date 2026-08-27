@@ -179,6 +179,23 @@ Tenant: aerospace    SpaceX → ("SpaceX", "ORG")
 Tenant: finance      SpaceX → (not registered — new entity)
 ```
 
+### Source-system context
+
+Tenant scope alone is not enough to explain how a name was used. Ingestion now
+adds source-system context beneath the canonical entity:
+
+```text
+Canonical Entity
+    └── SystemRepresentation {tenant, source_system, canonical identity}
+            └── ContextualAssertion {source document, chunk, raw name/type}
+```
+
+The graph persists this as `HAS_SYSTEM_REPRESENTATION`, `ASSERTS_IN_CONTEXT`,
+and `ASSERTS_REPRESENTATION`. CRM and ERP observations of `Customer` therefore
+keep separate provenance and assertion paths. A source system is not evidence
+that two external records are the same; canonical mappings still use the
+existing resolver policy.
+
 ---
 
 ## Confidence and Provenance

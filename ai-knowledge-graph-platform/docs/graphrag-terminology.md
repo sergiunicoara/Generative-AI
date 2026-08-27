@@ -79,6 +79,27 @@ A classical information retrieval ranking algorithm based on term frequency (TF)
 
 ## C
 
+### Contextual assertion
+An assertion tied to a source-system representation of a canonical entity,
+rather than only to the tenant-wide entity name.
+
+**Example:** CRM and ERP observations of `Customer` retain separate
+`SystemRepresentation` and source-chunk paths.
+
+**In this project:** `(:Chunk)-[:ASSERTS_IN_CONTEXT]->(:ContextualAssertion)-[:ASSERTS_REPRESENTATION]->(:SystemRepresentation)`.
+
+### Document link / `LINKS_TO`
+An explicit source-observed reference from one document to another. It is not a
+semantic-similarity edge.
+
+**Example:** `Policy.html —[LINKS_TO]→ Procedure.html` when the source contains
+an anchor to the procedure.
+
+**In this project:** HTML/Markdown extraction is in
+`graphrag/ingestion/document_loader.py`; SharePoint adapts it; Neo4j stores the
+edge and its provenance, tenant and ACL snapshot; `LocalSearch` performs bounded
+authorised traversal.
+
 ### Chunk
 A contiguous segment of a document that fits within an LLM's context window. Documents are split into chunks for embedding and retrieval.
 

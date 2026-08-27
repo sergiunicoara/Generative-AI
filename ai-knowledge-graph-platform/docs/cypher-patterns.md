@@ -71,6 +71,33 @@ RETURN e.name AS name, e.type AS type,
 ORDER BY e.name
 ```
 
+## 2a. Explicit document-link traversal
+
+Use only source-observed links for link-dependent multi-hop retrieval. The
+application additionally injects the shared ACL predicate for `source`, `link`,
+and `target` before returning target chunk text.
+
+```cypher
+UNWIND $seed_chunk_ids AS seed_id
+MATCH (seed:Chunk {id: seed_id, tenant: $tenant})-[:PART_OF]->
+      (source:Document {tenant: $tenant})
+      -[link:LINKS_TO {tenant: $tenant}]->
+      (target:Document {tenant: $tenant})
+MATCH (target_chunk:Chunk {tenant: $tenant})-[:PART_OF]->(target)
+WHERE coalesce(source.is_deleted, false) = false
+  AND coalesce(target.is_deleted, false) = false
+  AND link.recorded_at <= datetime()
+RETURN target_chunk.id AS chunk_id, target_chunk.text AS text,
+       source.filename AS link_source, target.filename AS link_target,
+       link.target_url AS target_url, link.anchor_text AS anchor_text,
+       link.observed_at AS observed_at
+ORDER BY link.observed_at DESC
+LIMIT $top_k
+```
+
+Implemented by `Neo4jClient.get_linked_document_chunks()`. Unresolved source
+observations live in `DocumentLinkReference` until a same-tenant target arrives.
+
 ```cypher
 -- Corresponding edge query — same bitemporal filter applied to RELATES_TO.
 -- Used in: graphrag/graph/bitemporal.py → as_of_edges()

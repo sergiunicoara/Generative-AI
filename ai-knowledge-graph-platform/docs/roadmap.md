@@ -46,6 +46,8 @@ deployed workload and monitoring data behind the claim.
 | Four-stage entity resolution | Exact, fuzzy, embedding, and human review; cosine threshold 0.92; ambiguous matches are queued through `/kg/review-queue`; embedding-search ANN pool is tenant-starvation-safe |
 | Contradiction detection | `directional_reversal`, `exclusive_state`, `functional_violation`, and `positive_negative_pair`; retrieval-side conflict warnings |
 | Authority and supersession | Document authority hierarchy and `SUPERSEDES` chains |
+| Explicit document-link topology | HTML/Markdown/SharePoint references become tenant-scoped, ACL-aware `LINKS_TO` edges with provenance and bounded retrieval traversal |
+| Context-scoped entity representations | Source-system assertions are retained below canonical entities as `SystemRepresentation` and `ContextualAssertion` nodes |
 | Temporal and provenance model | Valid time, transaction time, snapshots, extraction model, prompt version, spans, and source type; API retrieval can constrain chunk and graph traversal by valid and transaction time |
 | Multi-tenant isolation | `(name, type, tenant)` identity key; agent-tool layer (`ToolPolicy`) enforces tenant scoping on both read and write/restricted tools (see Recent Hardening) |
 | Community detection | Multi-resolution Leiden via `graspologic` |
@@ -244,6 +246,8 @@ described as:
 | Module | Status | Detail |
 |---|---|---|
 | Retrieval feedback (`graphrag/retrieval/feedback.py`) | **Implemented and wired** | Neo4j-backed feedback capture is exposed at `/feedback`; `HybridRetriever` now reads tenant-scoped aggregate signals in one batched lookup and blends them conservatively into final chunk scores. The call site and score blending are tested and fail open. |
+| Document-link topology (`document_loader.py`, `neo4j_client.py`) | **Implemented and wired** | Explicit HTML/Markdown/SharePoint references persist as provenance- and ACL-bearing `LINKS_TO` edges; unresolved targets reconcile later, stale links are removed on re-ingestion, and LocalSearch performs bounded authorised expansion. |
+| Contextual entity representations (`graph_writer.py`, `neo4j_client.py`) | **Implemented and wired** | Tenant/source-system `SystemRepresentation` nodes and chunk-backed `ContextualAssertion` paths preserve CRM/ERP context beneath canonical entities. |
 | Evidence tracking (`graphrag/graph/evidence.py`) | **Implemented and wired** | Real `Evidence`/`SourceArtifact` Cypher writes, wired into `/kg/confidence` routes. |
 | Confidence lifecycle (`graphrag/graph/confidence_lifecycle.py`) | **Implemented and wired** | Real enum-guarded state machine (`ASSERTED/INFERRED/DISPUTED/RETRACTED/APPROVED`) with an audit `ConfidenceTransition` node per transition, wired into `/kg/confidence`. |
 | GNN calibration scheduler (`graphrag/graph/calibration_scheduler.py`) | **Implemented and wired** | Triggered from the RabbitMQ ingestion consumer; records scheduled/running/completed/failed states and launches `scripts/calibrate_gnn.py`. Runner injection keeps unit tests deterministic. |

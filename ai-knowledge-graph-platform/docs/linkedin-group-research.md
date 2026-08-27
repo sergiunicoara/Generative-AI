@@ -18,21 +18,75 @@ evidence than the deterministic capability implemented here.
 ## Research scope and completeness
 
 - Group: `linkedin.com/groups/8659061/`, accessed through the authenticated UI.
-- Accessible top-level posts recorded: **109**.
-- Feed labels covered: **1 day to 3 months** old.
-- Posts with technical-keyword matches: **102**.
-- Posts containing external links: **83**.
-- Posts with a collapsed-text affordance: **94**; their complete text was
+- Accessible top-level posts recorded: **344** after continuing pagination to
+  the end of the authenticated feed.
+- Feed labels covered: **1 day to 11 months** old, through feed label **497**
+  (relative LinkedIn labels).
+- Posts with technical-keyword matches: **274**.
+- Posts containing external links: **281**.
+- Posts with a collapsed-text affordance: **313**; their complete text was
   already present in LinkedIn's accessibility DOM and was captured there.
-- Explicit crawl/inspection cycles: **17**.
-- `Show more results` activations with no new top-level records: **5**.
+- Explicit crawl/inspection cycles: **17** in the first pass, plus the resumed
+  pagination pass through feed label **497**.
+- The resumed passes produced **235 additional top-level records**. At the
+  boundary, `Show more results` was absent and three consecutive end-of-feed
+  checks retained the same 344 records and final activity ID.
 - Primary sources inspected for shortlisted claims: **8**.
-- Corpus status: **PARTIAL**.
+- Corpus status: **COMPLETE_ACCESSIBLE_UI**.
 
-The status is intentionally not “complete.” LinkedIn continued to expose an
-enabled pagination control, but repeated activations returned no additional
-records. Therefore 109 is the reproducible accessible corpus for this session,
-not a claim about the group's entire history.
+“Complete” applies only to the group feed exposed to the authenticated account
+at research time. It does not claim that LinkedIn has not withheld, removed, or
+otherwise made historical records inaccessible.
+
+### Resumed-pass findings
+
+- A post about the same label representing different system records reinforced
+  that entity identity must remain canonical while relationship assertions carry
+  system/domain context. The platform already has tenant-scoped alias and
+  identity handling; this is a validation point, not a new implementation gap.
+- A post describing first-class relationship nodes and RDF/Turtle export
+  reinforced the value of provenance-bearing reification. The platform already
+  models claims, evidence, provenance, RDF/OWL/SKOS/SHACL and semantic export;
+  no graph-wide remodel was justified from a social post.
+- Posts about Neo4j `GRAPH TYPE`, GQL/Cypher validation, and GPU graph analysis
+  are useful operational signals, but are vendor/tool-specific or preview/self-
+  benchmark claims. They remain comparison items rather than production
+  dependencies.
+- A drug-discovery example again highlighted that typed assertions such as
+  `treats` versus `causes` must not be represented as similarity-only edges. The
+  existing typed claims, contradiction checks and evidence-bound extraction are
+  the appropriate project control.
+
+### Global LinkedIn search addendum
+
+Authenticated searches for `#GraphRAG`, `graph rag`, and `SharePoint GraphRAG`
+were also reviewed. The global feed was deliberately treated as a lead source:
+most visible results were introductory explainers, job advertisements, or
+vendor claims. Two leads had independently inspectable primary sources.
+
+- **WebRAG / document-link structure:** the [CASCON 2025 paper](https://doi.org/10.1109/CASCON66301.2025.00112)
+  and [public implementation](https://github.com/saramazaheri/Multi-hop-WebRAG)
+  evaluate using a hyperlink graph alongside text retrieval for multi-hop web
+  questions. This is a credible *pilot* candidate for sources
+  that expose explicit document-to-document links. The platform does not yet
+  ingest an HTML/SharePoint link graph, so a future pilot should model typed
+  `LINKS_TO` evidence edges, apply access and provenance gates, and measure the
+  gain only on link-dependent questions. It should not be enabled for ordinary
+  PDFs or inferred from similarity.
+- **[RAGU](https://arxiv.org/abs/2607.11683):** the July 2026 preprint reports a
+  two-stage typed extraction and consolidation flow plus a compact extractor
+  model. Its engineering lesson is
+  already largely present: tenant-scoped alias resolution, embedding
+  deduplication, over-merge detection/splitting, graph-quality evaluation, and
+  incremental community maintenance. The model-specific claim is not enough to
+  replace the configured extraction providers; it is a benchmark candidate.
+- Posts advocating personalized PageRank and incremental indexing do not add a
+  new requirement: the platform already has PageRank retrieval and incremental
+  community rebuild controls.
+
+The global-search pass therefore adds one bounded roadmap item—**explicit
+document-link topology for link-bearing sources**—rather than a new graph
+backend, extraction model, or ranking algorithm.
 
 ## Evidence policy
 

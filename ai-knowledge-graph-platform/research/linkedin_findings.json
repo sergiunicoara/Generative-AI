@@ -3,17 +3,26 @@
   "researched_at": "2026-08-26",
   "source": {
     "group_url": "https://www.linkedin.com/groups/8659061/",
-    "status": "PARTIAL",
-    "accessible_top_level_posts": 109,
+    "status": "COMPLETE_ACCESSIBLE_UI",
+    "accessible_top_level_posts": 344,
     "newest_relative_age": "1d",
-    "oldest_relative_age": "3mo",
-    "technical_posts": 102,
-    "posts_with_external_links": 83,
-    "posts_with_collapsed_text_affordance": 94,
+    "oldest_relative_age": "11mo",
+    "technical_posts": 274,
+    "posts_with_external_links": 281,
+    "posts_with_collapsed_text_affordance": 313,
     "crawl_cycles": 17,
-    "show_more_activations_without_growth": 5,
+    "resumed_pagination_feed_label": 497,
+    "resumed_additional_top_level_posts": 235,
+    "show_more_activations_without_growth": 8,
+    "end_of_feed_stability_checks": 3,
     "primary_sources_inspected": 8,
-    "limitation": "An enabled pagination control remained but repeated activation produced no new top-level records."
+    "limitation": "Complete only for the authenticated UI feed at research time. LinkedIn may withhold, remove, or otherwise make historical records inaccessible."
+  },
+  "global_search": {
+    "queries_reviewed": ["#GraphRAG", "graph rag", "SharePoint GraphRAG", "GraphRAG benchmark"],
+    "scope": "Visible authenticated LinkedIn content-search results; not a claim of exhaustive global-search coverage.",
+    "decision_policy": "Posts are discovery leads. Only independently inspectable primary sources can create an implementation candidate.",
+    "primary_sources_inspected": 2
   },
   "decision_policy": {
     "linkedin_is_discovery_only": true,
@@ -126,6 +135,27 @@
       "status": "ALREADY_MITIGATED",
       "confidence": "high",
       "project_evidence": "Depth is bounded, multi-hop candidates are capped and semantically blended, graph weight is conservative, and retrieval changes are evaluation-gated."
+    },
+    {
+      "id": "LI-013",
+      "topic": "Explicit document-link topology for multi-hop retrieval",
+      "status": "PILOT_CANDIDATE",
+      "confidence": "medium",
+      "primary_sources": [
+        "https://doi.org/10.1109/CASCON66301.2025.00112",
+        "https://github.com/saramazaheri/Multi-hop-WebRAG"
+      ],
+      "reason": "Document hyperlink structure improved multi-hop web QA in the cited work. The platform has no explicit ingestion of HTML or SharePoint document-to-document links.",
+      "gate": "Limit to link-bearing sources, preserve tenant/access/provenance metadata on LINKS_TO edges, and release only if a link-dependent golden set improves without harming ordinary document retrieval."
+    },
+    {
+      "id": "LI-014",
+      "topic": "Two-stage typed extraction and compact domain-adapted extractor",
+      "status": "ALREADY_IMPLEMENTED_DIFFERENTLY",
+      "confidence": "medium",
+      "primary_source": "https://arxiv.org/abs/2607.11683",
+      "project_evidence": "GraphWriter applies tenant-scoped alias resolution and embedding deduplication; EntitySplitter and GraphEvaluator address over-merges and graph quality; incremental community controls support ongoing corpus change.",
+      "deferred": "Benchmark the reported compact extraction model against the configured providers before changing any production model default."
     }
   ]
 }

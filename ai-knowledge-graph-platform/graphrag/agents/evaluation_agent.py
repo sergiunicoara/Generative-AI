@@ -18,7 +18,7 @@ from graphrag.agents.base_agent import BaseGraphRAGAgent
 from graphrag.business_matrix.kpi_tracker import KPITracker
 from graphrag.core.config import get_settings
 from graphrag.core.models import EvalJob, EvalResult, KPIEvent
-from graphrag.evaluation.ragas_evaluator import RagasEvaluator
+from graphrag.evaluation.factory import build_evaluator
 from graphrag.evaluation.judge_retrieve_abstain import (
     CalibrationThresholds,
     JudgeDecision,
@@ -40,7 +40,7 @@ log = structlog.get_logger(__name__)
 
 class EvaluationAgent(BaseGraphRAGAgent):
     def __init__(self):
-        self._evaluator = RagasEvaluator()
+        self._evaluator = build_evaluator()
         self._tracker = KPITracker()
         super().__init__("evaluation_agent")
 
@@ -50,8 +50,8 @@ class EvaluationAgent(BaseGraphRAGAgent):
     def _instruction(self) -> str:
         return (
             "You are an evaluation agent. Given a completed query turn, "
-            "run RAGAS metrics (faithfulness, answer_relevancy, context_precision, "
-            "context_recall) and log all KPIs to the business matrix store."
+            "run configured evidence metrics (RAGAS when available, otherwise the "
+            "deterministic reference evaluator) and log all KPIs to the business matrix store."
         )
 
     def _judge_thresholds(self) -> CalibrationThresholds:
@@ -125,7 +125,7 @@ class EvaluationAgent(BaseGraphRAGAgent):
             "judge_target_fdr": retrieval_policy.target_fdr,
             "retrieval_used": True,
             "abstention_reason": final.abstention_reason,
-            "evaluation_source": "ragas",
+            "evaluation_source": ragas_result.evaluation_source,
         })
         return result, final
 
@@ -207,8 +207,8 @@ class EvaluationAgent(BaseGraphRAGAgent):
         # actual_outcome       = faithfulness      (how correct the answer was)
         # This populates the dashboard Calibration tab automatically after each run.
                 try:
-                    if eval_result.evaluation_source != "ragas":
-                        raise ValueError("calibration samples require retrieval-backed RAGAS")
+                    if eval_result.evaluation_source not in {"ragas", "reference"}:
+                        raise ValueError("calibration samples require retrieval-backed evaluation")
                     if not all(
                         isinstance(value, (int, float)) and math.isfinite(value)
                         for value in (eval_result.context_precision, eval_result.faithfulness)

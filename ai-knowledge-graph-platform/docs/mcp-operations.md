@@ -59,6 +59,11 @@ python -m mcp_server.remote
 
 `GET http://localhost:8002/health` is intentionally public for an orchestrator
 probe. `/mcp` and `/metrics` require `Authorization: Bearer <scoped JWT>`.
+The gateway accepts legacy session-oriented Streamable HTTP during the
+migration window and the stateless MCP 2026-07-28 core. Modern requests use
+`MCP-Protocol-Version: 2026-07-28`, `Mcp-Method`, and, for `tools/call`, a
+matching `Mcp-Name`; the gateway rejects header/body mismatches before a tool
+is resolved. Modern calls do not use `initialize` or `Mcp-Session-Id`.
 Use a real MCP Streamable HTTP client for protocol calls; do not hand-craft a
 write JSON-RPC request as an operational test.
 
@@ -119,8 +124,9 @@ Before exposing `/mcp` through an ingress:
 3. Configure Prometheus with a least-privilege Bearer token for `/metrics`.
 4. Confirm an unscoped token sees neither `biz.workorder.create` nor any other
    withheld capability via `discover_capabilities`.
-5. Keep replicas client-affine until MCP session state is backed by a shared,
-   tested session store.
+5. Keep replicas client-affine until legacy MCP session state is backed by a
+   shared, tested session store. Modern 2026-07-28 calls are stateless; remove
+   affinity only after legacy-client migration is complete.
 
 Render the base manifest before applying it:
 

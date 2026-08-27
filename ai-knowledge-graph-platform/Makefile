@@ -7,7 +7,7 @@ PYTEST    ?= $(PYTHON) scripts/run_pytest.py
 UVICORN   ?= $(PYTHON) -m uvicorn
 PIP       ?= $(PYTHON) -m pip
 
-.PHONY: help install install-dev lock test test-collect test-integration test-load test-all lint \
+.PHONY: help install install-dev lock test test-collect test-integration test-load test-all test-fuzz mutation lint \
 	terraform-fmt terraform-validate terraform-test terraform-security \
         api dashboard backup services-up services-down \
         community-rebuild re-embed entity-migrate smoke-test
@@ -67,6 +67,12 @@ test-ops:      ## Run operational-path integration tests
 
 test-shacl:    ## Run SHACL/ontology validation tests (fast, no live services)
 	$(PYTEST) tests/unit/test_shacl_validator.py tests/unit/test_ontology_lifecycle.py tests/unit/test_ontology_registry.py tests/unit/test_export_rdf.py tests/unit/test_relational_ingestion.py -v
+
+test-fuzz:     ## Run property/fuzz invariants for protocol, mapping, and tenant boundaries
+	$(PYTEST) tests/unit/test_property_invariants.py tests/unit/test_new_surface_invariants.py -q
+
+mutation:      ## Mutate high-risk new adapters; inspect surviving mutants before merge
+	$(PYTHON) -m mutmut run --paths-to-mutate graphrag/retrieval/answer_policy.py,mcp_server/transport_20260728.py,graphrag/ingestion/r2rml.py
 
 # ── Lint ───────────────────────────────────────────────────────────────────────
 

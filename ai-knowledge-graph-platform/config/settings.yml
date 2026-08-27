@@ -76,6 +76,9 @@ graph:
   superseded_confidence_penalty: 0.5  # confidence multiplier for superseded doc edges
 
 retrieval:
+  # Generic answer synthesis is domain-neutral. Tenant-specific vocabulary and
+  # deterministic provenance repairs opt in through `answer_policy` below.
+  answer_policy: generic
   trajectory_capture_enabled: true  # route/evidence telemetry; no ranking behavior change
   local_top_k: 10          # validated baseline — precision 0.907 measured at this value
   temporal_query_expansion_enabled: true  # January 2024 -> 2024-Q1 + 2024 lexical bridge
@@ -232,6 +235,7 @@ retrieval:
   # defaults above.
   tenant_overrides:
     aerospace:
+      answer_policy: aerospace_regulatory
       local_top_k: 14
       rerank_top_k: 8
       context_hop_reserved_slots: 2
@@ -243,6 +247,10 @@ retrieval:
   # first checking what specifically pulled AUT-02/NEG-02 off track.
 
 evaluation:
+  # `reference` is a deterministic, dependency-light fallback. It reports
+  # lexical evidence support and is never labelled as a semantic RAGAS score.
+  backend: ragas
+  ragas_fallback_to_reference: true
   # Bound each external RAGAS judge call so one provider timeout cannot stall
   # a full evaluation run. The runner records and retries a timed-out record.
   ragas_judge_timeout_seconds: 60

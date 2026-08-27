@@ -141,7 +141,7 @@ def record_evaluation_quality(*, faithfulness: float, source: str = "ragas") -> 
         score = float(faithfulness)
         if not math.isfinite(score):
             return
-        safe_source = source if source in {"ragas", "reference_judge", "judge"} else "other"
+        safe_source = source if source in {"ragas", "reference", "reference_judge", "judge"} else "other"
         _evaluation_faithfulness.labels(source=safe_source).set(max(0.0, min(1.0, score)))
     except Exception as exc:  # noqa: BLE001 - telemetry must never break evaluation
         log.debug("observability.evaluation_quality_update_failed", error=str(exc))

@@ -1,0 +1,21 @@
+@prefix rr: <http://www.w3.org/ns/r2rml#> .
+@prefix ex: <https://example.org/supply/> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+
+ex:SupplierMap a rr:TriplesMap;
+  rr:logicalTable [ rr:tableName "suppliers" ];
+  rr:subjectMap [ rr:template "https://example.org/suppliers/{id}"; rr:class ex:Supplier ];
+  rr:predicateObjectMap [ rr:predicate rdfs:label; rr:objectMap [ rr:column "name" ] ].
+
+ex:MaterialMap a rr:TriplesMap;
+  rr:logicalTable [ rr:tableName "materials" ];
+  rr:subjectMap [ rr:template "https://example.org/materials/{id}"; rr:class ex:Material ];
+  rr:predicateObjectMap [ rr:predicate rdfs:label; rr:objectMap [ rr:column "name" ] ].
+
+ex:SupplyMap a rr:TriplesMap;
+  rr:logicalTable [ rr:tableName "supplies" ];
+  rr:subjectMap [ rr:template "https://example.org/supplies/{supplier_id}"; rr:class ex:Supply ];
+  rr:predicateObjectMap [ rr:predicate rdfs:label; rr:objectMap [ rr:column "supplier_id" ] ];
+  rr:predicateObjectMap [ rr:predicate ex:supplies; rr:objectMap [
+    rr:parentTriplesMap ex:MaterialMap; rr:joinCondition [ rr:child "material_id"; rr:parent "id" ]
+  ] ].

@@ -35,6 +35,7 @@ from mcp_server.oauth_metadata import (
     protected_resource_metadata,
 )
 from mcp_server.server import mcp
+from mcp_server.transport_20260728 import ProtocolVersionDispatch
 
 DEFAULT_MAX_REQUEST_BYTES = 1_048_576
 _CORRELATION_CHARS = frozenset(string.ascii_letters + string.digits + "-_.:")
@@ -246,7 +247,10 @@ async def _no_receive() -> Message:
 
 
 async def _health(_request: Request) -> JSONResponse:
-    return JSONResponse({"status": "ok", "transport": "streamable-http"})
+    return JSONResponse({
+        "status": "ok", "transport": "streamable-http",
+        "protocol_versions": ["2025-03-26", "2026-07-28"],
+    })
 
 
 async def _protected_resource_metadata(_request: Request) -> JSONResponse:
@@ -274,7 +278,9 @@ def create_remote_app() -> ASGIApp:
         routes.append(Mount("/metrics", app=make_asgi_app()))
     except ImportError:  # pragma: no cover - Prometheus is a production dep
         pass
-    routes.append(Mount("/", app=mcp.streamable_http_app()))
+    # New MCP clients are stateless under 2026-07-28; older SDK clients keep
+    # the session-oriented FastMCP path during the published migration window.
+    routes.append(Mount("/", app=ProtocolVersionDispatch(mcp.streamable_http_app())))
 
     @asynccontextmanager
     async def lifespan(_app: Starlette):

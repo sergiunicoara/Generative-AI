@@ -15,6 +15,10 @@ The specification-to-implementation runner is documented in
 - `graphrag-tutorial.md` — setup and end-to-end usage
 - `runbook.md` — operations and troubleshooting
 - `mcp-operations.md` — authenticated remote MCP deployment and incident response
+- `multi-region-multi-tenant-architecture.md` — target deployment, residency,
+  regional recovery, and tenant-isolation model
+- `evaluation-and-benchmarking.md` — controlled GraphRAG-Benchmark routes,
+  evaluator provenance, R2RML/OBDA, fuzzing, and mutation checks
 - `local-evidence-runbook.md` — reproducible local MCP, retrieval, write, cost, and load evidence
 - `public-local-evaluation-report.md` — bounded results from the checked-in synthetic local run
 - `entity-resolution.md`, `ontology-model.md`, `cypher-patterns.md` — focused KG references

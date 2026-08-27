@@ -19,5 +19,9 @@ pytest-cov>=5.0.0
 # tenant-isolation and escaping edge cases nobody enumerates by hand.
 hypothesis>=6.100.0
 
+# Mutation testing is intentionally opt-in (too expensive for every PR); the
+# focused Make target below guards the newly security-sensitive adapters.
+mutmut>=3.2.0
+
 ruff>=0.6.0
 pip-tools>=7.4.0

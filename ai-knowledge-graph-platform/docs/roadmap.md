@@ -58,6 +58,7 @@ deployed workload and monitoring data behind the claim.
 | CI | GitHub Actions, pytest matrix, and Ruff linting |
 | Retrieval feedback | `graphrag/retrieval/feedback.py` — Neo4j-backed feedback capture, wired into `/feedback` API routes |
 | Confidence lifecycle & evidence tracking | `graphrag/graph/confidence_lifecycle.py`, `graphrag/graph/evidence.py` — real state-machine + audit trail, wired into `/kg/confidence` routes |
+| Query-conditioned retrieval controls | Adaptive traversal policy, retrieval sufficiency telemetry, auditable evidence bundles, and opt-in text/graph/path/provenance fusion are implemented and unit-tested; live calibration is still required before enabling all controls |
 
 ### Known scale limits
 

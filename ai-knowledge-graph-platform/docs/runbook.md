@@ -73,6 +73,35 @@ Neo4j write contention and entity-resolution latency before increasing further.
 
 ## 3. Common Failure Patterns
 
+### Retrieval reports insufficient evidence
+
+`retrieval_sufficiency` is enabled by default and records evidence count,
+source count, average score, conflicts, and a reason code. This is telemetry,
+not by itself a service failure. Inspect the query trace and
+`retrieval_sufficiency.reason_code` before changing thresholds.
+
+The default behavior can escalate evidence shortages through the existing
+agentic fallback; it does not hard-abstain. Enable
+`retrieval_sufficiency_abstain_enabled` only after running
+`research/linkedin_group/benchmark_plan.md` and setting tenant-appropriate
+minimum evidence and score values.
+
+### Enabling experimental retrieval controls
+
+Conservative defaults are:
+
+```yaml
+retrieval:
+  adaptive_traversal_enabled: false
+  evidence_fusion_enabled: false
+  retrieval_sufficiency_enabled: true
+  retrieval_sufficiency_abstain_enabled: false
+```
+
+Evaluate one feature at a time against the same corpus and golden queries.
+Compare answer quality, citation recall, latency, and escalation/abstention
+rates. Unit-test success is not live performance validation.
+
 ### Query stuck at `status: queued`
 
 **Cause A**: Worker not running.

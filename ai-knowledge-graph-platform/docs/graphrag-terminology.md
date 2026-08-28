@@ -323,6 +323,37 @@ Retrieval-Augmented Generation enhanced with a knowledge graph. Instead of (or i
 
 **In this project:** The entire platform is a GraphRAG implementation. The retrieval path has five retrieval stages; final LLM synthesis is a separate sixth step. IRCoT is an iterative fallback layered over this path, not a fixed retrieval stage.
 
+### Retrieval sufficiency
+
+A query-level assessment of whether retrieved evidence is strong enough to
+support synthesis. It considers evidence count, distinct sources, score
+quality, and open conflicts. Sufficiency is a control-plane signal, not a
+claim that an answer is true: an insufficient result may escalate to agentic
+retrieval or, when explicitly enabled and calibrated, abstain.
+
+**In this project:** `graphrag/retrieval/sufficiency.py` produces the
+`retrieval_sufficiency` payload on `QueryResult`; telemetry is enabled by
+default, while hard abstention is disabled by default.
+
+### Evidence bundle
+
+A compact audit record for the evidence used by retrieval and synthesis. It
+preserves the identifiers needed to trace a result back to chunks, citations,
+entities, graph edges, paths, sources, and temporal constraints.
+
+**In this project:** `graphrag/retrieval/evidence_bundle.py` produces the
+`evidence_bundle` payload on `QueryResult` and the governed retrieval trace.
+
+### Evidence fusion
+
+Joint ranking of candidates using text relevance, graph relevance, path
+quality, and provenance/authority. Query-conditioned weights prevent a precise
+fact lookup from being dominated by graph centrality while allowing relational
+questions to benefit from structural evidence.
+
+**In this project:** `graphrag/retrieval/evidence_fusion.py` is an opt-in layer
+after local retrieval and PageRank tie-breaking.
+
 ---
 
 ## H
@@ -437,6 +468,11 @@ Graph traversal that follows multiple edges in sequence to find entities or fact
 - FAA-AD-2024-01-02 REQUIRES engine mount inspection (MAINTENANCE_PROCEDURE)
 
 **In this project:** Stage 4. `graphrag/graph/neo4j_client.py: get_multihop_chunks()`. Default depth: 2 hops.
+
+When `retrieval.adaptive_traversal_enabled` is enabled, the fixed depth is
+replaced by a bounded query-conditioned `TraversalPolicy` controlling depth,
+beam width, candidate caps, and marginal-gain stopping. The legacy configured
+depth and limits remain authoritative while the flag is off.
 
 ---
 

@@ -369,6 +369,29 @@ minus a bounded, log-scaled latency penalty. Deterministic 5% exploration keeps
 untried routes measurable. Explicit non-hybrid modes and vector-only ablations
 remain authoritative, and any router storage failure falls back to the planner.
 
+### Query-conditioned traversal and evidence controls
+
+The local retrieval path contains three research-informed controls:
+
+- `graphrag/retrieval/traversal_policy.py` maps the normalized query class to
+  bounded depth, beam width, per-seed and total candidate caps. Factoid
+  queries stay shallow, while relational and multi-hop queries receive more
+  budget. Expansion stops when the score tail falls below absolute and
+  relative marginal-gain thresholds.
+- `graphrag/retrieval/sufficiency.py` records evidence count, distinct source
+  count, score quality, conflicts, and a reason code. It can escalate evidence
+  shortages to the existing agentic fallback; hard abstention is separately
+  gated because its thresholds require live calibration.
+- `graphrag/retrieval/evidence_bundle.py` creates an auditable summary of
+  chunk/citation/entity IDs, graph edges, paths, sources, and bitemporal
+  constraints. `evidence_fusion.py` can combine text, graph, path, and
+  provenance signals with query-class-specific weights.
+
+These controls remain backward-compatible and conservative: sufficiency
+telemetry is enabled, while adaptive traversal, evidence fusion, and hard
+abstention are disabled in `config/settings.yml` until the benchmark in
+`research/linkedin_group/benchmark_plan.md` supplies representative evidence.
+
 ### Versioned community summaries
 
 Leiden community IDs are deterministic over tenant, level, algorithm, and

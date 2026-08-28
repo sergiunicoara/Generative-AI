@@ -35,6 +35,8 @@ from graphrag.retrieval.query_rewriter import QueryRewriter
 from graphrag.retrieval.feedback import RetrievalFeedbackService, apply_feedback_scores
 from graphrag.retrieval.query_planner import retrieval_plan
 from graphrag.retrieval.adaptive_router import AdaptiveRetrievalRouter
+from graphrag.retrieval.sufficiency import assess_retrieval_sufficiency, abstention_message
+from graphrag.retrieval.evidence_bundle import build_evidence_bundle
 from graphrag.observability.budgets import check_budget
 from graphrag.observability.cost_attribution import CostEvent, record_cost_event
 from graphrag.retrieval.session_context import get_session_context
@@ -693,12 +695,41 @@ class HybridRetriever:
             hop_reserved_min_gnn=cfg.get("context_hop_reserved_min_gnn", 0.3),
         )
 
-        answer = await get_llm().generate(
-            answer_prompt(cfg).format(
-                context=escape_prompt_data(context),
-                question=question,
-            ),
-        ) or "Insufficient context to answer this question."
+        sufficiency = assess_retrieval_sufficiency(
+            chunks=local_results.get("chunks", []),
+            citations=citations,
+            conflicts=conflicts,
+            min_evidence=int(cfg.get("retrieval_sufficiency_min_evidence", 1)),
+            min_average_score=float(cfg.get("retrieval_sufficiency_min_average_score", 0.0)),
+        )
+        evidence_bundle = build_evidence_bundle(
+            local_results=local_results,
+            global_results=global_results,
+            citations=citations,
+            valid_at=valid_at,
+            transaction_at=transaction_at,
+        )
+        sufficiency_enabled = cfg.get("retrieval_sufficiency_enabled", True)
+        if sufficiency_enabled:
+            log.info("hybrid_retriever.retrieval_sufficiency", **sufficiency.as_dict())
+            if not sufficiency.sufficient:
+                policy_result = PolicyResult.ESCALATE
+                policy_reason_code = sufficiency.reason_code
+
+        if (
+            sufficiency_enabled
+            and cfg.get("retrieval_sufficiency_abstain_enabled", False)
+            and not sufficiency.sufficient
+        ):
+            answer = abstention_message(sufficiency.reason_code)
+            citations = []
+        else:
+            answer = await get_llm().generate(
+                answer_prompt(cfg).format(
+                    context=escape_prompt_data(context),
+                    question=question,
+                ),
+            ) or "Insufficient context to answer this question."
         # See llm_utils.normalize_dashes — Groq's gpt-oss models write
         # document IDs/dates with U+2011 NON-BREAKING HYPHEN instead of
         # ASCII "-", found 2026-08-17 diagnosing golden-eval failures.
@@ -748,6 +779,14 @@ class HybridRetriever:
         low_confidence = _is_low_confidence(
             answer, citations, require_no_citations=not hedge_only,
         )
+        # An evidence-shortage abstention can benefit from iterative retrieval;
+        # an unresolved conflict cannot, because more retrieval does not settle
+        # competing evidence without an explicit review policy.
+        low_confidence = low_confidence or (
+            sufficiency_enabled
+            and not sufficiency.sufficient
+            and sufficiency.reason_code in {"insufficient_evidence", "low_evidence_score"}
+        )
         # A planned multi-hop fallback must not be blocked merely because a
         # global-only search returned an incidental citation.  In that mode
         # `local_results` is intentionally empty, so the policy already says
@@ -785,6 +824,8 @@ class HybridRetriever:
             result.routing_reason = routing_reason
             result.policy_result = policy_result.value
             result.policy_reason_code = policy_reason_code
+            result.retrieval_sufficiency = sufficiency.as_dict()
+            result.evidence_bundle = evidence_bundle.as_dict()
             if capture_trajectory:
                 agentic_steps = (
                     result.retrieval_trajectory.steps
@@ -849,6 +890,8 @@ class HybridRetriever:
             routing_reason=routing_reason,
             policy_result=policy_result.value,
             policy_reason_code=policy_reason_code,
+            retrieval_sufficiency=sufficiency.as_dict(),
+            evidence_bundle=evidence_bundle.as_dict(),
             retrieval_trajectory=(
                 trajectory_from_steps(
                     query_class=plan["query_class"],

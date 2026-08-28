@@ -84,7 +84,20 @@ retrieval:
   temporal_query_expansion_enabled: true  # January 2024 -> 2024-Q1 + 2024 lexical bridge
   multihop_depth: 2        # validated baseline — depth 3 diluted retrieval and caused refusals on answerable questions
   multihop_top_k: 50       # max hop chunks fed to GNN — prevents full-corpus scoring on dense graphs (bug fix: 21min→30s)
+  # Query-shaped graph expansion is an experiment: retain the measured fixed
+  # depth baseline until an A/B run clears the benchmark acceptance gate.
+  adaptive_traversal_enabled: false
+  adaptive_traversal_max_depth: 4
   multihop_semantic_weight: 0.5  # blend hop ranking: (1-w)·path_score + w·cos(chunk,query), cosine computed in Neo4j. 0 = pure path score (pre-2026-06 behavior). Gated on retrieval eval — see scripts/eval_hop_ranking.py. Phase 5 Fix B tried 0.8 (no effect on CON-04/AUTH-01, reverted — see tasks/lessons.md A105)
+  # Log sufficiency now; enable hard abstention only after threshold
+  # calibration on tenant-disjoint golden data.
+  retrieval_sufficiency_enabled: true
+  retrieval_sufficiency_abstain_enabled: false
+  retrieval_sufficiency_min_evidence: 1
+  retrieval_sufficiency_min_average_score: 0.0
+  # Joint text/graph/path/provenance scoring is deliberately benchmark-gated.
+  evidence_fusion_enabled: false
+  evidence_fusion_weights: {}
   global_top_communities: 5
   global_search_strategy: direct_context  # direct summaries -> final synthesis; map_reduce remains available for ablations
   global_direct_context_max_chars: 6000   # bounded high-level context sent to the final answer call
@@ -261,6 +274,13 @@ evaluation:
     # - context_recall
   eval_sample_rate: 0.2
   min_ground_truth_queries: 50
+  rubrics:
+    enabled: true
+    # Only a configured budget is enforced; missing cost accounting is surfaced
+    # in the persisted rubric evidence rather than guessed from model names.
+    answer_support_threshold: 0.80
+    latency_budget_ms: null
+    cost_budget_usd: null
   judge_retrieve_abstain:
     enabled: true
     accept_threshold: 0.90

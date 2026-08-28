@@ -47,6 +47,11 @@ _evaluation_faithfulness = Gauge(
     "Most recently observed evaluation faithfulness by bounded evaluation source",
     ["source"],
 ) if Gauge else None
+_rubric_results = Counter(
+    "graphrag_evaluation_rubrics_total",
+    "Deterministic rubric outcomes by bounded rubric ID and outcome",
+    ["rubric_id", "outcome"],
+) if Counter else None
 _operational_write_receipts = Counter(
     "graphrag_operational_write_receipts_total",
     "Governed operational write receipts by capability and outcome",
@@ -145,6 +150,26 @@ def record_evaluation_quality(*, faithfulness: float, source: str = "ragas") -> 
         _evaluation_faithfulness.labels(source=safe_source).set(max(0.0, min(1.0, score)))
     except Exception as exc:  # noqa: BLE001 - telemetry must never break evaluation
         log.debug("observability.evaluation_quality_update_failed", error=str(exc))
+
+
+def record_rubric_results(*, results: list[dict], tenant: str, query_id: str) -> None:
+    """Emit bounded rubric counters while keeping evidence out of metric labels."""
+    known = {
+        "citation_present", "citation_resolves_to_source", "answer_supported",
+        "tool_execution_success", "authorized_scope", "tenant_scope_preserved",
+        "freshness_verified", "cost_budget_respected", "latency_budget_respected",
+        "pii_policy_respected",
+    }
+    for result in results:
+        rubric_id = str(result.get("rubric_id", "other"))
+        safe_id = rubric_id if rubric_id in known else "other"
+        outcome = "passed" if result.get("passed") else "failed"
+        if _rubric_results:
+            _rubric_results.labels(safe_id, outcome).inc()
+        log.info(
+            "observability.rubric_result", rubric_id=rubric_id, outcome=outcome,
+            tenant=tenant, query_id=query_id, correlation_id=current_correlation_id(),
+        )
 
 
 def record_operational_write_receipt(*, capability: str, outcome: str, tenant: str) -> None:

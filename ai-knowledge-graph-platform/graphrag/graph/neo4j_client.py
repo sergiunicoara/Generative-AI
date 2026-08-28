@@ -1731,6 +1731,8 @@ class Neo4jClient:
         transaction_at: str | None = None,
         query_embedding: list[float] | None = None,
         semantic_weight: float = 0.0,
+        per_seed_cap: int = 200,
+        total_cap: int = 500,
     ) -> list[dict]:
         """
         Multi-hop graph traversal with temporal filtering and path quality scoring.
@@ -1753,6 +1755,12 @@ class Neo4jClient:
         relevant chunks below that cap on dense graphs. Chunks without an
         embedding fall back to the pure path score.
         """
+        # These values are interpolated into Cypher's variable-length path and
+        # LIMIT clauses, so validate and bound them before interpolation.  The
+        # default limits preserve the legacy query shape exactly.
+        hops = min(max(int(hops), 1), 8)
+        per_seed_cap = min(max(int(per_seed_cap), 1), 1_000)
+        total_cap = min(max(int(total_cap), 1), 5_000)
         temporal_filter = (
             "AND ALL(r IN relationships(path) WHERE "
             "(r.valid_from IS NULL OR r.valid_from <= $as_of) "
@@ -1817,8 +1825,8 @@ class Neo4jClient:
             """,
             chunk_ids=chunk_ids,
             tenant=tenant,
-            per_seed_cap=200,
-            total_cap=500,
+            per_seed_cap=per_seed_cap,
+            total_cap=total_cap,
             **({"as_of": as_of} if as_of else {}),
             **({"transaction_at": transaction_at} if transaction_at else {}),
             **({"query_emb": query_embedding, "sem_w": float(semantic_weight)}

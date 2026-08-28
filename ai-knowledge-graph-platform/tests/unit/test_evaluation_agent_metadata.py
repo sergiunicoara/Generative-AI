@@ -31,6 +31,7 @@ async def test_evaluation_preserves_job_tenant_correlation_and_stable_kpi_event_
     neo4j.run = AsyncMock(return_value=[])
     with (
         patch("graphrag.agents.evaluation_agent.record_evaluation_job") as record_metric,
+        patch("graphrag.agents.evaluation_agent.record_rubric_results") as record_rubrics,
         patch("graphrag.graph.neo4j_client.get_neo4j", return_value=neo4j),
         patch("graphrag.graph.confidence_calibration.CalibrationService", return_value=calibration),
     ):
@@ -42,10 +43,13 @@ async def test_evaluation_preserves_job_tenant_correlation_and_stable_kpi_event_
     calibration.add_sample.assert_not_awaited()
     assert record_metric.call_args.kwargs["outcome"] == "completed"
     assert record_metric.call_args.kwargs["tenant"] == "automotive"
+    assert record_rubrics.call_args.kwargs["tenant"] == "automotive"
     assert neo4j.run.await_count == 7
     kpi = agent._tracker.record.await_args.args[0]
     assert kpi.judge_decision == "accept"
     assert kpi.evaluation_source == "reference_judge"
+    assert result.failure_category == "evaluator_uncertainty"
+    assert result.failure_reason == "retrieval trajectory was not captured"
 
 
 @pytest.mark.asyncio
@@ -90,3 +94,23 @@ async def test_evaluation_policy_abstains_on_refusal_without_ragas_call():
     assert result.evaluation_source == "judge"
     assert result.retrieval_used is False
     agent._evaluator.evaluate_single.assert_not_awaited()
+
+
+async def test_explicit_authorization_denial_overrides_semantic_acceptance():
+    agent = EvaluationAgent.__new__(EvaluationAgent)
+    job = EvalJob(
+        job_id="evaluation-denied", tenant="aerospace",
+        query_result=QueryResult(
+            query_id="q-denied", question="q", answer="supported answer",
+            citations=["source"], contexts=["source"], policy_result="escalate",
+            policy_reason_code="no_authorized_evidence",
+        ),
+    )
+    result = EvalResult(job_id="evaluation-denied", query_id="q-denied", faithfulness=1.0,
+                        judge_decision="accept")
+
+    gated = agent._apply_deterministic_rubrics(job, result)
+
+    assert gated.rubric_hard_failed
+    assert gated.judge_decision == "abstain"
+    assert gated.abstention_reason == "mandatory_rubric_failed"

@@ -415,6 +415,8 @@ class QueryResult(BaseModel):
     routing_reason: str = ""
     policy_result: str = ""
     policy_reason_code: str = ""
+    retrieval_sufficiency: dict[str, Any] = Field(default_factory=dict)
+    evidence_bundle: dict[str, Any] = Field(default_factory=dict)
     retrieval_trajectory: RetrievalTrajectory | None = None
 
 
@@ -457,6 +459,14 @@ class EvalResult(BaseModel):
     retrieval_used: bool = True
     abstention_reason: str = ""
     evaluation_source: str = "ragas"
+    rubric_score: float = 0.0
+    rubric_passed: bool = False
+    rubric_hard_failed: bool = False
+    rubric_results: list[dict[str, Any]] = Field(default_factory=list)
+    rubric_config: dict[str, Any] = Field(default_factory=dict)
+    stage_metrics: list[dict[str, Any]] = Field(default_factory=list)
+    failure_category: str = ""
+    failure_reason: str = ""
     scored_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 

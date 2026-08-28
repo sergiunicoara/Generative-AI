@@ -48,6 +48,8 @@ class CheckNode:
     check_type: str
     status: str
     score: float | None = None
+    version: str = ""
+    reason: str = ""
 
 
 @dataclass
@@ -123,6 +125,16 @@ def build_claim_evidence_graph(
     graph.checks.append(judge_check)
     if evaluation.judge_decision == "accept":
         graph.validated_by.extend((claim.id, judge_check.id) for claim in graph.claims)
+    for rubric in evaluation.rubric_results:
+        rubric_id = str(rubric.get("rubric_id", "unknown"))
+        rubric_check = CheckNode(
+            id=f"check:{query_id}:rubric:{_safe_id(rubric_id)}", tenant=tenant, query_id=query_id,
+            check_type=rubric_id, status="passed" if rubric.get("passed") else "failed",
+            score=float(rubric.get("score", 0.0)), version=str(rubric.get("version", "")),
+            reason=str(rubric.get("reason", "")),
+        )
+        graph.checks.append(rubric_check)
+        graph.validated_by.extend((claim.id, rubric_check.id) for claim in graph.claims)
     return graph
 
 
@@ -161,7 +173,8 @@ async def persist_claim_evidence_graph(neo4j: Any, graph: ClaimEvidenceGraph) ->
         UNWIND $items AS item
         MERGE (n:Check {tenant: item.tenant, id: item.id})
         SET n.query_id = item.query_id, n.check_type = item.check_type,
-            n.status = item.status, n.score = item.score
+            n.status = item.status, n.score = item.score, n.version = item.version,
+            n.reason = item.reason
         """,
         items=[vars(item) for item in graph.checks],
     )

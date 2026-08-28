@@ -1,0 +1,140 @@
+[
+  {
+    "case_id": "role_senior_ml_rag",
+    "category": "healthy",
+    "source": "historical",
+    "synthetic": false,
+    "source_reference": "C:\\Users\\Sergiu\\Desktop\\Projects\\Agentic-AI\\recruiter-agent\\eval_results.json",
+    "trajectory": [
+      {
+        "node_id": "user-1",
+        "kind": "user",
+        "text": "I'm a hiring manager looking for a senior ML engineer who has shipped RAG systems to production.",
+        "name": null,
+        "latency_ms": null,
+        "attributes": {}
+      },
+      {
+        "node_id": "agent-1",
+        "kind": "agent",
+        "text": "Perfect — I’ll evaluate Sergiu’s fit for **Senior ML Engineer** based on:\n\n- **Production Rag**\n- **Ownership**\n\nFrom here you can:\n1) Project deep dive — say **next** or **another** (or type `1`)\n2) ATS summary + recruiter email — say **summary** or **ats** (or type `2`)\n\nYou can also paste a job description for additional context.",
+        "name": null,
+        "latency_ms": null,
+        "attributes": {
+          "state": {
+            "source": null,
+            "role": "Senior ML Engineer",
+            "criteria": [
+              "production_rag",
+              "ownership"
+            ],
+            "memory": [
+              {
+                "kind": "set_role",
+                "payload": {
+                  "role": "Senior ML Engineer"
+                }
+              },
+              {
+                "kind": "set_criteria",
+                "payload": {
+                  "criteria": [
+                    "production_rag",
+                    "ownership"
+                  ],
+                  "raw": [
+                    "production_rag",
+                    "ownership"
+                  ],
+                  "extra_context": []
+                }
+              }
+            ],
+            "extra": {}
+          }
+        }
+      }
+    ],
+    "expected_failure": false,
+    "expected_failure_types": [],
+    "expected_refusal": null,
+    "role": "Senior ML Engineer",
+    "criteria": [
+      "production_rag",
+      "ownership"
+    ],
+    "notes": "Detect Senior ML Engineer role with RAG criteria from a plain hiring sentence",
+    "expected_tool_behavior": {},
+    "expected_policy_behavior": {},
+    "redaction_applied": false,
+    "source_payload": {
+      "golden_case": {
+        "id": "role_senior_ml_rag",
+        "description": "Detect Senior ML Engineer role with RAG criteria from a plain hiring sentence",
+        "user_message": "I'm a hiring manager looking for a senior ML engineer who has shipped RAG systems to production.",
+        "expected_role": "Senior ML Engineer",
+        "expected_criteria": [
+          "production_rag",
+          "ownership"
+        ]
+      },
+      "historical_judge_result": {
+        "case_id": "role_senior_ml_rag",
+        "passed": true,
+        "score": 5.0,
+        "faithfulness": 1.0,
+        "relevancy": 1.0,
+        "factuality": 1.0,
+        "label": "excellent",
+        "reasoning": "The agent correctly identified the job role and evaluation criteria, confirming them back to the user. It then provided clear, relevant next steps for further interaction.",
+        "raw": {
+          "chat": {
+            "reply": "Perfect — I’ll evaluate Sergiu’s fit for **Senior ML Engineer** based on:\n\n- **Production Rag**\n- **Ownership**\n\nFrom here you can:\n1) Project deep dive — say **next** or **another** (or type `1`)\n2) ATS summary + recruiter email — say **summary** or **ats** (or type `2`)\n\nYou can also paste a job description for additional context.",
+            "state": {
+              "source": null,
+              "role": "Senior ML Engineer",
+              "criteria": [
+                "production_rag",
+                "ownership"
+              ],
+              "memory": [
+                {
+                  "kind": "set_role",
+                  "payload": {
+                    "role": "Senior ML Engineer"
+                  }
+                },
+                {
+                  "kind": "set_criteria",
+                  "payload": {
+                    "criteria": [
+                      "production_rag",
+                      "ownership"
+                    ],
+                    "raw": [
+                      "production_rag",
+                      "ownership"
+                    ],
+                    "extra_context": []
+                  }
+                }
+              ],
+              "extra": {}
+            },
+            "session_id": "eval-run-001-role_senior_ml_rag"
+          },
+          "judge": {
+            "score": 5,
+            "faithfulness": 1.0,
+            "relevancy": 1.0,
+            "factuality": 1.0,
+            "label": "excellent",
+            "issues": [],
+            "reasoning": "The agent correctly identified the job role and evaluation criteria, confirming them back to the user. It then provided clear, relevant next steps for further interaction."
+          }
+        }
+      },
+      "preservation_note": "Source fields retained after explicit sanitization."
+    }
+  }
+]

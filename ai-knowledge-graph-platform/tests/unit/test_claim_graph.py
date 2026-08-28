@@ -27,6 +27,21 @@ def test_claim_graph_preserves_provenance_without_overclaiming_sentence_proof():
     assert graph.supported_by
     assert graph.checks[0].status == "passed"
     assert any(check.check_type == "judge_retrieve_abstain" for check in graph.checks)
+
+
+def test_claim_graph_persists_versioned_deterministic_rubrics():
+    result = _result()
+    evaluation = EvalResult(
+        job_id="j-1", query_id="q-1", faithfulness=0.92,
+        rubric_results=[{
+            "rubric_id": "tenant_scope_preserved", "version": "1.0",
+            "passed": True, "score": 1.0, "reason": "tenant=t1",
+        }],
+    )
+    graph = build_claim_evidence_graph(result, evaluation, tenant="aerospace")
+    check = next(item for item in graph.checks if item.check_type == "tenant_scope_preserved")
+    assert check.status == "passed"
+    assert check.version == "1.0"
     assert graph.validated_by
     assert graph.actions[0].correlation_id == "corr-q-1"
     assert graph.actions[0].source_trace_id == "trace-q-1"

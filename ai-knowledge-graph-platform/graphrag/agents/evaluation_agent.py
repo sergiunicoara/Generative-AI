@@ -27,11 +27,17 @@ from graphrag.evaluation.judge_retrieve_abstain import (
     finalize_after_retrieval,
     judge_without_retrieval,
 )
+from graphrag.evaluation.rubrics import RubricRegistry, build_observations
+from graphrag.evaluation.retrieval_trajectory import assess_runtime_trajectory
 from graphrag.evidence.claim_graph import (
     build_claim_evidence_graph,
     persist_claim_evidence_graph,
 )
-from graphrag.observability.agent_telemetry import record_evaluation_job, record_evaluation_quality
+from graphrag.observability.agent_telemetry import (
+    record_evaluation_job,
+    record_evaluation_quality,
+    record_rubric_results,
+)
 from graphrag.observability.correlation import correlation_context
 from graphrag.observability.tracing import trace_span
 
@@ -61,6 +67,36 @@ class EvaluationAgent(BaseGraphRAGAgent):
             retrieve_threshold=float(cfg.get("retrieve_threshold", 0.55)),
             target_fdr=float(cfg.get("target_fdr", 0.05)),
         )
+
+    def _apply_deterministic_rubrics(self, job: EvalJob, result: EvalResult) -> EvalResult:
+        """Persist deterministic gates and prevent semantic judges overriding hard failures."""
+        cfg = get_settings().evaluation.get("rubrics", {})
+        if not cfg.get("enabled", True):
+            return result
+        qr = job.query_result
+        observations = build_observations(
+            answer=qr.answer, citations=qr.citations, contexts=qr.contexts, tenant=job.tenant,
+            policy_result=qr.policy_result, policy_reason_code=qr.policy_reason_code,
+            valid_at=qr.valid_at, transaction_at=qr.transaction_at,
+            trajectory=qr.retrieval_trajectory, faithfulness=result.faithfulness,
+            latency_ms=qr.latency_ms, latency_budget_ms=cfg.get("latency_budget_ms"),
+            cost_usd=cfg.get("cost_usd"), cost_budget_usd=cfg.get("cost_budget_usd"),
+            answer_support_threshold=float(cfg.get("answer_support_threshold", 0.8)),
+        )
+        rubric_result = RubricRegistry().evaluate(observations)
+        updated = result.model_copy(update={
+            "rubric_score": rubric_result.score,
+            "rubric_passed": rubric_result.passed,
+            "rubric_hard_failed": rubric_result.hard_failed,
+            "rubric_results": [item.model_dump(mode="json") for item in rubric_result.rubrics],
+            "rubric_config": rubric_result.config | {"authorization_policy_known": observations["authorization_policy_known"]},
+        })
+        if rubric_result.hard_failed:
+            return updated.model_copy(update={
+                "judge_decision": JudgeDecision.ABSTAIN.value,
+                "abstention_reason": "mandatory_rubric_failed",
+            })
+        return updated
 
     async def _evaluate_with_policy(
         self, job: EvalJob,
@@ -146,6 +182,20 @@ class EvaluationAgent(BaseGraphRAGAgent):
                 # durable queue job ID as well so retries and traces have one
                 # unambiguous evaluation identity.
                 eval_result.job_id = job.job_id
+                eval_result = self._apply_deterministic_rubrics(job, eval_result)
+                stage_result = assess_runtime_trajectory(
+                    qr.retrieval_trajectory, citations=qr.citations,
+                    faithfulness=eval_result.faithfulness,
+                    temporal_query=qr.valid_at is not None or qr.transaction_at is not None,
+                    answer_support_threshold=float(
+                        get_settings().evaluation.get("rubrics", {}).get("answer_support_threshold", 0.8)
+                    ),
+                )
+                eval_result = eval_result.model_copy(update={
+                    "stage_metrics": [metric.model_dump(mode="json") for metric in stage_result.metrics],
+                    "failure_category": stage_result.failure_category.value if stage_result.failure_category else "",
+                    "failure_reason": stage_result.failure_reason,
+                })
 
                 # A stable event ID makes a redelivered job visible and gives
                 # the KPI backend a deterministic key for deduplication.
@@ -173,6 +223,9 @@ class EvaluationAgent(BaseGraphRAGAgent):
                 record_evaluation_quality(
                     faithfulness=eval_result.faithfulness,
                     source=eval_result.evaluation_source,
+                )
+                record_rubric_results(
+                    results=eval_result.rubric_results, tenant=job.tenant, query_id=qr.query_id,
                 )
 
                 # Persist an auditable claim/artifact/action/check subgraph.

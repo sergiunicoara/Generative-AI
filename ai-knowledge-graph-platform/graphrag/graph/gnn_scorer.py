@@ -204,6 +204,7 @@ class GNNScorer:
             for c in chunks:
                 text_score       = self._text_score(c, seed_rank, n_seed)
                 c["gnn_score"]   = 0.0
+                c["text_score"]  = text_score
                 # No graph evidence — weight falls entirely on text score.
                 # Applying alpha preserves the documented formula when gnn=0:
                 #   final = α·text + β·0 = α·text

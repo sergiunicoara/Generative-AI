@@ -34,6 +34,11 @@ from graphrag.retrieval.bm25_search import HybridBM25Search
 from graphrag.enterprise.models import AccessContext
 from graphrag.retrieval.reranker import CrossEncoderReranker
 from graphrag.retrieval.session_context import get_session_context
+from graphrag.retrieval.traversal_policy import (
+    build_traversal_policy,
+    select_traversal_candidates,
+)
+from graphrag.retrieval.evidence_fusion import apply_evidence_fusion, fusion_weights
 
 log = structlog.get_logger(__name__)
 
@@ -152,12 +157,20 @@ class LocalSearch:
         # (reranker/GNN singletons).
         cfg = {**resolve_tenant_config(self._cfg, tenant), **(config_overrides or {})}
         top_k      = cfg.get("local_top_k", 10)
-        hops       = cfg.get("multihop_depth", 2)
+        configured_hops = cfg.get("multihop_depth", 2)
         use_bm25   = cfg.get("bm25_enabled", True)
         use_rerank = cfg.get("reranker_enabled", True)
         use_gnn    = cfg.get("gnn_enabled", True)
         use_entity_context = cfg.get("entity_context_enabled", True)
         use_named_document_boost = cfg.get("named_document_boost_enabled", True)
+        traversal_policy = build_traversal_policy(
+            question,
+            configured_max_hops=configured_hops,
+            configured_top_k=cfg.get("multihop_top_k", 50),
+            enabled=cfg.get("adaptive_traversal_enabled", False),
+            max_depth_cap=cfg.get("adaptive_traversal_max_depth", 4),
+        )
+        hops = traversal_policy.max_hops
         acl_enforced = bool(get_settings().access_control.get("enabled", False))
         if acl_enforced:
             # Graph structures and community/entity summaries can encode facts
@@ -417,6 +430,8 @@ class LocalSearch:
                 transaction_at=transaction_at,
                 query_embedding=embedding if sem_weight > 0 else None,
                 semantic_weight=sem_weight,
+                per_seed_cap=traversal_policy.per_seed_cap,
+                total_cap=traversal_policy.total_cap,
             )
             log.info(
                 "local_search.multihop.done",
@@ -432,10 +447,15 @@ class LocalSearch:
         # of times. Without updating `seen` per accepted chunk, hop_top_k caps
         # on a pool that's mostly repeats of a handful of chunks, starving out
         # distinct-but-single-occurrence chunks that never get a seed slot.
-        hop_top_k = cfg.get("multihop_top_k", 50)
+        adaptive_traversal_enabled = cfg.get("adaptive_traversal_enabled", False)
+        hop_candidates = (
+            select_traversal_candidates(hop_chunks, traversal_policy)
+            if adaptive_traversal_enabled else hop_chunks
+        )
+        hop_top_k = traversal_policy.beam_width if adaptive_traversal_enabled else cfg.get("multihop_top_k", 50)
         seen: set[str] = set(seed_ids)
         extra_chunks: list[dict] = []
-        for c in hop_chunks:
+        for c in hop_candidates:
             if c["chunk_id"] in seen:
                 continue
             seen.add(c["chunk_id"])
@@ -556,7 +576,8 @@ class LocalSearch:
                         # comparable to final_score's range on their own.
                         pr = max((pagerank_by_name.get(n, 0.0) for n in names), default=0.0)
                         pr_norm = (pr / max_pr) if max_pr > 0 else 0.0
-                        c["final_score"] = c.get("final_score", 0.0) + weight * pr_norm
+                        c["pagerank_tiebreak"] = weight * pr_norm
+                        c["final_score"] = c.get("final_score", 0.0) + c["pagerank_tiebreak"]
                     candidates.sort(key=lambda c: c["final_score"], reverse=True)
                     all_chunks[:top_n] = candidates
                     after_order = [c["chunk_id"] for c in candidates]
@@ -572,6 +593,26 @@ class LocalSearch:
                         "local_search.pagerank_tiebreak.skipped",
                         reason="no_pagerank_data_for_candidates",
                     )
+
+        # Opt-in joint ranking over already retrieved evidence.  This does not
+        # issue additional graph/LLM calls, and leaves the calibrated legacy
+        # text/GNN score untouched unless a tenant enables the experiment.
+        if cfg.get("evidence_fusion_enabled", False) and all_chunks:
+            weights = fusion_weights(
+                enriched_question, cfg.get("evidence_fusion_weights", {}),
+            )
+            all_chunks = apply_evidence_fusion(all_chunks, weights)
+            for chunk in all_chunks:
+                chunk["final_score"] += float(chunk.get("pagerank_tiebreak", 0.0) or 0.0)
+            all_chunks.sort(key=lambda chunk: chunk["final_score"], reverse=True)
+            log.info(
+                "local_search.evidence_fusion.done",
+                query_class=traversal_policy.query_class,
+                text_weight=round(weights.text, 3),
+                graph_weight=round(weights.graph, 3),
+                path_weight=round(weights.path, 3),
+                provenance_weight=round(weights.provenance, 3),
+            )
 
         # Attach source document filenames so the LLM can attribute claims to
         # a specific document/revision — needed for cross-document questions
@@ -628,6 +669,13 @@ class LocalSearch:
                 for edge in document_link_edges if edge["src"] and edge["tgt"]
             }.values()),
             "document_link_context_slots": cfg.get("document_link_context_slots", 1),
+            "traversal_policy": {
+                "query_class": traversal_policy.query_class,
+                "max_hops": traversal_policy.max_hops,
+                "beam_width": traversal_policy.beam_width,
+                "enabled": adaptive_traversal_enabled,
+            },
+            "evidence_fusion_enabled": cfg.get("evidence_fusion_enabled", False),
             # Returned so hybrid_retriever can record the turn with the real answer
             "referenced_entities": referenced_entities,
             "referenced_chunks": all_ids,

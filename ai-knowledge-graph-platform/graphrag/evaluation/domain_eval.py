@@ -51,9 +51,18 @@ def validate_dataset(data: dict, *, source: str = "dataset") -> dict:
             errors.append(f"questions[{index}] has invalid type '{case.get('type')}'")
         if not isinstance(case.get("expected_citations"), list):
             errors.append(f"questions[{index}].expected_citations must be a list")
-        for field in ("expected_surfaces", "expected_evidence_ids", "expected_graph_edges"):
+        for field in (
+            "expected_surfaces", "expected_evidence_ids", "expected_graph_edges",
+            "expected_entity_ids", "expected_candidate_ids", "expected_reranked_ids",
+            "expected_fresh_evidence_ids",
+        ):
             if field in case and not isinstance(case[field], list):
                 errors.append(f"questions[{index}].{field} must be a list")
+        if "minimum_answer_score" in case and (
+            not isinstance(case["minimum_answer_score"], (int, float))
+            or not 0.0 <= float(case["minimum_answer_score"]) <= 1.0
+        ):
+            errors.append(f"questions[{index}].minimum_answer_score must be between 0 and 1")
         if "tool_budget" in case and (
             not isinstance(case["tool_budget"], int) or case["tool_budget"] < 0
         ):

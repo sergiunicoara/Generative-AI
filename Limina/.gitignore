@@ -1,0 +1,12 @@
+.env
+.venv/
+__pycache__/
+.pytest_cache/
+*.py[cod]
+results/*
+!results/.gitkeep
+artifacts/*
+!artifacts/.gitkeep
+benchmark_results.json
+benchmark_results.csv
+.vendor-inspect/

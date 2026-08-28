@@ -1,0 +1,353 @@
+[
+  {
+    "case_id": "deep_dive_keyword",
+    "category": "healthy",
+    "source": "historical",
+    "synthetic": false,
+    "source_reference": "C:\\Users\\Sergiu\\Desktop\\Projects\\Agentic-AI\\recruiter-agent\\eval_results.json",
+    "trajectory": [
+      {
+        "node_id": "user-1",
+        "kind": "user",
+        "text": "another",
+        "name": null,
+        "latency_ms": null,
+        "attributes": {}
+      },
+      {
+        "node_id": "agent-1",
+        "kind": "agent",
+        "text": "### 🔍 Deep Dive (2/3): **GraphRAG Pipeline with RAGAS Evaluation**\n\n**Target role:** ML Engineer\n**Evaluation criteria:** production_rag\n\n**What this project is about**\nProduction RAG pipeline with graph-augmented retrieval: embeddings, vector store, re-ranking, and a RAGAS evaluation harness. Achieves context_precision=1.0 and context_recall=1.0 on the golden test set. Automated CI gate blocks deploys if recall drops below threshold.\n\n**Impact (concrete outcomes)**\n- context_precision = 1.0, context_recall = 1.0 on eval dataset\n- Automated RAGAS CI gate: no deploy if recall regresses\n- Graph-augmented retrieval outperforms naive cosine on multi-hop queries\n- End-to-end: ingestion → chunking → embedding → retrieval → ranking → LLM response\n\n**Why this fits the role & criteria**\n- **production_rag**: explicitly supported in the project tags.\n\n📎 Repo: https://github.com/sergiunicoara/Agentic-AI\n\nSay **next** or **another** for the next project · **2** or **ats** for a summary.\n",
+        "name": null,
+        "latency_ms": null,
+        "attributes": {
+          "state": {
+            "source": null,
+            "role": "ML Engineer",
+            "criteria": [
+              "production_rag"
+            ],
+            "memory": [
+              {
+                "kind": "set_role",
+                "payload": {
+                  "role": "ML Engineer"
+                }
+              },
+              {
+                "kind": "set_criteria",
+                "payload": {
+                  "criteria": [
+                    "production_rag"
+                  ],
+                  "raw": [
+                    "production_rag"
+                  ],
+                  "extra_context": []
+                }
+              },
+              {
+                "kind": "view_project",
+                "payload": {
+                  "project_id": "ai-native-data-platform",
+                  "role": "ML Engineer",
+                  "criteria": [
+                    "production_rag"
+                  ]
+                }
+              },
+              {
+                "kind": "view_project",
+                "payload": {
+                  "project_id": "graphrag:ragas-pipeline",
+                  "role": "ML Engineer",
+                  "criteria": [
+                    "production_rag"
+                  ]
+                }
+              }
+            ],
+            "extra": {
+              "deep_dive_index": 2
+            }
+          }
+        }
+      }
+    ],
+    "expected_failure": false,
+    "expected_failure_types": [],
+    "expected_refusal": null,
+    "role": "ML Engineer",
+    "criteria": [
+      "production_rag"
+    ],
+    "notes": "Trigger project deep dive with 'another' keyword after first deep dive",
+    "expected_tool_behavior": {},
+    "expected_policy_behavior": {},
+    "redaction_applied": false,
+    "source_payload": {
+      "golden_case": {
+        "id": "deep_dive_keyword",
+        "description": "Trigger project deep dive with 'another' keyword after first deep dive",
+        "setup_messages": [
+          "Looking for an ML Engineer with production RAG experience.",
+          "1"
+        ],
+        "user_message": "another",
+        "expected_role": "ML Engineer",
+        "expected_criteria": [
+          "production_rag"
+        ]
+      },
+      "historical_judge_result": {
+        "case_id": "deep_dive_keyword",
+        "passed": true,
+        "score": 5.0,
+        "faithfulness": 1.0,
+        "relevancy": 1.0,
+        "factuality": 1.0,
+        "label": "excellent",
+        "reasoning": "The agent correctly interpreted 'another' as a request for another project relevant to the previously established role and criteria. It provided a detailed, specific project description that explicitly ties back to the 'production_rag' criteria, including technical details, impact, and a link to the repo.",
+        "raw": {
+          "chat": {
+            "reply": "### 🔍 Deep Dive (2/3): **GraphRAG Pipeline with RAGAS Evaluation**\n\n**Target role:** ML Engineer\n**Evaluation criteria:** production_rag\n\n**What this project is about**\nProduction RAG pipeline with graph-augmented retrieval: embeddings, vector store, re-ranking, and a RAGAS evaluation harness. Achieves context_precision=1.0 and context_recall=1.0 on the golden test set. Automated CI gate blocks deploys if recall drops below threshold.\n\n**Impact (concrete outcomes)**\n- context_precision = 1.0, context_recall = 1.0 on eval dataset\n- Automated RAGAS CI gate: no deploy if recall regresses\n- Graph-augmented retrieval outperforms naive cosine on multi-hop queries\n- End-to-end: ingestion → chunking → embedding → retrieval → ranking → LLM response\n\n**Why this fits the role & criteria**\n- **production_rag**: explicitly supported in the project tags.\n\n📎 Repo: https://github.com/sergiunicoara/Agentic-AI\n\nSay **next** or **another** for the next project · **2** or **ats** for a summary.\n",
+            "state": {
+              "source": null,
+              "role": "ML Engineer",
+              "criteria": [
+                "production_rag"
+              ],
+              "memory": [
+                {
+                  "kind": "set_role",
+                  "payload": {
+                    "role": "ML Engineer"
+                  }
+                },
+                {
+                  "kind": "set_criteria",
+                  "payload": {
+                    "criteria": [
+                      "production_rag"
+                    ],
+                    "raw": [
+                      "production_rag"
+                    ],
+                    "extra_context": []
+                  }
+                },
+                {
+                  "kind": "view_project",
+                  "payload": {
+                    "project_id": "ai-native-data-platform",
+                    "role": "ML Engineer",
+                    "criteria": [
+                      "production_rag"
+                    ]
+                  }
+                },
+                {
+                  "kind": "view_project",
+                  "payload": {
+                    "project_id": "graphrag:ragas-pipeline",
+                    "role": "ML Engineer",
+                    "criteria": [
+                      "production_rag"
+                    ]
+                  }
+                }
+              ],
+              "extra": {
+                "deep_dive_index": 2
+              }
+            },
+            "session_id": "eval-run-001-deep_dive_keyword"
+          },
+          "judge": {
+            "score": 5,
+            "faithfulness": 1.0,
+            "relevancy": 1.0,
+            "factuality": 1.0,
+            "label": "excellent",
+            "issues": [],
+            "reasoning": "The agent correctly interpreted 'another' as a request for another project relevant to the previously established role and criteria. It provided a detailed, specific project description that explicitly ties back to the 'production_rag' criteria, including technical details, impact, and a link to the repo."
+          }
+        }
+      },
+      "preservation_note": "Source fields retained after explicit sanitization."
+    }
+  },
+  {
+    "case_id": "ats_summary_keyword",
+    "category": "healthy",
+    "source": "historical",
+    "synthetic": false,
+    "source_reference": "C:\\Users\\Sergiu\\Desktop\\Projects\\Agentic-AI\\recruiter-agent\\eval_results.json",
+    "trajectory": [
+      {
+        "node_id": "user-1",
+        "kind": "user",
+        "text": "ats",
+        "name": null,
+        "latency_ms": null,
+        "attributes": {}
+      },
+      {
+        "node_id": "agent-1",
+        "kind": "agent",
+        "text": "### 📝 ATS-ready Summary for **ML Engineer**\n\nRole: ML Engineer\nKey criteria: production_rag, leadership, ownership\n\nCandidate: Sergiu\n\nSummary:\n- Strong hands-on experience across ML and Generative AI projects.\n- Portfolio hosted on GitHub under the user 'sergiunicoara', with projects covering agents, RAG, NLP, and classic ML.\n- Relevant projects:\n- AI-Native Data Platform → Production-grade RAG platform scaffold demonstrating the engineering patterns used in real AI-native systems: multi-stage retrieval, multimodal ingestion, runtime reliability contracts, DSPy-optimized NL→SQL, and a full Prometheus + Grafana observability stack.\n- GraphRAG Pipeline with RAGAS Evaluation → Production RAG pipeline with graph-augmented retrieval: embeddings, vector store, re-ranking, and a RAGAS evaluation harness. Achieves context_precision=1.0 and context_recall=1.0 on the golden test set. Automated CI gate blocks deploys if recall drops below threshold.\n- AI Engineering Workflow Toolkit → A production-grade, repository-deployable infrastructure layer that enforces quality standards on every code change by grounding AI reasoning in deterministic tool output before any LLM judgement occurs.\n\n\n---\n\n### ✉️ Recruiter Email Template\n\nHi,\n\nI reviewed Sergiu's profile for the ML Engineer opening.\n\nHe shows strong alignment with the role, especially in: production_rag, leadership, ownership.\n\nSome relevant projects:\n- AI-Native Data Platform → Production-grade RAG platform scaffold demonstrating the engineering patterns used in real AI-native systems: multi-stage retrieval, multimodal ingestion, runtime reliability contracts, DSPy-optimized NL→SQL, and a full Prometheus + Grafana observability stack.\n- GraphRAG Pipeline with RAGAS Evaluation → Production RAG pipeline with graph-augmented retrieval: embeddings, vector store, re-ranking, and a RAGAS evaluation harness. Achieves context_precision=1.0 and context_recall=1.0 on the golden test set. Automated CI gate blocks deploys if recall drops below threshold.\n- AI Engineering Workflow Toolkit → A production-grade, repository-deployable infrastructure layer that enforces quality standards on every code change by grounding AI reasoning in deterministic tool output before any LLM judgement occurs.\n\nAll projects are available on GitHub under the username 'sergiunicoara'.\n\nI recommend moving him forward to the next interview stage.\n\nBest,\nYour AI recruiter agent\n\nYou can reply with:\n- `1` or `another` for project deep dives\n- `change criteria` or `change role` to adjust focus",
+        "name": null,
+        "latency_ms": null,
+        "attributes": {
+          "state": {
+            "source": null,
+            "role": "ML Engineer",
+            "criteria": [
+              "production_rag",
+              "leadership",
+              "ownership"
+            ],
+            "memory": [
+              {
+                "kind": "set_role",
+                "payload": {
+                  "role": "ML Engineer"
+                }
+              },
+              {
+                "kind": "set_criteria",
+                "payload": {
+                  "criteria": [
+                    "production_rag",
+                    "leadership",
+                    "ownership"
+                  ],
+                  "raw": [
+                    "production_rag",
+                    "leadership",
+                    "ownership"
+                  ],
+                  "extra_context": []
+                }
+              },
+              {
+                "kind": "ats_requested",
+                "payload": {
+                  "role": "ML Engineer",
+                  "criteria": [
+                    "production_rag",
+                    "leadership",
+                    "ownership"
+                  ]
+                }
+              }
+            ],
+            "extra": {
+              "deep_dive_index": 0
+            }
+          }
+        }
+      }
+    ],
+    "expected_failure": false,
+    "expected_failure_types": [],
+    "expected_refusal": null,
+    "role": "ML Engineer",
+    "criteria": [
+      "production_rag",
+      "leadership"
+    ],
+    "notes": "Request ATS summary using keyword shortcut after role+criteria set",
+    "expected_tool_behavior": {},
+    "expected_policy_behavior": {},
+    "redaction_applied": true,
+    "source_payload": {
+      "golden_case": {
+        "id": "ats_summary_keyword",
+        "description": "Request ATS summary using keyword shortcut after role+criteria set",
+        "setup_messages": [
+          "I need an ML Engineer with production RAG and leadership skills."
+        ],
+        "user_message": "ats",
+        "expected_role": "ML Engineer",
+        "expected_criteria": [
+          "production_rag",
+          "leadership"
+        ]
+      },
+      "historical_judge_result": {
+        "case_id": "ats_summary_keyword",
+        "passed": true,
+        "score": 5.0,
+        "faithfulness": 1.0,
+        "relevancy": 1.0,
+        "factuality": 1.0,
+        "label": "excellent",
+        "reasoning": "The agent provided an excellent ATS-ready summary and a recruiter email template, perfectly matching the 'ats' request. It correctly applied the predefined job role and evaluation criteria, highlighting highly relevant, production-grade projects from the candidate's profile. The inclusion of the GitHub username and specific project details demonstrates strong factuality and relevance.",
+        "raw": {
+          "chat": {
+            "reply": "### 📝 ATS-ready Summary for **ML Engineer**\n\nRole: ML Engineer\nKey criteria: production_rag, leadership, ownership\n\nCandidate: Sergiu\n\nSummary:\n- Strong hands-on experience across ML and Generative AI projects.\n- Portfolio hosted on GitHub under the user 'sergiunicoara', with projects covering agents, RAG, NLP, and classic ML.\n- Relevant projects:\n- AI-Native Data Platform → Production-grade RAG platform scaffold demonstrating the engineering patterns used in real AI-native systems: multi-stage retrieval, multimodal ingestion, runtime reliability contracts, DSPy-optimized NL→SQL, and a full Prometheus + Grafana observability stack.\n- GraphRAG Pipeline with RAGAS Evaluation → Production RAG pipeline with graph-augmented retrieval: embeddings, vector store, re-ranking, and a RAGAS evaluation harness. Achieves context_precision=1.0 and context_recall=1.0 on the golden test set. Automated CI gate blocks deploys if recall drops below threshold.\n- AI Engineering Workflow Toolkit → A production-grade, repository-deployable infrastructure layer that enforces quality standards on every code change by grounding AI reasoning in deterministic tool output before any LLM judgement occurs.\n\n\n---\n\n### ✉️ Recruiter Email Template\n\nHi,\n\nI reviewed Sergiu's profile for the ML Engineer opening.\n\nHe shows strong alignment with the role, especially in: production_rag, leadership, ownership.\n\nSome relevant projects:\n- AI-Native Data Platform → Production-grade RAG platform scaffold demonstrating the engineering patterns used in real AI-native systems: multi-stage retrieval, multimodal ingestion, runtime reliability contracts, DSPy-optimized NL→SQL, and a full Prometheus + Grafana observability stack.\n- GraphRAG Pipeline with RAGAS Evaluation → Production RAG pipeline with graph-augmented retrieval: embeddings, vector store, re-ranking, and a RAGAS evaluation harness. Achieves context_precision=1.0 and context_recall=1.0 on the golden test set. Automated CI gate blocks deploys if recall drops below threshold.\n- AI Engineering Workflow Toolkit → A production-grade, repository-deployable infrastructure layer that enforces quality standards on every code change by grounding AI reasoning in deterministic tool output before any LLM judgement occurs.\n\nAll projects are available on GitHub under the username 'sergiunicoara'.\n\nI recommend moving him forward to the next interview stage.\n\nBest,\nYour AI recruiter agent\n\nYou can reply with:\n- `1` or `another` for project deep dives\n- `change criteria` or `change role` to adjust focus",
+            "state": {
+              "source": null,
+              "role": "ML Engineer",
+              "criteria": [
+                "production_rag",
+                "leadership",
+                "ownership"
+              ],
+              "memory": [
+                {
+                  "kind": "set_role",
+                  "payload": {
+                    "role": "ML Engineer"
+                  }
+                },
+                {
+                  "kind": "set_criteria",
+                  "payload": {
+                    "criteria": [
+                      "production_rag",
+                      "leadership",
+                      "ownership"
+                    ],
+                    "raw": [
+                      "production_rag",
+                      "leadership",
+                      "ownership"
+                    ],
+                    "extra_context": []
+                  }
+                },
+                {
+                  "kind": "ats_requested",
+                  "payload": {
+                    "role": "ML Engineer",
+                    "criteria": [
+                      "production_rag",
+                      "leadership",
+                      "ownership"
+                    ]
+                  }
+                }
+              ],
+              "extra": {
+                "deep_dive_index": 0
+              }
+            },
+            "session_id": "[REDACTED_SECRET]"
+          },
+          "judge": {
+            "score": 5,
+            "faithfulness": 1.0,
+            "relevancy": 1.0,
+            "factuality": 1.0,
+            "label": "excellent",
+            "issues": [],
+            "reasoning": "The agent provided an excellent ATS-ready summary and a recruiter email template, perfectly matching the 'ats' request. It correctly applied the predefined job role and evaluation criteria, highlighting highly relevant, production-grade projects from the candidate's profile. The inclusion of the GitHub username and specific project details demonstrates strong factuality and relevance."
+          }
+        }
+      },
+      "preservation_note": "Source fields retained after explicit sanitization."
+    }
+  }
+]

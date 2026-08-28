@@ -6,12 +6,17 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from api.routes.evaluation import score_retrieval_trajectory
-from graphrag.core.models import RetrievalTrajectory
+from api.routes.evaluation import score_retrieval_stages, score_retrieval_trajectory
+from graphrag.core.models import RetrievalStep, RetrievalTrajectory
 from graphrag.evaluation.domain_eval import validate_dataset
 from graphrag.evaluation.retrieval_trajectory import (
     RetrievalTrajectoryEvaluationRequest,
     RetrievalTrajectoryExpectation,
+    RetrievalStageEvaluationRequest,
+    RetrievalStageExpectation,
+    StageFailureCategory,
+    assess_runtime_trajectory,
+    evaluate_retrieval_stages,
     evaluate_retrieval_trajectory,
 )
 from graphrag.retrieval.agentic_retriever import AgenticRetriever
@@ -70,6 +75,56 @@ async def test_scoring_endpoint_uses_the_same_deterministic_contract() -> None:
     assert score.aggregate == 1.0
 
 
+def test_stage_evaluator_attributes_an_observed_graph_failure() -> None:
+    trajectory = RetrievalTrajectory(
+        steps=[
+            RetrievalStep(step=1, action="search", query="q", evidence_ids=["chunk-a"]),
+            RetrievalStep(step=2, action="rerank", query="q", evidence_ids=["chunk-a"]),
+        ],
+        evidence_ids=["chunk-a"], graph_edges=["a|REL|b"],
+    )
+    result = evaluate_retrieval_stages(
+        trajectory,
+        RetrievalStageExpectation(
+            expected_candidate_ids=["chunk-a"], expected_reranked_ids=["chunk-a"],
+            expected_graph_edges=["a|REL|c"], expected_evidence_ids=["chunk-a"],
+        ),
+        citations=[], answer_score=1.0,
+    )
+    assert result.failure_category == StageFailureCategory.GRAPH_TRAVERSAL
+    assert next(metric for metric in result.metrics if metric.stage == "graph_traversal").status == "failed"
+
+
+def test_stage_evaluator_reports_uncertainty_for_untraced_expected_rerank() -> None:
+    trajectory = RetrievalTrajectory(
+        steps=[RetrievalStep(step=1, action="search", query="q", evidence_ids=["chunk-a"])],
+        evidence_ids=["chunk-a"],
+    )
+    result = evaluate_retrieval_stages(
+        trajectory, RetrievalStageExpectation(expected_reranked_ids=["chunk-a"]),
+        citations=[], answer_score=1.0,
+    )
+    assert result.failure_category == StageFailureCategory.EVALUATOR_UNCERTAINTY
+
+
+async def test_stage_scoring_endpoint_uses_same_contract() -> None:
+    body = RetrievalStageEvaluationRequest(
+        trajectory=RetrievalTrajectory(
+            steps=[RetrievalStep(step=1, action="search", query="q", evidence_ids=["chunk-a"])],
+            evidence_ids=["chunk-a"],
+        ),
+        expected=RetrievalStageExpectation(expected_candidate_ids=["chunk-a"]),
+        answer_score=1.0,
+    )
+    result = await score_retrieval_stages(body, _tenant="tenant-a")
+    assert result.failure_category is None
+
+
+def test_runtime_stage_assessment_reports_missing_trace_as_uncertain() -> None:
+    result = assess_runtime_trajectory(None, citations=[], faithfulness=1.0, temporal_query=False)
+    assert result.failure_category == StageFailureCategory.EVALUATOR_UNCERTAINTY
+
+
 def test_domain_eval_accepts_structural_expectations_and_rejects_bad_shapes() -> None:
     valid = {"tenant": "a", "questions": [{
         "id": "Q1",
@@ -79,6 +134,8 @@ def test_domain_eval_accepts_structural_expectations_and_rejects_bad_shapes() ->
         "expected_surfaces": ["text", "graph"],
         "expected_evidence_ids": ["chunk-a"],
         "expected_graph_edges": ["a|REL|b"],
+        "expected_candidate_ids": ["chunk-a"],
+        "minimum_answer_score": 0.9,
         "tool_budget": 2,
     }]}
     assert validate_dataset(valid)["valid"] is True

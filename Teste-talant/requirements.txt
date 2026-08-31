@@ -1,2 +1,0 @@
-reportlab>=4.2
-pdfplumber>=0.11  # test-only: verifies rendered PDF text in tests/test_generator.py

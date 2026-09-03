@@ -200,9 +200,16 @@ class MultiModalEntityService:
         image_url: str = "",
         caption: str = "",
         mime_type: str = "image/jpeg",
+        image_bytes: bytes | None = None,
     ) -> str:
-        """Convenience wrapper — attach an image attachment."""
-        return await self.attach_media(
+        """Convenience wrapper — attach an image attachment.
+
+        If ``image_bytes`` is given, a perceptual hash is computed inline
+        (via ``graphrag.graph.perceptual_hash.compute_phash``) and stored on
+        the same MediaAttachment node, so ``find_similar_images`` can use it
+        immediately without a separate ``set_perceptual_hash`` call.
+        """
+        attachment_id = await self.attach_media(
             entity_name=entity_name,
             entity_type=entity_type,
             tenant=tenant,
@@ -211,6 +218,11 @@ class MultiModalEntityService:
             caption=caption,
             mime_type=mime_type,
         )
+        if image_bytes is not None:
+            from graphrag.graph.perceptual_hash import compute_phash
+            phash = compute_phash(image_bytes)
+            await self.set_perceptual_hash(tenant, attachment_id, phash)
+        return attachment_id
 
     async def attach_audio(
         self,
@@ -325,6 +337,133 @@ class MultiModalEntityService:
         )
         log.info("multimodal.embedding_stored",
                  attachment_id=attachment_id, dim=len(embedding), tenant=tenant)
+
+    # ── Perceptual hashing ─────────────────────────────────────────────────────
+
+    async def set_perceptual_hash(
+        self,
+        tenant: str,
+        attachment_id: str,
+        phash: str,
+    ) -> None:
+        """Store a perceptual hash (see ``graphrag.graph.perceptual_hash``) on
+        a MediaAttachment, and record the computation as a provenance-tracked
+        transformation.
+
+        `tenant` required for the same reason as ``set_embedding``: without a
+        tenant check, a caller who learns another tenant's attachment_id
+        could silently overwrite that attachment's hash.
+        """
+        tenant = require_tenant(tenant)
+        await self._neo4j.run(
+            """
+            MATCH (m:MediaAttachment {id: $id, tenant: $tenant})
+            SET m.phash = $phash, m.phash_set_at = datetime()
+            """,
+            id=attachment_id,
+            tenant=tenant,
+            phash=phash,
+        )
+        await self.record_transformation(MediaTransformation(
+            tenant=tenant,
+            input_attachment_id=attachment_id,
+            output_artifact_id=attachment_id,
+            transform_type="perceptual_hash",
+            output_digest=phash,
+        ))
+        log.info("multimodal.phash_stored", attachment_id=attachment_id, tenant=tenant)
+
+    async def find_similar_images(
+        self,
+        tenant: str,
+        attachment_id: str,
+        max_distance: int = 8,
+        limit: int = 20,
+    ) -> list[dict]:
+        """Find image MediaAttachments perceptually similar to a given one.
+
+        Fetches the tenant's image attachments that have a stored phash and
+        computes Hamming distance against ``attachment_id``'s hash in Python
+        (Neo4j has no native Hamming-distance operator, and tenant-scoped
+        image counts don't warrant a dedicated similarity index). Returns
+        matches within ``max_distance``, closest first. The target itself is
+        excluded from results.
+
+        Returns an empty list if ``attachment_id`` has no stored phash.
+        """
+        from graphrag.graph.perceptual_hash import hamming_distance
+
+        tenant = require_tenant(tenant)
+        rows = await self._neo4j.run(
+            """
+            MATCH (m:MediaAttachment {modality: 'image', tenant: $tenant})
+            WHERE m.phash IS NOT NULL
+            RETURN m.id AS id, m.entity_name AS entity_name,
+                   m.entity_type AS entity_type, m.media_url AS media_url,
+                   m.caption AS caption, m.phash AS phash
+            """,
+            tenant=tenant,
+        )
+        rows = [dict(r) for r in rows]
+        target = next((r for r in rows if r["id"] == attachment_id), None)
+        if target is None:
+            return []
+
+        matches = []
+        for r in rows:
+            if r["id"] == attachment_id:
+                continue
+            distance = hamming_distance(target["phash"], r["phash"])
+            if distance <= max_distance:
+                matches.append({**{k: v for k, v in r.items() if k != "phash"},
+                                 "distance": distance})
+        matches.sort(key=lambda r: r["distance"])
+        return matches[:limit]
+
+    # ── OCR ────────────────────────────────────────────────────────────────────
+
+    async def run_ocr(
+        self,
+        tenant: str,
+        attachment_id: str,
+        image_bytes: bytes,
+    ) -> MediaTransformation:
+        """Run OCR over an image attachment and record the result.
+
+        Stores the extracted text as a provenance-tracked
+        ``MediaTransformation`` (transform_type="ocr"), and — only if the
+        attachment's caption is currently empty — backfills the caption with
+        the OCR'd text, so it becomes searchable through the existing
+        caption-based ANN/text retrieval path without any new plumbing.
+        """
+        from graphrag.graph.ocr import extract_text
+
+        tenant = require_tenant(tenant)
+        text, confidence = extract_text(image_bytes)
+
+        transformation = MediaTransformation(
+            tenant=tenant,
+            input_attachment_id=attachment_id,
+            output_artifact_id=attachment_id,
+            transform_type="ocr",
+            output_digest=text,
+            metadata={"confidence": confidence},
+        )
+        await self.record_transformation(transformation)
+
+        await self._neo4j.run(
+            """
+            MATCH (m:MediaAttachment {id: $id, tenant: $tenant})
+            WHERE m.caption IS NULL OR m.caption = ''
+            SET m.caption = $text
+            """,
+            id=attachment_id,
+            tenant=tenant,
+            text=text,
+        )
+        log.info("multimodal.ocr_run", attachment_id=attachment_id,
+                 tenant=tenant, chars=len(text), confidence=confidence)
+        return transformation
 
     async def get_unembedded(
         self,

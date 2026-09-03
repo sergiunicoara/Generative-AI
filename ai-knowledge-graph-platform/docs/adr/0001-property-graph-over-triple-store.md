@@ -102,3 +102,17 @@ infrastructure that Neo4j provides natively via ON CREATE SET semantics.
 **Mitigation:** The `export_rdf.py` script provides a standards-compliant Turtle export
 on demand, enabling interoperability with OWL reasoners and SPARQL endpoints without
 coupling the primary workload to RDF semantics.
+
+---
+
+## Addendum (2026-09) — optional live SPARQL endpoint
+
+`docker-compose.yml` now includes an optional `blazegraph` service, loaded via
+`scripts/load_blazegraph.py` from the same Turtle exports `export_rdf.py` already produces.
+This is a mirror for tools/workflows that expect a real SPARQL 1.1 HTTP endpoint rather than
+the in-process `rdflib`-backed bridge (`graphrag/graph/sparql_bridge.py`, `POST /kg/sparql`).
+
+It does **not** revisit the Decision above: Neo4j remains the source of truth, Blazegraph
+holds a point-in-time copy that is only as fresh as the last export/load run, and nothing in
+the platform depends on it being present. It exists purely as an additional, disposable
+interoperability sink alongside Protégé/Fuseki/Oxigraph, callable exactly as before.

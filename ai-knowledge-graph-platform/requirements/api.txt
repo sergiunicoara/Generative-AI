@@ -18,6 +18,13 @@ numpy>=1.26.0
 rdflib>=7.0.0
 owlrl>=6.0.0
 
+# ── Media analysis (graphrag/graph/perceptual_hash.py, graphrag/graph/ocr.py) ──
+# Lazily imported by graphrag/graph/multimodal.py's phash/OCR methods, not
+# loaded unconditionally -- but this is the only service that calls them
+# (api/routes/kg/multimodal.py), so it's the only subset that needs them.
+imagehash>=4.3.1
+easyocr>=1.7.2
+
 # ── Google AI (used in graph writer, extractor) ────────────────────────────────
 google-generativeai>=0.8.0
 google-genai>=1.0.0

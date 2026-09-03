@@ -583,6 +583,103 @@ async def list_unembedded_media(
     return await svc.get_unembedded(tenant=tenant, modality=modality, limit=limit)
 
 
+class AttachImageRequest(BaseModel):
+    entity_name: str
+    entity_type: str
+    image_url: str = ""
+    caption: str = ""
+    mime_type: str = "image/jpeg"
+    image_base64: str | None = None
+
+
+class MediaIdRequest(BaseModel):
+    attachment_id: str
+    image_base64: str
+
+
+@router.post(
+    "/multimodal/attach-image",
+    dependencies=[Depends(require_scope("write"))],
+    summary="Attach an image to an entity, computing a perceptual hash inline",
+)
+async def attach_image(request: AttachImageRequest, tenant: str = Depends(get_tenant)):
+    """Attach an image, optionally computing its perceptual hash inline.
+
+    When ``image_base64`` is provided, the decoded bytes are hashed via
+    ``compute_phash`` and stored on the attachment, so it's immediately
+    eligible for ``GET /multimodal/similar``.
+    """
+    import base64
+
+    from graphrag.graph.multimodal import MultiModalEntityService
+
+    image_bytes = base64.b64decode(request.image_base64) if request.image_base64 else None
+    svc = MultiModalEntityService(get_neo4j())
+    try:
+        attachment_id = await svc.attach_image(
+            entity_name=request.entity_name,
+            entity_type=request.entity_type,
+            tenant=tenant,
+            image_url=request.image_url,
+            caption=request.caption,
+            mime_type=request.mime_type,
+            image_bytes=image_bytes,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return {"attachment_id": attachment_id, "phash_computed": image_bytes is not None}
+
+
+@router.post(
+    "/multimodal/ocr",
+    dependencies=[Depends(require_scope("write"))],
+    summary="Run OCR on an image attachment and record the extracted text",
+)
+async def run_media_ocr(request: MediaIdRequest, tenant: str = Depends(get_tenant)):
+    """Extract text from an already-attached image via EasyOCR.
+
+    Backfills the attachment's caption with the extracted text if it was
+    previously empty, so the text becomes searchable through the existing
+    caption-based retrieval path.
+    """
+    import base64
+
+    from graphrag.graph.multimodal import MultiModalEntityService
+
+    try:
+        image_bytes = base64.b64decode(request.image_base64)
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=f"Invalid base64: {exc}") from exc
+
+    svc = MultiModalEntityService(get_neo4j())
+    try:
+        transformation = await svc.run_ocr(tenant, request.attachment_id, image_bytes)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return {
+        "text": transformation.output_digest,
+        "confidence": transformation.metadata.get("confidence", 0.0),
+    }
+
+
+@router.get(
+    "/multimodal/similar",
+    dependencies=[Depends(require_scope("read"))],
+    summary="Find images perceptually similar to a given MediaAttachment",
+)
+async def find_similar_media(
+    attachment_id: str,
+    tenant: str = Depends(get_tenant),
+    max_distance: int = 8,
+    limit: int = 20,
+):
+    from graphrag.graph.multimodal import MultiModalEntityService
+    svc = MultiModalEntityService(get_neo4j())
+    return await svc.find_similar_images(
+        tenant, attachment_id, max_distance=max_distance, limit=limit
+    )
+
+
 # ── SPARQL Bridge ────────────────────────────────────────────────────────────
 
 class SPARQLRequest(BaseModel):
@@ -637,6 +734,59 @@ async def sparql_query(request: SPARQLRequest, tenant: str = Depends(get_tenant)
         bridge = SPARQLBridge.from_turtle(path)
         rows   = bridge.query(request.query, init_ns=request.namespaces)
         return {"rows": rows, "count": len(rows)}
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+class SPARQLUpdateRequest(BaseModel):
+    query: str
+    namespaces: dict[str, str] = {}
+    persist: bool = False
+
+
+@router.post(
+    "/sparql/update",
+    dependencies=[Depends(require_scope("write"))],
+    summary="Execute a SPARQL 1.1 Update against the caller's tenant RDF export",
+)
+async def sparql_update(request: SPARQLUpdateRequest, tenant: str = Depends(get_tenant)):
+    """Run a SPARQL 1.1 Update (INSERT/DELETE/CLEAR/...) against the caller's
+    tenant export.
+
+    By default (``persist=False``) the mutation is applied to an in-memory
+    copy of the export and discarded -- nothing on disk changes, and Neo4j
+    is never touched by this endpoint (RDF here is an export/interop layer,
+    not the source of truth). Pass ``persist=True`` to overwrite the
+    tenant's ``graph_export.ttl`` with the mutated graph, so a subsequent
+    ``POST /kg/sparql`` SELECT sees the change.
+    """
+    import os
+    from pathlib import Path
+
+    from graphrag.graph.sparql_bridge import SPARQLBridge
+
+    if not _TENANT_PATH_RE.fullmatch(tenant):
+        raise HTTPException(status_code=403, detail="Invalid tenant")
+
+    export_dir = Path(os.getenv("GRAPHRAG_RDF_EXPORT_DIR", "exports"))
+    path = export_dir / tenant / "graph_export.ttl"
+    if not path.exists():
+        raise HTTPException(
+            status_code=404,
+            detail=f"RDF export not found at '{path}'. "
+                   f"Run: python scripts/export_rdf.py --tenant {tenant}",
+        )
+    try:
+        bridge = SPARQLBridge.from_turtle(path)
+        triples_before = len(bridge._g)
+        triples_after  = bridge.update(request.query, init_ns=request.namespaces)
+        if request.persist:
+            bridge.save(path)
+        return {
+            "triples_before": triples_before,
+            "triples_after": triples_after,
+            "persisted": request.persist,
+        }
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 

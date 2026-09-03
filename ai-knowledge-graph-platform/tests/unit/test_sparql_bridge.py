@@ -134,6 +134,92 @@ class TestSPARQLBridgeDescribe:
         assert isinstance(ttl, str)
 
 
+class TestSPARQLBridgeUpdate:
+    def setup_method(self) -> None:
+        self.bridge = SPARQLBridge(_minimal_graph())
+
+    def test_insert_data_adds_triple(self) -> None:
+        before = len(self.bridge._g)
+        self.bridge.update(
+            """
+            INSERT DATA {
+                <https://graphrag.example.com/entity/default/PERSON/Bob>
+                    a <https://graphrag.example.com/ontology#PERSON> .
+            }
+            """
+        )
+        after = len(self.bridge._g)
+        assert after == before + 1
+
+    def test_delete_data_removes_triple(self) -> None:
+        alice = INST["default/PERSON/Alice"]
+        assert (alice, RDFS.label, Literal("Alice")) in self.bridge._g
+
+        self.bridge.update(
+            """
+            DELETE DATA {
+                <https://graphrag.example.com/entity/default/PERSON/Alice>
+                    <http://www.w3.org/2000/01/rdf-schema#label> "Alice" .
+            }
+            """
+        )
+        assert (alice, RDFS.label, Literal("Alice")) not in self.bridge._g
+
+    def test_update_returns_new_triple_count(self) -> None:
+        n = self.bridge.update(
+            """
+            INSERT DATA {
+                <https://graphrag.example.com/entity/default/PERSON/Bob>
+                    a <https://graphrag.example.com/ontology#PERSON> .
+            }
+            """
+        )
+        assert n == len(self.bridge._g)
+
+    def test_service_rejected(self) -> None:
+        with pytest.raises(ValueError, match="not permitted"):
+            self.bridge.update(
+                "INSERT { ?s ?p ?o } WHERE { SERVICE <http://evil.example.com/sparql> { ?s ?p ?o } }"
+            )
+
+    def test_load_rejected(self) -> None:
+        # LOAD isn't a recognised update form at all (it's not in
+        # _ALLOWED_UPDATE_FORMS), so this is rejected by the "no allowed
+        # form found" branch rather than the explicit forbidden-keyword
+        # check -- either way, LOAD never executes.
+        with pytest.raises(ValueError, match="permitted"):
+            self.bridge.update("LOAD <http://evil.example.com/data.ttl>")
+
+    def test_load_rejected_even_when_wrapped_in_insert(self) -> None:
+        # A LOAD smuggled alongside a permitted keyword must still be
+        # rejected by the explicit _FORBIDDEN_UPDATE check.
+        with pytest.raises(ValueError, match="not permitted"):
+            self.bridge.update(
+                "INSERT { ?s ?p ?o } WHERE { LOAD <http://evil.example.com/data.ttl> }"
+            )
+
+    def test_non_update_form_rejected(self) -> None:
+        with pytest.raises(ValueError, match="permitted"):
+            self.bridge.update("SELECT ?s WHERE { ?s ?p ?o }")
+
+    def test_save_and_reload_round_trip(self, tmp_path) -> None:
+        self.bridge.update(
+            """
+            INSERT DATA {
+                <https://graphrag.example.com/entity/default/PERSON/Bob>
+                    a <https://graphrag.example.com/ontology#PERSON> .
+            }
+            """
+        )
+        out = tmp_path / "updated.ttl"
+        self.bridge.save(out)
+
+        reloaded = SPARQLBridge.from_turtle(out)
+        assert len(reloaded._g) == len(self.bridge._g)
+        bob = INST["default/PERSON/Bob"]
+        assert (bob, RDF.type, BASE.PERSON) in reloaded._g
+
+
 class TestSPARQLBridgeConvenienceQueries:
     def setup_method(self) -> None:
         self.bridge = SPARQLBridge(_minimal_graph())

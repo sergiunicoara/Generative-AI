@@ -75,6 +75,24 @@ services:
       timeout: 5s
       retries: 10
 
+  # Optional live SPARQL endpoint mirroring the RDF export produced by
+  # scripts/export_rdf.py -- see scripts/load_blazegraph.py. Nothing else
+  # depends_on this service; it is not on the critical path of a normal
+  # `docker-compose up`. See docs/adr/0001-property-graph-over-triple-store.md
+  # (Addendum) for why this doesn't reverse that ADR's core decision.
+  blazegraph:
+    image: lyrasis/blazegraph:2.1.5
+    container_name: graphrag_blazegraph
+    ports:
+      - "9999:9999"
+    volumes:
+      - blazegraph_data:/data
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "-", "http://localhost:9999/blazegraph/status"]
+      interval: 15s
+      timeout: 10s
+      retries: 5
+
   api:
     build:
       context: .
@@ -279,3 +297,4 @@ volumes:
   prometheus_data:
   grafana_data:
   redis_data:
+  blazegraph_data:

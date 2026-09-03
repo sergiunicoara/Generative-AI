@@ -46,6 +46,18 @@ _ALLOWED_FORMS = ("SELECT", "ASK", "CONSTRUCT", "DESCRIBE")
 _FORBIDDEN = ("SERVICE", "LOAD", "INSERT", "DELETE", "CLEAR", "DROP",
               "CREATE", "ADD", "MOVE", "COPY")
 
+# Update forms. Unlike the read path, these are expected here -- update()
+# only ever mutates the in-memory rdflib Graph the bridge was constructed
+# with; it never reaches Neo4j, and the caller decides separately (via
+# save()) whether the result is persisted anywhere.
+_ALLOWED_UPDATE_FORMS = ("INSERT", "DELETE", "CLEAR", "DROP",
+                          "CREATE", "ADD", "MOVE", "COPY")
+
+# SERVICE and LOAD stay forbidden even for updates: both make rdflib issue an
+# outbound HTTP request to an attacker-controlled URL (SSRF), which has
+# nothing to do with mutating the local graph.
+_FORBIDDEN_UPDATE = ("SERVICE", "LOAD")
+
 _COMMENT_RE = re.compile(r"#[^\n]*")
 _STRING_RE  = re.compile(r'"(?:[^"\\]|\\.)*"|\'(?:[^\'\\]|\\.)*\'')
 
@@ -67,6 +79,24 @@ def _reject_unsafe_sparql(sparql: str) -> None:
     for kw in _FORBIDDEN:
         if re.search(rf"\b{kw}\b", upper):
             raise ValueError(f"'{kw}' is not permitted in a read-only SPARQL query")
+
+
+def _reject_unsafe_update(sparql: str) -> None:
+    """Raise ValueError unless ``sparql`` is a non-federated SPARQL Update.
+
+    Same comment/string-stripping approach as ``_reject_unsafe_sparql`` so a
+    keyword inside a literal or comment can neither trip nor evade the check.
+    """
+    stripped = _STRING_RE.sub('""', _COMMENT_RE.sub("", sparql))
+    upper = stripped.upper()
+
+    if not any(re.search(rf"\b{form}\b", upper) for form in _ALLOWED_UPDATE_FORMS):
+        raise ValueError(
+            f"Only {', '.join(_ALLOWED_UPDATE_FORMS)} SPARQL update forms are permitted"
+        )
+    for kw in _FORBIDDEN_UPDATE:
+        if re.search(rf"\b{kw}\b", upper):
+            raise ValueError(f"'{kw}' is not permitted in a SPARQL update")
 
 # Mirror the namespaces defined in scripts/export_rdf.py
 BASE  = Namespace("https://graphrag.example.com/ontology#")
@@ -173,6 +203,63 @@ class SPARQLBridge:
                     }
                 )
         return rows
+
+    def update(
+        self,
+        sparql: str,
+        init_ns: dict[str, str] | None = None,
+    ) -> int:
+        """Execute a SPARQL 1.1 Update against the in-memory graph.
+
+        Mutates ``self._g`` in place (INSERT/DELETE/CLEAR/DROP/CREATE/ADD/
+        MOVE/COPY are all permitted -- they only ever touch this in-memory
+        rdflib Graph, never Neo4j). Call ``save()`` afterwards to persist
+        the result; otherwise the mutation is scoped to this bridge instance.
+
+        Parameters
+        ----------
+        sparql :
+            A complete SPARQL 1.1 Update statement (or ``;``-separated
+            sequence of them).
+        init_ns :
+            Extra namespace prefix bindings, merged with the default set.
+
+        Returns
+        -------
+        int
+            The graph's triple count after the update.
+
+        Raises
+        ------
+        ValueError
+            If the SPARQL contains SERVICE/LOAD, uses no recognised update
+            form, or fails to parse/execute.
+        """
+        _reject_unsafe_update(sparql)
+
+        ns = {**self._DEFAULT_NS, **(init_ns or {})}
+        init_ns_rdflib = {
+            k: Namespace(v) if isinstance(v, str) else v
+            for k, v in ns.items()
+        }
+
+        try:
+            self._g.update(sparql, initNs=init_ns_rdflib)
+        except Exception as exc:
+            raise ValueError(f"SPARQL update parse/execution error: {exc}") from exc
+
+        return len(self._g)
+
+    def save(self, path: Path | str, rdf_format: str = "turtle") -> None:
+        """Serialize the current in-memory graph to disk.
+
+        Use after ``update()`` to persist a mutation -- e.g. overwriting the
+        tenant export file that ``query()``/``from_turtle()`` read.
+        """
+        out = Path(path)
+        out.parent.mkdir(parents=True, exist_ok=True)
+        self._g.serialize(destination=str(out), format=rdf_format)
+        log.info("sparql_bridge.saved", path=str(out), triples=len(self._g))
 
     def describe(self, entity_uri: str) -> str:
         """Return a Turtle-serialised neighbourhood for a single entity.

@@ -91,6 +91,16 @@ testcontainers>=4.15.0
 # pipeline stage was a no-op on every clean install.
 rapidfuzz>=3.9.0
 
+# ── Media analysis ─────────────────────────────────────────────────────────────
+# imagehash: perceptual hashing (graphrag/graph/perceptual_hash.py) for
+# near-duplicate image detection on MediaAttachment nodes. Pillow (below) is
+# imagehash's only real dependency and is already pinned as a security floor.
+imagehash>=4.3.1
+# easyocr: OCR on ingested images (graphrag/graph/ocr.py). Downloads its
+# detection/recognition models on first use -- see graphrag/graph/ocr.py for
+# the model-cache-dir note (mirrors the HF_HOME pattern on query_worker).
+easyocr>=1.7.2
+
 # ── Backup targets ────────────────────────────────────────────────────────────
 # scripts/kg_backup.py uses boto3 for `--output s3://...`.
 boto3>=1.34.0

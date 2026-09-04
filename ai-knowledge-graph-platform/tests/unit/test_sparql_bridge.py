@@ -220,6 +220,74 @@ class TestSPARQLBridgeUpdate:
         assert (bob, RDF.type, BASE.PERSON) in reloaded._g
 
 
+class TestSPARQLBridgeUpdateGuardPrecision:
+    def setup_method(self) -> None:
+        self.bridge = SPARQLBridge(_minimal_graph())
+
+    def test_keyword_inside_an_iri_is_not_federation(self) -> None:
+        # <http://ex/SERVICE> is data, not a SERVICE clause.
+        self.bridge.update(
+            """
+            INSERT DATA {
+                <https://graphrag.example.com/entity/default/PERSON/Bob>
+                    <https://graphrag.example.com/ontology#SEE>
+                    <http://example.com/SERVICE> .
+            }
+            """
+        )
+        assert len(self.bridge._g) > 0
+
+    def test_bare_service_clause_still_rejected(self) -> None:
+        with pytest.raises(ValueError, match="not permitted"):
+            self.bridge.update(
+                "INSERT { ?s ?p ?o } WHERE { SERVICE <http://evil.example.com/s> { ?s ?p ?o } }"
+            )
+
+    def test_variable_named_like_a_keyword_does_not_satisfy_the_guard(self) -> None:
+        # ?ADD is a variable name, not an ADD operation, so this is not a
+        # recognised update form and must be rejected rather than executed.
+        with pytest.raises(ValueError, match="permitted"):
+            self.bridge.update("SELECT ?ADD WHERE { ?ADD ?p ?o }")
+
+
+class TestSPARQLBridgePersistence:
+    def test_stamp_marks_divergence_from_neo4j(self) -> None:
+        bridge = SPARQLBridge(_minimal_graph())
+        before = len(bridge._g)
+        after = bridge.stamp_sparql_update(tenant="acme")
+
+        assert after > before
+        rows = bridge.query(
+            "SELECT ?ts WHERE { ?ont annot:sparqlUpdatedAt ?ts }"
+        )
+        assert len(rows) == 1
+        tenant_rows = bridge.query(
+            "SELECT ?t WHERE { ?ont annot:sparqlUpdatedBy ?t }"
+        )
+        assert tenant_rows == [{"t": "acme"}]
+
+    def test_save_is_atomic_and_leaves_no_temp_files(self, tmp_path) -> None:
+        bridge = SPARQLBridge(_minimal_graph())
+        out = tmp_path / "graph_export.ttl"
+        bridge.save(out)
+
+        assert out.exists()
+        assert list(tmp_path.iterdir()) == [out]
+
+    def test_failed_save_does_not_clobber_existing_export(self, tmp_path) -> None:
+        out = tmp_path / "graph_export.ttl"
+        out.write_text("# original export\n", encoding="utf-8")
+
+        bridge = SPARQLBridge(_minimal_graph())
+        with pytest.raises(Exception):
+            bridge.save(out, rdf_format="not-a-real-format")
+
+        # The original file must survive a failed serialisation, and no
+        # temp file may be left behind.
+        assert out.read_text(encoding="utf-8") == "# original export\n"
+        assert list(tmp_path.iterdir()) == [out]
+
+
 class TestSPARQLBridgeConvenienceQueries:
     def setup_method(self) -> None:
         self.bridge = SPARQLBridge(_minimal_graph())

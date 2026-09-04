@@ -5,12 +5,15 @@ from __future__ import annotations
 
 import re
 
+import structlog
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
 from api.auth.dependencies import get_tenant, require_scope
 from graphrag.graph.corpus_revision import CorpusMutation
 from graphrag.graph.neo4j_client import get_neo4j
+
+log = structlog.get_logger(__name__)
 
 router = APIRouter()
 
@@ -583,6 +586,32 @@ async def list_unembedded_media(
     return await svc.get_unembedded(tenant=tenant, modality=modality, limit=limit)
 
 
+# Both media endpoints accept image bytes inline as base64, so an unbounded
+# field is an unbounded decode + an unbounded PIL/EasyOCR workload. 12 MB of
+# base64 is ~9 MB of image, comfortably above any real photo and well below
+# anything that threatens the worker.
+_MAX_IMAGE_B64_CHARS = 12 * 1024 * 1024
+
+
+def _decode_image_b64(value: str) -> bytes:
+    """Decode a base64 image payload, raising HTTP 400 rather than 500.
+
+    Bare ``b64decode`` raises ``binascii.Error`` on malformed input, which
+    surfaces as an unhandled 500; a malformed request body is a client error.
+    """
+    if len(value) > _MAX_IMAGE_B64_CHARS:
+        raise HTTPException(
+            status_code=413,
+            detail=f"Image payload exceeds {_MAX_IMAGE_B64_CHARS} base64 characters",
+        )
+    import base64
+
+    try:
+        return base64.b64decode(value, validate=True)
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=f"Invalid base64: {exc}") from exc
+
+
 class AttachImageRequest(BaseModel):
     entity_name: str
     entity_type: str
@@ -609,11 +638,11 @@ async def attach_image(request: AttachImageRequest, tenant: str = Depends(get_te
     ``compute_phash`` and stored on the attachment, so it's immediately
     eligible for ``GET /multimodal/similar``.
     """
-    import base64
-
     from graphrag.graph.multimodal import MultiModalEntityService
 
-    image_bytes = base64.b64decode(request.image_base64) if request.image_base64 else None
+    image_bytes = (
+        _decode_image_b64(request.image_base64) if request.image_base64 else None
+    )
     svc = MultiModalEntityService(get_neo4j())
     try:
         attachment_id = await svc.attach_image(
@@ -642,23 +671,25 @@ async def run_media_ocr(request: MediaIdRequest, tenant: str = Depends(get_tenan
     previously empty, so the text becomes searchable through the existing
     caption-based retrieval path.
     """
-    import base64
-
     from graphrag.graph.multimodal import MultiModalEntityService
+    from graphrag.graph.ocr import OCRUnavailableError
 
-    try:
-        image_bytes = base64.b64decode(request.image_base64)
-    except Exception as exc:
-        raise HTTPException(status_code=400, detail=f"Invalid base64: {exc}") from exc
-
+    image_bytes = _decode_image_b64(request.image_base64)
     svc = MultiModalEntityService(get_neo4j())
     try:
-        transformation = await svc.run_ocr(tenant, request.attachment_id, image_bytes)
+        transformation, text = await svc.run_ocr(
+            tenant, request.attachment_id, image_bytes
+        )
+    except OCRUnavailableError as exc:
+        # The backend is absent from this build, not the request's fault.
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     return {
-        "text": transformation.output_digest,
+        "text": text,
         "confidence": transformation.metadata.get("confidence", 0.0),
+        # The digest identifies this extraction in the provenance graph.
+        "digest": transformation.output_digest,
     }
 
 
@@ -781,7 +812,23 @@ async def sparql_update(request: SPARQLUpdateRequest, tenant: str = Depends(get_
         triples_before = len(bridge._g)
         triples_after  = bridge.update(request.query, init_ns=request.namespaces)
         if request.persist:
+            # A persisted update makes the export diverge from Neo4j, which is
+            # the source of truth (ADR-0001). Stamp the graph so the divergence
+            # is visible to anything that reads the file afterwards -- including
+            # a later SELECT -- rather than being silent, and emit an audit line
+            # for the same event. CorpusMutation is deliberately not used here:
+            # it brackets *Neo4j* writes and advances the answer-cache revision,
+            # which a file-level RDF mutation must not do.
+            triples_after = bridge.stamp_sparql_update(tenant=tenant)
             bridge.save(path)
+            log.warning(
+                "kg.sparql_update.persisted",
+                tenant=tenant,
+                path=str(path),
+                triples_before=triples_before,
+                triples_after=triples_after,
+                query=request.query[:2000],
+            )
         return {
             "triples_before": triples_before,
             "triples_after": triples_after,

@@ -116,3 +116,14 @@ It does **not** revisit the Decision above: Neo4j remains the source of truth, B
 holds a point-in-time copy that is only as fresh as the last export/load run, and nothing in
 the platform depends on it being present. It exists purely as an additional, disposable
 interoperability sink alongside Protégé/Fuseki/Oxigraph, callable exactly as before.
+
+Operational notes (verified against `lyrasis/blazegraph:2.1.5`):
+
+- The webapp context path is `/bigdata`, and the container listens on **8080**; compose maps
+  it to host port 9999. The endpoint is `http://localhost:9999/bigdata/namespace/kb/sparql`.
+- The port is published on **127.0.0.1 only**. Blazegraph has no authentication and its
+  endpoint accepts SPARQL Update plus `LOAD`/`SERVICE` — the same primitives
+  `graphrag/graph/sparql_bridge.py` blocks at the API. Do not expose it on `0.0.0.0`, and do
+  not treat it as a trusted store.
+- Loading rejects invalid Turtle at the server's parser, so exports must come from rdflib
+  (`scripts/export_rdf.py`), not hand-assembled strings.

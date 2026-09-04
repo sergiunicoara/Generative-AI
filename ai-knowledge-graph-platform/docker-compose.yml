@@ -84,11 +84,23 @@ services:
     image: lyrasis/blazegraph:2.1.5
     container_name: graphrag_blazegraph
     ports:
-      - "9999:9999"
+      # Bound to loopback deliberately. Blazegraph ships with no authentication,
+      # and its SPARQL endpoint accepts Update as well as LOAD/SERVICE -- i.e.
+      # exactly the SSRF and write primitives graphrag/graph/sparql_bridge.py
+      # goes out of its way to block at the API. Publishing it on 0.0.0.0 would
+      # hand all of that to anything that can route to this host. Reachable from
+      # sibling containers by service name regardless of this binding.
+      # Container listens on 8080, not 9999: lyrasis/blazegraph:2.1.5 runs the
+      # bigdata.war under Jetty on 8080. Host port 9999 is kept as the external
+      # convention the load script defaults to.
+      - "127.0.0.1:9999:8080"
     volumes:
       - blazegraph_data:/data
     healthcheck:
-      test: ["CMD", "wget", "-q", "-O", "-", "http://localhost:9999/blazegraph/status"]
+      # Verified against lyrasis/blazegraph:2.1.5 (digest sha256:56be5edb…):
+      # both curl and wget are present, and the webapp context path is
+      # /bigdata (NOT /blazegraph, which 404s on this image).
+      test: ["CMD", "curl", "-fsS", "http://localhost:8080/bigdata/status"]
       interval: 15s
       timeout: 10s
       retries: 5

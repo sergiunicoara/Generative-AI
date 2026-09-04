@@ -11,6 +11,12 @@ raw Turtle document POSTed directly to a namespace's ``/sparql`` endpoint
 with ``Content-Type: text/turtle`` is bulk-inserted into that namespace's
 default graph.
 
+Verified end to end against lyrasis/blazegraph:2.1.5 -- the endpoint is
+``<host>/bigdata/namespace/<ns>/sparql``. The Turtle must be valid: a
+hand-written prefixed name containing an unescaped ``/`` is rejected by the
+server's parser, which is why exports come from rdflib rather than string
+concatenation (see scripts/export_rdf.py).
+
 Usage
 -----
   docker compose up -d blazegraph
@@ -39,6 +45,10 @@ if sys.stdout.encoding and sys.stdout.encoding.lower() != "utf-8":
 log = structlog.get_logger(__name__)
 
 DEFAULT_ENDPOINT = "http://localhost:9999"
+# lyrasis/blazegraph:2.1.5 deploys bigdata.war, so the webapp context path is
+# /bigdata. "/blazegraph" is the path used by some other distributions and
+# 404s on this image -- verified against digest sha256:56be5edb….
+DEFAULT_CONTEXT_PATH = "bigdata"
 
 
 def load(
@@ -46,6 +56,7 @@ def load(
     endpoint: str = DEFAULT_ENDPOINT,
     namespace: str = "kb",
     timeout: float = 60.0,
+    context_path: str = DEFAULT_CONTEXT_PATH,
 ) -> int:
     """POST a Turtle file to a Blazegraph namespace's SPARQL endpoint.
 
@@ -55,7 +66,7 @@ def load(
     if not ttl_path.exists():
         raise FileNotFoundError(f"Turtle file not found: {ttl_path}")
 
-    url = f"{endpoint.rstrip('/')}/blazegraph/namespace/{namespace}/sparql"
+    url = f"{endpoint.rstrip('/')}/{context_path.strip('/')}/namespace/{namespace}/sparql"
     body = ttl_path.read_bytes()
 
     resp = httpx.post(
@@ -88,6 +99,9 @@ def main() -> None:
                         help=f"Blazegraph base URL (default: {DEFAULT_ENDPOINT})")
     parser.add_argument("--namespace", default="kb",
                         help="Blazegraph namespace to load into (default: kb)")
+    parser.add_argument("--context-path", default=DEFAULT_CONTEXT_PATH,
+                        help="Webapp context path "
+                             f"(default: {DEFAULT_CONTEXT_PATH})")
     args = parser.parse_args()
 
     if args.input:
@@ -99,7 +113,8 @@ def main() -> None:
         parser.error("Provide either --tenant or --input")
         return
 
-    status = load(ttl_path, endpoint=args.endpoint, namespace=args.namespace)
+    status = load(ttl_path, endpoint=args.endpoint, namespace=args.namespace,
+                  context_path=args.context_path)
     print(f"[OK] Loaded {ttl_path} into {args.endpoint} "
           f"(namespace={args.namespace}, status={status})")
 

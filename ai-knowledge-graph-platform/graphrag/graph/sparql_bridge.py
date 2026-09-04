@@ -25,12 +25,13 @@ Typical usage::
 
 from __future__ import annotations
 
+import os
+import re
+import tempfile
 from pathlib import Path
 
-import re
-
 import structlog
-from rdflib import Graph, Namespace
+from rdflib import Graph, Namespace, URIRef
 from rdflib.namespace import OWL, RDF, RDFS, XSD
 
 log = structlog.get_logger(__name__)
@@ -60,6 +61,11 @@ _FORBIDDEN_UPDATE = ("SERVICE", "LOAD")
 
 _COMMENT_RE = re.compile(r"#[^\n]*")
 _STRING_RE  = re.compile(r'"(?:[^"\\]|\\.)*"|\'(?:[^\'\\]|\\.)*\'')
+# An IRI may legitimately contain a keyword (<http://ex/DELETE>); a variable may
+# legitimately be named ?ADD. Neither is a SPARQL keyword occurrence, so both are
+# blanked before the update guard scans for one.
+_IRI_RE     = re.compile(r"<[^<>\s]*>")
+_VAR_RE     = re.compile(r"[?$][A-Za-z_][A-Za-z0-9_]*")
 
 
 def _reject_unsafe_sparql(sparql: str) -> None:
@@ -84,10 +90,16 @@ def _reject_unsafe_sparql(sparql: str) -> None:
 def _reject_unsafe_update(sparql: str) -> None:
     """Raise ValueError unless ``sparql`` is a non-federated SPARQL Update.
 
-    Same comment/string-stripping approach as ``_reject_unsafe_sparql`` so a
-    keyword inside a literal or comment can neither trip nor evade the check.
+    Same comment/string-stripping approach as ``_reject_unsafe_sparql``, plus
+    IRIs and variables, so a keyword inside a literal, comment, IRI or variable
+    name can neither trip nor evade the check. Blanking IRIs is what keeps
+    ``INSERT DATA { <a> <b> <http://ex/SERVICE> }`` from being misread as
+    federation, while a bare ``SERVICE`` clause is still caught.
     """
-    stripped = _STRING_RE.sub('""', _COMMENT_RE.sub("", sparql))
+    stripped = _COMMENT_RE.sub("", sparql)
+    stripped = _STRING_RE.sub('""', stripped)
+    stripped = _IRI_RE.sub("<>", stripped)
+    stripped = _VAR_RE.sub("?v", stripped)
     upper = stripped.upper()
 
     if not any(re.search(rf"\b{form}\b", upper) for form in _ALLOWED_UPDATE_FORMS):
@@ -250,15 +262,56 @@ class SPARQLBridge:
 
         return len(self._g)
 
+    def stamp_sparql_update(self, tenant: str = "") -> int:
+        """Record in the graph itself that it was mutated by SPARQL Update.
+
+        The export is a projection of Neo4j (ADR-0001). Once an update is
+        persisted the two have diverged, and without a marker that divergence
+        is invisible -- the file still looks like a clean export. Stamping the
+        ontology node means any later reader, including a plain SELECT against
+        this same file, can tell it is no longer purely export-derived.
+
+        Returns the triple count after stamping.
+        """
+        from datetime import datetime, timezone
+
+        from rdflib import Literal
+
+        ont = URIRef("https://graphrag.example.com/ontology")
+        self._g.add((
+            ont,
+            ANNOT.sparqlUpdatedAt,
+            Literal(datetime.now(timezone.utc).isoformat(), datatype=XSD.dateTime),
+        ))
+        if tenant:
+            self._g.add((ont, ANNOT.sparqlUpdatedBy, Literal(tenant)))
+        return len(self._g)
+
     def save(self, path: Path | str, rdf_format: str = "turtle") -> None:
-        """Serialize the current in-memory graph to disk.
+        """Atomically serialize the current in-memory graph to disk.
 
         Use after ``update()`` to persist a mutation -- e.g. overwriting the
         tenant export file that ``query()``/``from_turtle()`` read.
+
+        The write goes to a temporary file in the destination directory and
+        is then renamed over the target. Serialising straight onto the live
+        export would leave it truncated if the process died mid-write, and
+        that file is what every subsequent ``POST /kg/sparql`` reads.
+        ``os.replace`` is atomic on both POSIX and Windows.
         """
         out = Path(path)
         out.parent.mkdir(parents=True, exist_ok=True)
-        self._g.serialize(destination=str(out), format=rdf_format)
+        fd, tmp_name = tempfile.mkstemp(
+            dir=str(out.parent), prefix=f".{out.name}.", suffix=".tmp"
+        )
+        os.close(fd)
+        tmp = Path(tmp_name)
+        try:
+            self._g.serialize(destination=str(tmp), format=rdf_format)
+            os.replace(tmp, out)
+        except BaseException:
+            tmp.unlink(missing_ok=True)
+            raise
         log.info("sparql_bridge.saved", path=str(out), triples=len(self._g))
 
     def describe(self, entity_uri: str) -> str:

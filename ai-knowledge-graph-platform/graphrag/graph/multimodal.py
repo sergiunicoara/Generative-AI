@@ -36,7 +36,11 @@ embedding externally.
 
 from __future__ import annotations
 
+import asyncio
+import hashlib
+import json
 from uuid import uuid4
+
 from pydantic import BaseModel, Field
 
 import structlog
@@ -116,7 +120,10 @@ class MultiModalEntityService:
             transform_type=transformation.transform_type,
             model_version=transformation.model_version,
             output_digest=transformation.output_digest,
-            metadata=transformation.metadata,
+            # Neo4j property values must be primitives or arrays of primitives --
+            # a map is rejected outright (CypherTypeException). Serialise to a
+            # JSON string so structured metadata survives the round trip.
+            metadata=json.dumps(transformation.metadata, sort_keys=True),
         )
         return transformation.id
 
@@ -364,10 +371,15 @@ class MultiModalEntityService:
             tenant=tenant,
             phash=phash,
         )
+        # A distinct output artifact id per transformation is required, not
+        # cosmetic: record_transformation MERGEs on (SourceArtifact {id}) and
+        # then SETs. Reusing the attachment id here made every transform of a
+        # given attachment collapse onto one node, so running OCR after this
+        # (or vice versa) silently overwrote the earlier provenance record.
         await self.record_transformation(MediaTransformation(
             tenant=tenant,
             input_attachment_id=attachment_id,
-            output_artifact_id=attachment_id,
+            output_artifact_id=str(uuid4()),
             transform_type="perceptual_hash",
             output_digest=phash,
         ))
@@ -379,41 +391,57 @@ class MultiModalEntityService:
         attachment_id: str,
         max_distance: int = 8,
         limit: int = 20,
+        scan_limit: int = 10_000,
     ) -> list[dict]:
         """Find image MediaAttachments perceptually similar to a given one.
 
         Fetches the tenant's image attachments that have a stored phash and
         computes Hamming distance against ``attachment_id``'s hash in Python
-        (Neo4j has no native Hamming-distance operator, and tenant-scoped
-        image counts don't warrant a dedicated similarity index). Returns
-        matches within ``max_distance``, closest first. The target itself is
-        excluded from results.
+        (Neo4j has no native Hamming-distance operator). Returns matches
+        within ``max_distance``, closest first; the target is excluded.
+
+        ``scan_limit`` bounds how many hashes are pulled into memory. The
+        distance filter cannot be pushed into Cypher, so this is a linear
+        scan -- but it must still be a *bounded* one, since ``limit`` only
+        trims the result after every row has already been materialised.
+        The target row is fetched separately so it is never displaced from
+        the scan window by the cap.
 
         Returns an empty list if ``attachment_id`` has no stored phash.
         """
         from graphrag.graph.perceptual_hash import hamming_distance
 
         tenant = require_tenant(tenant)
+        target_rows = await self._neo4j.run(
+            """
+            MATCH (m:MediaAttachment {id: $id, tenant: $tenant})
+            WHERE m.phash IS NOT NULL
+            RETURN m.phash AS phash
+            """,
+            id=attachment_id,
+            tenant=tenant,
+        )
+        if not target_rows:
+            return []
+        target_phash = dict(target_rows[0])["phash"]
+
         rows = await self._neo4j.run(
             """
             MATCH (m:MediaAttachment {modality: 'image', tenant: $tenant})
-            WHERE m.phash IS NOT NULL
+            WHERE m.phash IS NOT NULL AND m.id <> $id
             RETURN m.id AS id, m.entity_name AS entity_name,
                    m.entity_type AS entity_type, m.media_url AS media_url,
                    m.caption AS caption, m.phash AS phash
+            LIMIT $scan_limit
             """,
+            id=attachment_id,
             tenant=tenant,
+            scan_limit=scan_limit,
         )
-        rows = [dict(r) for r in rows]
-        target = next((r for r in rows if r["id"] == attachment_id), None)
-        if target is None:
-            return []
-
         matches = []
-        for r in rows:
-            if r["id"] == attachment_id:
-                continue
-            distance = hamming_distance(target["phash"], r["phash"])
+        for row in rows:
+            r = dict(row)
+            distance = hamming_distance(target_phash, r["phash"])
             if distance <= max_distance:
                 matches.append({**{k: v for k, v in r.items() if k != "phash"},
                                  "distance": distance})
@@ -427,27 +455,48 @@ class MultiModalEntityService:
         tenant: str,
         attachment_id: str,
         image_bytes: bytes,
-    ) -> MediaTransformation:
+    ) -> tuple[MediaTransformation, str]:
         """Run OCR over an image attachment and record the result.
 
-        Stores the extracted text as a provenance-tracked
-        ``MediaTransformation`` (transform_type="ocr"), and — only if the
-        attachment's caption is currently empty — backfills the caption with
-        the OCR'd text, so it becomes searchable through the existing
-        caption-based ANN/text retrieval path without any new plumbing.
+        Records a provenance-tracked ``MediaTransformation``
+        (transform_type="ocr") holding a sha256 *digest* of the extracted text
+        plus a bounded excerpt — not the text itself, which has no size bound
+        worth writing into a node property. The full text goes to the
+        attachment's caption, and only when that caption is currently empty,
+        so OCR can never overwrite a human-written one. That backfill is what
+        makes the text searchable through the existing caption-based ANN/text
+        retrieval path without any new plumbing.
+
+        Returns ``(transformation, text)``. The full text is returned rather
+        than read back off the transformation precisely because the
+        transformation deliberately does not carry it.
         """
         from graphrag.graph.ocr import extract_text
 
         tenant = require_tenant(tenant)
-        text, confidence = extract_text(image_bytes)
+        # readtext() is synchronous CPU-bound work (and loads ~100s of MB of
+        # model on first call). Awaiting it inline would block the event loop
+        # for the whole OCR duration -- the same failure mode that got slowapi
+        # removed in requirements.txt. Hand it to a worker thread instead.
+        text, confidence = await asyncio.to_thread(extract_text, image_bytes)
 
+        # output_digest is a digest, not a payload (see the existing contract in
+        # tests/unit/test_p4_features.py, which uses "sha256:abc"). The full text
+        # is unbounded, so it is not stored as a node property; the caption
+        # backfill below is the searchable copy and metadata keeps an excerpt.
+        digest = "sha256:" + hashlib.sha256(text.encode("utf-8")).hexdigest()
         transformation = MediaTransformation(
             tenant=tenant,
             input_attachment_id=attachment_id,
-            output_artifact_id=attachment_id,
+            output_artifact_id=str(uuid4()),
             transform_type="ocr",
-            output_digest=text,
-            metadata={"confidence": confidence},
+            output_digest=digest,
+            metadata={
+                "confidence": confidence,
+                "chars": len(text),
+                # 500 chars matches the truncation precedent in scripts/export_rdf.py.
+                "text_excerpt": text[:500],
+            },
         )
         await self.record_transformation(transformation)
 
@@ -463,7 +512,7 @@ class MultiModalEntityService:
         )
         log.info("multimodal.ocr_run", attachment_id=attachment_id,
                  tenant=tenant, chars=len(text), confidence=confidence)
-        return transformation
+        return transformation, text
 
     async def get_unembedded(
         self,

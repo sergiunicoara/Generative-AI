@@ -20,8 +20,17 @@ owlrl>=6.0.0
 
 # ── Media analysis (graphrag/graph/perceptual_hash.py, graphrag/graph/ocr.py) ──
 # Lazily imported by graphrag/graph/multimodal.py's phash/OCR methods, not
-# loaded unconditionally -- but this is the only service that calls them
-# (api/routes/kg/multimodal.py), so it's the only subset that needs them.
+# loaded unconditionally -- but this is the only service that serves them
+# (the /multimodal/* routes in api/routes/kg/knowledge.py), so it's the only
+# subset that needs them.
+#
+# COST, stated explicitly because it is not obvious: easyocr depends on torch,
+# which this image did not previously carry (measured 530 MB installed on
+# Windows/CPU; Linux CUDA wheels are larger still). imagehash itself is ~0.1 MB
+# and only needs Pillow. If image size matters more than OCR for a given
+# deployment, drop easyocr from this file: graphrag/graph/ocr.py raises
+# OCRUnavailableError and POST /multimodal/ocr answers 503 with an actionable
+# message, while perceptual hashing keeps working.
 imagehash>=4.3.1
 easyocr>=1.7.2
 

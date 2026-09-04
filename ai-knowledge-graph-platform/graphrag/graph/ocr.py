@@ -30,13 +30,28 @@ _reader = None
 _reader_lock = Lock()
 
 
+class OCRUnavailableError(RuntimeError):
+    """Raised when the OCR backend is not installed in this deployment."""
+
+
+
 def _get_reader():
     """Lazily construct a singleton ``easyocr.Reader`` (model load is slow)."""
     global _reader
     if _reader is None:
         with _reader_lock:
             if _reader is None:
-                import easyocr
+                try:
+                    import easyocr
+                except ImportError as exc:  # pragma: no cover - env-dependent
+                    # easyocr pulls torch, which images built without the OCR
+                    # extra deliberately omit. Fail with something actionable
+                    # instead of an opaque ImportError from deep in a request.
+                    raise OCRUnavailableError(
+                        "OCR is unavailable: easyocr is not installed in this "
+                        "image. Install requirements/api.txt (which includes "
+                        "easyocr), or omit OCR from this deployment."
+                    ) from exc
                 _reader = easyocr.Reader(["en"], gpu=False)
                 log.info("ocr.reader_initialised")
     return _reader

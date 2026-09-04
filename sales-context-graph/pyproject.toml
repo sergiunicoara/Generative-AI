@@ -119,14 +119,16 @@ select = ["E4", "E7", "E9", "F", "B", "I", "S"]
 # *name*, not an actual leaked credential; these are fake values that exist
 # only to exercise config validation.
 "tests/**/*.py" = ["S101", "S105", "S106"]
-# S608: api/routes/viz.py's _PAGE/_PANEL_PAGE are large multi-line HTML/JS
-# template string constants (the /viz debug UI and the embeddable panel),
-# not SQL/Cypher query construction -- the rule's string-heuristic false-
-# positives on some substring inside one of them. A trailing `# noqa` isn't
-# usable here: the flagged line is the opening `"""` of a string that
-# doesn't close until many lines later, so any comment placed after it
-# becomes literal string content instead of an actual Python comment.
-"api/routes/viz.py" = ["S608"]
+# S608: api/routes/viz_templates.py's _PAGE/_PANEL_PAGE/_BUYER_PORTAL_PAGE are
+# large multi-line HTML/JS template string constants (the /viz debug UI, the
+# embeddable panel, and the buyer portal), not SQL/Cypher query construction
+# -- the rule's string-heuristic false-positives on some substring inside one
+# of them. A trailing `# noqa` isn't usable here: the flagged line is the
+# opening `"""` of a string that doesn't close until many lines later, so any
+# comment placed after it becomes literal string content instead of an
+# actual Python comment. Was api/routes/viz.py's own ignore before that
+# file's static templates were split out into this dedicated module.
+"api/routes/viz_templates.py" = ["S608"]
 
 [tool.ruff.lint.flake8-bugbear]
 # FastAPI's dependency-injection system requires calling Depends(...)/

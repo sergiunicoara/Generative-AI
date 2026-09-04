@@ -21,3 +21,8 @@ backups/
 
 # Presentation renderer intermediates (the final MP4 is intentionally tracked).
 artifacts/presentation_video_work/
+
+# HTTrack mirror of the deployed demo site (scraper output, not source --
+# includes hts-cache/ and a captured Cloudflare __cf_bm cookie). Regenerate
+# with HTTrack if a local copy is ever needed again; never track it.
+site/

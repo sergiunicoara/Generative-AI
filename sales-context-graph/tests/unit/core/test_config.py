@@ -20,7 +20,9 @@ _ENV_KEYS = (
     "NEO4J_URI", "NEO4J_USER", "NEO4J_PASSWORD",
     "LLM_PROVIDER", "LLM_API_KEY",
     "EMBEDDING_PROVIDER", "EMBEDDING_API_KEY",
-    "LOG_LEVEL", "ENV",
+    "LOG_LEVEL", "ENV", "METRICS_API_KEY", "PANEL_TOKEN_SECRET",
+    "AUTHZ_ENFORCEMENT_ENABLED", "AUTHZ_TRUSTED_GATEWAY_ENABLED",
+    "AUTHZ_ENFORCEMENT_DISABLED_ACK", "SSO_ENABLED",
 )
 
 
@@ -39,12 +41,6 @@ def test_get_settings_works_with_no_env_file_and_no_settings_yaml():
     assert settings.neo4j_user == "neo4j"
     assert settings.neo4j_password == "scg_dev_local"
     assert settings.env == "development"
-
-
-def test_missing_settings_yaml_degrades_to_empty_sections():
-    settings = get_settings()
-    assert settings.ontology == {}
-    assert settings.ingestion == {}
 
 
 def test_get_settings_is_a_cached_singleton():
@@ -87,5 +83,43 @@ def test_production_with_changed_password_and_api_keys_does_not_raise():
     settings = Settings(
         _env_file=None, env="production", neo4j_password="a-real-secret",
         workspace_api_keys={"ws-1": "k"}, panel_token_secret="a-real-panel-secret",
+        metrics_api_key="a-real-metrics-key", authz_enforcement_disabled_ack=True,
     )
     assert settings.env == "production"
+
+
+def test_production_without_metrics_api_key_raises():
+    with pytest.raises(ValueError, match="metrics_api_key"):
+        Settings(
+            _env_file=None, env="production", neo4j_password="a-real-secret",
+            workspace_api_keys={"ws-1": "k"}, panel_token_secret="a-real-panel-secret",
+        )
+
+
+def test_production_must_state_its_authorization_choice():
+    """Production may run without application authz -- but not by accident.
+
+    Every other check here refuses to boot on an unsafe *default*; before
+    this one existed, a production deploy that never mentioned authorization
+    inherited authz_enforcement_enabled=False silently.
+    """
+    with pytest.raises(ValueError, match="explicit choice about application authorization"):
+        Settings(
+            _env_file=None, env="production", neo4j_password="a-real-secret",
+            workspace_api_keys={"ws-1": "k"}, panel_token_secret="a-real-panel-secret",
+            metrics_api_key="a-real-metrics-key",
+        )
+
+
+def test_authz_enforcement_without_a_claims_source_raises_at_boot():
+    """api.dependencies.get_access_context() 503s every request in this
+    configuration; catching it at boot beats discovering it in traffic."""
+    with pytest.raises(ValueError, match="requires SSO_ENABLED"):
+        Settings(_env_file=None, authz_enforcement_enabled=True)
+
+
+def test_authz_enforcement_with_a_trusted_gateway_is_accepted():
+    settings = Settings(
+        _env_file=None, authz_enforcement_enabled=True, authz_trusted_gateway_enabled=True
+    )
+    assert settings.authz_enforcement_enabled

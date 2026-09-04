@@ -1,5 +1,0 @@
-# HTTrack Website Copier Cookie File
-# This file format is compatible with Netscape cookies
-sales-context-graph.mail4sergiu.chatgpt.site	TRUE	/	FALSE	1999999999	__cf_bm	xqC5xDGYaa4BVl6tVGkhETlFn1933g0ufJSp8PEq19E-1787405167.334429-1.0.1.1-htrZEj1PwxXRC51U3N1PnKXvGCaZo7dYAhkKzjH2czLt4OYGPkuXTMWnQF19cMUWsl747Ssma4mfBndg_e.4EhWEzJsLvxnVDYnbAmQwr68IrWYPr_kBiXY6mg0TITix
-chatgpt.site	TRUE	/	FALSE	1999999999	SameSite	None
-

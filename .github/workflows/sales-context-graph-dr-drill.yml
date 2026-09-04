@@ -1,0 +1,34 @@
+# Relocated from sales-context-graph/.github/workflows/dr-drill.yml -- GitHub
+# Actions only reads workflows from the repository root (see
+# sales-context-graph-ci.yml's header for the full story). Unlike that
+# workflow's push/pull_request triggers, this one is schedule/dispatch-only,
+# so no path filter is added: GitHub does not evaluate path filters for
+# `schedule` triggers, they'd always run full-repo regardless
+# (ai-knowledge-graph-platform-ci.yml's header notes the same). What this
+# relocation does add is `working-directory`: docker-compose.yml and the
+# Makefile it drives both live under sales-context-graph/, not at the repo
+# root the runner checks out to by default.
+
+name: Local Neo4j restore drill
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "17 3 * * 1"
+
+defaults:
+  run:
+    working-directory: sales-context-graph
+
+jobs:
+  backup-restore-round-trip:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Start disposable Neo4j and Redis
+        run: docker compose up -d neo4j redis
+      - name: Verify backup and restore round trip
+        run: make backup-verify
+      - name: Tear down disposable infrastructure
+        if: always()
+        run: docker compose down -v

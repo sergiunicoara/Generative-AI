@@ -173,7 +173,18 @@ class LocalCRMEmulator:
 
     def _receipt(self, command: SalesCRMWrite, outcome: str, version: int, diff: dict,
                  compensation: SalesCompensationAction | None) -> CRMReceipt:
+        recorded_at = datetime.now(timezone.utc).isoformat()
         payload = {"command_id": command.command_id, "workspace_id": command.workspace_id,
                    "object_id": command.object_id, "outcome": outcome, "version": version, "diff": diff,
-                   "correlation_id": command.correlation_id, "recorded_at": datetime.now(timezone.utc).isoformat()}
-        return CRMReceipt(**payload, receipt_hash=self._hash(payload), compensation=compensation)
+                   "correlation_id": command.correlation_id, "recorded_at": recorded_at}
+        # CRMReceipt(**payload, ...) previously unpacked this dict, but mypy widens a
+        # dict literal mixing str/int/dict values to dict[str, object], losing every
+        # field's real type -- so it rejected `**payload` wholesale. `payload` (kept
+        # as a plain dict, matching self._hash()'s signature) is passed to _hash()
+        # unchanged; CRMReceipt itself is built straight from the well-typed locals.
+        return CRMReceipt(
+            command_id=command.command_id, workspace_id=command.workspace_id,
+            object_id=command.object_id, outcome=outcome, version=version, diff=diff,
+            correlation_id=command.correlation_id, recorded_at=recorded_at,
+            receipt_hash=self._hash(payload), compensation=compensation,
+        )

@@ -1,0 +1,38 @@
+# Relocated from sales-context-graph/.github/workflows/reliability-drills.yml
+# -- see sales-context-graph-ci.yml's header for why (repo-root-only workflow
+# discovery) and sales-context-graph-dr-drill.yml's for why no path filter is
+# added here (schedule triggers ignore them). `working-directory` is new for
+# the same reason as that file: the checkout root is the monorepo root, not
+# sales-context-graph/.
+
+name: Reliability drills
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "43 3 * * 3"
+
+defaults:
+  run:
+    working-directory: sales-context-graph
+
+jobs:
+  deterministic-failure-paths:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      # Same lockfile-constrained install as sales-context-graph-ci.yml --
+      # see that file's comment for why a bare `pip install -e ".[dev]"` is
+      # unsafe here (it can silently resolve a fastapi/starlette pair this
+      # repo's tests have never run against).
+      - name: Install dependencies
+        run: |
+          pip install -r requirements.lock.txt
+          pip install -e ".[dev]" -c requirements.lock.txt
+      - name: Queue crash recovery, retry and DLQ drills
+        run: pytest tests/unit/ingestion/test_queue.py -q -p no:unraisableexception
+      - name: Alert and rate-limit degradation drills
+        run: pytest tests/unit/core/test_alerting.py tests/unit/core/test_rate_limit.py -q -p no:unraisableexception

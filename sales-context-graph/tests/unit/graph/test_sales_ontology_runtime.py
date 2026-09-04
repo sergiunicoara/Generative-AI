@@ -1,3 +1,5 @@
+from pathlib import Path
+
 import pytest
 
 from src.graph.sales_ontology import (
@@ -8,6 +10,20 @@ from src.graph.sales_ontology import (
     validate_claim_predicate,
     validate_relation,
 )
+
+_SALES_YML = Path(__file__).resolve().parents[3] / "config" / "ontologies" / "sales.yml"
+
+
+def test_sales_yaml_is_not_the_leftover_adtech_template():
+    """config/ontologies/sales.yml once replaced a WPP/Nova Beverages adtech
+    template left over from the fork this repo started from. The parametrized
+    relation_rules tests below would already fail against that template (it
+    has neither RAISED_OBJECTION nor ADDRESSES_OBJECTION), but this guard
+    names the specific regression directly rather than leaving it implicit."""
+    text = _SALES_YML.read_text(encoding="utf-8")
+    assert "WPP" not in text
+    assert "Nova Beverages" not in text
+    assert "ADVERTISER" not in text
 
 
 def test_sales_ontology_contains_all_production_extractor_predicates():

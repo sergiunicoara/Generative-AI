@@ -19,6 +19,7 @@ from hypothesis import HealthCheck, given, settings
 from hypothesis import strategies as st
 
 from src.domain.assertion import (
+    CandidateScore,
     Claim,
     Conflict,
     ErasureEvent,
@@ -131,6 +132,17 @@ MODEL_STRATEGIES: list[tuple[type, object]] = [
         ),
     ),
     (ExtractionRun, st.builds(ExtractionRun)),
+    (
+        CandidateScore,
+        st.builds(
+            CandidateScore,
+            lexical_score=_safe_float,
+            semantic_score=st.none() | _safe_float,
+            base_score=_safe_float,
+            relational_bonus=_safe_float,
+            final_score=_safe_float,
+        ),
+    ),
     (
         ResolutionDecision,
         st.builds(

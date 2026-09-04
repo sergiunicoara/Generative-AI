@@ -29,6 +29,7 @@ caller always has a correct fallback (run the real computation).
 from __future__ import annotations
 
 import hashlib
+from typing import cast
 
 import structlog
 
@@ -55,7 +56,13 @@ async def get_cached_result(workspace_id: str, cache_key: str) -> str | None:
     client = get_redis()
     if client is None:
         return None
-    return await client.get(_redis_key(workspace_id, cache_key))
+    # redis-py's own stub types Redis.get() as bytes | str | None unconditionally
+    # -- it has no generic Redis[str] to reflect decode_responses at the type
+    # level -- but src/core/redis_client.py::get_redis() is the sole factory for
+    # every client in this codebase and always passes decode_responses=True, so
+    # a real bytes value here would mean that invariant broke, not a type worth
+    # silently forwarding as bytes | str | None to every caller.
+    return cast("str | None", await client.get(_redis_key(workspace_id, cache_key)))
 
 
 async def cache_result(workspace_id: str, cache_key: str, value: str, *, ttl: int | None = None) -> None:

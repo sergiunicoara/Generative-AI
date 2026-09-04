@@ -37,7 +37,18 @@ def get_redis() -> aioredis.Redis | None:
 
     if _client is not None:
         bound_loop = _client_loop() if _client_loop is not None else None
-        if bound_loop is None or bound_loop is not loop or bound_loop.is_closed():
+        # `.is_closed()` deliberately comes before `is not loop` in the `or`
+        # below (order doesn't matter for either check -- both are cheap and
+        # side-effect-free). Reversed, mypy's identity-comparison narrowing
+        # treats the `bound_loop is not loop` check as unifying bound_loop's
+        # type with loop's (AbstractEventLoop | None) for the rest of the
+        # expression, and flags `.is_closed()` as possibly called on None --
+        # even though the `if bound_loop is None` above already ruled that out.
+        if bound_loop is None:
+            stale = True
+        else:
+            stale = bound_loop.is_closed() or bound_loop is not loop
+        if stale:
             _client = None
             _client_loop = None
 

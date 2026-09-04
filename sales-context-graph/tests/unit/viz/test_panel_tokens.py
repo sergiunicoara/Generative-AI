@@ -102,3 +102,20 @@ async def test_minting_without_redis_fails_closed(monkeypatch):
     with pytest.raises(panel_tokens.PanelTokenError, match="REDIS_URL"):
         await panel_tokens.mint_panel_token("ws-1", "opp-1")
     get_settings.cache_clear()
+
+
+@pytest.mark.parametrize("token", ["\u00e9.abc", "abc.\u00e9", "\u00e9\u00e9.\u00e9\u00e9"])
+async def test_non_ascii_token_raises_panel_token_error_not_a_500(monkeypatch, token):
+    """A non-ASCII token used to escape as UnicodeEncodeError/TypeError.
+
+    Neither is a PanelTokenError, and api/dependencies.py catches only
+    PanelTokenError -- so one non-ASCII character in an unauthenticated,
+    fully attacker-controlled query param turned a 401 into a 500.
+    """
+    import src.viz.panel_tokens as panel_tokens
+
+    monkeypatch.setenv("PANEL_TOKEN_SECRET", "unit-test-panel-secret")
+    get_settings.cache_clear()
+    with pytest.raises(panel_tokens.PanelTokenError, match="non-ASCII"):
+        await panel_tokens.verify_panel_token(token)
+    get_settings.cache_clear()

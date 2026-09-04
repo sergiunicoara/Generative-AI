@@ -5,11 +5,14 @@
 # (a real IdP is still deferred per docs/plan.md §13 — workspace_api_keys below is
 # an MVP API-key-per-workspace stand-in, not that).
 #
-# _load_yaml() no longer crashes when config/settings.yml is absent (it is, until
-# a later phase's ontology work adds one) — it now fails open to {} with a warning,
-# instead of the original's bare open()/FileNotFoundError.
+# The forked config/settings.yml loader and its Settings.ontology /
+# Settings.ingestion accessors were removed once their only readers (the legacy
+# src/graph/* cluster: ontology_registry, alias_registry, contradiction_strategies)
+# were deleted. config/settings.yml has never existed in this repo, so the loader
+# only ever returned {}. config/ontologies/sales.yml is unaffected -- it is read
+# directly by the live src/graph/sales_ontology.py, not through Settings.
 
-"""Load settings.yml (if present) + .env into a typed Settings object."""
+"""Load .env into a typed Settings object."""
 
 from __future__ import annotations
 
@@ -18,25 +21,12 @@ from pathlib import Path
 from typing import Literal
 
 import structlog
-import yaml
 from pydantic import model_validator
 from pydantic_settings import BaseSettings
 
 log = structlog.get_logger(__name__)
 
 ROOT = Path(__file__).resolve().parents[2]  # repo root
-
-
-def _load_yaml() -> dict:
-    path = ROOT / "config" / "settings.yml"
-    if not path.exists():
-        return {}
-    try:
-        with open(path, encoding="utf-8") as f:
-            return yaml.safe_load(f) or {}
-    except OSError as exc:
-        log.warning("config.settings_yaml_load_failed", path=str(path), error=str(exc))
-        return {}
 
 
 class Settings(BaseSettings):
@@ -114,6 +104,17 @@ class Settings(BaseSettings):
     # this process, require an explicit deployment declaration. This prevents
     # a client from self-asserting X-User-Roles on an accidentally enabled API.
     authz_trusted_gateway_enabled: bool = False
+    # Production may legitimately run with authz_enforcement_enabled=False --
+    # §13's identity provider is still deferred, and get_access_context() 503s
+    # every request if enforcement is on without SSO or a trusted gateway, so
+    # forcing it true here would take the deployment down rather than secure
+    # it. What must not happen is *silently* landing there: every other
+    # production check below refuses to boot on an unsafe default, and before
+    # this flag existed a production deploy that simply never mentioned
+    # authorization booted with it off and said nothing. Setting this to true
+    # is the operator writing down "yes, this deployment runs without
+    # application-level authorization" on purpose.
+    authz_enforcement_disabled_ack: bool = False
 
     # Authenticated Streamable-HTTP MCP.  It uses the same per-request API
     # key/JWT boundary as the REST API; the local CRM emulator is opt-in and
@@ -295,9 +296,6 @@ class Settings(BaseSettings):
     log_level: str = "INFO"
     env: str = "development"
 
-    # ── YAML config (loaded separately, merged at property access) ──────────────
-    _yaml: dict = {}
-
     model_config = {"env_file": str(ROOT / ".env"), "extra": "ignore"}
 
     @model_validator(mode="after")
@@ -320,24 +318,21 @@ class Settings(BaseSettings):
             raise ValueError("demo_public_access_enabled must remain disabled in production.")
         if self.env == "production" and not self.metrics_api_key:
             raise ValueError("metrics_api_key must be configured in production (METRICS_API_KEY).")
+        if self.env == "production" and not self.authz_enforcement_enabled and not self.authz_enforcement_disabled_ack:
+            raise ValueError(
+                "production must make an explicit choice about application authorization: set "
+                "AUTHZ_ENFORCEMENT_ENABLED=true (requires SSO_ENABLED or "
+                "AUTHZ_TRUSTED_GATEWAY_ENABLED), or set "
+                "AUTHZ_ENFORCEMENT_DISABLED_ACK=true to run deliberately without it."
+            )
+        # Catch at boot what api.dependencies.get_access_context() would
+        # otherwise only reveal as a 503 on the first real request.
+        if self.authz_enforcement_enabled and not (self.sso_enabled or self.authz_trusted_gateway_enabled):
+            raise ValueError(
+                "authz_enforcement_enabled requires SSO_ENABLED or AUTHZ_TRUSTED_GATEWAY_ENABLED; "
+                "without one of them every authorized route returns 503."
+            )
         return self
-
-    def __init__(self, **data):
-        super().__init__(**data)
-        object.__setattr__(self, "_yaml", _load_yaml())
-
-    # ── Accessors ─────────────────────────────────────────────────────────────────
-    # Only sections the ported src/graph/*.py legacy modules actually read
-    # (ontology_registry.load() -> settings.ontology; alias_registry.__init__ ->
-    # settings.ingestion). Add more only once a phase's code actually calls
-    # get_settings().<section>.
-    @property
-    def ontology(self) -> dict:
-        return self._yaml.get("ontology", {})
-
-    @property
-    def ingestion(self) -> dict:
-        return self._yaml.get("ingestion", {})
 
 
 @lru_cache(maxsize=1)

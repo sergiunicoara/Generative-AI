@@ -9,6 +9,8 @@ dispatcher cannot run.
 
 from __future__ import annotations
 
+from collections.abc import Iterable, Iterator
+
 from fastapi.routing import APIRoute
 
 from api.main import app
@@ -38,15 +40,49 @@ _NOT_INTENT_ROUTES = {
 }
 
 
+def _all_api_routes(routes: Iterable[object]) -> Iterator[APIRoute]:
+    """Yield every APIRoute reachable from `routes`, descending into sub-routers.
+
+    Deliberately recursive rather than a flat scan of `app.routes`. Starting
+    with fastapi 0.141 / starlette 1.6, `include_router` leaves a lazy
+    `_IncludedRouter` wrapper in `app.routes` instead of splicing the child
+    `APIRoute`s in, so the old flat `isinstance(route, APIRoute)` filter
+    returned an empty set on a fully-working app. That broke
+    test_every_catalog_entry_points_at_a_real_route loudly -- and, far worse,
+    made test_every_query_route_has_a_catalog_entry pass *vacuously*: an empty
+    left-hand set can never produce a missing entry, so the guard against
+    adding an uncatalogued query route silently stopped guarding anything.
+    Hence _query_routes()'s own non-empty assertion below.
+
+    `_IncludedRouter` carries no plain `.routes` list of its own (its
+    `effective_candidates` is a lazily-built matcher, not an iterable) --
+    the actual child `APIRoute`s live on `_IncludedRouter.original_router.routes`.
+    A bare `getattr(route, "routes", None)` silently finds nothing there, which
+    is exactly the failure mode this helper exists to not repeat.
+    """
+    for route in routes:
+        if isinstance(route, APIRoute):
+            yield route
+        original_router = getattr(route, "original_router", None)
+        child_routes = getattr(original_router, "routes", None) or getattr(route, "routes", None)
+        if child_routes:
+            yield from _all_api_routes(child_routes)
+
+
 def _query_routes() -> set[tuple[str, str]]:
     found = set()
-    for route in app.routes:
-        if not isinstance(route, APIRoute):
-            continue
+    for route in _all_api_routes(app.routes):
         if not route.path.startswith(_QUERY_PREFIXES) or route.path in _NOT_INTENTS:
             continue
         for method in route.methods - {"HEAD", "OPTIONS"}:
             found.add((method, route.path))
+    # A route-discovery helper that silently finds nothing turns both guards
+    # below into no-ops. Fail here instead, so the next framework change that
+    # reshapes app.routes is a loud error rather than lost coverage.
+    assert found, (
+        "route discovery found no query routes at all -- the app has "
+        f"{len(app.routes)} top-level routes; this is a broken helper, not an empty API"
+    )
     return found
 
 

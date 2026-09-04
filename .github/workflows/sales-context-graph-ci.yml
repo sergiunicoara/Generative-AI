@@ -1,17 +1,37 @@
-name: CI
-
+# CI for sales-context-graph.
+#
+# This file must live at the REPOSITORY root (.github/workflows/), not inside
+# the project directory — GitHub Actions only reads workflows from the root,
+# so the previous copy at sales-context-graph/.github/workflows/ci.yml was
+# never executed, not once, across every commit that touched it. Identical
+# fix to the one already applied for ai-knowledge-graph-platform-ci.yml, same
+# root cause. Path filters keep this from running on unrelated changes
+# elsewhere in the monorepo.
+#
 # docs/evaluation.md's Showpad engineering-rigor assessment (2026-08-08),
 # Band 1: 468 test functions existed with nothing automated to run them --
 # the single highest-leverage gap the assessment found. This workflow is
 # that gap closed: every push gets lint + the offline unit suite (no live
 # infra needed, matches how tests/unit is written); every PR into main also
 # gets the full suite against real Neo4j/Redis via docker compose, the same
-# services local development already uses (docker-compose.yml).
+# services local development already uses (sales-context-graph/docker-compose.yml).
+
+name: sales-context-graph CI
 
 on:
   push:
+    paths:
+      - "sales-context-graph/**"
+      - ".github/workflows/sales-context-graph-ci.yml"
   pull_request:
     branches: [main]
+    paths:
+      - "sales-context-graph/**"
+      - ".github/workflows/sales-context-graph-ci.yml"
+
+defaults:
+  run:
+    working-directory: sales-context-graph
 
 jobs:
   lint-and-unit:
@@ -21,8 +41,20 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
+      # requirements.lock.txt first, exactly what the Dockerfile installs --
+      # then the dev extras (pytest/ruff/mypy/...) constrained against that
+      # same lock so they can't silently pull a newer fastapi/starlette/
+      # pydantic than what this repo's tests actually run against. A bare
+      # `pip install -e ".[dev]"` here previously resolved
+      # fastapi==0.141.1/starlette==1.6.0 -- current-on-PyPI, but versions
+      # this repo's tests have never been run against (see
+      # requirements.lock.txt's own header, which hit and documented the
+      # identical failure mode) -- and that drift is what silently broke
+      # tests/unit/nlq/test_intent_catalog.py's route-discovery guard.
       - name: Install dependencies
-        run: pip install -e ".[dev]"
+        run: |
+          pip install -r requirements.lock.txt
+          pip install -e ".[dev]" -c requirements.lock.txt
       - name: ruff check
         run: ruff check src api tests scripts
       - name: mypy
@@ -49,7 +81,9 @@ jobs:
         with:
           python-version: "3.11"
       - name: Install dependencies
-        run: pip install -e ".[dev]"
+        run: |
+          pip install -r requirements.lock.txt
+          pip install -e ".[dev]" -c requirements.lock.txt
       - name: Start Neo4j + Redis
         run: docker compose up -d neo4j redis
       - name: Wait for Neo4j bolt port

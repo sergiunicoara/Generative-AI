@@ -34,6 +34,13 @@ primary_region = "iad"
   ENV = "production"
   LOG_LEVEL = "INFO"
   INGESTION_QUEUE_ENABLED = "true"
+  # §13's identity provider is still deferred, so this deployment runs with
+  # application-level authorization off. src/core/config.py now refuses to
+  # boot a production env that leaves that decision unstated -- turning
+  # AUTHZ_ENFORCEMENT_ENABLED on without SSO_ENABLED or
+  # AUTHZ_TRUSTED_GATEWAY_ENABLED would 503 every authorized route, so the
+  # honest declaration is this acknowledgement, not a flipped flag.
+  AUTHZ_ENFORCEMENT_DISABLED_ACK = "true"
 
 [http_service]
   processes = ["app"]

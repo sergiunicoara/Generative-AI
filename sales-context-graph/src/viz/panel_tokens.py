@@ -105,6 +105,14 @@ async def mint_panel_token(workspace_id: str, opportunity_id: str) -> str:
 async def verify_panel_token(token: str) -> PanelTokenClaims:
     if not token or "." not in token:
         raise PanelTokenError("malformed panel token")
+    # The token arrives straight off a query param / header, so it is fully
+    # attacker-controlled. Both halves must be checked for ASCII *before* they
+    # reach hmac: `encoded.encode("ascii")` raises UnicodeEncodeError and
+    # compare_digest() raises TypeError on non-ASCII str, and neither is a
+    # PanelTokenError -- so callers (api/dependencies.py catches PanelTokenError
+    # only) turned a one-character malformed token into a 500 instead of a 401.
+    if not token.isascii():
+        raise PanelTokenError("malformed panel token: non-ASCII characters")
     encoded, _, signature = token.rpartition(".")
     expected_signature = hmac.new(_secret(), encoded.encode("ascii"), hashlib.sha256).hexdigest()
     if not hmac.compare_digest(signature, expected_signature):

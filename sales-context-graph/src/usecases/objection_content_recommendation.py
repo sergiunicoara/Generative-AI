@@ -22,12 +22,14 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from src.diagnostics.invariants import InvariantCheck, run_invariants
 from src.domain.assertion import Claim
 from src.domain.enums import AdjudicationStatus, Polarity, SpeakerRole
 from src.domain.knowledge import ContentAsset
 from src.graph.repositories.claim_repository import ClaimRepository
 from src.graph.repositories.content_repository import ContentRepository
 from src.graph.repositories.conversation_repository import ConversationRepository
+from src.graph.sales_ontology import validate_relation
 
 MAPPING_SOURCE = "content_asset.tags (curated Showpad content taxonomy)"
 
@@ -88,6 +90,21 @@ class ObjectionContentRecommendationUseCase:
         self, workspace_id: str, opportunity_id: str, buyer_contact_id: str,
         *, division_id: str | None = None,
     ) -> ObjectionContentRecommendation:
+        # Config-drift guard, not a per-recommendation data check: this
+        # relation shape is static and already documented in
+        # config/ontologies/sales.yml's ADDRESSES_OBJECTION rule ("must come
+        # from curated taxonomy or reviewed Claim, not invented at query
+        # time" -- MAPPING_SOURCE above is this method's concrete
+        # implementation of that rule). Currently passes; becomes valuable
+        # the moment someone edits sales.yml to narrow or remove the rule
+        # this use case depends on.
+        run_invariants("objection_content_recommendation.recommend", [
+            InvariantCheck(
+                name="addresses_objection_relation_is_valid",
+                check_fn=lambda: bool(validate_relation("ADDRESSES_OBJECTION", "CONTENT_ASSET", "OBJECTION")),
+                detail=f"backs this use case's tag-based mapping ({MAPPING_SOURCE})",
+            ),
+        ])
         conversations = await self._conversation_repo.list_conversations_by_opportunity(
             workspace_id, opportunity_id
         )

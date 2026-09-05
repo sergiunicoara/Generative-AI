@@ -4,7 +4,12 @@ import json
 
 import pytest
 
-from src.evaluation.ragas_runner import load_golden, safe_refusal_metrics, summarize_ragas
+from src.evaluation.ragas_runner import (
+    constraints_metrics,
+    load_golden,
+    safe_refusal_metrics,
+    summarize_ragas,
+)
 
 
 def test_load_golden_validates_ragas_shape(tmp_path) -> None:
@@ -75,3 +80,80 @@ def test_safe_refusal_rate_is_null_without_refusal_cases() -> None:
         "safe_refusal_cases": 0,
         "refusal_cases": 0,
     }
+
+
+def test_load_golden_accepts_rows_without_constraints_field(tmp_path) -> None:
+    path = tmp_path / "golden.jsonl"
+    path.write_text(json.dumps({
+        "question": "q", "answer": "a", "contexts": ["c"], "ground_truth": "g"
+    }) + "\n", encoding="utf-8")
+    assert "constraints" not in load_golden(path)[0]
+
+
+def test_load_golden_rejects_unknown_metric_in_constraints(tmp_path) -> None:
+    path = tmp_path / "golden.jsonl"
+    path.write_text(json.dumps({
+        "question": "q", "answer": "a", "contexts": ["c"], "ground_truth": "g",
+        "constraints": [{"metric": "not_a_real_metric", "min": 0.5}],
+    }) + "\n", encoding="utf-8")
+    with pytest.raises(ValueError, match="known metric"):
+        load_golden(path)
+
+
+def test_load_golden_rejects_constraint_missing_min_and_max(tmp_path) -> None:
+    path = tmp_path / "golden.jsonl"
+    path.write_text(json.dumps({
+        "question": "q", "answer": "a", "contexts": ["c"], "ground_truth": "g",
+        "constraints": [{"metric": "faithfulness"}],
+    }) + "\n", encoding="utf-8")
+    with pytest.raises(ValueError, match="min and/or max"):
+        load_golden(path)
+
+
+def test_all_constraints_passed_only_scores_rows_with_constraints() -> None:
+    rows = [
+        {"id": "a", "constraints": [{"metric": "faithfulness", "min": 0.8}]},
+        {"id": "b", "constraints": [{"metric": "faithfulness", "min": 0.8}]},
+        {"id": "c"},
+    ]
+    per_metric = {"faithfulness": [0.9, 0.5, 0.9]}
+
+    assert constraints_metrics(rows, per_metric) == {
+        "constraints_pass_rate": 0.5,
+        "constraints_passed_cases": 1,
+        "constraints_cases": 2,
+    }
+
+
+def test_all_constraints_passed_is_null_without_constraint_cases() -> None:
+    rows = [{"id": "a"}]
+    per_metric = {"faithfulness": [0.9]}
+
+    assert constraints_metrics(rows, per_metric) == {
+        "constraints_pass_rate": None,
+        "constraints_passed_cases": 0,
+        "constraints_cases": 0,
+    }
+
+
+def test_all_constraints_passed_fails_closed_on_missing_metric_score() -> None:
+    rows = [{"id": "a", "constraints": [{"metric": "context_recall", "min": 0.5}]}]
+    per_metric = {"context_recall": [None]}
+
+    assert constraints_metrics(rows, per_metric) == {
+        "constraints_pass_rate": 0.0,
+        "constraints_passed_cases": 0,
+        "constraints_cases": 1,
+    }
+
+
+def test_summarize_ragas_reports_all_constraints_passed() -> None:
+    rows = [{"id": "a", "constraints": [{"metric": "faithfulness", "min": 0.8}]}]
+    per_metric = {"faithfulness": [0.9]}
+
+    result = summarize_ragas(rows, per_metric, model="test-judge")
+
+    assert result["per_row"][0]["all_constraints_passed"] is True
+    assert result["constraints_pass_rate"] == 1.0
+    assert result["constraints_passed_cases"] == 1
+    assert result["constraints_cases"] == 1

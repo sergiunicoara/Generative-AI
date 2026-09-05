@@ -82,7 +82,7 @@ async def test_reranker_without_query_text_is_a_no_op_even_when_enabled(executor
     assert len(result.claims) == 1
 
 
-async def test_reranker_reorders_by_relevance_and_replaces_the_score(executor, monkeypatch):
+async def test_reranker_reorders_by_relevance_and_blends_the_score(executor, monkeypatch):
     monkeypatch.setenv("RERANKER_ENABLED", "true")
     get_settings.cache_clear()
     workspace_id = f"ws-rerank-on-{uuid4().hex[:8]}"
@@ -108,8 +108,10 @@ async def test_reranker_reorders_by_relevance_and_replaces_the_score(executor, m
 
     assert len(result.claims) == 2  # additive -- nothing dropped
     assert result.claims[0].claim_id == "claim-timeline"  # reranked to the top
-    # 1.0/0.1 are the stub's exact rerank scores, not values the original
-    # confidence/recency/adjudication formula could produce by coincidence
-    # -- confirms selected_items reflects the rerank, not the original score.
-    assert result.selected_items[0].score == pytest.approx(1.0)
-    assert result.selected_items[1].score == pytest.approx(0.1)
+    # The score is now a blend of relevance with the base
+    # confidence/recency/adjudication/authority score, not the raw stub
+    # value -- assert ordering and bounds instead of an exact number that
+    # would break every time the blend weights get retuned.
+    assert 0.0 <= result.selected_items[1].score < result.selected_items[0].score <= 1.0
+    assert result.selected_items[0].score != 1.0  # no longer the raw stub logit
+    assert "relevance=" in result.selected_items[0].reason

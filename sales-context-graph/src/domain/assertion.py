@@ -76,6 +76,24 @@ class Claim(BaseModel):
     # version produced this specific assertion" actually be queried.
     extraction_run_id: str | None = None
 
+    # --- Adjudication audit trail ------------------------------------------
+    # adjudication_status itself (line 48) stays a plain current-value
+    # property -- these three carry *why*/*who*/*when* for the most recent
+    # transition. History beyond "most recent" lives in ClaimRevision nodes
+    # via ClaimRepository.transition_adjudication_status(), not here; these
+    # three mirror only the live node's current transition for cheap reads
+    # that don't need the full history.
+    adjudication_reason: str | None = None
+    adjudication_decided_by: str | None = None
+    adjudication_decided_at: datetime | None = None
+
+    # --- Source authority ---------------------------------------------------
+    # Denormalized from Conversation.source_system at Claim-construction time
+    # (src/ingestion/transcript_pipeline.py) so ContextGraphBuilder._score_claim
+    # can weigh source authority without an extra repository fetch per Claim
+    # (would otherwise be an N+1 join through source_record_id -> SourceRecord).
+    source_system: str | None = None
+
     @model_validator(mode="after")
     def _resolved_entity_requires_auto_link(self) -> "Claim":
         """Mirror of ResolutionDecision's own invariant.

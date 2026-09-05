@@ -58,6 +58,16 @@ def load_golden(path: Path) -> list[dict[str, Any]]:
             raise ValueError(f"{path}:{line_number}: contexts must be a list of strings")
         if "category" in row and row["category"] not in CATEGORY_VALUES:
             raise ValueError(f"{path}:{line_number}: category must be one of {sorted(CATEGORY_VALUES)}")
+        if "constraints" in row:
+            if not isinstance(row["constraints"], list):
+                raise ValueError(f"{path}:{line_number}: constraints must be a list")
+            for constraint in row["constraints"]:
+                if not isinstance(constraint, dict) or constraint.get("metric") not in METRIC_NAMES:
+                    raise ValueError(
+                        f"{path}:{line_number}: each constraint must reference a known metric {sorted(METRIC_NAMES)}"
+                    )
+                if "min" not in constraint and "max" not in constraint:
+                    raise ValueError(f"{path}:{line_number}: each constraint must declare min and/or max")
         rows.append(row)
     if not rows:
         raise ValueError(f"{path}: dataset is empty")
@@ -116,6 +126,56 @@ def safe_refusal_metrics(rows: list[dict[str, Any]]) -> dict[str, int | float | 
     }
 
 
+def _constraint_status(row: dict[str, Any], scores: dict[str, float | None]) -> bool | None:
+    """Check whether one row's declared constraints all hold simultaneously.
+
+    Unlike ``_safe_refusal_status``, this needs the row's own computed
+    per-metric scores (not just the row), since a constraint thresholds
+    RAGAS-judge output rather than a deterministic string property.
+    Fail-closed: a constraint whose metric has no score (``None``) counts
+    as failed, not excluded -- a declared constraint should never silently
+    pass. Rows with no ``constraints`` are excluded from the denominator,
+    same convention as ``_safe_refusal_status``.
+    """
+    constraints = row.get("constraints")
+    if not constraints:
+        return None
+    for constraint in constraints:
+        value = scores.get(constraint["metric"])
+        if value is None:
+            return False
+        if "min" in constraint and value < constraint["min"]:
+            return False
+        if "max" in constraint and value > constraint["max"]:
+            return False
+    return True
+
+
+def constraints_metrics(
+    rows: list[dict[str, Any]],
+    per_metric: dict[str, list[float | None]],
+) -> dict[str, int | float | None]:
+    """Return constraint-only all-or-nothing metrics.
+
+    This is what per-metric averaging can't show: how often a single answer
+    satisfies every declared constraint at once, not just each one on
+    average. ``None`` is returned when no row declares constraints, making
+    an absent constraint slice distinguishable from a failing slice.
+    """
+    statuses = [
+        _constraint_status(row, {name: values[index] for name, values in per_metric.items()})
+        for index, row in enumerate(rows)
+    ]
+    applicable = [status for status in statuses if status is not None]
+    return {
+        "constraints_pass_rate": (
+            sum(status is True for status in applicable) / len(applicable) if applicable else None
+        ),
+        "constraints_passed_cases": sum(status is True for status in applicable),
+        "constraints_cases": len(applicable),
+    }
+
+
 def summarize_ragas(
     rows: list[dict[str, Any]],
     per_metric: dict[str, list[float | None]],
@@ -132,6 +192,9 @@ def summarize_ragas(
             "id": row.get("id", str(index)),
             "category": row.get("category", "unclassified"),
             "safe_refusal": _safe_refusal_status(row),
+            "all_constraints_passed": _constraint_status(
+                row, {name: values[index] for name, values in per_metric.items()}
+            ),
             **{name: values[index] for name, values in per_metric.items()},
         }
         for index, row in enumerate(rows)
@@ -149,6 +212,7 @@ def summarize_ragas(
         "rows": len(rows),
         "metrics": metrics,
         **safe_refusal_metrics(rows),
+        **constraints_metrics(rows, per_metric),
         "by_category": categories,
         "per_row": per_row,
     }

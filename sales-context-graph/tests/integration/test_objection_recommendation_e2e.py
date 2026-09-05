@@ -13,6 +13,7 @@ from uuid import uuid4
 
 import pytest
 
+from src.diagnostics.invariants import InvariantViolation
 from src.domain.identity import crm_entity_id
 from src.domain.knowledge import AssetView, ContentAsset
 from src.extraction.fixture_provider import FixtureExtractionProvider
@@ -21,10 +22,12 @@ from src.graph.repositories.content_repository import ContentRepository
 from src.graph.repositories.conversation_repository import ConversationRepository
 from src.graph.repositories.crm_repository import CrmRepository
 from src.graph.repositories.source_repository import SourceRepository
+from src.graph.sales_ontology import UnknownGraphRelation
 from src.ingestion.adapters.gong import GongAdapter
 from src.ingestion.adapters.salesforce import SalesforceAdapter
 from src.ingestion.pipeline import CrmIngestionPipeline
 from src.ingestion.transcript_pipeline import TranscriptIngestionPipeline
+from src.usecases import objection_content_recommendation
 from src.usecases.objection_content_recommendation import (
     NoObjectionFoundError,
     NoRelevantCallError,
@@ -135,6 +138,27 @@ async def test_objection_recommendation_end_to_end_excludes_viewed_asset(executo
     assert "pricing" in recommendation.evidence_text.lower()
     assert recommendation.mapping_source == "content_asset.tags (curated Showpad content taxonomy)"
     assert recommendation.objection_claim.claim_id in recommendation.explanation
+
+
+async def test_recommend_raises_invariant_violation_when_ontology_drops_the_relation(executor, monkeypatch):
+    """Config-drift guard: if config/ontologies/sales.yml ever narrows or
+    removes the ADDRESSES_OBJECTION rule this use case depends on,
+    recommend() must fail loudly with a diagnosable InvariantViolation
+    rather than silently keep serving recommendations against a mapping the
+    ontology no longer sanctions."""
+    workspace_id = f"ws-demo-drift-{uuid4().hex[:8]}"
+    conv_repo = ConversationRepository(executor)
+    claim_repo = ClaimRepository(executor)
+    content_repo = ContentRepository(executor)
+
+    def _relation_removed(*args, **kwargs):
+        raise UnknownGraphRelation("ADDRESSES_OBJECTION is no longer in the active sales ontology")
+
+    monkeypatch.setattr(objection_content_recommendation, "validate_relation", _relation_removed)
+    use_case = ObjectionContentRecommendationUseCase(conv_repo, claim_repo, content_repo)
+
+    with pytest.raises(InvariantViolation):
+        await use_case.recommend(workspace_id, "opp-does-not-exist", "contact-x")
 
 
 async def test_no_conversation_raises_no_relevant_call_error(executor):

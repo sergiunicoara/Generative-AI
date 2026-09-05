@@ -13,7 +13,7 @@ from datetime import datetime
 
 from src.core.telemetry import CLAIMS_TOTAL
 from src.domain.assertion import Claim
-from src.domain.enums import ErasureStatus
+from src.domain.enums import AdjudicationStatus, ErasureStatus
 from src.graph.execution import GraphExecutor, scoped_match
 
 _CLAIM_RETURN = (
@@ -27,6 +27,10 @@ _CLAIM_RETURN = (
     "cl.valid_from AS valid_from, cl.valid_to AS valid_to, "
     "cl.transaction_from AS transaction_from, cl.transaction_to AS transaction_to, "
     "cl.is_superseded AS is_superseded, cl.adjudication_status AS adjudication_status, "
+    "cl.adjudication_reason AS adjudication_reason, "
+    "cl.adjudication_decided_by AS adjudication_decided_by, "
+    "cl.adjudication_decided_at AS adjudication_decided_at, "
+    "cl.source_system AS source_system, "
     "cl.retention_class AS retention_class, cl.erasure_status AS erasure_status, "
     "cl.created_at AS created_at, "
     # Resolved subject identity (§8/§9). Nodes written before these existed
@@ -72,6 +76,12 @@ def _claim_params(claim: Claim) -> dict:
         "transaction_to": claim.transaction_to.isoformat() if claim.transaction_to else None,
         "is_superseded": claim.is_superseded,
         "adjudication_status": claim.adjudication_status.value,
+        "adjudication_reason": claim.adjudication_reason,
+        "adjudication_decided_by": claim.adjudication_decided_by,
+        "adjudication_decided_at": (
+            claim.adjudication_decided_at.isoformat() if claim.adjudication_decided_at else None
+        ),
+        "source_system": claim.source_system,
         "retention_class": claim.retention_class,
         "erasure_status": claim.erasure_status.value,
         "created_at": claim.created_at.isoformat(),
@@ -106,7 +116,11 @@ class ClaimRepository:
                 f"""
                 MATCH {segment_match}
                 MERGE {match}
-                ON CREATE SET cl.created_at = $created_at
+                ON CREATE SET cl.created_at = $created_at,
+                              cl.adjudication_status = $adjudication_status,
+                              cl.adjudication_reason = $adjudication_reason,
+                              cl.adjudication_decided_by = $adjudication_decided_by,
+                              cl.adjudication_decided_at = $adjudication_decided_at
                 SET cl.subject_id = $subject_id,
                     cl.predicate = $predicate,
                     cl.object_id = $object_id,
@@ -115,6 +129,7 @@ class ClaimRepository:
                     cl.source_type = $source_type,
                     cl.source_record_id = $source_record_id,
                     cl.source_segment_id = $source_segment_id,
+                    cl.source_system = $source_system,
                     cl.evidence_char_start = $evidence_char_start,
                     cl.evidence_char_end = $evidence_char_end,
                     cl.source_timestamp = $source_timestamp,
@@ -126,7 +141,6 @@ class ClaimRepository:
                     cl.transaction_from = $transaction_from,
                     cl.transaction_to = $transaction_to,
                     cl.is_superseded = $is_superseded,
-                    cl.adjudication_status = $adjudication_status,
                     cl.retention_class = $retention_class,
                     cl.erasure_status = $erasure_status,
                     cl.resolved_entity_id = $resolved_entity_id,
@@ -148,7 +162,11 @@ class ClaimRepository:
         await self._executor.tenant_query(
             f"""
             MERGE {match}
-            ON CREATE SET cl.created_at = $created_at
+            ON CREATE SET cl.created_at = $created_at,
+                          cl.adjudication_status = $adjudication_status,
+                          cl.adjudication_reason = $adjudication_reason,
+                          cl.adjudication_decided_by = $adjudication_decided_by,
+                          cl.adjudication_decided_at = $adjudication_decided_at
             SET cl.subject_id = $subject_id,
                 cl.predicate = $predicate,
                 cl.object_id = $object_id,
@@ -157,6 +175,7 @@ class ClaimRepository:
                 cl.source_type = $source_type,
                 cl.source_record_id = $source_record_id,
                 cl.source_segment_id = $source_segment_id,
+                cl.source_system = $source_system,
                 cl.evidence_char_start = $evidence_char_start,
                 cl.evidence_char_end = $evidence_char_end,
                 cl.source_timestamp = $source_timestamp,
@@ -168,7 +187,6 @@ class ClaimRepository:
                 cl.transaction_from = $transaction_from,
                 cl.transaction_to = $transaction_to,
                 cl.is_superseded = $is_superseded,
-                cl.adjudication_status = $adjudication_status,
                 cl.retention_class = $retention_class,
                 cl.erasure_status = $erasure_status,
                 cl.resolved_entity_id = $resolved_entity_id,
@@ -395,6 +413,106 @@ class ClaimRepository:
             transaction_to=transaction_to.isoformat(),
         )
         CLAIMS_TOTAL.labels(event="superseded").inc()
+
+    async def transition_adjudication_status(
+        self,
+        workspace_id: str,
+        claim_id: str,
+        new_status: AdjudicationStatus,
+        *,
+        reason: str | None,
+        decided_by: str | None,
+        decided_at: datetime,
+    ) -> bool:
+        """Record a human adjudication decision as history, not an overwrite.
+
+        Reuses reconcile_claim_subject's snapshot mechanism (ClaimRevision +
+        HAS_REVISION) rather than introducing a new IS_STATUS-edge-to-status-
+        node scheme -- this codebase already has one graph-native audit-trail
+        convention, and a second, inconsistent one would cost more than it's
+        worth.
+
+        Deliberately does NOT touch transaction_from/transaction_to/
+        is_superseded the way reconcile_claim_subject and close_claim_interval
+        do: those three fields carry the bitemporal "is this assertion still
+        the live belief" story, which is orthogonal to "has a human judged
+        whether to trust this claim." Reusing them here would let an
+        adjudication decision accidentally un-supersede a conflict-losing
+        Claim, or invert an already-closed interval.
+
+        The revision's own transaction_to is pinned equal to its
+        transaction_from (a degenerate, always-empty interval) specifically
+        so list_claims_as_of's open-interval union query never picks up an
+        adjudication-history revision as a duplicate of the live Claim --
+        these revisions are audit trail only, read back via
+        list_adjudication_history, not list_claims_as_of.
+        """
+        transition_id = hashlib.sha256(
+            f"{workspace_id}\x1f{claim_id}\x1f{decided_at.isoformat()}\x1f{new_status.value}".encode("utf-8")
+        ).hexdigest()
+        match = scoped_match("Claim", "cl", claim_id="claim_id")
+        rows = await self._executor.tenant_query(
+            f"""
+            MATCH {match}
+            MERGE (revision:ClaimRevision {{workspace_id: $workspace_id, revision_id: $revision_id}})
+            ON CREATE SET revision = properties(cl),
+                          revision.revision_id = $revision_id,
+                          revision.revised_claim_id = cl.claim_id,
+                          revision.adjudication_transition_id = $revision_id,
+                          revision.adjudication_status_before = cl.adjudication_status,
+                          revision.adjudication_status_after = $new_status,
+                          revision.adjudication_reason = $reason,
+                          revision.adjudication_decided_by = $decided_by,
+                          revision.adjudication_decided_at = $decided_at,
+                          revision.transaction_to = revision.transaction_from
+            MERGE (cl)-[:HAS_REVISION]->(revision)
+            SET cl.adjudication_status = $new_status,
+                cl.adjudication_reason = $reason,
+                cl.adjudication_decided_by = $decided_by,
+                cl.adjudication_decided_at = $decided_at
+            RETURN cl.claim_id AS claim_id
+            """,
+            workspace_id=workspace_id,
+            claim_id=claim_id,
+            new_status=new_status.value,
+            reason=reason,
+            decided_by=decided_by,
+            decided_at=decided_at.isoformat(),
+            revision_id=transition_id,
+        )
+        if rows:
+            CLAIMS_TOTAL.labels(event="adjudicated").inc()
+        return bool(rows)
+
+    async def list_adjudication_history(
+        self, workspace_id: str, claim_id: str, *, limit: int = 100, offset: int = 0
+    ) -> list[dict]:
+        """Read only the adjudication-specific revision properties written by
+        transition_adjudication_status, oldest first. These revisions carry a
+        degenerate transaction interval (see above) and must never be
+        confused with reconcile_claim_subject's reconstructable historical
+        Claims sharing the same ClaimRevision label."""
+        match = scoped_match("Claim", "cl", claim_id="claim_id")
+        rows = await self._executor.tenant_query(
+            f"""
+            MATCH {match}
+            MATCH (cl)-[:HAS_REVISION]->(revision:ClaimRevision)
+            WHERE revision.adjudication_transition_id IS NOT NULL
+            RETURN revision.adjudication_transition_id AS transition_id,
+                   revision.adjudication_status_before AS status_before,
+                   revision.adjudication_status_after AS status_after,
+                   revision.adjudication_reason AS reason,
+                   revision.adjudication_decided_by AS decided_by,
+                   revision.adjudication_decided_at AS decided_at
+            ORDER BY revision.adjudication_decided_at ASC
+            SKIP $offset LIMIT $limit
+            """,
+            workspace_id=workspace_id,
+            claim_id=claim_id,
+            offset=offset,
+            limit=limit,
+        )
+        return rows
 
     async def reconcile_claim_subject(
         self,

@@ -33,6 +33,7 @@ I/O, bounded by the (typically small) number of actual contradictions found.
 
 from __future__ import annotations
 
+import math
 import time
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -45,10 +46,12 @@ from src.core.telemetry import (
     CONTEXT_GRAPH_RESULT_COUNT,
     CONTEXT_GRAPH_TRUNCATED_TOTAL,
 )
+from src.diagnostics.invariants import InvariantCheck, run_invariants
 from src.domain.assertion import Claim
 from src.domain.enums import AdjudicationStatus
 from src.graph.repositories.claim_repository import ClaimRepository
 from src.graph.repositories.conflict_repository import ConflictRepository
+from src.graph.repositories.source_repository import SourceRepository
 from src.resolution.conflict_detection import detect_conflicting_claims
 from src.summarization.call_summary import CallSummaryUseCase
 
@@ -62,6 +65,41 @@ _ADJUDICATION_WEIGHT = {
     AdjudicationStatus.DISPUTED: 0.4,
     AdjudicationStatus.REJECTED: 0.0,
 }
+
+# Human-tunable starting points, not load-bearing: source_system isn't baked
+# into any stored score, so these can be retuned later with no backfill.
+# salesforce (structured CRM fields) ranks above gong (ASR + LLM extraction
+# noise on a call transcript); an unknown/not-yet-set source_system gets the
+# neutral default rather than being penalized or favored.
+_SOURCE_AUTHORITY_WEIGHT: dict[str, float] = {
+    "salesforce": 1.0,
+    "gong": 0.7,
+}
+_DEFAULT_SOURCE_AUTHORITY_WEIGHT = 0.5
+
+# How much a reranked relevance score weighs against the base
+# confidence/recency/adjudication/authority score once the reranker fires.
+# Also a tunable starting point.
+_RERANK_RELEVANCE_WEIGHT = 0.6
+
+
+def _normalize_relevance(raw_logit: float) -> float:
+    """The cross-encoder returns an unbounded raw logit (see reranker.py) --
+    sigmoid is the natural inverse-link to bring it into [0, 1] so it can be
+    blended with the already-[0, 1] base score below."""
+    return 1.0 / (1.0 + math.exp(-raw_logit))
+
+
+def _blend_relevance(base_score: float, raw_relevance: float) -> float:
+    """Blend, not replace. Previously the reranked score replaced the base
+    confidence/recency/adjudication/authority score outright -- letting a
+    highly-relevant-but-unadjudicated Claim beat a fully-reviewed one purely
+    because the reranker path was taken. Blending keeps both signals live."""
+    return round(
+        _RERANK_RELEVANCE_WEIGHT * _normalize_relevance(raw_relevance)
+        + (1 - _RERANK_RELEVANCE_WEIGHT) * base_score,
+        4,
+    )
 
 
 @dataclass(frozen=True)
@@ -88,20 +126,30 @@ def _claim_tokens(claim: Claim) -> int:
 
 
 def _score_claim(claim: Claim, *, now: datetime) -> float:
-    """confidence, recency, and adjudication_status are genuinely computed.
-    'Relevance'/'source authority' collapse into the scope filter itself here —
-    this builder answers 'what's the well-evidenced context for this specific
-    conversation/subject', not 'rank all Claims in the workspace against a
-    free-text question', which is a materially different (and unbuilt) ranking
-    problem."""
+    """confidence, recency, adjudication_status, and source authority are
+    genuinely computed. 'Relevance' (ranking against a free-text question)
+    still collapses into the scope filter itself here — this builder answers
+    'what's the well-evidenced context for this specific conversation/
+    subject', not 'rank all Claims in the workspace against a free-text
+    question'; the latter is handled separately, when scope.query_text is
+    set, by the reranker blend in build()."""
     age_days = max((now - claim.source_timestamp).days, 0)
     recency = 1.0 / (1.0 + age_days / 30.0)
     adjudication = _ADJUDICATION_WEIGHT.get(claim.adjudication_status, 0.5)
-    return round(0.5 * claim.confidence + 0.3 * recency + 0.2 * adjudication, 4)
+    authority = (
+        _SOURCE_AUTHORITY_WEIGHT.get(claim.source_system, _DEFAULT_SOURCE_AUTHORITY_WEIGHT)
+        if claim.source_system is not None
+        else _DEFAULT_SOURCE_AUTHORITY_WEIGHT
+    )
+    return round(0.45 * claim.confidence + 0.20 * recency + 0.15 * adjudication + 0.20 * authority, 4)
 
 
-def _explain(claim: Claim, score: float) -> str:
-    return f"confidence={claim.confidence:.2f}, adjudication={claim.adjudication_status.value}, score={score:.2f}"
+def _explain(claim: Claim, score: float, *, relevance: float | None = None) -> str:
+    parts = [f"confidence={claim.confidence:.2f}", f"adjudication={claim.adjudication_status.value}"]
+    if relevance is not None:
+        parts.append(f"relevance={relevance:.2f}")
+    parts.append(f"score={score:.2f}")
+    return ", ".join(parts)
 
 
 def _claim_rerank_text(claim: Claim) -> str:
@@ -117,6 +165,7 @@ class ContextGraphBuilder:
         claim_repo: ClaimRepository,
         conflict_repo: ConflictRepository | None = None,
         call_summary_usecase: CallSummaryUseCase | None = None,
+        source_repo: SourceRepository | None = None,
     ):
         self._claim_repo = claim_repo
         self._conflict_repo = conflict_repo or ConflictRepository()
@@ -125,6 +174,10 @@ class ContextGraphBuilder:
         # site keeps working unchanged -- attaching a summary needs an LLM
         # chat_fn this builder otherwise has no reason to require.
         self._call_summary_usecase = call_summary_usecase
+        # Same opt-in shape as call_summary_usecase above: None (the default)
+        # skips the source-traceability invariant check entirely, so every
+        # existing call site keeps working unchanged.
+        self._source_repo = source_repo
 
     async def build(
         self,
@@ -157,17 +210,28 @@ class ContextGraphBuilder:
         # Phase 7 reranker (docs/evaluation.md's B5 item): off unless both
         # reranker_enabled and scope.query_text are set -- a caller with no
         # question to rank against gets exactly the pre-Phase-7 confidence/
-        # recency/adjudication ordering, unchanged. Reordering happens on
-        # the already-fully-in-memory `scored` list, no extra DB fetch;
-        # the relevance score *replaces* the displayed score below so
-        # SelectedItem.score always matches the actual sort basis.
+        # recency/adjudication/authority ordering, unchanged. Reordering
+        # happens on the already-fully-in-memory `scored` list, no extra DB
+        # fetch. The relevance score is BLENDED with (not a replacement for)
+        # the base score -- see _blend_relevance's docstring for why a
+        # straight replacement was a bug, not a design choice.
+        relevance_by_claim_id: dict[str, float] = {}
         if get_settings().reranker_enabled and scope.query_text and scored:
             claims_in_order = [c for c, _ in scored]
+            base_score_by_claim_id = {c.claim_id: s for c, s in scored}
             relevance_scores = await rerank(
                 scope.query_text, [_claim_rerank_text(c) for c in claims_in_order]
             )
+            relevance_by_claim_id = {
+                c.claim_id: r for c, r in zip(claims_in_order, relevance_scores, strict=True)
+            }
             scored = sorted(
-                zip(claims_in_order, relevance_scores, strict=True), key=lambda pair: pair[1], reverse=True
+                (
+                    (c, _blend_relevance(base_score_by_claim_id[c.claim_id], r))
+                    for c, r in zip(claims_in_order, relevance_scores, strict=True)
+                ),
+                key=lambda pair: pair[1],
+                reverse=True,
             )
 
         selected: list[tuple[Claim, float]] = []
@@ -199,7 +263,10 @@ class ContextGraphBuilder:
             )
             for c, _ in selected
         ]
-        selected_items = [SelectedItem(claim_id=c.claim_id, score=s, reason=_explain(c, s)) for c, s in selected]
+        selected_items = [
+            SelectedItem(claim_id=c.claim_id, score=s, reason=_explain(c, s, relevance=relevance_by_claim_id.get(c.claim_id)))
+            for c, s in selected
+        ]
 
         conflicts = detect_conflicting_claims([c for c, _ in selected], now=now)
         for conflict in conflicts:
@@ -221,6 +288,9 @@ class ContextGraphBuilder:
                 scope.workspace_id, scope.conversation_id
             )
 
+        if self._source_repo is not None:
+            await self._check_source_traceability(scope.workspace_id, [c for c, _ in selected])
+
         return ContextGraphResult(
             workspace_id=scope.workspace_id,
             claims=[c for c, _ in selected],
@@ -235,3 +305,24 @@ class ContextGraphBuilder:
             truncated=truncated,
             summary=summary,
         )
+
+    async def _check_source_traceability(self, workspace_id: str, claims: list[Claim]) -> None:
+        """Invariant: every selected Claim that carries a source_record_id
+        must resolve to a retrievable SourceRecord. Claims with no
+        source_record_id are excluded from the check (not treated as a
+        violation) -- not every Claim's provenance is a SourceRecord today.
+        Opt-in via source_repo (constructor) so this never fires unless a
+        caller explicitly wants it."""
+        if self._source_repo is None:
+            return
+        source_record_ids = {c.source_record_id for c in claims if c.source_record_id}
+        if not source_record_ids:
+            return
+        found = await self._source_repo.get_source_records(workspace_id, list(source_record_ids))
+        run_invariants("context_graph.build", [
+            InvariantCheck(
+                name="cited_claims_trace_to_source_record",
+                check_fn=lambda: source_record_ids.issubset(found.keys()),
+                detail=f"missing={sorted(source_record_ids - found.keys())}",
+            ),
+        ])

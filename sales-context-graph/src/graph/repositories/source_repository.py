@@ -60,6 +60,28 @@ class SourceRepository:
         )
         return SourceRecord(**rows[0]) if rows else None
 
+    async def get_source_records(
+        self, workspace_id: str, source_record_ids: list[str]
+    ) -> dict[str, SourceRecord]:
+        """Batched sibling of get_source_record — one round trip for every id
+        in the given (already-bounded) list, same reasoning as
+        claim_repository.py's list_claims_for_conversations. Backs
+        ContextGraphBuilder's optional source-traceability invariant check
+        (src/diagnostics/invariants.py), which would otherwise be an N+1
+        fetch per selected Claim."""
+        if not source_record_ids:
+            return {}
+        rows = await self._executor.tenant_query(
+            f"""
+            MATCH (r:SourceRecord {{workspace_id: $workspace_id}})
+            WHERE r.source_record_id IN $source_record_ids
+            RETURN {_RECORD_RETURN}
+            """,
+            workspace_id=workspace_id,
+            source_record_ids=source_record_ids,
+        )
+        return {row["source_record_id"]: SourceRecord(**row) for row in rows}
+
     async def create_snapshot(self, workspace_id: str, snapshot: SourceSnapshot) -> None:
         """SourceSnapshot carries no workspace_id of its own — it's reached only
         by traversal from a workspace-scoped SourceRecord (same routing principle

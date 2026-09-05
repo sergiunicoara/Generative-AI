@@ -476,6 +476,7 @@ class TranscriptIngestionPipeline:
                     polarity=assertion.polarity,
                     source_type="transcript",
                     source_record_id=parsed_conv.entity.source_record_id,
+                    source_system=parsed_conv.entity.source_system,
                     source_segment_id=segment.segment_id,
                     evidence_char_start=assertion.evidence_char_start,
                     evidence_char_end=assertion.evidence_char_end,

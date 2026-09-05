@@ -70,11 +70,11 @@ RESOLUTION_DECISIONS_TOTAL = Counter(
     ["status"],  # auto_linked | pending_review | unresolved | rejected
 )
 
-# --- 7. Claims created, superseded, conflicted, and erased -----------------
+# --- 7. Claims created, superseded, conflicted, erased, and adjudicated ----
 CLAIMS_TOTAL = Counter(
     "scg_claims_total",
     "Claim lifecycle events, by event type.",
-    ["event"],  # created | superseded | conflicted | erased
+    ["event"],  # created | superseded | conflicted | erased | adjudicated
 )
 
 # --- 8. Context Graph latency, result count, and budget truncation ---------
@@ -214,6 +214,13 @@ GROUNDED_RECOMMENDATIONS_TOTAL = Counter(
     "scg_grounded_recommendations_total",
     "Grounded sales recommendation versus abstention outcomes.",
     ["outcome"],
+)
+
+# --- Diagnostics invariant checks (src/diagnostics/invariants.py) ----------
+INVARIANT_CHECKS_TOTAL = Counter(
+    "scg_invariant_checks_total",
+    "Structured invariant checks, by stage, check name, and outcome.",
+    ["stage", "name", "outcome"],
 )
 
 

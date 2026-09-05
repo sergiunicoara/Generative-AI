@@ -43,6 +43,10 @@ class CRMReceipt:
     recorded_at: str
     receipt_hash: str
     compensation: SalesCompensationAction | None = None
+    # None = not applicable (PREVIEW/replay never mutate), True = the store was
+    # read back after the write and matched. Not part of verify()'s hash
+    # payload, so old persisted receipts keep validating.
+    verified: bool | None = None
 
     def verify(self) -> bool:
         payload = {
@@ -76,6 +80,21 @@ class LocalCRMEmulator:
             return self._records[(command.workspace_id, command.object_id)]
         except KeyError as exc:
             raise CRMCommandError("CRM object not found in the command workspace") from exc
+
+    def get_record(self, *, workspace_id: str, object_id: str) -> dict | None:
+        """Public, read-only accessor. Unlike ``_record()`` this never raises
+        on a miss -- callers decide for themselves whether that's an error --
+        and returns a defensive copy so a caller can't mutate live state.
+
+        Known limitation: this reads the same in-memory dict `execute()` just
+        mutated in place, so a read-back from inside the same call always
+        matches by construction today. It still earns its keep for interface
+        parity with a future networked CRM connector, and as a regression
+        guard if that live-reference behavior ever changes.
+        """
+        with self._lock:
+            record = self._records.get((workspace_id, object_id))
+            return copy.deepcopy(record) if record is not None else None
 
     def preview(self, command: SalesCRMWrite) -> dict:
         current = self._record(command)
@@ -118,12 +137,21 @@ class LocalCRMEmulator:
             previous = {field: record.get(field) for field in command.patch}
             record.update(command.patch)
             record["version"] += 1
+            verified_record = self.get_record(workspace_id=command.workspace_id, object_id=command.object_id)
+            mismatches = sorted(
+                field for field, expected in command.patch.items()
+                if verified_record is None or verified_record.get(field) != expected
+            )
+            if mismatches:
+                # Abort before any success bookkeeping below -- a failed
+                # verification must never look like a partial success.
+                raise CRMCommandError(f"CRM write verification failed: fields did not round-trip: {mismatches}")
             compensation = SalesCompensationAction(
                 compensation_id=f"compensate-{command.command_id}", workspace_id=command.workspace_id,
                 original_command_id=command.command_id, object_id=command.object_id,
                 restore_patch=previous,
             )
-            receipt = self._receipt(command, "EXECUTED", record["version"], diff, compensation)
+            receipt = self._receipt(command, "EXECUTED", record["version"], diff, compensation, verified=True)
             self._commands[key] = receipt
             self.audit_events.append({"event": "crm.command.executed", "command_id": command.command_id,
                                       "workspace_id": command.workspace_id, "correlation_id": command.correlation_id,
@@ -172,7 +200,7 @@ class LocalCRMEmulator:
         os.replace(temporary, self._storage_path)
 
     def _receipt(self, command: SalesCRMWrite, outcome: str, version: int, diff: dict,
-                 compensation: SalesCompensationAction | None) -> CRMReceipt:
+                 compensation: SalesCompensationAction | None, *, verified: bool | None = None) -> CRMReceipt:
         recorded_at = datetime.now(timezone.utc).isoformat()
         payload = {"command_id": command.command_id, "workspace_id": command.workspace_id,
                    "object_id": command.object_id, "outcome": outcome, "version": version, "diff": diff,
@@ -186,5 +214,5 @@ class LocalCRMEmulator:
             command_id=command.command_id, workspace_id=command.workspace_id,
             object_id=command.object_id, outcome=outcome, version=version, diff=diff,
             correlation_id=command.correlation_id, recorded_at=recorded_at,
-            receipt_hash=self._hash(payload), compensation=compensation,
+            receipt_hash=self._hash(payload), compensation=compensation, verified=verified,
         )

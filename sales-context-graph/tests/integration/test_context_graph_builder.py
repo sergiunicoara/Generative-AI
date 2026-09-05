@@ -9,9 +9,12 @@ from uuid import uuid4
 import pytest
 
 from src.context_graph.builder import ContextGraphBuilder, ContextGraphScope
+from src.diagnostics.invariants import InvariantViolation
 from src.domain.assertion import Claim
-from src.domain.enums import AdjudicationStatus, Polarity, SpeakerRole
+from src.domain.crm import SourceRecord
+from src.domain.enums import AdjudicationStatus, Polarity, SourceStatus, SpeakerRole
 from src.graph.repositories.claim_repository import ClaimRepository
+from src.graph.repositories.source_repository import SourceRepository
 
 pytestmark = pytest.mark.asyncio
 
@@ -86,3 +89,38 @@ async def test_selection_reason_and_evidence_are_populated(executor):
     assert len(result.selected_items) == 1
     assert "confidence=" in result.selected_items[0].reason
     assert result.evidence[0].claim_id == "claim-x"
+
+
+async def test_build_raises_when_a_cited_claim_has_no_retrievable_source_record(executor):
+    workspace_id = f"ws-ctx-src-missing-{uuid4().hex[:8]}"
+    claim_repo = ClaimRepository(executor)
+    await claim_repo.create_claim(
+        _claim("claim-src-missing", "contact-src").model_copy(
+            update={"workspace_id": workspace_id, "source_record_id": "does-not-exist"}
+        )
+    )
+
+    builder = ContextGraphBuilder(claim_repo, source_repo=SourceRepository(executor))
+    with pytest.raises(InvariantViolation):
+        await builder.build(ContextGraphScope(workspace_id=workspace_id, subject_id="contact-src"), now=_T0)
+
+
+async def test_build_passes_when_cited_claims_trace_to_seeded_source_records(executor):
+    workspace_id = f"ws-ctx-src-ok-{uuid4().hex[:8]}"
+    claim_repo = ClaimRepository(executor)
+    source_repo = SourceRepository(executor)
+    await source_repo.upsert_source_record(SourceRecord(
+        source_record_id="source-ok", workspace_id=workspace_id, source_system="gong",
+        object_type="Call", external_id="call-1", source_status=SourceStatus.ACTIVE,
+        first_seen_at=_T0, last_seen_at=_T0,
+    ))
+    await claim_repo.create_claim(
+        _claim("claim-src-ok", "contact-src-ok").model_copy(
+            update={"workspace_id": workspace_id, "source_record_id": "source-ok"}
+        )
+    )
+
+    builder = ContextGraphBuilder(claim_repo, source_repo=source_repo)
+    result = await builder.build(ContextGraphScope(workspace_id=workspace_id, subject_id="contact-src-ok"), now=_T0)
+
+    assert len(result.claims) == 1

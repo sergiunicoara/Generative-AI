@@ -25,6 +25,29 @@ def test_local_adapter_preview_execute_and_hash_receipt():
     assert len(receipt.receipt_hash) == 64
     assert receipt.verify()
     assert receipt.compensation is not None
+    assert receipt.verified is True
+    assert crm.get_record(workspace_id="ws-a", object_id="opp-1") == {"stage": "NEGOTIATION", "version": 2}
+
+
+def test_preview_receipt_has_no_verified_flag():
+    crm = LocalCRMEmulator()
+    crm.seed(workspace_id="ws-a", object_id="opp-1", values={"stage": "PROPOSAL"})
+    receipt = crm.execute(_command(dry_run=True))
+    assert receipt.outcome == "PREVIEW"
+    assert receipt.verified is None
+
+
+def test_get_record_returns_none_for_unknown_object():
+    crm = LocalCRMEmulator()
+    assert crm.get_record(workspace_id="ws-a", object_id="missing") is None
+
+
+def test_get_record_returns_a_defensive_copy():
+    crm = LocalCRMEmulator()
+    crm.seed(workspace_id="ws-a", object_id="opp-1", values={"stage": "PROPOSAL"})
+    record = crm.get_record(workspace_id="ws-a", object_id="opp-1")
+    record["stage"] = "TAMPERED"
+    assert crm._records[("ws-a", "opp-1")]["stage"] == "PROPOSAL"
 
 
 def test_stale_and_cross_tenant_commands_are_rejected():

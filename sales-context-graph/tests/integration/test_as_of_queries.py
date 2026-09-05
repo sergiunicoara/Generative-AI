@@ -136,6 +136,109 @@ async def test_review_subject_reconciliation_preserves_bitemporal_history(execut
     assert [item.claim_id for item in after_new_subject] == [claim.claim_id]
 
 
+# ── ClaimRepository.transition_adjudication_status ──────────────────────────
+
+async def test_transition_adjudication_status_updates_live_node_and_writes_history(executor):
+    workspace_id = f"ws-adj-transition-{uuid4().hex[:8]}"
+    claim_repo = ClaimRepository(executor)
+    await claim_repo.create_claim(_claim(workspace_id, "claim-adj-1"))
+    decided_at = _T0 + timedelta(days=1)
+
+    changed = await claim_repo.transition_adjudication_status(
+        workspace_id, "claim-adj-1", AdjudicationStatus.ACCEPTED,
+        reason="Confirmed against CRM record", decided_by="reviewer-1", decided_at=decided_at,
+    )
+
+    assert changed is True
+    reloaded = await claim_repo.get_claim(workspace_id, "claim-adj-1")
+    assert reloaded.adjudication_status == AdjudicationStatus.ACCEPTED
+    assert reloaded.adjudication_reason == "Confirmed against CRM record"
+    assert reloaded.adjudication_decided_by == "reviewer-1"
+    assert reloaded.adjudication_decided_at == decided_at
+
+    history = await claim_repo.list_adjudication_history(workspace_id, "claim-adj-1")
+    assert len(history) == 1
+    assert history[0]["status_before"] == AdjudicationStatus.UNREVIEWED.value
+    assert history[0]["status_after"] == AdjudicationStatus.ACCEPTED.value
+    assert history[0]["decided_by"] == "reviewer-1"
+
+
+async def test_transition_adjudication_status_does_not_affect_list_claims_as_of(executor):
+    """Regression guard for the degenerate-interval design: an adjudication
+    transition must never make list_claims_as_of return the same claim twice
+    (once as the live node, once as a stray history revision)."""
+    workspace_id = f"ws-adj-asof-{uuid4().hex[:8]}"
+    claim_repo = ClaimRepository(executor)
+    await claim_repo.create_claim(_claim(workspace_id, "claim-adj-2", source_timestamp=_T0))
+    await claim_repo.transition_adjudication_status(
+        workspace_id, "claim-adj-2", AdjudicationStatus.DISPUTED,
+        reason="Contradicted by a later call", decided_by="reviewer-2", decided_at=_T0 + timedelta(days=2),
+    )
+
+    far_future = _T0 + timedelta(days=365)
+    found = await claim_repo.list_claims_as_of(workspace_id, "spk_1", far_future)
+    assert [c.claim_id for c in found] == ["claim-adj-2"]
+
+
+async def test_transition_adjudication_status_unknown_claim_returns_false(executor):
+    workspace_id = f"ws-adj-unknown-{uuid4().hex[:8]}"
+    claim_repo = ClaimRepository(executor)
+
+    changed = await claim_repo.transition_adjudication_status(
+        workspace_id, "does-not-exist", AdjudicationStatus.REJECTED,
+        reason=None, decided_by=None, decided_at=_T0,
+    )
+    assert changed is False
+
+
+async def test_reingest_preserves_adjudication_status_after_human_review(executor):
+    """Regression guard for the bug found alongside this feature: create_claim
+    used to SET adjudication_status unconditionally on every persist, so
+    re-extracting the same transcript (same content-derived claim_id) would
+    silently reset a human's adjudication decision back to UNREVIEWED. The
+    fields now live in ON CREATE SET, so a re-persist of an existing claim_id
+    must leave a prior human decision untouched."""
+    workspace_id = f"ws-adj-reingest-{uuid4().hex[:8]}"
+    claim_repo = ClaimRepository(executor)
+    claim = _claim(workspace_id, "claim-adj-4")
+    await claim_repo.create_claim(claim)
+    await claim_repo.transition_adjudication_status(
+        workspace_id, "claim-adj-4", AdjudicationStatus.ACCEPTED,
+        reason="Verified by manager", decided_by="reviewer-3", decided_at=_T0 + timedelta(days=1),
+    )
+
+    # Simulates a re-extraction producing the identical Claim (same
+    # content-derived claim_id, adjudication_status defaulted back to
+    # UNREVIEWED because a fresh extraction never carries a human's prior
+    # decision) being re-persisted.
+    await claim_repo.create_claim(claim)
+
+    reloaded = await claim_repo.get_claim(workspace_id, "claim-adj-4")
+    assert reloaded.adjudication_status == AdjudicationStatus.ACCEPTED
+    assert reloaded.adjudication_decided_by == "reviewer-3"
+
+
+async def test_list_adjudication_history_returns_transitions_oldest_first(executor):
+    workspace_id = f"ws-adj-history-{uuid4().hex[:8]}"
+    claim_repo = ClaimRepository(executor)
+    await claim_repo.create_claim(_claim(workspace_id, "claim-adj-3"))
+
+    await claim_repo.transition_adjudication_status(
+        workspace_id, "claim-adj-3", AdjudicationStatus.DISPUTED,
+        reason="First pass review", decided_by="reviewer-a", decided_at=_T0 + timedelta(days=1),
+    )
+    await claim_repo.transition_adjudication_status(
+        workspace_id, "claim-adj-3", AdjudicationStatus.ACCEPTED,
+        reason="Confirmed after follow-up", decided_by="reviewer-b", decided_at=_T0 + timedelta(days=2),
+    )
+
+    history = await claim_repo.list_adjudication_history(workspace_id, "claim-adj-3")
+    assert [item["status_after"] for item in history] == [
+        AdjudicationStatus.DISPUTED.value, AdjudicationStatus.ACCEPTED.value,
+    ]
+    assert [item["decided_by"] for item in history] == ["reviewer-a", "reviewer-b"]
+
+
 # ── ConflictsUseCase.resolve ─────────────────────────────────────────────────
 
 async def _seed_conflict(executor, workspace_id: str, claim_a: Claim, claim_b: Claim) -> str:

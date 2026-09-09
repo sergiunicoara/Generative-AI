@@ -67,13 +67,13 @@ SKOS = Namespace("http://www.w3.org/2004/02/skos/core#")
 
 
 def _make_neo4j(
-    type_rows=None, rel_rows=None, ent_rows=None, edge_rows=None, neg_rows=None,
+    type_rows=None, rel_rows=None, prov_rows=None, ent_rows=None, edge_rows=None, neg_rows=None,
 ) -> AsyncMock:
-    """Mirrors test_export_rdf.py's fixture: export() issues exactly 5
+    """Mirrors test_export_rdf.py's fixture: export() issues exactly 6
     sequential neo4j.run() calls, in this fixed order."""
     neo4j = AsyncMock()
     neo4j.run.side_effect = [
-        type_rows or [], rel_rows or [], ent_rows or [], edge_rows or [], neg_rows or [],
+        type_rows or [], rel_rows or [], prov_rows or [], ent_rows or [], edge_rows or [], neg_rows or [],
     ]
     return neo4j
 
@@ -149,7 +149,7 @@ class TestExactSemanticFidelity:
 
         from export_rdf import ANNOT, _axiom_uri
 
-        axiom = _axiom_uri("Boeing", "MANUFACTURES", "Boeing 737 MAX")
+        axiom = _axiom_uri("Boeing", "MANUFACTURES", "Boeing 737 MAX", "aerospace")
         confidence_values = list(graph.objects(axiom, ANNOT.confidence))
         assert confidence_values == [Literal(0.95, datatype=XSD.float)]
 

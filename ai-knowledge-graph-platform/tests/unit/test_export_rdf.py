@@ -117,6 +117,13 @@ class TestGraphStructure:
 
         assert str(dict(_init_graph().namespaces())["prov"]) == str(PROV)
 
+    def test_prov_assertion_uris_are_tenant_scoped(self):
+        from export_rdf import _axiom_uri
+
+        assert _axiom_uri("A", "REL", "B", "tenant-a") != _axiom_uri(
+            "A", "REL", "B", "tenant-b"
+        )
+
 
 # ── Reified confidence (owl:Axiom) ────────────────────────────────────────────
 
@@ -220,15 +227,16 @@ class TestAwareDatetime:
 # in tests/unit/, which CI already executes on every push.
 
 def _make_neo4j(
-    type_rows=None, rel_rows=None, ent_rows=None, edge_rows=None, neg_rows=None,
+    type_rows=None, rel_rows=None, prov_rows=None, ent_rows=None, edge_rows=None, neg_rows=None,
 ) -> AsyncMock:
     neo4j = AsyncMock()
-    # export() issues 5 sequential neo4j.run() calls in this fixed order:
-    # type hierarchy, distinct relation names, entities, RELATES_TO edges,
-    # NEGATIVE_RELATES_TO edges.
+    # export() issues 6 sequential neo4j.run() calls in this fixed order:
+    # type hierarchy, distinct relation names, PROV records, entities,
+    # RELATES_TO edges, NEGATIVE_RELATES_TO edges.
     neo4j.run.side_effect = [
         type_rows or [],
         rel_rows or [],
+        prov_rows or [],
         ent_rows or [],
         edge_rows or [],
         neg_rows or [],
@@ -368,3 +376,30 @@ class TestExportProducesConformantGraph:
         source = list(graph.objects(entity, PROV.wasDerivedFrom))
         assert len(source) == 1
         assert (source[0], RDF.type, PROV.Entity) in graph
+
+    async def test_export_emits_prov_activity_agent_and_answer_lineage(self, tmp_path: Path) -> None:
+        from export_rdf import export
+
+        neo4j = _make_neo4j(prov_rows=[{
+            "kind": "retrieval", "id": "run-1", "row_tenant": "sustainability",
+            "model_provider": "groq", "model_version": "model-v1",
+            "status": "completed", "manifest_id": "manifest-1",
+            "document_ids": ["doc-1"], "chunk_ids": ["chunk-1"],
+            "episodes": [{"episode_type": "answer", "content_digest": "a" * 64}],
+        }])
+        output = tmp_path / "prov_trace.ttl"
+        with patch("graphrag.graph.neo4j_client.get_neo4j", return_value=neo4j):
+            await export(tenant="sustainability", output=output, limit=1000)
+
+        graph = Graph().parse(output, format="turtle")
+        from graphrag.provenance.prov_o import activity_uri, agent_uri, answer_uri, chunk_uri, document_uri
+
+        activity = activity_uri("retrieval", "run-1", "sustainability")
+        answer = answer_uri("run-1", "sustainability")
+        agent = agent_uri("software", "groq:model-v1", "sustainability")
+        assert (activity, RDF.type, PROV.Activity) in graph
+        assert (activity, PROV.wasAssociatedWith, agent) in graph
+        assert (activity, PROV.used, document_uri("doc-1", "sustainability")) in graph
+        assert (activity, PROV.used, chunk_uri("chunk-1", "sustainability")) in graph
+        assert (answer, RDF.type, PROV.Entity) in graph
+        assert (answer, PROV.wasGeneratedBy, activity) in graph

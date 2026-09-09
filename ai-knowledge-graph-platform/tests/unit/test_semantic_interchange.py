@@ -63,7 +63,7 @@ async def test_jsonld_export_is_parseable_by_standard_rdflib(tmp_path):
 
     output = tmp_path / "graph.jsonld"
     neo4j = MagicMock()
-    neo4j.run = AsyncMock(side_effect=[[], [], [], [], []])
+    neo4j.run = AsyncMock(side_effect=[[], [], [], [], [], []])
     neo4j.close = AsyncMock()
     with patch("graphrag.graph.neo4j_client.get_neo4j", return_value=neo4j):
         await export(tenant="legal", output=output, limit=10, rdf_format="json-ld")

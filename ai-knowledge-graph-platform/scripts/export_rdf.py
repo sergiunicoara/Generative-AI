@@ -37,6 +37,7 @@ from __future__ import annotations
 import argparse
 import os
 import asyncio
+import json
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
@@ -49,6 +50,23 @@ if sys.stdout.encoding and sys.stdout.encoding.lower() != "utf-8":
     sys.stdout.reconfigure(encoding="utf-8")
 from rdflib import Graph, Literal, Namespace, URIRef
 from rdflib.namespace import OWL, RDF, RDFS, XSD
+from graphrag.provenance.prov_o import (
+    PROV,
+    activity_uri,
+    add_activity,
+    add_agent,
+    add_association,
+    add_derived,
+    add_entity,
+    add_generated,
+    add_used,
+    agent_uri,
+    answer_uri,
+    chunk_uri,
+    document_uri,
+    entity_uri as prov_entity_uri,
+    query_uri,
+)
 
 log = structlog.get_logger(__name__)
 
@@ -57,7 +75,6 @@ log = structlog.get_logger(__name__)
 BASE  = Namespace("https://graphrag.example.com/ontology#")
 INST  = Namespace("https://graphrag.example.com/entity/")
 ANNOT = Namespace("https://graphrag.example.com/annotation#")
-PROV  = Namespace("http://www.w3.org/ns/prov#")
 SKOS  = Namespace("http://www.w3.org/2004/02/skos/core#")
 
 
@@ -84,28 +101,21 @@ def _rel_uri(relation: str) -> URIRef:
     return BASE[relation.upper()]
 
 
-def _axiom_uri(s_name: str, rel: str, t_name: str) -> URIRef:
+def _axiom_uri(s_name: str, rel: str, t_name: str, tenant: str = "default") -> URIRef:
     import hashlib
-    key = f"{s_name}|{rel}|{t_name}"
+    key = f"{tenant}|{s_name}|{rel}|{t_name}"
     h = hashlib.md5(key.encode()).hexdigest()[:12]
     return INST[f"axiom/{h}"]
 
 
 def _document_uri(source_doc_id: str, tenant: str) -> URIRef:
     """Stable PROV-O source-artifact URI scoped to the owning tenant."""
-    import urllib.parse
-
-    return INST[
-        f"document/{urllib.parse.quote(tenant, safe='')}/"
-        f"{urllib.parse.quote(source_doc_id, safe='')}"
-    ]
+    return document_uri(source_doc_id, tenant)
 
 
 def _add_provenance_document(g: Graph, source_doc_id: str, tenant: str) -> URIRef:
     uri = _document_uri(source_doc_id, tenant)
-    g.add((uri, RDF.type, PROV.Entity))
-    g.add((uri, RDFS.label, Literal(source_doc_id)))
-    g.add((uri, ANNOT.tenant, Literal(tenant)))
+    add_entity(g, uri, label=source_doc_id, tenant=tenant)
     return uri
 
 
@@ -136,12 +146,173 @@ def _init_graph() -> Graph:
         ("validTo",    XSD.string),
         ("sourceDoc",  XSD.string),
         ("tenant",     XSD.string),
+        ("status",     XSD.string),
+        ("modelProvider", XSD.string),
+        ("modelVersion", XSD.string),
+        ("promptVersion", XSD.string),
+        ("contentDigest", XSD.string),
     ]:
         prop = ANNOT[prop_name]
         g.add((prop, RDF.type, OWL.AnnotationProperty))
         g.add((prop, RDFS.range, range_type))
 
     return g
+
+
+def _list_value(value: object) -> list[str]:
+    """Normalise Neo4j lists and JSON-encoded legacy properties."""
+    if value is None:
+        return []
+    if isinstance(value, str):
+        try:
+            value = json.loads(value)
+        except (TypeError, ValueError):
+            return [value] if value else []
+    if isinstance(value, (list, tuple, set)):
+        return [str(item) for item in value if item]
+    return [str(value)]
+
+
+def _emit_provenance_rows(graph: Graph, rows: list[dict], tenant: str) -> dict[tuple[str, str], URIRef]:
+    """Project durable ingestion/context records into PROV-O.
+
+    The operational records remain authoritative in Neo4j.  The exporter only
+    emits tenant-matching rows and never copies answer text or other sensitive
+    payloads into the interchange graph; identifiers and content digests are
+    sufficient for lineage without turning the RDF export into a data dump.
+    """
+    ingestion_by_document: dict[tuple[str, str], URIRef] = {}
+
+    for row in rows:
+        row_tenant = str(row.get("row_tenant") or row.get("tenant") or tenant)
+        if row_tenant != tenant and tenant != "default":
+            continue
+        kind = str(row.get("kind") or "")
+        identifier = str(row.get("id") or "")
+        if not identifier:
+            continue
+
+        provider = str(row.get("model_provider") or row.get("provider") or "platform")
+        version = str(row.get("model_version") or row.get("version") or "unknown")
+        agent_key = str(row.get("agent_id") or f"{provider}:{version}")
+        agent = agent_uri("software", agent_key, row_tenant)
+        add_agent(graph, agent, label=f"{provider} ({version})", tenant=row_tenant)
+
+        if kind == "ingestion":
+            activity = activity_uri("ingestion", identifier, row_tenant)
+            add_activity(
+                graph, activity,
+                label=f"Ingestion run {identifier}",
+                tenant=row_tenant,
+                started_at=row.get("started_at"),
+                ended_at=row.get("ended_at") or row.get("completed_at"),
+                status=str(row.get("status") or ""),
+            )
+            add_association(graph, activity, agent)
+            document_id = str(row.get("document_id") or "")
+            if document_id:
+                document = _add_provenance_document(graph, document_id, row_tenant)
+                add_used(graph, activity, document)
+                ingestion_by_document[(row_tenant, document_id)] = activity
+                for chunk_id in _list_value(row.get("chunk_ids")):
+                    chunk = chunk_uri(chunk_id, row_tenant)
+                    add_entity(graph, chunk, label=f"Chunk {chunk_id}", tenant=row_tenant)
+                    add_derived(graph, chunk, document)
+                    add_generated(graph, chunk, activity)
+            continue
+
+        if kind == "retrieval":
+            activity = activity_uri("retrieval", identifier, row_tenant)
+            add_activity(
+                graph, activity,
+                label=f"Retrieval run {identifier}",
+                tenant=row_tenant,
+                started_at=row.get("started_at"),
+                ended_at=row.get("ended_at"),
+                status=str(row.get("status") or ""),
+            )
+            add_association(graph, activity, agent)
+            query = query_uri(identifier, row_tenant)
+            add_entity(graph, query, label=f"Query {identifier}", tenant=row_tenant)
+            add_used(graph, activity, query)
+            manifest_id = str(row.get("manifest_id") or "")
+            if manifest_id:
+                manifest = prov_entity_uri(f"context-manifest/{manifest_id}", row_tenant)
+                add_entity(graph, manifest, label=f"Context manifest {manifest_id}", tenant=row_tenant)
+                add_used(graph, activity, manifest)
+            for document_id in _list_value(row.get("document_ids")):
+                add_used(graph, activity, _add_provenance_document(graph, document_id, row_tenant))
+            for chunk_id in _list_value(row.get("chunk_ids")):
+                chunk = chunk_uri(chunk_id, row_tenant)
+                add_entity(graph, chunk, label=f"Chunk {chunk_id}", tenant=row_tenant)
+                add_used(graph, activity, chunk)
+            episodes = row.get("episodes") or []
+            if isinstance(episodes, str):
+                try:
+                    episodes = json.loads(episodes)
+                except (TypeError, ValueError):
+                    episodes = []
+            answer_digest = str(row.get("answer_digest") or "")
+            if not answer_digest:
+                for episode in episodes if isinstance(episodes, list) else []:
+                    if isinstance(episode, dict) and str(episode.get("episode_type")) == "answer":
+                        answer_digest = str(episode.get("content_digest") or "")
+                        break
+            answer = answer_uri(identifier, row_tenant)
+            add_entity(graph, answer, label=f"Answer {answer_digest or identifier}", tenant=row_tenant)
+            if answer_digest:
+                graph.add((answer, ANNOT.contentDigest, Literal(answer_digest)))
+            add_generated(graph, answer, activity)
+            continue
+
+        if kind == "artifact":
+            activity = activity_uri("artifact-extraction", identifier, row_tenant)
+            add_activity(
+                graph, activity,
+                label=f"Artifact extraction {identifier}",
+                tenant=row_tenant,
+                started_at=row.get("started_at"),
+                ended_at=row.get("ended_at"),
+                status=str(row.get("status") or "completed"),
+            )
+            add_association(graph, activity, agent)
+            artifact = prov_entity_uri(f"intelligence-artifact/{identifier}", row_tenant)
+            add_entity(graph, artifact, label=f"Intelligence artifact {identifier}", tenant=row_tenant)
+            source_chunk_id = str(row.get("source_chunk_id") or "")
+            if source_chunk_id:
+                source_chunk = chunk_uri(source_chunk_id, row_tenant)
+                add_entity(graph, source_chunk, label=f"Chunk {source_chunk_id}", tenant=row_tenant)
+                add_used(graph, activity, source_chunk)
+                add_derived(graph, artifact, source_chunk)
+            add_generated(graph, artifact, activity)
+
+    return ingestion_by_document
+
+
+def _activity_for_document(
+    graph: Graph,
+    document_id: str,
+    tenant: str,
+    *,
+    extraction_model: str = "",
+    prompt_version: str = "",
+    activity_cache: dict[tuple[str, str, str, str], URIRef] | None = None,
+) -> URIRef:
+    """Return a deterministic fallback activity when no manifest is present."""
+    cache = activity_cache if activity_cache is not None else {}
+    key = (tenant, document_id, extraction_model, prompt_version)
+    if key in cache:
+        return cache[key]
+    identifier = f"{document_id}:{extraction_model or 'unknown'}:{prompt_version or 'unknown'}"
+    activity = activity_uri("extraction", identifier, tenant)
+    add_activity(graph, activity, label=f"Extraction for {document_id}", tenant=tenant)
+    agent_key = f"{extraction_model or 'unknown'}:{prompt_version or 'unknown'}"
+    agent = agent_uri("software", agent_key, tenant)
+    add_agent(graph, agent, label=agent_key, tenant=tenant)
+    add_association(graph, activity, agent)
+    add_used(graph, activity, _add_provenance_document(graph, document_id, tenant))
+    cache[key] = activity
+    return activity
 
 
 async def export(
@@ -202,6 +373,56 @@ async def export(
             g.add((r_uri, RDFS.label, Literal(rel)))
             declared_rels.add(rel)
 
+    # ── PROV-O activities, agents, and trace evidence ─────────────────────────
+    # One bounded query keeps export round-trips small while covering the
+    # durable ingestion and Context Graph records already present in Neo4j.
+    prov_rows = await neo4j.run(
+        """
+        CALL {
+          MATCH (m:IngestionRunManifest)
+          WHERE ($tenant = 'default' OR m.tenant = $tenant)
+          OPTIONAL MATCH (c:Chunk {tenant: m.tenant, document_id: m.document_id})
+          WITH m, collect(DISTINCT c.id) AS chunk_ids
+          RETURN 'ingestion' AS kind, m.id AS id, m.tenant AS row_tenant,
+                 m.document_id AS document_id, m.model_provider AS model_provider,
+                 m.model_version AS model_version, m.started_at AS started_at,
+                 m.completed_at AS completed_at, m.status AS status,
+                 chunk_ids AS chunk_ids, [] AS document_ids, [] AS source_chunk_ids,
+                 null AS manifest_id, [] AS episodes, null AS answer_digest
+          UNION ALL
+          MATCH (r:CGAgentRun)
+          WHERE ($tenant = 'default' OR r.tenant = $tenant)
+          OPTIONAL MATCH (r)-[:USED_CONTEXT]->(m:CGContextManifest)
+          OPTIONAL MATCH (r)-[:RECORDED_EPISODE]->(ep:CGEpisode)
+          WITH r, m, collect(DISTINCT ep { .episode_type, .content_digest }) AS episodes
+          RETURN 'retrieval' AS kind, r.id AS id, r.tenant AS row_tenant,
+                 null AS document_id, r.model_provider AS model_provider,
+                 r.model_version AS model_version, r.created_at AS started_at,
+                 r.completed_at AS completed_at, r.status AS status,
+                 coalesce(m.chunk_ids, []) AS chunk_ids,
+                 coalesce(m.document_ids, []) AS document_ids,
+                 [] AS source_chunk_ids, m.id AS manifest_id,
+                 episodes AS episodes, null AS answer_digest
+          UNION ALL
+          MATCH (a:IntelligenceArtifact)
+          WHERE ($tenant = 'default' OR a.tenant = $tenant)
+          RETURN 'artifact' AS kind, a.id AS id, a.tenant AS row_tenant,
+                 a.source_doc_id AS document_id, a.extraction_model AS model_provider,
+                 a.extraction_model AS model_version, null AS started_at,
+                 a.event_end AS completed_at, 'completed' AS status,
+                 [] AS chunk_ids, [] AS document_ids,
+                 [a.source_chunk_id] AS source_chunk_ids, null AS manifest_id,
+                 [] AS episodes, null AS answer_digest
+        }
+        RETURN kind, id, row_tenant, document_id, model_provider, model_version,
+               started_at, completed_at, status, chunk_ids, document_ids,
+               source_chunk_ids, manifest_id, episodes, answer_digest
+        LIMIT $limit
+        """,
+        tenant=tenant, limit=limit,
+    )
+    ingestion_by_document = _emit_provenance_rows(g, prov_rows, tenant)
+
     # ── Entities ───────────────────────────────────────────────────────────────
     ent_rows = await neo4j.run(
         """
@@ -209,11 +430,13 @@ async def export(
         WHERE ($tenant = 'default' OR e.tenant = $tenant)
         RETURN e.name AS name, e.type AS type, e.description AS desc,
                e.valid_from AS vf, e.valid_to AS vt, e.tenant AS tenant
-               , e.source_doc_id AS src_doc
+               , e.source_doc_id AS src_doc, e.source_chunk_ids AS source_chunks,
+               e.extraction_model AS extraction_model, e.prompt_version AS prompt_version
         LIMIT $limit
         """,
         tenant=tenant, limit=limit,
     )
+    activity_cache: dict[tuple[str, str, str, str], URIRef] = {}
     for row in ent_rows:
         name  = row["name"] or ""
         etype = row["type"] or "CONCEPT"
@@ -246,7 +469,20 @@ async def export(
         if row.get("vt"):
             g.add((uri, ANNOT.validTo, Literal(str(row["vt"]))))
         if row.get("src_doc"):
-            g.add((uri, PROV.wasDerivedFrom, _add_provenance_document(g, str(row["src_doc"]), t)))
+            document_id = str(row["src_doc"])
+            document = _add_provenance_document(g, document_id, t)
+            add_derived(g, uri, document)
+            activity = _activity_for_document(
+                g, document_id, t,
+                extraction_model=str(row.get("extraction_model") or ""),
+                prompt_version=str(row.get("prompt_version") or ""),
+                activity_cache=activity_cache,
+            )
+            add_generated(g, uri, activity)
+            for chunk_id in _list_value(row.get("source_chunks")):
+                chunk = chunk_uri(chunk_id, t)
+                add_entity(g, chunk, label=f"Chunk {chunk_id}", tenant=t)
+                add_derived(g, uri, chunk)
 
     # ── Relations with reified confidence ─────────────────────────────────────
     edge_rows = await neo4j.run(
@@ -258,8 +494,11 @@ async def export(
                r.relation AS rel,
                r.confidence AS conf,
                r.source_doc_id AS src_doc,
+               r.source_chunk_id AS source_chunk_id,
                r.extracted_at AS extracted_at,
-               r.tenant AS tenant
+               r.tenant AS tenant,
+               r.extraction_model AS extraction_model,
+               r.prompt_version AS prompt_version
         LIMIT $limit
         """,
         tenant=tenant, limit=limit,
@@ -277,8 +516,11 @@ async def export(
 
         # Reify with owl:Axiom to carry confidence + provenance annotations
         if conf is not None or sdoc:
-            ax = _axiom_uri(row["sname"], row["rel"], row["tname"])
+            ax = _axiom_uri(row["sname"], row["rel"], row["tname"], t)
             g.add((ax, RDF.type, OWL.Axiom))
+            g.add((ax, RDF.type, PROV.Entity))
+            g.add((ax, RDFS.label, Literal(f"{row['sname']} {row['rel']} {row['tname']}")))
+            g.add((ax, ANNOT.tenant, Literal(t)))
             g.add((ax, OWL.annotatedSource,   s_uri))
             g.add((ax, OWL.annotatedProperty, p_uri))
             g.add((ax, OWL.annotatedTarget,   o_uri))
@@ -286,7 +528,21 @@ async def export(
                 g.add((ax, ANNOT.confidence, Literal(round(float(conf), 4), datatype=XSD.float)))
             if sdoc:
                 g.add((ax, ANNOT.sourceDoc, Literal(sdoc)))
-                g.add((ax, PROV.wasDerivedFrom, _add_provenance_document(g, sdoc, t)))
+                document = _add_provenance_document(g, sdoc, t)
+                add_derived(g, ax, document)
+                activity = ingestion_by_document.get((t, sdoc)) if 'ingestion_by_document' in locals() else None
+                if activity is None:
+                    activity = _activity_for_document(
+                        g, sdoc, t,
+                        extraction_model=str(row.get("extraction_model") or ""),
+                        prompt_version=str(row.get("prompt_version") or ""),
+                        activity_cache=activity_cache,
+                    )
+                add_generated(g, ax, activity)
+            if row.get("source_chunk_id"):
+                chunk = chunk_uri(str(row["source_chunk_id"]), t)
+                add_entity(g, chunk, label=f"Chunk {row['source_chunk_id']}", tenant=t)
+                add_derived(g, ax, chunk)
             if row.get("extracted_at"):
                 g.add((ax, PROV.generatedAtTime, Literal(str(row["extracted_at"]), datatype=XSD.dateTime)))
 
@@ -315,16 +571,21 @@ async def export(
         g.add((neg_uri, RDFS.label, Literal(f"NOT {rel}")))
         g.add((s_uri, neg_uri, o_uri))
         if row.get("conf") is not None:
-            ax = _axiom_uri(f"NEG_{row['sname']}", rel, row["tname"])
+            ax = _axiom_uri(f"NEG_{row['sname']}", rel, row["tname"], t)
             g.add((ax, RDF.type, OWL.Axiom))
+            g.add((ax, RDF.type, PROV.Entity))
+            g.add((ax, RDFS.label, Literal(f"NOT {row['sname']} {rel} {row['tname']}")))
+            g.add((ax, ANNOT.tenant, Literal(t)))
             g.add((ax, OWL.annotatedSource,   s_uri))
             g.add((ax, OWL.annotatedProperty, neg_uri))
             g.add((ax, OWL.annotatedTarget,   o_uri))
             g.add((ax, ANNOT.confidence,
                    Literal(round(float(row["conf"]), 4), datatype=XSD.float)))
             if row.get("src_doc"):
-                g.add((ax, PROV.wasDerivedFrom,
-                       _add_provenance_document(g, str(row["src_doc"]), t)))
+                document = _add_provenance_document(g, str(row["src_doc"]), t)
+                add_derived(g, ax, document)
+                activity = _activity_for_document(g, str(row["src_doc"]), t, activity_cache=activity_cache)
+                add_generated(g, ax, activity)
 
     # ── Optional OWL-RL closure ────────────────────────────────────────────────
     if infer:

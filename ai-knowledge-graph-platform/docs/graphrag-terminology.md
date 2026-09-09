@@ -527,6 +527,21 @@ The record of where a fact came from — which source document, which extraction
 
 **In this project:** Every `RELATES_TO` edge stores `source_doc_id`, `source_doc_ids` (list for Bayesian merges), `extraction_model`, `prompt_version`, `extracted_at`. Queried via `GET /graph/entities/{id}/provenance`.
 
+### PROV-O
+
+The W3C OWL vocabulary for interoperable provenance. Its core model describes
+`prov:Entity` (a thing), `prov:Activity` (an event that uses or generates
+things), and `prov:Agent` (a responsible actor), with relationships such as
+`prov:used`, `prov:wasGeneratedBy`, `prov:wasDerivedFrom`, and
+`prov:wasAssociatedWith`.
+
+**In this project:** `graphrag/provenance/prov_o.py` provides stable
+tenant-scoped URI and graph helpers. `scripts/export_rdf.py` projects
+documents, chunks, assertions, ingestion manifests, retrieval runs, models,
+and answer digests into PROV-O while retaining the existing `owl:Axiom`
+confidence representation. The export is validated by
+`ontology/shapes/export.shapes.ttl` and can be consumed as Turtle or JSON-LD.
+
 ---
 
 ## R

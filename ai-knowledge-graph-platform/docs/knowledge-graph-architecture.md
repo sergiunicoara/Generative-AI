@@ -480,12 +480,35 @@ Unsupported questions are returned to normal cited GraphRAG retrieval.
 
 ### PROV-O interoperability
 
-The Turtle export now binds the standard `prov:` namespace. Entities and
-reified relationship assertions with a source document emit
-`prov:wasDerivedFrom` links to tenant-scoped source-artifact resources; relation
-assertions also export `prov:generatedAtTime` when extraction time is present.
-The existing annotation vocabulary remains available for platform-specific
-confidence and temporal fields.
+The Turtle/JSON-LD export uses the W3C PROV-O namespace through the reusable
+mapper in `graphrag/provenance/prov_o.py`. The operational Neo4j model remains
+the system of record; PROV-O is a tenant-scoped interoperability projection.
+
+The mapping is:
+
+| Platform object | PROV-O projection |
+|---|---|
+| `Document`, `Chunk`, relation assertion, intelligence artifact, query, answer, context manifest | `prov:Entity` |
+| `IngestionRunManifest` | `prov:Activity` using the source document and generating chunks |
+| `CGAgentRun` / retrieval trace | `prov:Activity` using query, manifest, documents and chunks and generating an answer entity |
+| extraction model, retrieval model, worker | `prov:SoftwareAgent` |
+| source document → chunk | `prov:specializationOf` / `prov:wasDerivedFrom` |
+| extraction/retrieval output → activity | `prov:wasGeneratedBy` and inverse `prov:generated` |
+| activity input → source/evidence | `prov:used` |
+| activity → model/worker | `prov:wasAssociatedWith` |
+
+Relation assertions remain represented as the original RDF triple plus an
+`owl:Axiom` for confidence and platform-specific annotations. The axiom is
+also typed as `prov:Entity`, linked to its source document/chunk with
+`prov:wasDerivedFrom`, and linked to the relevant extraction activity with
+`prov:wasGeneratedBy`. No answer text is copied into the PROV export; answer
+entities carry a digest so lineage remains auditable without turning the
+export into a sensitive payload dump.
+
+The export shapes validate that every PROV entity and agent has a label and
+that every PROV activity has at least one `prov:used` input and a responsible
+`prov:Agent`. Tenant filters are applied before projection, and stable URI
+builders prevent cross-tenant collisions.
 
 ### Correlation and telemetry
 

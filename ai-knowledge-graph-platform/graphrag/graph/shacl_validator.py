@@ -102,6 +102,7 @@ _SHAPES_TTL_FALLBACK = """
 @prefix rdf:   <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
 @prefix rdfs:  <http://www.w3.org/2000/01/rdf-schema#> .
 @prefix xsd:   <http://www.w3.org/2001/XMLSchema#> .
+@prefix prov:  <http://www.w3.org/ns/prov#> .
 @prefix annot: <https://graphrag.example.com/annotation#> .
 @prefix shapes: <https://graphrag.example.com/shapes#> .
 
@@ -166,6 +167,46 @@ shapes:AxiomConfidenceRangeProperty a sh:PropertyShape ;
     sh:maxInclusive 1.0 ;
     sh:severity sh:Violation ;
     sh:message "confidence must be an xsd:float in [0, 1]." .
+
+shapes:ProvEntityShape a sh:NodeShape ;
+    sh:targetClass prov:Entity ;
+    sh:property shapes:ProvEntityLabelProperty .
+
+shapes:ProvEntityLabelProperty a sh:PropertyShape ;
+    sh:path rdfs:label ;
+    sh:minCount 1 ;
+    sh:datatype xsd:string ;
+    sh:severity sh:Violation ;
+    sh:message "PROV entity is missing an rdfs:label." .
+
+shapes:ProvActivityShape a sh:NodeShape ;
+    sh:targetClass prov:Activity ;
+    sh:property shapes:ProvActivityUsedProperty ;
+    sh:property shapes:ProvActivityAgentProperty .
+
+shapes:ProvActivityUsedProperty a sh:PropertyShape ;
+    sh:path prov:used ;
+    sh:minCount 1 ;
+    sh:severity sh:Violation ;
+    sh:message "PROV activity must reference at least one used entity." .
+
+shapes:ProvActivityAgentProperty a sh:PropertyShape ;
+    sh:path prov:wasAssociatedWith ;
+    sh:minCount 1 ;
+    sh:class prov:Agent ;
+    sh:severity sh:Violation ;
+    sh:message "PROV activity must reference its responsible agent." .
+
+shapes:ProvAgentShape a sh:NodeShape ;
+    sh:targetClass prov:Agent ;
+    sh:property shapes:ProvAgentLabelProperty .
+
+shapes:ProvAgentLabelProperty a sh:PropertyShape ;
+    sh:path rdfs:label ;
+    sh:minCount 1 ;
+    sh:datatype xsd:string ;
+    sh:severity sh:Violation ;
+    sh:message "PROV agent is missing an rdfs:label." .
 """
 
 _INGESTION_SHAPES_TTL_FALLBACK = """

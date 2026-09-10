@@ -25,6 +25,8 @@ Typical usage::
 
 from __future__ import annotations
 
+import asyncio
+import functools
 import os
 import re
 import tempfile
@@ -143,6 +145,10 @@ class SPARQLBridge:
     def __init__(self, graph: Graph) -> None:
         self._g = graph
 
+    def _init_ns_rdflib(self, init_ns: dict[str, str] | None) -> dict[str, Namespace]:
+        ns = {**self._DEFAULT_NS, **(init_ns or {})}
+        return {k: Namespace(v) if isinstance(v, str) else v for k, v in ns.items()}
+
     # ── Query safety ───────────────────────────────────────────────────────────
 
     # ── Constructors ───────────────────────────────────────────────────────────
@@ -215,6 +221,51 @@ class SPARQLBridge:
                     }
                 )
         return rows
+
+    def query_typed(self, sparql: str, init_ns: dict[str, str] | None = None):
+        """Execute a SPARQL 1.1 SELECT and return rdflib's own Result object.
+
+        ``query()`` coerces every term to a plain string, which is right for
+        that method's callers but loses the URI/literal/bnode distinction and
+        datatype/language tag a standards-compliant SPARQL results
+        serialization (application/sparql-results+json etc., see
+        graphrag/graph/sparql_results.py) requires. This is a sibling, not a
+        replacement -- query()'s string-coerced contract is pinned by tests
+        and used by callers with nothing to gain from typed terms.
+
+        Same safety guard as query(); raises ValueError on an unsafe or
+        invalid query.
+        """
+        _reject_unsafe_sparql(sparql)
+        try:
+            return self._g.query(sparql, initNs=self._init_ns_rdflib(init_ns))
+        except Exception as exc:
+            raise ValueError(f"SPARQL parse/execution error: {exc}") from exc
+
+    async def aquery(
+        self,
+        sparql: str,
+        init_ns: dict[str, str] | None = None,
+    ) -> list[dict]:
+        """Async wrapper over ``query()``, off the event loop.
+
+        rdflib's SPARQL engine is synchronous and, for a graph of any real
+        size, not fast -- ``POST /kg/sparql`` called ``query()`` directly
+        inside an async route handler, so every query blocked the event loop
+        (and every other in-flight request on that worker) for its full
+        duration. Offloading via ``run_in_executor`` is the same fix
+        api/limiter.py's docstring describes for why that module moved off
+        slowapi's synchronous Redis calls.
+
+        Exists alongside the unchanged sync ``query()`` rather than replacing
+        it: query()'s synchronous, string-coerced contract is pinned by
+        tests and used by callers with no event loop to offload onto (the
+        convenience methods below call ``query()`` directly, for instance).
+        """
+        loop = asyncio.get_running_loop()
+        return await loop.run_in_executor(
+            None, functools.partial(self.query, sparql, init_ns=init_ns)
+        )
 
     def update(
         self,

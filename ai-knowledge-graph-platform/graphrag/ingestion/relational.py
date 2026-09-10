@@ -13,7 +13,7 @@ import re
 import sqlite3
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any
+from typing import Any, Protocol, runtime_checkable
 from uuid import NAMESPACE_URL, uuid5
 
 from pydantic import BaseModel, Field, model_validator
@@ -271,10 +271,35 @@ class ExcelWorkbookConnector:
                 )
 
 
+@runtime_checkable
+class TabularSourceConnector(Protocol):
+    """Connector boundary for ``RelationalGraphIngestor`` specifically.
+
+    Distinct from ``graphrag.graph.source_catalog.SourceConnector``, which
+    declares ``records()`` for streaming change envelopes -- a different job.
+    ``RelationalGraphIngestor`` never calls ``records()``; it only ever calls
+    ``read_table()``, and reads ``kind``/``uri`` (see its ``ingest()``/
+    ``validate()`` methods below). Requiring ``records()`` here would
+    over-constrain any future tabular connector that has no notion of
+    streaming deltas -- a fixed-schema on-disk export, say.
+
+    ``SQLiteSourceConnector``, ``PostgreSQLSourceConnector`` and
+    ``ExcelWorkbookConnector`` all already satisfy this structurally; no
+    change was needed on any of them.
+    """
+
+    kind: SourceKind
+
+    @property
+    def uri(self) -> str: ...
+
+    async def read_table(self, table: str) -> list[dict[str, Any]]: ...
+
+
 class RelationalGraphIngestor:
     """Validate and persist mapped relational rows through ``GraphWriter``."""
 
-    def __init__(self, connector: SQLiteSourceConnector | PostgreSQLSourceConnector | ExcelWorkbookConnector, graph_writer):
+    def __init__(self, connector: TabularSourceConnector, graph_writer):
         self.connector = connector
         self.graph_writer = graph_writer
 
@@ -425,6 +450,6 @@ class RelationalGraphIngestor:
 
 __all__ = [
     "EntityTableMapping", "RelationTableMapping", "RelationalGraphMapping",
-    "MappingValidationReport", "SQLiteSourceConnector", "PostgreSQLSourceConnector",
-    "ExcelWorkbookConnector", "RelationalGraphIngestor",
+    "MappingValidationReport", "TabularSourceConnector", "SQLiteSourceConnector",
+    "PostgreSQLSourceConnector", "ExcelWorkbookConnector", "RelationalGraphIngestor",
 ]

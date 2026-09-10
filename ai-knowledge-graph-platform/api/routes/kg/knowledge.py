@@ -6,7 +6,7 @@ from __future__ import annotations
 import re
 
 import structlog
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from pydantic import BaseModel
 
 from api.auth.dependencies import get_tenant, require_scope
@@ -714,6 +714,16 @@ async def find_similar_media(
 # ── SPARQL Bridge ────────────────────────────────────────────────────────────
 
 class SPARQLRequest(BaseModel):
+    """Documents the legacy JSON request shape.
+
+    No longer bound directly by FastAPI: the route now reads the body itself
+    via ``parse_sparql_query_request`` so it can also accept
+    ``application/sparql-query`` and form-urlencoded bodies, which a
+    Pydantic-model body parameter can't do (FastAPI would try to JSON-decode
+    those too and reject them). The JSON shape this class describes is still
+    exactly what a caller sending ``Content-Type: application/json`` gets.
+    """
+
     query: str
     namespaces: dict[str, str] = {}
     # export_path was client-supplied and flowed straight into Path(...) and
@@ -727,10 +737,23 @@ _TENANT_PATH_RE = re.compile(r"^[a-z0-9][a-z0-9_-]{0,63}$")
 @router.post(
     "/sparql",
     dependencies=[Depends(require_scope("read"))],
-    summary="Execute a SPARQL 1.1 SELECT query against the exported Turtle graph",
+    summary=(
+        "Execute a SPARQL 1.1 SELECT query against the exported Turtle graph "
+        "(legacy JSON, or the SPARQL 1.1 Protocol via Content-Type/Accept)"
+    ),
 )
-async def sparql_query(request: SPARQLRequest, tenant: str = Depends(get_tenant)):
+async def sparql_query(http_request: Request, tenant: str = Depends(get_tenant)):
     """Run a read-only SPARQL query against the caller's tenant's RDF export.
+
+    Request body is negotiated by Content-Type (see
+    graphrag/graph/sparql_results.py): ``application/json`` (or absent) is
+    the original ``{"query", "namespaces"}`` shape, unchanged; standard
+    ``application/sparql-query`` and ``application/x-www-form-urlencoded``
+    bodies are also accepted, for SPARQL 1.1 Protocol clients. Response body
+    is negotiated by Accept the same way: default/``application/json`` stays
+    the original ``{"rows": [...], "count": N}`` shape;
+    ``application/sparql-results+json``/``+xml``/``text/csv`` return the
+    corresponding W3C serialization instead.
 
     The export is produced by ``scripts/export_rdf.py --tenant <t>``. Its
     location is server configuration derived from the caller's tenant
@@ -744,14 +767,52 @@ async def sparql_query(request: SPARQLRequest, tenant: str = Depends(get_tenant)
     saw. Tenant is validated against a strict filename-safe pattern before
     it ever touches Path(...), so it can't be used for traversal even
     though it's now part of the constructed path.
+
+    When ``GRAPHRAG_SPARQL_ENDPOINT`` is set, queries resolve against that
+    remote triplestore instead of the local Turtle snapshot (ADR-0001
+    addendum) -- content negotiation there is JSON-only for now (the remote
+    store's own sparql-results+json body is passed through verbatim); a
+    caller requesting XML/CSV against a remote-backed tenant gets 501 rather
+    than a silently wrong conversion.
     """
+    import json
     import os
     from pathlib import Path
 
     from graphrag.graph.sparql_bridge import SPARQLBridge
+    from graphrag.graph.sparql_results import (
+        LEGACY_CONTENT_TYPE,
+        SPARQL_RESULTS_JSON,
+        negotiate_accept,
+        parse_sparql_query_request,
+        serialize_typed_result,
+    )
+    from graphrag.graph.triplestore import remote_sparql_source_from_env
 
     if not _TENANT_PATH_RE.fullmatch(tenant):
         raise HTTPException(status_code=403, detail="Invalid tenant")
+
+    query, namespaces = await parse_sparql_query_request(http_request)
+    accept = negotiate_accept(http_request.headers.get("accept", ""))
+
+    remote = remote_sparql_source_from_env()
+    if remote is not None:
+        try:
+            if accept == SPARQL_RESULTS_JSON:
+                payload = await remote.query_json_raw(query)
+                return Response(content=json.dumps(payload), media_type=SPARQL_RESULTS_JSON)
+            if accept != LEGACY_CONTENT_TYPE:
+                raise HTTPException(
+                    status_code=501,
+                    detail=(
+                        f"{accept} content negotiation is not implemented against "
+                        f"a remote SPARQL endpoint; use application/sparql-results+json"
+                    ),
+                )
+            rows = await remote.query(query, init_ns=namespaces)
+            return {"rows": rows, "count": len(rows)}
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     export_dir = Path(os.getenv("GRAPHRAG_RDF_EXPORT_DIR", "exports"))
     path = export_dir / tenant / "graph_export.ttl"
@@ -763,7 +824,11 @@ async def sparql_query(request: SPARQLRequest, tenant: str = Depends(get_tenant)
         )
     try:
         bridge = SPARQLBridge.from_turtle(path)
-        rows   = bridge.query(request.query, init_ns=request.namespaces)
+        if accept != LEGACY_CONTENT_TYPE:
+            result = bridge.query_typed(query, init_ns=namespaces)
+            body = serialize_typed_result(result, accept)
+            return Response(content=body, media_type=accept)
+        rows = await bridge.aquery(query, init_ns=namespaces)
         return {"rows": rows, "count": len(rows)}
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
@@ -790,14 +855,29 @@ async def sparql_update(request: SPARQLUpdateRequest, tenant: str = Depends(get_
     not the source of truth). Pass ``persist=True`` to overwrite the
     tenant's ``graph_export.ttl`` with the mutated graph, so a subsequent
     ``POST /kg/sparql`` SELECT sees the change.
+
+    Always targets the local Turtle snapshot, even when
+    ``GRAPHRAG_SPARQL_ENDPOINT`` is configured for reads (see
+    ``sparql_query`` above): writing through to that mirror would silently
+    diverge it from the export that regenerates it, and the next
+    ``scripts/load_blazegraph.py``-style load would clobber the write anyway.
     """
     import os
     from pathlib import Path
 
     from graphrag.graph.sparql_bridge import SPARQLBridge
+    from graphrag.graph.triplestore import remote_sparql_source_from_env
 
     if not _TENANT_PATH_RE.fullmatch(tenant):
         raise HTTPException(status_code=403, detail="Invalid tenant")
+
+    if remote_sparql_source_from_env() is not None:
+        log.info(
+            "kg.sparql_update.local_snapshot_only",
+            tenant=tenant,
+            note="a remote SPARQL endpoint is configured for reads, but "
+                 "updates always target the local Turtle snapshot",
+        )
 
     export_dir = Path(os.getenv("GRAPHRAG_RDF_EXPORT_DIR", "exports"))
     path = export_dir / tenant / "graph_export.ttl"

@@ -6,11 +6,13 @@ import pytest
 
 from graphrag.ingestion.relational import (
     EntityTableMapping,
+    ExcelWorkbookConnector,
     RelationTableMapping,
     RelationalGraphIngestor,
     RelationalGraphMapping,
     PostgreSQLSourceConnector,
     SQLiteSourceConnector,
+    TabularSourceConnector,
 )
 
 
@@ -130,3 +132,30 @@ async def test_postgresql_connector_uses_the_same_row_contract(monkeypatch):
 
     assert rows_out[0].external_id == "suppliers:s1"
     assert rows_out[0].metadata["source_id"] == "supplier-db"
+
+
+class TestTabularSourceConnectorProtocol:
+    """RelationalGraphIngestor.__init__'s connector param was a hardcoded
+    union of the three concrete classes; TabularSourceConnector replaces it
+    with a structural Protocol declaring exactly what the ingestor calls
+    (kind, uri, read_table) -- not `records()`, which it never uses. Every
+    existing connector must satisfy it with zero changes."""
+
+    def test_sqlite_connector_satisfies_the_protocol(self, tmp_path):
+        db_path = tmp_path / "empty.db"
+        sqlite3.connect(db_path).close()
+        assert isinstance(SQLiteSourceConnector(db_path), TabularSourceConnector)
+
+    def test_postgresql_connector_satisfies_the_protocol(self):
+        connector = PostgreSQLSourceConnector("postgresql+asyncpg://user:pass@localhost:5432/db")
+        assert isinstance(connector, TabularSourceConnector)
+
+    def test_excel_connector_satisfies_the_protocol(self, tmp_path):
+        assert isinstance(ExcelWorkbookConnector(tmp_path / "sheet.xlsx"), TabularSourceConnector)
+
+    def test_an_object_lacking_read_table_does_not_satisfy_it(self):
+        class NotAConnector:
+            kind = "database"
+            uri = "x"
+
+        assert not isinstance(NotAConnector(), TabularSourceConnector)

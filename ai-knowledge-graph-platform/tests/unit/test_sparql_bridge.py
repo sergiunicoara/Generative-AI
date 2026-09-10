@@ -325,3 +325,53 @@ class TestSPARQLBridgeConvenienceQueries:
         assert "property" in row
         assert "target" in row
         assert "confidence" in row
+
+
+class TestSPARQLBridgeAsyncQuery:
+    """aquery() offloads the sync query() call so it never blocks the event
+    loop -- POST /kg/sparql previously called query() directly inside an
+    async route handler, blocking every other in-flight request for the
+    duration of each rdflib query."""
+
+    def setup_method(self) -> None:
+        self.bridge = SPARQLBridge(_minimal_graph())
+
+    @pytest.mark.asyncio
+    async def test_returns_the_same_rows_as_the_sync_call(self) -> None:
+        sync_rows = self.bridge.query("SELECT ?label WHERE { ?e rdfs:label ?label }")
+        async_rows = await self.bridge.aquery("SELECT ?label WHERE { ?e rdfs:label ?label }")
+        assert async_rows == sync_rows
+
+    @pytest.mark.asyncio
+    async def test_still_rejects_an_unsafe_query(self) -> None:
+        with pytest.raises(ValueError, match="SERVICE"):
+            await self.bridge.aquery(
+                "SELECT * WHERE { SERVICE <http://evil.example/> { ?s ?p ?o } }"
+            )
+
+    @pytest.mark.asyncio
+    async def test_namespaces_are_forwarded(self) -> None:
+        rows = await self.bridge.aquery(
+            "SELECT ?x WHERE { ?x rdf:type owl:Class }",
+            init_ns={"rdf": str(RDF), "owl": str(OWL)},
+        )
+        assert len(rows) >= 2
+
+    @pytest.mark.asyncio
+    async def test_does_not_block_a_concurrent_coroutine(self) -> None:
+        # A blocking query() called directly (not offloaded) would starve
+        # this concurrently-scheduled coroutine until the query finished.
+        # asyncio.gather only interleaves them if aquery() actually yields.
+        import asyncio
+
+        marker: list[str] = []
+
+        async def ping():
+            marker.append("ping")
+
+        async def run_query():
+            await self.bridge.aquery("SELECT ?s WHERE { ?s ?p ?o }")
+            marker.append("query")
+
+        await asyncio.gather(run_query(), ping())
+        assert "ping" in marker

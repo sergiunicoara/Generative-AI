@@ -9,7 +9,10 @@ SPARQL 1.1 endpoint, for tools/workflows that expect one.
 Loading uses Blazegraph's SPARQL 1.1 Graph Store HTTP Protocol support: a
 raw Turtle document POSTed directly to a namespace's ``/sparql`` endpoint
 with ``Content-Type: text/turtle`` is bulk-inserted into that namespace's
-default graph.
+default graph. This is now a thin wrapper over
+``graphrag.graph.triplestore.TripleStoreTarget`` (vendor="blazegraph"),
+which generalises the same URL-construction step to other triplestore
+vendors -- see that module's docstring for which vendors are verified.
 
 Verified end to end against lyrasis/blazegraph:2.1.5 -- the endpoint is
 ``<host>/bigdata/namespace/<ns>/sparql``. The Turtle must be valid: a
@@ -32,12 +35,17 @@ Usage
 from __future__ import annotations
 
 import argparse
+import asyncio
 import os
 import sys
 from pathlib import Path
 
-import httpx
 import structlog
+
+ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT))
+
+from graphrag.graph.triplestore import TripleStoreTarget  # noqa: E402  # ROOT must be added to sys.path first.
 
 if sys.stdout.encoding and sys.stdout.encoding.lower() != "utf-8":
     sys.stdout.reconfigure(encoding="utf-8")
@@ -51,7 +59,7 @@ DEFAULT_ENDPOINT = "http://localhost:9999"
 DEFAULT_CONTEXT_PATH = "bigdata"
 
 
-def load(
+async def load(
     ttl_path: Path,
     endpoint: str = DEFAULT_ENDPOINT,
     namespace: str = "kb",
@@ -61,29 +69,28 @@ def load(
     """POST a Turtle file to a Blazegraph namespace's SPARQL endpoint.
 
     Returns the HTTP status code from Blazegraph on success; raises for
-    network errors or a non-2xx response.
+    network errors or a non-2xx response. Signature unchanged from before
+    this wrapped TripleStoreTarget -- every existing caller of this function
+    (this script's own main(), any external script importing it) keeps
+    working unmodified.
     """
     if not ttl_path.exists():
         raise FileNotFoundError(f"Turtle file not found: {ttl_path}")
 
-    url = f"{endpoint.rstrip('/')}/{context_path.strip('/')}/namespace/{namespace}/sparql"
-    body = ttl_path.read_bytes()
-
-    resp = httpx.post(
-        url,
-        content=body,
-        headers={"Content-Type": "text/turtle"},
-        timeout=timeout,
+    target = TripleStoreTarget(
+        "blazegraph", endpoint, timeout=timeout,
+        namespace=namespace, context_path=context_path,
     )
-    resp.raise_for_status()
+    body = ttl_path.read_bytes()
+    status = await target.load(body)
     log.info(
         "load_blazegraph.loaded",
         path=str(ttl_path),
-        endpoint=url,
+        endpoint=target.load_url,
         bytes=len(body),
-        status=resp.status_code,
+        status=status,
     )
-    return resp.status_code
+    return status
 
 
 def main() -> None:
@@ -113,8 +120,8 @@ def main() -> None:
         parser.error("Provide either --tenant or --input")
         return
 
-    status = load(ttl_path, endpoint=args.endpoint, namespace=args.namespace,
-                  context_path=args.context_path)
+    status = asyncio.run(load(ttl_path, endpoint=args.endpoint, namespace=args.namespace,
+                               context_path=args.context_path))
     print(f"[OK] Loaded {ttl_path} into {args.endpoint} "
           f"(namespace={args.namespace}, status={status})")
 

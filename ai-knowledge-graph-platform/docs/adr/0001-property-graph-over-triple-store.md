@@ -127,3 +127,33 @@ Operational notes (verified against `lyrasis/blazegraph:2.1.5`):
   not treat it as a trusted store.
 - Loading rejects invalid Turtle at the server's parser, so exports must come from rdflib
   (`scripts/export_rdf.py`), not hand-assembled strings.
+
+## Addendum (2026-09, continued) — remote query + SPARQL 1.1 Protocol compliance
+
+The 2026-09 addendum above closed the *write* half of the gap (mirroring an export into a
+live store) but left the platform unable to *query* one back — `SPARQLBridge` only ever
+wrapped an in-process `rdflib` graph. `graphrag/graph/triplestore.py` adds
+`RemoteSPARQLEndpoint` (query any SPARQL 1.1 Protocol endpoint over HTTP) and
+`TripleStoreTarget` (the same load path as `scripts/load_blazegraph.py`, generalised past
+Blazegraph's specific URL shape to GraphDB/Stardog/RDFox/Virtuoso/Neptune — only Blazegraph's
+is independently verified end to end; see that module's docstring).
+
+**This still does not revisit the Decision above.** Opting in
+(`GRAPHRAG_SPARQL_ENDPOINT`) changes what `POST /kg/sparql` *reads from* — Neo4j remains
+what the platform writes to and treats as ground truth. `POST /kg/sparql/update` always
+targets the local Turtle snapshot regardless, even with a remote endpoint configured for
+reads: writing through to the mirror would silently diverge it from the export that
+regenerates it, and the next load would clobber the divergence anyway. Every outbound query
+to a remote store still passes through the same `_reject_unsafe_sparql` guard that protects
+the local bridge — Blazegraph's own endpoint "has no authentication and accepts SPARQL
+Update plus `LOAD`/`SERVICE`" (above), so proxying a client's query unfiltered to *any*
+configured remote store would reopen that hole through a new path.
+
+Separately, `POST /kg/sparql` now negotiates SPARQL 1.1 Protocol content types
+(`application/sparql-query`, form-urlencoded requests; `application/sparql-results+json`/
+`+xml`/`text/csv` responses) alongside its original custom JSON shape, which stays the
+default for an unspecified or `application/json` Content-Type/Accept. See
+`graphrag/graph/sparql_results.py`. Content negotiation against a remote-backed query is
+JSON-only for now — the remote store's own results body is passed through verbatim rather
+than reconstructed — and any other Accept type returns `501` rather than a silently
+incorrect conversion.

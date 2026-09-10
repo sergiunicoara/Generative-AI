@@ -92,6 +92,11 @@ AUTH_LIMIT = os.getenv("GRAPHRAG_RATE_LIMIT_AUTH", "10/minute")
 # several conversations at once without the narrow bucket becoming the
 # effective per-subject limit.
 CONVERSATION_LIMIT = os.getenv("GRAPHRAG_RATE_LIMIT_CONVERSATION", "20/minute")
+# Own knob rather than reusing QUERY_LIMIT: search carries no LLM cost but
+# still runs a cross-encoder reranking pass per request, so it is CPU-bound
+# rather than spend-bound and may need tuning independently of the LLM-backed
+# query path.
+SEARCH_LIMIT = os.getenv("GRAPHRAG_RATE_LIMIT_SEARCH", "60/minute")
 
 
 class RateLimitExceeded(HTTPException):

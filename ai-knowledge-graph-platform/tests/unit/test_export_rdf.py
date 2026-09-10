@@ -6,6 +6,8 @@ import sys
 from pathlib import Path
 from unittest.mock import AsyncMock, patch
 
+import pytest
+
 # Allow importing from scripts/
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "scripts"))
 
@@ -403,3 +405,185 @@ class TestExportProducesConformantGraph:
         assert (activity, PROV.used, chunk_uri("chunk-1", "sustainability")) in graph
         assert (answer, RDF.type, PROV.Entity) in graph
         assert (answer, PROV.wasGeneratedBy, activity) in graph
+
+
+# ── Export conformance is enforced, not merely reported ───────────────────────
+
+class TestStrictValidationGatesTheWrite:
+    async def test_strict_refuses_to_write_a_non_conformant_export(self, tmp_path: Path) -> None:
+        """A shape violation must prevent the file from existing at all.
+
+        Validating after serialisation cannot stop a bad export from being
+        published, which is the failure this flag exists to close.
+        """
+        from export_rdf import ShapeViolationError, export
+
+        # confidence 1.4 is outside [0, 1], which
+        # shapes:AxiomConfidenceRangeProperty rejects.
+        neo4j = _make_neo4j(edge_rows=[
+            {"sname": "A", "stype": "CONCEPT", "tname": "B", "ttype": "CONCEPT",
+             "rel": "RELATED_TO", "conf": 1.4,
+             "src_doc": "x.pdf", "tenant": "aerospace"},
+        ])
+        output = tmp_path / "invalid.ttl"
+        with patch("graphrag.graph.neo4j_client.get_neo4j", return_value=neo4j):
+            with pytest.raises(ShapeViolationError):
+                await export(tenant="aerospace", output=output, limit=10, strict=True)
+
+        assert not output.exists(), "a non-conformant export must not reach disk"
+
+    async def test_conformant_export_still_writes_under_strict(self, tmp_path: Path) -> None:
+        from export_rdf import export
+
+        neo4j = _make_neo4j(ent_rows=[
+            {"name": "Boeing", "type": "ORG", "desc": None, "vf": None, "vt": None,
+             "tenant": "aerospace"},
+        ])
+        output = tmp_path / "valid.ttl"
+        with patch("graphrag.graph.neo4j_client.get_neo4j", return_value=neo4j):
+            await export(tenant="aerospace", output=output, limit=10, strict=True)
+
+        assert output.exists()
+
+
+# ── SKOS alias publication ────────────────────────────────────────────────────
+
+class TestAliasesArePublished:
+    async def test_entity_aliases_export_as_skos_altlabel(self, tmp_path: Path) -> None:
+        """The alias registry resolves name variants internally; an external
+        consumer can only align against them if they are published."""
+        from export_rdf import _entity_uri, export
+
+        neo4j = _make_neo4j(ent_rows=[
+            {"name": "EASA AD 2022-0201", "type": "AIRWORTHINESS_DIRECTIVE",
+             "desc": None, "vf": None, "vt": None, "tenant": "aerospace",
+             "aliases": ["AD 2022-0201", "EASA Airworthiness Directive 2022-0201",
+                         "EASA AD 2022-0201"]},
+        ])
+        output = tmp_path / "aliases.ttl"
+        with patch("graphrag.graph.neo4j_client.get_neo4j", return_value=neo4j):
+            await export(tenant="aerospace", output=output, limit=10)
+
+        graph = Graph().parse(output, format="turtle")
+        entity = _entity_uri("EASA AD 2022-0201", "AIRWORTHINESS_DIRECTIVE", "aerospace")
+        alt_labels = set(graph.objects(entity, SKOS.altLabel))
+        assert Literal("AD 2022-0201") in alt_labels
+        assert Literal("EASA Airworthiness Directive 2022-0201") in alt_labels
+        # The canonical name belongs on prefLabel only -- repeating it as an
+        # altLabel would make the two indistinguishable to a consumer.
+        assert Literal("EASA AD 2022-0201") not in alt_labels
+        assert (entity, SKOS.prefLabel, Literal("EASA AD 2022-0201")) in graph
+
+
+# ── Vocabulary versioning ─────────────────────────────────────────────────────
+
+class TestVocabularyIsVersionedAndAnchored:
+    async def test_export_declares_ontology_version(self, tmp_path: Path) -> None:
+        from export_rdf import ONTOLOGY_IRI, ONTOLOGY_VERSION, export
+
+        neo4j = _make_neo4j()
+        output = tmp_path / "versioned.ttl"
+        with patch("graphrag.graph.neo4j_client.get_neo4j", return_value=neo4j):
+            await export(tenant="aerospace", output=output, limit=10)
+
+        graph = Graph().parse(output, format="turtle")
+        assert (ONTOLOGY_IRI, OWL.versionInfo, Literal(ONTOLOGY_VERSION)) in graph
+        assert (ONTOLOGY_IRI, OWL.versionIRI, None) in graph
+
+    async def test_minted_base_terms_point_back_to_the_ontology(self, tmp_path: Path) -> None:
+        """base:ORG and base:OPERATES are minted per export from live data --
+        without isDefinedBy a consumer cannot resolve where they come from."""
+        from export_rdf import ONTOLOGY_IRI, _rel_uri, _type_uri, export
+
+        neo4j = _make_neo4j(
+            type_rows=[{"child": "AIRCRAFT_MODEL", "parent": "ASSET"}],
+            rel_rows=[{"rel": "OPERATES"}],
+            ent_rows=[
+                {"name": "Boeing", "type": "ORG", "desc": None, "vf": None,
+                 "vt": None, "tenant": "aerospace"},
+            ],
+        )
+        output = tmp_path / "anchored.ttl"
+        with patch("graphrag.graph.neo4j_client.get_neo4j", return_value=neo4j):
+            await export(tenant="aerospace", output=output, limit=10)
+
+        graph = Graph().parse(output, format="turtle")
+        for term in (_type_uri("AIRCRAFT_MODEL"), _type_uri("ORG"), _rel_uri("OPERATES")):
+            assert (term, RDFS.isDefinedBy, ONTOLOGY_IRI) in graph, f"{term} is unanchored"
+
+
+# ── PROV activity inputs ──────────────────────────────────────────────────────
+
+class TestEveryActivityHasAnInput:
+    async def test_artifact_activity_records_its_source_chunk(self, tmp_path: Path) -> None:
+        """Regression: the Cypher projects `source_chunk_ids` (plural) but the
+        reader asked for `source_chunk_id`, so every artifact activity was
+        exported with no prov:used at all -- violating the very shape this
+        project ships."""
+        from export_rdf import export
+        from graphrag.provenance.prov_o import activity_uri, chunk_uri
+
+        neo4j = _make_neo4j(prov_rows=[{
+            "kind": "artifact", "id": "artifact-1", "row_tenant": "aerospace",
+            "model_provider": "groq", "model_version": "v1",
+            "document_id": "doc-1", "source_chunk_ids": ["chunk-9"],
+        }])
+        output = tmp_path / "artifact.ttl"
+        with patch("graphrag.graph.neo4j_client.get_neo4j", return_value=neo4j):
+            await export(tenant="aerospace", output=output, limit=10)
+
+        graph = Graph().parse(output, format="turtle")
+        activity = activity_uri("artifact-extraction", "artifact-1", "aerospace")
+        assert (activity, PROV.used, chunk_uri("chunk-9", "aerospace")) in graph
+
+    async def test_artifact_without_a_chunk_falls_back_to_its_document(self, tmp_path: Path) -> None:
+        from export_rdf import export
+        from graphrag.provenance.prov_o import activity_uri, document_uri
+
+        neo4j = _make_neo4j(prov_rows=[{
+            "kind": "artifact", "id": "artifact-2", "row_tenant": "aerospace",
+            "model_provider": "groq", "model_version": "v1",
+            "document_id": "doc-2", "source_chunk_ids": [None],
+        }])
+        output = tmp_path / "artifact_fallback.ttl"
+        with patch("graphrag.graph.neo4j_client.get_neo4j", return_value=neo4j):
+            await export(tenant="aerospace", output=output, limit=10)
+
+        graph = Graph().parse(output, format="turtle")
+        activity = activity_uri("artifact-extraction", "artifact-2", "aerospace")
+        assert (activity, PROV.used, document_uri("doc-2", "aerospace")) in graph
+
+    async def test_inputless_activity_is_skipped_not_emitted_invalid(self, tmp_path: Path) -> None:
+        """An ingestion manifest with no document has nothing to point at;
+        emitting the activity anyway would ship a shape violation."""
+        from export_rdf import export
+        from graphrag.provenance.prov_o import activity_uri
+
+        neo4j = _make_neo4j(prov_rows=[{
+            "kind": "ingestion", "id": "run-orphan", "row_tenant": "aerospace",
+            "model_provider": "groq", "model_version": "v1", "document_id": None,
+        }])
+        output = tmp_path / "orphan.ttl"
+        with patch("graphrag.graph.neo4j_client.get_neo4j", return_value=neo4j):
+            await export(tenant="aerospace", output=output, limit=10, strict=True)
+
+        graph = Graph().parse(output, format="turtle")
+        activity = activity_uri("ingestion", "run-orphan", "aerospace")
+        assert (activity, RDF.type, PROV.Activity) not in graph
+
+    async def test_chunk_is_a_specialization_of_its_document(self, tmp_path: Path) -> None:
+        from export_rdf import export
+        from graphrag.provenance.prov_o import chunk_uri, document_uri
+
+        neo4j = _make_neo4j(prov_rows=[{
+            "kind": "ingestion", "id": "run-2", "row_tenant": "aerospace",
+            "model_provider": "groq", "model_version": "v1",
+            "document_id": "doc-3", "chunk_ids": ["chunk-3"],
+        }])
+        output = tmp_path / "specialization.ttl"
+        with patch("graphrag.graph.neo4j_client.get_neo4j", return_value=neo4j):
+            await export(tenant="aerospace", output=output, limit=10)
+
+        graph = Graph().parse(output, format="turtle")
+        assert (chunk_uri("chunk-3", "aerospace"), PROV.specializationOf,
+                document_uri("doc-3", "aerospace")) in graph

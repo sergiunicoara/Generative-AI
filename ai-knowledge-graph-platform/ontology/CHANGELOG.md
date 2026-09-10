@@ -8,6 +8,36 @@ Format: one entry per released version bump, newest first. An entry records
 what changed and why — not a copy of the diff, which `git log` already gives
 you.
 
+## Exported vocabulary `1.0.0` — 2026-09-10
+
+The RDF export's own `base:`/`annot:` vocabulary now declares a version. It is
+deliberately separate from the per-tenant domain ontologies below: those version
+*what the graph is about*, this versions *the interchange terms the export
+mints*. Tracked as `ONTOLOGY_VERSION` in `scripts/export_rdf.py`; bump it here
+and there together whenever a `base:` class/property changes meaning.
+
+Emitted as `owl:versionIRI` + `owl:versionInfo` on the ontology resource, with
+`rdfs:isDefinedBy` on every minted `base:` term — previously those terms were
+generated per export with no way for a consumer to resolve where they were
+defined or which release defined them.
+
+Also in this entry, `1.0.0` being the first version rather than a change to an
+existing one:
+
+- Entity aliases are published as `skos:altLabel` (they were resolved
+  internally by `graphrag/graph/alias_registry.py` but never exported, while
+  `cross_ontology_linker.py` consumed that same predicate from *external*
+  ontologies).
+- Chunks carry `prov:specializationOf` to their source document alongside
+  `prov:wasDerivedFrom`, matching PROV-DM's distinction between "derived from"
+  and "same thing, finer granularity".
+- SHACL validation moved ahead of serialisation, with `--strict` refusing to
+  write a non-conformant export at all. This closed a real defect: artifact
+  extraction activities were read from the wrong result key
+  (`source_chunk_id` vs the projected `source_chunk_ids`), so every one of
+  them was exported with no `prov:used` — a violation of this project's own
+  shapes that post-hoc, opt-in validation never surfaced.
+
 ## Current baseline — 2026-08-18
 
 All 7 shipped domain ontologies are at `1.0.0`, `status: active`, with empty

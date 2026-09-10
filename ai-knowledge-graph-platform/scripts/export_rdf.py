@@ -59,6 +59,7 @@ from graphrag.provenance.prov_o import (
     add_derived,
     add_entity,
     add_generated,
+    add_specialization,
     add_used,
     agent_uri,
     answer_uri,
@@ -76,6 +77,33 @@ BASE  = Namespace("https://graphrag.example.com/ontology#")
 INST  = Namespace("https://graphrag.example.com/entity/")
 ANNOT = Namespace("https://graphrag.example.com/annotation#")
 SKOS  = Namespace("http://www.w3.org/2004/02/skos/core#")
+
+# Version of the exported BASE/ANNOT vocabulary itself — deliberately separate
+# from the per-tenant domain ontologies in config/ontologies/*.yml, which carry
+# their own versions. Bump alongside an entry in ontology/CHANGELOG.md whenever
+# a BASE class/property changes meaning.
+ONTOLOGY_VERSION = "1.0.0"
+ONTOLOGY_IRI = URIRef("https://graphrag.example.com/ontology")
+
+
+class ShapeViolationError(RuntimeError):
+    """Raised in --strict mode when an export fails SHACL validation.
+
+    Distinct from a plain ValueError so a caller (CI, a scheduled export job)
+    can tell "this graph is not conformant" apart from "you passed a bad
+    argument".
+    """
+
+
+def _declare_base_term(g: Graph, uri: URIRef) -> URIRef:
+    """Anchor a minted BASE-namespace term to the ontology that defines it.
+
+    Class and property URIs are minted per export from live graph data, so
+    without this a consumer has no way to resolve where `base:AIRCRAFT` or
+    `base:MANUFACTURES` is defined, or which version defined it.
+    """
+    g.add((uri, RDFS.isDefinedBy, ONTOLOGY_IRI))
+    return uri
 
 
 def _entity_uri(name: str, etype: str, tenant: str) -> URIRef:
@@ -134,10 +162,15 @@ def _init_graph() -> Graph:
     g.bind("skos",  SKOS)
 
     # Ontology declaration
-    ont = URIRef("https://graphrag.example.com/ontology")
+    ont = ONTOLOGY_IRI
     g.add((ont, RDF.type, OWL.Ontology))
     g.add((ont, RDFS.label, Literal("AI Knowledge Graph & Ontology Platform")))
     g.add((ont, RDFS.comment, Literal("Exported from the AI Knowledge Graph & Ontology Platform.")))
+    # A consumer that keeps two exports side by side needs to know which
+    # vocabulary version each was written against; without this the BASE terms
+    # are undated and silently incomparable across releases.
+    g.add((ont, OWL.versionIRI, URIRef(f"{ont}/{ONTOLOGY_VERSION}")))
+    g.add((ont, OWL.versionInfo, Literal(ONTOLOGY_VERSION)))
 
     # Annotation properties
     for prop_name, range_type in [
@@ -155,6 +188,7 @@ def _init_graph() -> Graph:
         prop = ANNOT[prop_name]
         g.add((prop, RDF.type, OWL.AnnotationProperty))
         g.add((prop, RDFS.range, range_type))
+        g.add((prop, RDFS.isDefinedBy, ont))
 
     return g
 
@@ -199,6 +233,18 @@ def _emit_provenance_rows(graph: Graph, rows: list[dict], tenant: str) -> dict[t
         add_agent(graph, agent, label=f"{provider} ({version})", tenant=row_tenant)
 
         if kind == "ingestion":
+            document_id = str(row.get("document_id") or "")
+            if not document_id:
+                # An ingestion run with no source document has no lineage to
+                # project and would emit a prov:Activity with no prov:used,
+                # violating shapes:ProvActivityUsedProperty. Skipping keeps the
+                # export conformant instead of shipping an unusable activity.
+                log.warning(
+                    "export_rdf.prov_activity_skipped",
+                    kind=kind, id=identifier, tenant=row_tenant,
+                    reason="ingestion manifest has no document_id",
+                )
+                continue
             activity = activity_uri("ingestion", identifier, row_tenant)
             add_activity(
                 graph, activity,
@@ -209,16 +255,15 @@ def _emit_provenance_rows(graph: Graph, rows: list[dict], tenant: str) -> dict[t
                 status=str(row.get("status") or ""),
             )
             add_association(graph, activity, agent)
-            document_id = str(row.get("document_id") or "")
-            if document_id:
-                document = _add_provenance_document(graph, document_id, row_tenant)
-                add_used(graph, activity, document)
-                ingestion_by_document[(row_tenant, document_id)] = activity
-                for chunk_id in _list_value(row.get("chunk_ids")):
-                    chunk = chunk_uri(chunk_id, row_tenant)
-                    add_entity(graph, chunk, label=f"Chunk {chunk_id}", tenant=row_tenant)
-                    add_derived(graph, chunk, document)
-                    add_generated(graph, chunk, activity)
+            document = _add_provenance_document(graph, document_id, row_tenant)
+            add_used(graph, activity, document)
+            ingestion_by_document[(row_tenant, document_id)] = activity
+            for chunk_id in _list_value(row.get("chunk_ids")):
+                chunk = chunk_uri(chunk_id, row_tenant)
+                add_entity(graph, chunk, label=f"Chunk {chunk_id}", tenant=row_tenant)
+                add_derived(graph, chunk, document)
+                add_specialization(graph, chunk, document)
+                add_generated(graph, chunk, activity)
             continue
 
         if kind == "retrieval":
@@ -266,6 +311,19 @@ def _emit_provenance_rows(graph: Graph, rows: list[dict], tenant: str) -> dict[t
             continue
 
         if kind == "artifact":
+            source_chunk_ids = _list_value(row.get("source_chunk_ids")) or (
+                [str(row["source_chunk_id"])] if row.get("source_chunk_id") else []
+            )
+            document_id = str(row.get("document_id") or "")
+            if not source_chunk_ids and not document_id:
+                # Same conformance reasoning as the ingestion branch above:
+                # no chunk and no source document means no prov:used input.
+                log.warning(
+                    "export_rdf.prov_activity_skipped",
+                    kind=kind, id=identifier, tenant=row_tenant,
+                    reason="artifact has neither source_chunk_id nor source_doc_id",
+                )
+                continue
             activity = activity_uri("artifact-extraction", identifier, row_tenant)
             add_activity(
                 graph, activity,
@@ -278,12 +336,17 @@ def _emit_provenance_rows(graph: Graph, rows: list[dict], tenant: str) -> dict[t
             add_association(graph, activity, agent)
             artifact = prov_entity_uri(f"intelligence-artifact/{identifier}", row_tenant)
             add_entity(graph, artifact, label=f"Intelligence artifact {identifier}", tenant=row_tenant)
-            source_chunk_id = str(row.get("source_chunk_id") or "")
-            if source_chunk_id:
+            for source_chunk_id in source_chunk_ids:
                 source_chunk = chunk_uri(source_chunk_id, row_tenant)
                 add_entity(graph, source_chunk, label=f"Chunk {source_chunk_id}", tenant=row_tenant)
                 add_used(graph, activity, source_chunk)
                 add_derived(graph, artifact, source_chunk)
+            if not source_chunk_ids:
+                # Chunk-level lineage is preferred, but a document-level input
+                # still yields a usable (and conformant) activity.
+                document = _add_provenance_document(graph, document_id, row_tenant)
+                add_used(graph, activity, document)
+                add_derived(graph, artifact, document)
             add_generated(graph, artifact, activity)
 
     return ingestion_by_document
@@ -322,6 +385,7 @@ async def export(
     infer: bool = False,
     validate: bool = False,
     rdf_format: str = "turtle",
+    strict: bool = False,
 ) -> None:
     from graphrag.graph.neo4j_client import get_neo4j
 
@@ -345,7 +409,7 @@ async def export(
         child, parent = row["child"], row["parent"]
         for t in (child, parent):
             if t not in declared_types:
-                t_uri = _type_uri(t)
+                t_uri = _declare_base_term(g, _type_uri(t))
                 g.add((t_uri, RDF.type, OWL.Class))
                 g.add((t_uri, RDFS.label, Literal(t)))
                 g.add((t_uri, RDF.type, SKOS.Concept))
@@ -368,7 +432,7 @@ async def export(
     for row in rel_rows:
         rel = (row.get("rel") or "RELATED_TO").upper()
         if rel not in declared_rels:
-            r_uri = _rel_uri(rel)
+            r_uri = _declare_base_term(g, _rel_uri(rel))
             g.add((r_uri, RDF.type, OWL.ObjectProperty))
             g.add((r_uri, RDFS.label, Literal(rel)))
             declared_rels.add(rel)
@@ -428,10 +492,14 @@ async def export(
         """
         MATCH (e:Entity)
         WHERE ($tenant = 'default' OR e.tenant = $tenant)
+        OPTIONAL MATCH (e)<-[:ALIAS_OF]-(al:Alias)
+        WHERE al.tenant = e.tenant
+        WITH e, collect(DISTINCT al.value) AS aliases
         RETURN e.name AS name, e.type AS type, e.description AS desc,
                e.valid_from AS vf, e.valid_to AS vt, e.tenant AS tenant
                , e.source_doc_id AS src_doc, e.source_chunk_ids AS source_chunks,
-               e.extraction_model AS extraction_model, e.prompt_version AS prompt_version
+               e.extraction_model AS extraction_model, e.prompt_version AS prompt_version,
+               aliases AS aliases
         LIMIT $limit
         """,
         tenant=tenant, limit=limit,
@@ -447,6 +515,7 @@ async def export(
         # Types that have no explicit SUBCLASS_OF edge still need a SKOS
         # concept so every exported entity has a navigable broader concept.
         if etype not in declared_types:
+            _declare_base_term(g, type_uri)
             g.add((type_uri, RDF.type, OWL.Class))
             g.add((type_uri, RDFS.label, Literal(etype)))
             g.add((type_uri, RDF.type, SKOS.Concept))
@@ -462,6 +531,14 @@ async def export(
         g.add((uri, SKOS.inScheme, scheme))
         g.add((uri, SKOS.broader, type_uri))
         g.add((uri, ANNOT.tenant, Literal(t)))
+        # Name variants the alias registry already resolves internally
+        # (graphrag/graph/alias_registry.py). Publishing them as skos:altLabel
+        # is what lets an external consumer align against this graph the same
+        # way cross_ontology_linker.py aligns against external ontologies --
+        # which reads exactly this predicate.
+        for alias in _list_value(row.get("aliases")):
+            if alias and alias != name:
+                g.add((uri, SKOS.altLabel, Literal(alias)))
         if row.get("desc"):
             g.add((uri, RDFS.comment, Literal(str(row["desc"])[:500])))
         if row.get("vf"):
@@ -603,14 +680,15 @@ async def export(
 
     if rdf_format not in {"turtle", "json-ld"}:
         raise ValueError("rdf_format must be 'turtle' or 'json-ld'")
-    output.parent.mkdir(parents=True, exist_ok=True)
-    g.serialize(destination=str(output), format=rdf_format)
 
-    # ── Optional SHACL shape validation ────────────────────────────────────────
-    if validate:
+    # ── SHACL shape validation ────────────────────────────────────────────────
+    # Deliberately BEFORE serialisation: validating a file that is already on
+    # disk cannot stop an invalid export from being published, and in --strict
+    # mode nothing should be written at all when the graph does not conform.
+    if validate or strict:
         from graphrag.graph.shacl_validator import SHACLValidator
         report = SHACLValidator(g).validate_report()
-        log.info("export_rdf.shacl", conforms=report.conforms, **report.counts)
+        log.info("export_rdf.shacl", conforms=report.conforms, strict=strict, **report.counts)
         print(f"\n{'✅' if report.conforms else '❌'}  SHACL validation: "
               f"{'conforms' if report.conforms else 'violations found'} "
               f"({report.counts['violations']} violation(s), "
@@ -619,6 +697,14 @@ async def export(
             print("  By shape:", report.failures_by_shape)
         if not report.conforms:
             print(report.text)
+            if strict:
+                raise ShapeViolationError(
+                    f"export does not conform to {report.counts['violations']} SHACL "
+                    f"shape constraint(s); nothing was written to {output}"
+                )
+
+    output.parent.mkdir(parents=True, exist_ok=True)
+    g.serialize(destination=str(output), format=rdf_format)
 
     entity_count = len(ent_rows)
     edge_count   = len(edge_rows)
@@ -655,9 +741,14 @@ def main():
                         help="Apply OWL-RL closure after export (materialises "
                              "subClass propagation, symmetric/inverse properties)")
     parser.add_argument("--validate", action="store_true",
-                        help="Validate the exported graph against SHACL shapes "
-                             "after export (entity labels/types, axiom completeness, "
-                             "confidence range)")
+                        help="Validate the graph against SHACL shapes before writing "
+                             "(entity labels/types, axiom completeness, confidence "
+                             "range, PROV activity inputs/agents); reports violations "
+                             "but still writes the file")
+    parser.add_argument("--strict", action="store_true",
+                        help="Implies --validate, and refuses to write the export at "
+                             "all if it violates any shape (exit code 1). Use this in "
+                             "CI and scheduled export jobs.")
     args = parser.parse_args()
 
     if args.output:
@@ -667,14 +758,21 @@ def main():
         suffix = ".ttl" if args.format == "turtle" else ".jsonld"
         output = export_dir / args.tenant / f"graph_export{suffix}"
 
-    asyncio.run(export(
-        tenant=args.tenant,
-        output=output,
-        limit=args.limit,
-        infer=args.infer,
-        validate=args.validate,
-        rdf_format=args.format,
-    ))
+    try:
+        asyncio.run(export(
+            tenant=args.tenant,
+            output=output,
+            limit=args.limit,
+            infer=args.infer,
+            validate=args.validate,
+            rdf_format=args.format,
+            strict=args.strict,
+        ))
+    except ShapeViolationError as exc:
+        # Non-zero exit is the whole point of --strict: a CI step or cron job
+        # must fail loudly rather than silently publish a non-conformant graph.
+        print(f"\n❌  {exc}", file=sys.stderr)
+        sys.exit(1)
 
 
 if __name__ == "__main__":

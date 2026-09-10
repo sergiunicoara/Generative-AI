@@ -125,6 +125,17 @@ def add_derived(graph: Graph, entity: URIRef, source: URIRef) -> None:
     graph.add((entity, PROV.wasDerivedFrom, source))
 
 
+def add_specialization(graph: Graph, specific: URIRef, general: URIRef) -> None:
+    """A chunk is the same thing as its document, at a finer granularity.
+
+    ``prov:wasDerivedFrom`` alone says only "came from"; PROV-DM's
+    ``prov:specializationOf`` is the precise relation for an entity that
+    shares identity with a broader one, which is what a chunk is to its
+    source document.
+    """
+    graph.add((specific, PROV.specializationOf, general))
+
+
 def add_association(graph: Graph, activity: URIRef, agent: URIRef) -> None:
     graph.add((activity, PROV.wasAssociatedWith, agent))
 
@@ -147,6 +158,7 @@ __all__ = [
     "add_derived",
     "add_entity",
     "add_generated",
+    "add_specialization",
     "add_used",
     "agent_uri",
     "answer_uri",

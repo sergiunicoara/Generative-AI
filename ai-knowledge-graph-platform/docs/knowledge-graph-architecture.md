@@ -510,6 +510,24 @@ that every PROV activity has at least one `prov:used` input and a responsible
 `prov:Agent`. Tenant filters are applied before projection, and stable URI
 builders prevent cross-tenant collisions.
 
+Validation runs **before** serialisation, so a non-conformant graph can be
+stopped rather than merely reported on after the file is already published:
+`--validate` prints the violation report, `--strict` additionally refuses to
+write the export and exits non-zero (the mode intended for CI and scheduled
+export jobs). A record that cannot satisfy the shapes — an ingestion manifest
+with no source document, an artifact with neither chunk nor document — is
+skipped with a logged warning instead of being exported invalid.
+
+The exported vocabulary declares its own `owl:versionIRI`/`owl:versionInfo`
+(`export_rdf.ONTOLOGY_VERSION`, tracked in `ontology/CHANGELOG.md`), and every
+minted `base:` class/property carries `rdfs:isDefinedBy` back to that ontology
+IRI, so terms generated per export remain resolvable and comparable across
+releases. Entity name variants held by the alias registry
+(`graphrag/graph/alias_registry.py`) are published as `skos:altLabel` — the
+same predicate `cross_ontology_linker.py` consumes when aligning against
+external ontologies, so external consumers can align against this graph on
+equal terms.
+
 ### Correlation and telemetry
 
 FastAPI accepts or creates `X-Correlation-ID`, returns it to the caller, and

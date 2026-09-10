@@ -28,6 +28,8 @@ from api.limiter import (
     _storage_uri,
     client_address,
     client_key,
+    conversation_key,
+    enforce_conversation_limit,
     rate_limit,
 )
 
@@ -169,6 +171,67 @@ class TestDependencyShape:
         assert excinfo.value.status_code == 429
         assert int(excinfo.value.headers["Retry-After"]) >= 1
         assert excinfo.value.headers["X-RateLimit-Limit"] == "1/minute"
+
+
+class TestConversationBucketing:
+    """A conversation bucket must belong to *a caller's* conversation.
+
+    Keying on the client-supplied session id alone would let anyone who
+    learned or guessed another user's session id drain that conversation's
+    budget, turning a cost control into a denial-of-service primitive against
+    its rightful owner.
+    """
+
+    def test_bucket_is_scoped_to_the_caller_not_the_session_alone(self):
+        victim = _request(user={"sub": "victim"})
+        attacker = _request(user={"sub": "attacker"})
+        assert conversation_key(victim, "s-1") != conversation_key(attacker, "s-1")
+
+    def test_one_caller_two_conversations_get_separate_buckets(self):
+        request = _request(user={"sub": "client-a"})
+        assert conversation_key(request, "s-1") != conversation_key(request, "s-2")
+
+    def test_same_caller_and_session_is_stable_across_calls(self):
+        first = _request(peer="198.51.100.1", user={"sub": "client-a"})
+        second = _request(peer="198.51.100.2", user={"sub": "client-a"})
+        assert conversation_key(first, "s-1") == conversation_key(second, "s-1")
+
+    async def test_sessionless_requests_are_not_conversation_limited(self):
+        # Nothing to attribute conversation cost to, and rate_limit(QUERY_LIMIT)
+        # already covers them. Must not consume a bucket or raise.
+        from api import limiter as limiter_module
+
+        limiter_module.limiter = AsyncRateLimiter(storage_uri=None)
+        request = _request(user={"sub": "client-a"})
+        for _ in range(5):
+            await enforce_conversation_limit(request, "", limit="1/minute")
+
+    async def test_conversation_over_its_limit_is_rejected_with_backoff(self):
+        from api import limiter as limiter_module
+
+        limiter_module.limiter = AsyncRateLimiter(storage_uri=None)
+        request = _request(user={"sub": "client-a"})
+
+        await enforce_conversation_limit(request, "s-1", limit="1/minute")
+        with pytest.raises(RateLimitExceeded) as excinfo:
+            await enforce_conversation_limit(request, "s-1", limit="1/minute")
+
+        assert excinfo.value.status_code == 429
+        assert int(excinfo.value.headers["Retry-After"]) >= 1
+
+    async def test_exhausting_one_conversation_leaves_another_usable(self):
+        # The point of the narrower bucket: a looping thread must not consume
+        # the caller's ability to hold a different conversation.
+        from api import limiter as limiter_module
+
+        limiter_module.limiter = AsyncRateLimiter(storage_uri=None)
+        request = _request(user={"sub": "client-a"})
+
+        await enforce_conversation_limit(request, "looping", limit="1/minute")
+        with pytest.raises(RateLimitExceeded):
+            await enforce_conversation_limit(request, "looping", limit="1/minute")
+
+        await enforce_conversation_limit(request, "healthy", limit="1/minute")
 
 
 class TestSharedStorage:

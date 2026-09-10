@@ -5,9 +5,44 @@ from __future__ import annotations
 import re
 from difflib import SequenceMatcher
 
+from graphrag.core.tokens import estimate_tokens
 from graphrag.graph.alias_registry import canonical_document_key
+from graphrag.observability.context_size import record_context_composition
 
 _NEAR_DUPLICATE_RATIO = 0.85
+
+_SECTION_SEPARATOR = "\n\n---\n\n"
+
+
+class _Sections:
+    """The assembled prompt sections, each tagged with what kind it is.
+
+    A plain `list[str]` would let a section be appended without recording what
+    it was — which is exactly how a composition metric silently starts
+    under-reporting the context it exists to explain. Requiring a label at the
+    only insertion point makes that omission impossible rather than merely
+    discouraged.
+    """
+
+    def __init__(self) -> None:
+        self._parts: list[tuple[str, str]] = []
+
+    def add(self, label: str, text: str) -> None:
+        self._parts.append((label, text))
+
+    def render(self) -> str:
+        return _SECTION_SEPARATOR.join(text for _, text in self._parts)
+
+    def token_composition(self) -> dict[str, int]:
+        """Estimated tokens per section kind, summed across repeats.
+
+        The separator is attributed to nothing: it is a fixed cost of joining,
+        not something any one section chose to spend.
+        """
+        totals: dict[str, int] = {}
+        for label, text in self._parts:
+            totals[label] = totals.get(label, 0) + estimate_tokens(text)
+        return totals
 
 
 def _normalize(text: str) -> str:
@@ -41,8 +76,32 @@ class ContextBuilder:
         hop_reserved_slots: int = 0,
         hop_reserved_min_gnn: float = 0.3,
         document_names: list[str] | None = None,
+        token_budget: int | None = None,
     ) -> tuple[str, list[str]]:
-        sections: list[str] = []
+        """Assemble the prompt context and its citation list.
+
+        `token_budget`, when set, caps the tokens spent on the primary top-k
+        chunk admission below. Default `None` leaves behaviour byte-identical
+        to before the budget existed — the same opt-in shape
+        `hop_reserved_slots` uses.
+
+        It deliberately does **not** cover the two additive paths that follow
+        (reserved hop slots and the document-link slot). Both exist precisely
+        to guarantee a chunk survives into the context that ordinary ranking
+        would drop — MH-03 and the link-topology answers depend on that
+        guarantee — so letting a token budget silently evict them would
+        reintroduce the exact defect they were added to fix. Their tokens are
+        still measured and published, so their cost stays visible.
+
+        The budget covers chunks only, not the whole context, and that is
+        deliberate rather than an oversight: every other section carries a
+        count cap that exists to satisfy a specific golden-eval defect (see the
+        comments below on entity edges and conflicts), so silently truncating
+        one to fit a token target would regress a known-correct answer to save
+        tokens. Their sizes are measured and published instead, so a section
+        that genuinely dominates can be dealt with on evidence.
+        """
+        sections = _Sections()
         citations: list[str] = []
 
         # Local: top-k chunks, ranked by the GNN-blended final_score (falls back
@@ -65,11 +124,27 @@ class ContextBuilder:
         seen_chunk_ids: set[str] = set()
         seen_texts: list[str] = []
         deduped: list[dict] = []
+        chunk_tokens_used = 0
         for chunk in chunks_sorted:
             if chunk["chunk_id"] in seen_chunk_ids:
                 continue
             if _is_near_duplicate(chunk["text"], seen_texts):
                 continue
+            # Budget check, when one is set. `continue` rather than `break`:
+            # chunks arrive in descending value order, so a chunk that does not
+            # fit says nothing about a smaller, slightly-lower-ranked one that
+            # would — stopping outright would leave budget unspent for no gain.
+            # The first chunk is always admitted regardless, since returning an
+            # empty context because the single best chunk was oversized is a
+            # worse failure than overshooting a soft budget by one chunk.
+            if token_budget is not None:
+                chunk_tokens = estimate_tokens(chunk["text"])
+                if deduped and chunk_tokens_used + chunk_tokens > token_budget:
+                    continue
+                # Counted even when admitted unconditionally as the first
+                # chunk: an oversized leader still spends the budget, so the
+                # chunks after it must see what is actually left.
+                chunk_tokens_used += chunk_tokens
             seen_chunk_ids.add(chunk["chunk_id"])
             seen_texts.append(_normalize(chunk["text"])[:300])
             deduped.append(chunk)
@@ -111,7 +186,7 @@ class ContextBuilder:
         for chunk in deduped:
             source = chunk.get("source")
             header = f"[Chunk {chunk['chunk_id']} | Source: {source}]" if source else f"[Chunk {chunk['chunk_id']}]"
-            sections.append(f"{header}\n{chunk['text']}")
+            sections.add("chunks", f"{header}\n{chunk['text']}")
             doc_name = chunk.get("_doc_name") or (source.replace(".txt", "") if source else None)
             citations.append(doc_name if doc_name else chunk["chunk_id"])
 
@@ -130,7 +205,7 @@ class ContextBuilder:
                 seen_texts.append(_normalize(chunk["text"])[:300])
                 source = chunk.get("source")
                 header = f"[Linked chunk {chunk['chunk_id']} | Source: {source}]" if source else f"[Linked chunk {chunk['chunk_id']}]"
-                sections.append(f"{header}\n{chunk['text']}")
+                sections.add("linked_chunks", f"{header}\n{chunk['text']}")
                 doc_name = chunk.get("_doc_name") or (source.replace(".txt", "") if source else None)
                 citations.append(doc_name if doc_name else chunk["chunk_id"])
                 link_slots -= 1
@@ -145,7 +220,7 @@ class ContextBuilder:
                 lines.append(line)
                 citations.extend([edge["src"], edge["tgt"]])
             if lines:
-                sections.append("Explicit document links:\n" + "\n".join(lines))
+                sections.add("document_links", "Explicit document links:\n" + "\n".join(lines))
 
         # Local: entity context
         entities = local_results.get("entities", [])
@@ -156,7 +231,7 @@ class ContextBuilder:
                 entity_lines.append(
                     f"{e['entity']} ({e['type']}): {e['description']}. Related: {neighbors}"
                 )
-            sections.append("Entity context:\n" + "\n".join(entity_lines))
+            sections.add("entity_context", "Entity context:\n" + "\n".join(entity_lines))
 
         # Known graph relationships: entity/document edges established
         # elsewhere in the corpus — directly extracted or, notably, derived
@@ -211,8 +286,9 @@ class ContextBuilder:
                 citations.append(e["src"])
                 citations.append(e["tgt"])
             if edge_lines:
-                sections.append(
-                    "Known graph relationships:\n" + "\n".join(edge_lines)
+                sections.add(
+                    "graph_relationships",
+                    "Known graph relationships:\n" + "\n".join(edge_lines),
                 )
 
         # Unresolved conflicts: an entity in this result set is the subject of
@@ -227,14 +303,15 @@ class ContextBuilder:
                     f"{c['src']} —{c['relation']}→ {c['tgt']} ({c['conflict_type']}): "
                     f"sources disagree, unresolved"
                 )
-            sections.append(
-                "⚠ Unresolved conflicts:\n" + "\n".join(conflict_lines)
+            sections.add(
+                "conflicts",
+                "⚠ Unresolved conflicts:\n" + "\n".join(conflict_lines),
             )
 
         # Global: community-synthesized answer
         synthesized = global_results.get("synthesized_answer", "")
         if synthesized:
-            sections.append(f"Community knowledge:\n{synthesized}")
+            sections.add("community_knowledge", f"Community knowledge:\n{synthesized}")
 
         # Global-mode citations: community summaries carry no per-fact
         # provenance, so this is the representative document set attached by
@@ -247,7 +324,11 @@ class ContextBuilder:
         for community in global_results.get("communities", []):
             citations.extend(community.get("source_documents", []))
 
-        context = "\n\n---\n\n".join(sections)
+        context = sections.render()
+        # Published after assembly rather than accumulated during it, so the
+        # numbers describe the context that is actually returned — a section
+        # dropped or capped along the way never shows up as spend.
+        record_context_composition(sections.token_composition())
         # Resolve entity-form citations to their document's canonical name.
         #
         # Citations arrive under two naming systems: chunk-derived ones use the

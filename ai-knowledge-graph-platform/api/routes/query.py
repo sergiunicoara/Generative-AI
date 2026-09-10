@@ -15,7 +15,7 @@ from pydantic import BaseModel, Field
 from api.auth.dependencies import get_current_user, get_tenant, require_scope
 from graphrag.enterprise.models import AccessContext
 from api.quota import enforce_tenant_quota
-from api.limiter import QUERY_LIMIT, rate_limit
+from api.limiter import QUERY_LIMIT, enforce_conversation_limit, rate_limit
 from graphrag.messaging.publishers import publish_query
 from graphrag.retrieval.result_store import ResultStoreUnavailable, get_result_store
 from graphrag.retrieval.session_store import SessionContextUnavailable, get_session_store
@@ -67,7 +67,13 @@ async def submit_query(
 
     Rate-limited to prevent LLM quota exhaustion.
     Default: 60 requests/minute per client IP (override via GRAPHRAG_RATE_LIMIT_QUERY).
+    A single conversation is additionally capped (GRAPHRAG_RATE_LIMIT_CONVERSATION).
     """
+    # Before any Redis read or queue write below: this is burst protection, and
+    # the ordering rationale in the route's `dependencies=` applies here too —
+    # cheap rejection first, so a looping client never reaches the work.
+    await enforce_conversation_limit(request, body.session_id)
+
     if body.requires_session_context:
         if not body.session_id:
             raise HTTPException(status_code=400,

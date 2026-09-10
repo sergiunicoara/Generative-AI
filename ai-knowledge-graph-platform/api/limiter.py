@@ -52,6 +52,23 @@ to the number of proxy hops in front of the app. The header is client-writable,
 so trusting it unconditionally lets any caller forge a fresh identity per
 request and bypass the limit entirely. With N trusted hops, the client address
 is the Nth entry from the right — the last value a proxy you control appended.
+
+Conversation limit
+------------------
+`enforce_conversation_limit` adds a second, narrower bucket per conversation.
+Be precise about what it is for: `session_id` is supplied by the client
+(`QueryRequest.session_id`), so a caller who wants more throughput can simply
+send a new one. It is therefore **not** an abuse control — the per-subject
+`QUERY_LIMIT` above remains the only thing an adversary cannot sidestep. What
+this bounds is the cost of a *single* conversation: a client stuck in a retry
+loop, a runaway agent, or a UI bug re-submitting the same thread, all of which
+sit comfortably under the per-subject limit while burning LLM spend on one
+session.
+
+Its bucket key is the caller identity **and** the session id, never the session
+id alone. Keying on the session alone would mean anyone who learned or guessed
+another user's session id could exhaust that conversation's quota and deny
+service to its real owner — turning a cost control into a griefing primitive.
 """
 
 from __future__ import annotations
@@ -70,6 +87,11 @@ log = structlog.get_logger(__name__)
 INGEST_LIMIT = os.getenv("GRAPHRAG_RATE_LIMIT_INGEST", "20/minute")
 QUERY_LIMIT = os.getenv("GRAPHRAG_RATE_LIMIT_QUERY", "60/minute")
 AUTH_LIMIT = os.getenv("GRAPHRAG_RATE_LIMIT_AUTH", "10/minute")
+# Deliberately a third of QUERY_LIMIT: a human conversation runs far below
+# this, so it only bites on a loop, while still leaving a caller room to hold
+# several conversations at once without the narrow bucket becoming the
+# effective per-subject limit.
+CONVERSATION_LIMIT = os.getenv("GRAPHRAG_RATE_LIMIT_CONVERSATION", "20/minute")
 
 
 class RateLimitExceeded(HTTPException):
@@ -130,6 +152,42 @@ def client_key(request: Request) -> str:
     if subject:
         return f"sub:{subject}"
     return f"ip:{client_address(request)}"
+
+
+def conversation_key(request: Request, session_id: str) -> str:
+    """Rate-limit bucket for one caller's one conversation.
+
+    Composite by design — see the module docstring: the session half alone is
+    client-controlled and guessable, so it can neither be trusted as an
+    identity nor safely own a bucket of its own.
+    """
+    return f"conv:{client_key(request)}:{session_id}"
+
+
+async def enforce_conversation_limit(
+    request: Request, session_id: str, limit: str = CONVERSATION_LIMIT
+) -> None:
+    """Consume one unit of `session_id`'s conversation budget.
+
+    A plain call rather than a FastAPI dependency, unlike `rate_limit` above:
+    `session_id` arrives in the request *body*, and a dependency would have to
+    read and re-parse that body before the endpoint's own model does, purely to
+    reach one field. The route calls this once it has a parsed body instead.
+
+    Sessionless requests are not limited here — they have no conversation to
+    attribute cost to, and `rate_limit(QUERY_LIMIT)` already covers them.
+    """
+    if not session_id:
+        return
+    allowed, retry_after = await limiter.check(limit, conversation_key(request, session_id))
+    if not allowed:
+        log.info(
+            "rate_limit.conversation_rejected",
+            path=request.url.path,
+            key=conversation_key(request, session_id)[:32],
+            limit=limit,
+        )
+        raise RateLimitExceeded(retry_after, limit)
 
 
 def _storage_uri() -> str | None:

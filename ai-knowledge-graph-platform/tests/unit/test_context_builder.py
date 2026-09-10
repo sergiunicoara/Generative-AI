@@ -362,3 +362,131 @@ class TestContextBuilderDocumentNameCanonicalization:
             document_names=["FAA-AD-2024-01-02.txt", "FAA-AD-2022-03-07.txt"],
         )
         assert citations.count("FAA-AD-2024-01-02") == 1
+
+
+class TestContextComposition:
+    """Every assembled section must be measurable and attributed to its kind.
+
+    Six of the seven section kinds are bounded by a *count* (top_k, [:5],
+    [:10]) and the community answer by nothing at all, so a count cap is not a
+    token cap: five long entity descriptions cost more than ten short edges.
+    Publishing per-section tokens is what makes "the context is too large"
+    attributable instead of an opinion.
+    """
+
+    @staticmethod
+    def _capture(monkeypatch) -> list[dict]:
+        captured: list[dict] = []
+        monkeypatch.setattr(
+            "graphrag.retrieval.context_builder.record_context_composition",
+            captured.append,
+        )
+        return captured
+
+    def test_each_section_kind_is_reported_under_its_own_label(self, monkeypatch):
+        captured = self._capture(monkeypatch)
+        ContextBuilder().build(
+            _local(
+                [{"chunk_id": "c1", "text": "chunk text", "score": 0.9}],
+                entities=[{"entity": "Boeing", "type": "ORG",
+                           "description": "an aerospace manufacturer", "neighbors": ["FAA"]}],
+                entity_edges=[{"src": "A", "relation": "SUPERSEDES", "tgt": "B"}],
+            ),
+            {"synthesized_answer": "a community-level answer"},
+            top_k=1,
+            conflicts=[{"src": "A", "relation": "R", "tgt": "B", "conflict_type": "value"}],
+        )
+        assert captured, "composition must be published on every build"
+        assert set(captured[0]) == {
+            "chunks", "entity_context", "graph_relationships",
+            "conflicts", "community_knowledge",
+        }
+
+    def test_repeated_sections_of_one_kind_sum_into_one_entry(self, monkeypatch):
+        captured = self._capture(monkeypatch)
+        chunks = [
+            {"chunk_id": "c1", "text": "alpha " * 50, "score": 0.9},
+            {"chunk_id": "c2", "text": "bravo " * 50, "score": 0.8},
+        ]
+        ContextBuilder().build(_local(chunks), {}, top_k=2)
+        assert list(captured[0]) == ["chunks"]
+        assert captured[0]["chunks"] > 0
+
+    def test_an_unbounded_community_answer_is_visible_as_its_own_cost(self, monkeypatch):
+        # The community answer carries no count cap at all, so it is the one
+        # section that can dominate a context without any existing guard
+        # noticing. Its size has to be attributable on its own.
+        captured = self._capture(monkeypatch)
+        ContextBuilder().build(
+            _local([{"chunk_id": "c1", "text": "short", "score": 0.9}]),
+            {"synthesized_answer": "verbose " * 2_000},
+            top_k=1,
+        )
+        assert captured[0]["community_knowledge"] > captured[0]["chunks"]
+
+    def test_an_empty_build_reports_nothing_rather_than_a_zero(self, monkeypatch):
+        # A zero-token context and no context at all are different events; only
+        # the second should be silent.
+        captured = self._capture(monkeypatch)
+        context, _ = ContextBuilder().build(_local([]), {})
+        assert context == ""
+        assert captured == [{}]
+
+
+class TestChunkTokenBudget:
+    """`token_budget` caps tokens spent on chunk text, and only that."""
+
+    def test_default_leaves_admission_unchanged(self):
+        chunks = [
+            {"chunk_id": "c1", "text": "alpha " * 500, "score": 0.9},
+            {"chunk_id": "c2", "text": "bravo " * 500, "score": 0.8},
+        ]
+        _, citations = ContextBuilder().build(_local(chunks), {}, top_k=2)
+        assert citations == ["c1", "c2"]
+
+    def test_a_chunk_that_would_exceed_the_budget_is_left_out(self):
+        chunks = [
+            {"chunk_id": "small", "text": "alpha beta", "score": 0.9},
+            {"chunk_id": "huge", "text": "bravo " * 5_000, "score": 0.8},
+        ]
+        _, citations = ContextBuilder().build(
+            _local(chunks), {}, top_k=2, token_budget=100,
+        )
+        assert citations == ["small"]
+
+    def test_the_best_chunk_is_admitted_even_when_it_alone_exceeds_the_budget(self):
+        # Returning an empty context because the single best chunk was
+        # oversized is a worse failure than overshooting a soft budget.
+        chunks = [{"chunk_id": "huge", "text": "alpha " * 5_000, "score": 0.9}]
+        context, citations = ContextBuilder().build(
+            _local(chunks), {}, top_k=3, token_budget=10,
+        )
+        assert citations == ["huge"]
+        assert context != ""
+
+    def test_a_smaller_lower_ranked_chunk_still_fits_after_one_is_skipped(self):
+        # `continue`, not `break`: chunks arrive in descending value order, so
+        # one that does not fit says nothing about a smaller, slightly worse
+        # one that would. Stopping outright would leave budget unspent.
+        chunks = [
+            {"chunk_id": "first", "text": "alpha beta", "score": 0.9},
+            {"chunk_id": "toobig", "text": "bravo " * 5_000, "score": 0.8},
+            {"chunk_id": "fits", "text": "charlie delta", "score": 0.7},
+        ]
+        _, citations = ContextBuilder().build(
+            _local(chunks), {}, top_k=3, token_budget=100,
+        )
+        assert citations == ["first", "fits"]
+
+    def test_an_oversized_leader_still_spends_the_budget(self):
+        # The first chunk is admitted unconditionally but is not free: what
+        # follows must see what is actually left, or the budget silently
+        # applies to every chunk except the largest one.
+        chunks = [
+            {"chunk_id": "huge", "text": "alpha " * 5_000, "score": 0.9},
+            {"chunk_id": "small", "text": "beta", "score": 0.8},
+        ]
+        _, citations = ContextBuilder().build(
+            _local(chunks), {}, top_k=2, token_budget=100,
+        )
+        assert citations == ["huge"]

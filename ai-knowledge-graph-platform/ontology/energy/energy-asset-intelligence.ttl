@@ -1,0 +1,21 @@
+@prefix energy: <https://example.energy.demo/ontology#> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix prov: <http://www.w3.org/ns/prov#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+
+energy: a owl:Ontology ; rdfs:label "Synthetic Energy Asset Intelligence ontology" .
+energy:Site a owl:Class . energy:Asset a owl:Class . energy:Component a owl:Class .
+energy:Observation a owl:Class ; rdfs:subClassOf prov:Entity .
+energy:WorkOrder a owl:Class ; rdfs:subClassOf prov:Entity .
+energy:TechnicalDocument a owl:Class ; rdfs:subClassOf prov:Entity .
+energy:DocumentRevision a owl:Class ; rdfs:subClassOf energy:TechnicalDocument .
+energy:MaintenanceReviewFinding a owl:Class .
+energy:hasAsset a owl:ObjectProperty . energy:hasComponent a owl:ObjectProperty .
+energy:observedAsset a owl:ObjectProperty . energy:concernsAsset a owl:ObjectProperty .
+energy:supersedes a owl:ObjectProperty .
+energy:assetId a owl:DatatypeProperty . energy:unit a owl:DatatypeProperty .
+energy:value a owl:DatatypeProperty ; rdfs:range xsd:decimal .
+energy:observedAt a owl:DatatypeProperty ; rdfs:range xsd:dateTime .
+energy:validFrom a owl:DatatypeProperty ; rdfs:range xsd:dateTime .
+energy:validTo a owl:DatatypeProperty ; rdfs:range xsd:dateTime .

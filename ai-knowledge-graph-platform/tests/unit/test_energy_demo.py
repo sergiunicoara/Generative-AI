@@ -1,0 +1,41 @@
+from rdflib import Graph
+
+from graphrag.domains.energy.demo import EnergyDemoService, TENANT
+from graphrag.ingestion.r2rml import r2rml_to_mapping
+from scripts.create_energy_demo_sqlite import create
+
+
+def test_energy_demo_answers_current_and_historical_questions_with_evidence():
+    service = EnergyDemoService()
+    current = service.answer("maintenance_review", tenant=TENANT)
+    historical = service.answer("historical_state", tenant=TENANT, as_of="2026-05-01T00:00:00Z")
+    assert "WT-01" in current["answer"]
+    assert current["authoritative_bulletin"] == "MFG-GBX-17-R2"
+    assert current["evidence"]
+    assert historical["authoritative_bulletin"] == "MFG-GBX-17-R1"
+
+
+def test_energy_demo_does_not_leak_evidence_to_another_tenant():
+    result = EnergyDemoService().answer("maintenance_review", tenant="another-tenant")
+    assert result == {"status": "not_found", "answer": "No energy demonstration is available for this tenant.", "evidence": []}
+
+
+def test_energy_demo_exports_parseable_rdf_and_rejects_invalid_candidate():
+    service = EnergyDemoService()
+    graph = Graph().parse(data=service.export_turtle(), format="turtle")
+    assert len(graph) > 50
+    report = service.validate_candidate()
+    assert report["conforms"] is False
+    assert report["rejected_records"]
+    assert any("unit" in violation.lower() for violation in report["violations"])
+
+
+def test_energy_r2rml_mapping_parses_against_reproducible_source_contract(tmp_path):
+    database = tmp_path / "energy.sqlite"
+    create(database)
+    mapping = r2rml_to_mapping(
+        "ontology/mappings/energy-assets.r2rml.ttl", mapping_id="energy-assets",
+        version="1.0.0", source_id="synthetic-sap", tenant=TENANT,
+    )
+    assert [entity.table for entity in mapping.entities] == ["sap_assets", "sap_work_orders"]
+    assert database.exists()

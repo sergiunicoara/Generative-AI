@@ -1,0 +1,11 @@
+{
+  "tenant": "energy-demo",
+  "synthetic": true,
+  "questions": [
+    {"id": "maintenance_review", "expected_assets": ["WT-01"], "expected_bulletin": "MFG-GBX-17-R2"},
+    {"id": "open_work_orders", "expected_work_orders": ["WO-9001", "WO-9002"]},
+    {"id": "revision_change", "expected_bulletin": "MFG-GBX-17-R2"},
+    {"id": "historical_state", "as_of": "2026-05-01T00:00:00Z", "expected_bulletin": "MFG-GBX-17-R1"},
+    {"id": "insufficient_evidence", "expected_status": "insufficient_evidence"}
+  ]
+}

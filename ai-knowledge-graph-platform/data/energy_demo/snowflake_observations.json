@@ -1,0 +1,4 @@
+[
+  {"observation_id": "SNOW-OBS-WT-01", "asset_id": "WT-01", "metric": "temperature_c", "value": 96.0, "unit": "C", "observed_at": "2026-08-28T08:00:00Z"},
+  {"observation_id": "SNOW-OBS-WT-02", "asset_id": "WT-02", "metric": "vibration_mm_s", "value": 12.4, "unit": "mm/s", "observed_at": "2026-08-28T08:05:00Z"}
+]

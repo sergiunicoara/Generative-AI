@@ -12,7 +12,7 @@ from starlette.middleware.sessions import SessionMiddleware
 
 from api.limiter import limiter
 from api.request_limits import RequestBodyLimitMiddleware
-from api.routes import agent, auth, ingest, query, search, evaluation, kpis, corrections, kg_features, demo, context_graph, business, skills, wellknown, enterprise
+from api.routes import agent, auth, ingest, query, search, evaluation, kpis, corrections, kg_features, demo, context_graph, business, skills, wellknown, enterprise, energy_demo
 from graphrag.core.config import get_settings, is_dev_env
 
 log = structlog.get_logger(__name__)
@@ -184,6 +184,8 @@ app.include_router(skills.router)
 app.include_router(demo.router)
 app.include_router(context_graph.router)
 app.include_router(business.router)
+app.include_router(energy_demo.router, prefix="/energy-demo", tags=["Energy Demo"],
+                   dependencies=[Depends(require_scope("read"))])
 
 
 @app.get("/health", tags=["Health"])

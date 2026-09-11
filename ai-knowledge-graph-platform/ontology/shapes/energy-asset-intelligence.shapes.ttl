@@ -1,0 +1,12 @@
+@prefix energy: <https://example.energy.demo/ontology#> .
+@prefix sh: <http://www.w3.org/ns/shacl#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+
+energy:AssetShape a sh:NodeShape ; sh:targetClass energy:Asset ;
+  sh:property [ sh:path energy:assetId ; sh:minCount 1 ; sh:datatype xsd:string ] .
+energy:ObservationShape a sh:NodeShape ; sh:targetClass energy:Observation ;
+  sh:property [ sh:path energy:value ; sh:minCount 1 ; sh:datatype xsd:decimal ] ;
+  sh:property [ sh:path energy:unit ; sh:minCount 1 ; sh:datatype xsd:string ] ;
+  sh:property [ sh:path energy:observedAt ; sh:minCount 1 ; sh:datatype xsd:dateTime ] .
+energy:RevisionShape a sh:NodeShape ; sh:targetClass energy:DocumentRevision ;
+  sh:property [ sh:path energy:validFrom ; sh:minCount 1 ; sh:datatype xsd:dateTime ] .

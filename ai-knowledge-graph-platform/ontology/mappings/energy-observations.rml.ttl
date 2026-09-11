@@ -1,0 +1,11 @@
+@prefix rml: <http://semweb.mmlab.be/ns/rml#> .
+@prefix ql: <http://semweb.mmlab.be/ns/ql#> .
+@prefix rr: <http://www.w3.org/ns/r2rml#> .
+@prefix energy: <https://example.energy.demo/ontology#> .
+
+# RML source mapping retained as an executable-contract artifact. Running it
+# requires an external RML processor; the local demo uses its equivalent
+# deterministic Python fixture loader and declares this limitation in docs.
+energy:ObservationMap a rr:TriplesMap;
+  rml:logicalSource [ rml:source "data/energy_demo/snowflake_observations.json"; rml:referenceFormulation ql:JSONPath; rml:iterator "$[*]" ];
+  rr:subjectMap [ rr:template "https://example.energy.demo/record/{observation_id}"; rr:class energy:Observation ].

@@ -1,0 +1,14 @@
+services:
+  graphdb:
+    # Pinned tag for the optional local RDF-store demonstration. Validate image
+    # availability and GraphDB license terms before using in a client setting.
+    image: ontotext/graphdb:11.2.0
+    ports: ["127.0.0.1:7200:7200"]
+    volumes: ["energy_graphdb_data:/opt/graphdb/home"]
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:7200/rest/monitor/health | grep -q alive"]
+      interval: 15s
+      timeout: 5s
+      retries: 12
+volumes:
+  energy_graphdb_data:

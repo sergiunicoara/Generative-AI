@@ -1,0 +1,12 @@
+@prefix rr: <http://www.w3.org/ns/r2rml#> .
+@prefix energy: <https://example.energy.demo/ontology#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+
+energy:AssetMap a rr:TriplesMap;
+  rr:logicalTable [ rr:tableName "sap_assets" ];
+  rr:subjectMap [ rr:template "https://example.energy.demo/asset/{asset_id}"; rr:class energy:Asset ];
+  rr:predicateObjectMap [ rr:predicate rdfs:label; rr:objectMap [ rr:column "asset_name" ] ].
+energy:WorkOrderMap a rr:TriplesMap;
+  rr:logicalTable [ rr:tableName "sap_work_orders" ];
+  rr:subjectMap [ rr:template "https://example.energy.demo/record/{work_order_id}"; rr:class energy:WorkOrder ];
+  rr:predicateObjectMap [ rr:predicate rdfs:label; rr:objectMap [ rr:column "work_order_id" ] ].

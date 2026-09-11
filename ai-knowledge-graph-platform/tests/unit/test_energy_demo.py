@@ -39,3 +39,17 @@ def test_energy_r2rml_mapping_parses_against_reproducible_source_contract(tmp_pa
     )
     assert [entity.table for entity in mapping.entities] == ["sap_assets", "sap_work_orders"]
     assert database.exists()
+
+
+def test_energy_demo_materializes_the_sqlite_source_and_uses_sparql_for_review(tmp_path):
+    database = tmp_path / "energy.sqlite"
+    create(database)
+    result = EnergyDemoService(source_db=database).answer("maintenance_review", tenant=TENANT)
+    assert result["answer_source"] == "version-controlled SPARQL query"
+    assert result["query_rows"] == [{
+        "asset": "https://example.energy.demo/asset/WT-01",
+        "temperature": "96.0",
+        "threshold": "85.0",
+        "bulletin": "https://example.energy.demo/document/MFG-GBX-17-R2",
+        "workOrder": "https://example.energy.demo/record/WO-9001",
+    }]

@@ -1,6 +1,8 @@
 PREFIX energy: <https://example.energy.demo/ontology#>
-SELECT ?asset ?temperature ?threshold WHERE {
+SELECT ?asset ?temperature ?threshold ?bulletin ?workOrder WHERE {
+  VALUES ?bulletinId { "{{BULLETIN_ID}}" }
   ?observation a energy:Observation ; energy:observedAsset ?asset ; energy:metric "temperature_c" ; energy:value ?temperature .
-  ?bulletin a energy:DocumentRevision ; energy:temperatureReviewThreshold ?threshold .
+  ?bulletin a energy:DocumentRevision ; energy:documentId ?bulletinId ; energy:temperatureReviewThreshold ?threshold .
+  ?workOrder a energy:WorkOrder ; energy:concernsAsset ?asset ; energy:status "open" .
   FILTER(?temperature > ?threshold)
 }

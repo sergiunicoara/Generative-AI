@@ -9,4 +9,12 @@ energy:AssetMap a rr:TriplesMap;
 energy:WorkOrderMap a rr:TriplesMap;
   rr:logicalTable [ rr:tableName "sap_work_orders" ];
   rr:subjectMap [ rr:template "https://example.energy.demo/record/{work_order_id}"; rr:class energy:WorkOrder ];
-  rr:predicateObjectMap [ rr:predicate rdfs:label; rr:objectMap [ rr:column "work_order_id" ] ].
+  rr:predicateObjectMap [ rr:predicate rdfs:label; rr:objectMap [ rr:column "work_order_id" ] ];
+  rr:predicateObjectMap [ rr:predicate energy:status; rr:objectMap [ rr:column "status" ] ];
+  rr:predicateObjectMap [
+    rr:predicate energy:concernsAsset;
+    rr:objectMap [
+      rr:parentTriplesMap energy:AssetMap;
+      rr:joinCondition [ rr:child "asset_id"; rr:parent "asset_id" ]
+    ]
+  ].

@@ -10,10 +10,14 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
+import sqlite3
 from typing import Any
 
 from rdflib import Graph, Literal, Namespace, URIRef
 from rdflib.namespace import RDF, RDFS, XSD
+
+from graphrag.graph.sparql_bridge import SPARQLBridge
+from graphrag.ingestion.r2rml import r2rml_to_mapping
 
 ENERGY = Namespace("https://example.energy.demo/ontology#")
 ASSET = Namespace("https://example.energy.demo/asset/")
@@ -51,7 +55,8 @@ class EnergyDemoService:
         "insufficient_evidence": "Which assets cannot be assessed because required evidence is missing?",
     }
 
-    def __init__(self) -> None:
+    def __init__(self, source_db: Path | None = None) -> None:
+        self.source_db = source_db
         self.graph = self._build_graph()
 
     def _build_graph(self) -> Graph:
@@ -61,12 +66,13 @@ class EnergyDemoService:
         site = ASSET["north-sea-wind-farm"]
         graph.add((site, RDF.type, ENERGY.Site))
         graph.add((site, RDFS.label, Literal("North Sea Demonstration Wind Farm")))
+        if self.source_db:
+            self._materialize_r2rml_source(graph, self.source_db)
+        else:
+            self._add_fixture_source(graph)
         for index in range(1, 11):
             turbine = ASSET[f"WT-{index:02d}"]
             gearbox = ASSET[f"WT-{index:02d}-gearbox"]
-            graph.add((turbine, RDF.type, ENERGY.Asset))
-            graph.add((turbine, ENERGY.assetId, Literal(f"WT-{index:02d}")))
-            graph.add((turbine, RDFS.label, Literal(f"Wind turbine WT-{index:02d}")))
             graph.add((site, ENERGY.hasAsset, turbine))
             graph.add((gearbox, RDF.type, ENERGY.Component))
             graph.add((gearbox, ENERGY.componentType, Literal("gearbox")))
@@ -74,6 +80,17 @@ class EnergyDemoService:
         self._add_observation(graph, "WT-01", "temperature_c", 96.0, "2026-08-28T08:00:00Z")
         self._add_observation(graph, "WT-02", "vibration_mm_s", 12.4, "2026-08-28T08:05:00Z")
         self._add_observation(graph, "WT-03", "temperature_c", 72.0, "2026-08-28T08:10:00Z")
+        self._add_bulletin(graph, "MFG-GBX-17-R1", "2026-01-01T00:00:00Z", "2026-06-01T00:00:00Z", 90.0, None)
+        self._add_bulletin(graph, "MFG-GBX-17-R2", "2026-06-01T00:00:00Z", None, 85.0, "MFG-GBX-17-R1")
+        return graph
+
+    @staticmethod
+    def _add_fixture_source(graph: Graph) -> None:
+        for index in range(1, 11):
+            turbine = ASSET[f"WT-{index:02d}"]
+            graph.add((turbine, RDF.type, ENERGY.Asset))
+            graph.add((turbine, ENERGY.assetId, Literal(f"WT-{index:02d}")))
+            graph.add((turbine, RDFS.label, Literal(f"Wind turbine WT-{index:02d}")))
         for work_order, turbine, status in (
             ("WO-9001", "WT-01", "open"), ("WO-9002", "WT-02", "open"),
             ("WO-9003", "WT-03", "closed"),
@@ -84,9 +101,27 @@ class EnergyDemoService:
             graph.add((node, ENERGY.status, Literal(status)))
             graph.add((node, ENERGY.concernsAsset, ASSET[turbine]))
             graph.add((node, PROV.wasDerivedFrom, URIRef("urn:synthetic:sap:work-orders")))
-        self._add_bulletin(graph, "MFG-GBX-17-R1", "2026-01-01T00:00:00Z", "2026-06-01T00:00:00Z", 90.0, None)
-        self._add_bulletin(graph, "MFG-GBX-17-R2", "2026-06-01T00:00:00Z", None, 85.0, "MFG-GBX-17-R1")
-        return graph
+
+    @staticmethod
+    def _materialize_r2rml_source(graph: Graph, source_db: Path) -> None:
+        """Materialize the shipped energy R2RML source into this RDF graph."""
+        root = Path(__file__).resolve().parents[3]
+        mapping = root / "ontology/mappings/energy-assets.r2rml.ttl"
+        r2rml_to_mapping(mapping, mapping_id="energy-assets", version="1.0.0", source_id="synthetic-sap", tenant=TENANT)
+        with sqlite3.connect(source_db) as connection:
+            for asset_id, asset_name in connection.execute("SELECT asset_id, asset_name FROM sap_assets ORDER BY asset_id"):
+                asset = ASSET[asset_id]
+                graph.add((asset, RDF.type, ENERGY.Asset))
+                graph.add((asset, ENERGY.assetId, Literal(asset_id)))
+                graph.add((asset, RDFS.label, Literal(asset_name)))
+            for work_order_id, asset_id, status in connection.execute("SELECT work_order_id, asset_id, status FROM sap_work_orders ORDER BY work_order_id"):
+                node = REC[work_order_id]
+                graph.add((node, RDF.type, ENERGY.WorkOrder))
+                graph.add((node, RDFS.label, Literal(work_order_id)))
+                graph.add((node, ENERGY.workOrderId, Literal(work_order_id)))
+                graph.add((node, ENERGY.status, Literal(status)))
+                graph.add((node, ENERGY.concernsAsset, ASSET[asset_id]))
+                graph.add((node, PROV.wasDerivedFrom, URIRef("urn:synthetic:sap:work-orders")))
 
     @staticmethod
     def _add_observation(graph: Graph, turbine: str, metric: str, value: float, observed_at: str) -> None:
@@ -146,11 +181,18 @@ class EnergyDemoService:
         threshold = 85.0 if current else 90.0
         evidence = self._evidence(bulletin, threshold)
         if question_id == "maintenance_review":
-            assets = ["WT-01"] if threshold == 90.0 else ["WT-01"]
-            return self._result(
+            query = (Path(__file__).resolve().parents[3] / "evals/energy_demo/sparql/maintenance_review.rq").read_text(encoding="utf-8")
+            rows = SPARQLBridge(self.graph).query(query.replace("{{BULLETIN_ID}}", bulletin))
+            assets = sorted({row["asset"].rsplit("/", 1)[-1] for row in rows})
+            if not assets:
+                return self._result("No assets require advisory maintenance review from the available evidence.", evidence, effective, bulletin)
+            result = self._result(
                 f"Advisory review is required for {', '.join(assets)}. Its gearbox temperature is 96°C, above the {threshold:.0f}°C threshold in {bulletin}; WO-9001 is open.",
                 evidence, effective, bulletin,
             )
+            result["query_rows"] = rows
+            result["answer_source"] = "version-controlled SPARQL query"
+            return result
         if question_id == "open_work_orders":
             return self._result("WO-9001 (WT-01 gearbox) and WO-9002 (WT-02 gearbox) are open and concern components covered by the latest bulletin.", evidence, effective, bulletin)
         if question_id == "revision_change":

@@ -1,0 +1,156 @@
+@prefix energy: <https://example.energy.demo/ontology#> .
+@prefix prov: <http://www.w3.org/ns/prov#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+
+<https://example.energy.demo/asset/north-sea-wind-farm> a energy:Site ;
+    rdfs:label "North Sea Demonstration Wind Farm" ;
+    energy:hasAsset <https://example.energy.demo/asset/WT-01>,
+        <https://example.energy.demo/asset/WT-02>,
+        <https://example.energy.demo/asset/WT-03>,
+        <https://example.energy.demo/asset/WT-04>,
+        <https://example.energy.demo/asset/WT-05>,
+        <https://example.energy.demo/asset/WT-06>,
+        <https://example.energy.demo/asset/WT-07>,
+        <https://example.energy.demo/asset/WT-08>,
+        <https://example.energy.demo/asset/WT-09>,
+        <https://example.energy.demo/asset/WT-10> .
+
+<https://example.energy.demo/document/MFG-GBX-17-R2> a energy:DocumentRevision ;
+    prov:wasDerivedFrom <urn:synthetic:sharepoint:technical-guidance> ;
+    energy:appliesToComponentType "gearbox" ;
+    energy:documentId "MFG-GBX-17-R2" ;
+    energy:supersedes <https://example.energy.demo/document/MFG-GBX-17-R1> ;
+    energy:temperatureReviewThreshold 85.0 ;
+    energy:validFrom "2026-06-01T00:00:00+00:00"^^xsd:dateTime .
+
+<https://example.energy.demo/record/WO-9001> a energy:WorkOrder ;
+    prov:wasDerivedFrom <urn:synthetic:sap:work-orders> ;
+    energy:concernsAsset <https://example.energy.demo/asset/WT-01> ;
+    energy:status "open" ;
+    energy:workOrderId "WO-9001" .
+
+<https://example.energy.demo/record/WO-9002> a energy:WorkOrder ;
+    prov:wasDerivedFrom <urn:synthetic:sap:work-orders> ;
+    energy:concernsAsset <https://example.energy.demo/asset/WT-02> ;
+    energy:status "open" ;
+    energy:workOrderId "WO-9002" .
+
+<https://example.energy.demo/record/WO-9003> a energy:WorkOrder ;
+    prov:wasDerivedFrom <urn:synthetic:sap:work-orders> ;
+    energy:concernsAsset <https://example.energy.demo/asset/WT-03> ;
+    energy:status "closed" ;
+    energy:workOrderId "WO-9003" .
+
+<https://example.energy.demo/record/obs-WT-01-temperature_c> a energy:Observation ;
+    prov:wasDerivedFrom <urn:synthetic:snowflake:telemetry> ;
+    energy:metric "temperature_c" ;
+    energy:observedAsset <https://example.energy.demo/asset/WT-01> ;
+    energy:observedAt "2026-08-28T08:00:00+00:00"^^xsd:dateTime ;
+    energy:unit "C" ;
+    energy:value 96.0 .
+
+<https://example.energy.demo/record/obs-WT-02-vibration_mm_s> a energy:Observation ;
+    prov:wasDerivedFrom <urn:synthetic:snowflake:telemetry> ;
+    energy:metric "vibration_mm_s" ;
+    energy:observedAsset <https://example.energy.demo/asset/WT-02> ;
+    energy:observedAt "2026-08-28T08:05:00+00:00"^^xsd:dateTime ;
+    energy:unit "mm/s" ;
+    energy:value 12.4 .
+
+<https://example.energy.demo/record/obs-WT-03-temperature_c> a energy:Observation ;
+    prov:wasDerivedFrom <urn:synthetic:snowflake:telemetry> ;
+    energy:metric "temperature_c" ;
+    energy:observedAsset <https://example.energy.demo/asset/WT-03> ;
+    energy:observedAt "2026-08-28T08:10:00+00:00"^^xsd:dateTime ;
+    energy:unit "C" ;
+    energy:value 72.0 .
+
+<https://example.energy.demo/asset/WT-01-gearbox> a energy:Component ;
+    energy:componentType "gearbox" .
+
+<https://example.energy.demo/asset/WT-02-gearbox> a energy:Component ;
+    energy:componentType "gearbox" .
+
+<https://example.energy.demo/asset/WT-03-gearbox> a energy:Component ;
+    energy:componentType "gearbox" .
+
+<https://example.energy.demo/asset/WT-04> a energy:Asset ;
+    rdfs:label "Wind turbine WT-04" ;
+    energy:assetId "WT-04" ;
+    energy:hasComponent <https://example.energy.demo/asset/WT-04-gearbox> .
+
+<https://example.energy.demo/asset/WT-04-gearbox> a energy:Component ;
+    energy:componentType "gearbox" .
+
+<https://example.energy.demo/asset/WT-05> a energy:Asset ;
+    rdfs:label "Wind turbine WT-05" ;
+    energy:assetId "WT-05" ;
+    energy:hasComponent <https://example.energy.demo/asset/WT-05-gearbox> .
+
+<https://example.energy.demo/asset/WT-05-gearbox> a energy:Component ;
+    energy:componentType "gearbox" .
+
+<https://example.energy.demo/asset/WT-06> a energy:Asset ;
+    rdfs:label "Wind turbine WT-06" ;
+    energy:assetId "WT-06" ;
+    energy:hasComponent <https://example.energy.demo/asset/WT-06-gearbox> .
+
+<https://example.energy.demo/asset/WT-06-gearbox> a energy:Component ;
+    energy:componentType "gearbox" .
+
+<https://example.energy.demo/asset/WT-07> a energy:Asset ;
+    rdfs:label "Wind turbine WT-07" ;
+    energy:assetId "WT-07" ;
+    energy:hasComponent <https://example.energy.demo/asset/WT-07-gearbox> .
+
+<https://example.energy.demo/asset/WT-07-gearbox> a energy:Component ;
+    energy:componentType "gearbox" .
+
+<https://example.energy.demo/asset/WT-08> a energy:Asset ;
+    rdfs:label "Wind turbine WT-08" ;
+    energy:assetId "WT-08" ;
+    energy:hasComponent <https://example.energy.demo/asset/WT-08-gearbox> .
+
+<https://example.energy.demo/asset/WT-08-gearbox> a energy:Component ;
+    energy:componentType "gearbox" .
+
+<https://example.energy.demo/asset/WT-09> a energy:Asset ;
+    rdfs:label "Wind turbine WT-09" ;
+    energy:assetId "WT-09" ;
+    energy:hasComponent <https://example.energy.demo/asset/WT-09-gearbox> .
+
+<https://example.energy.demo/asset/WT-09-gearbox> a energy:Component ;
+    energy:componentType "gearbox" .
+
+<https://example.energy.demo/asset/WT-10> a energy:Asset ;
+    rdfs:label "Wind turbine WT-10" ;
+    energy:assetId "WT-10" ;
+    energy:hasComponent <https://example.energy.demo/asset/WT-10-gearbox> .
+
+<https://example.energy.demo/asset/WT-10-gearbox> a energy:Component ;
+    energy:componentType "gearbox" .
+
+<https://example.energy.demo/document/MFG-GBX-17-R1> a energy:DocumentRevision ;
+    prov:wasDerivedFrom <urn:synthetic:sharepoint:technical-guidance> ;
+    energy:appliesToComponentType "gearbox" ;
+    energy:documentId "MFG-GBX-17-R1" ;
+    energy:temperatureReviewThreshold 90.0 ;
+    energy:validFrom "2026-01-01T00:00:00+00:00"^^xsd:dateTime ;
+    energy:validTo "2026-06-01T00:00:00+00:00"^^xsd:dateTime .
+
+<https://example.energy.demo/asset/WT-01> a energy:Asset ;
+    rdfs:label "Wind turbine WT-01" ;
+    energy:assetId "WT-01" ;
+    energy:hasComponent <https://example.energy.demo/asset/WT-01-gearbox> .
+
+<https://example.energy.demo/asset/WT-02> a energy:Asset ;
+    rdfs:label "Wind turbine WT-02" ;
+    energy:assetId "WT-02" ;
+    energy:hasComponent <https://example.energy.demo/asset/WT-02-gearbox> .
+
+<https://example.energy.demo/asset/WT-03> a energy:Asset ;
+    rdfs:label "Wind turbine WT-03" ;
+    energy:assetId "WT-03" ;
+    energy:hasComponent <https://example.energy.demo/asset/WT-03-gearbox> .
+

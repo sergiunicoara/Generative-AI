@@ -1,0 +1,104 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Energy Asset Intelligence — Architecture</title>
+<style>
+:root {
+  --navy:#0b2035; --navy-2:#123c5f; --blue:#1769aa; --sky:#68d6ff;
+  --teal:#16a47c; --amber:#ffcb6b; --red:#d94d44; --paper:#f4f7fa;
+  --raised:#fff; --ink:#102235; --muted:#627789; --line:#d5e1ec;
+  --accent:#1769aa; --semantic:#16a47c; --tenant:#7546c7;
+  --mono:ui-monospace,SFMono-Regular,Consolas,"Liberation Mono",monospace;
+  --display:Georgia,"Times New Roman",serif; --radius:8px;
+}
+:root[data-theme="dark"] { --paper:#071522; --raised:#10283c; --ink:#edf7ff; --muted:#abc0d0; --line:#26475f; --accent:#68d6ff; }
+*{box-sizing:border-box} html{scroll-behavior:smooth} body{margin:0;padding:48px 24px 96px;background:var(--paper);color:var(--ink);font-family:system-ui,-apple-system,"Segoe UI",sans-serif}
+.wrap{max-width:1180px;margin:auto} header{padding-bottom:32px;border-bottom:1px solid var(--line);margin-bottom:38px;position:relative}.eyebrow,.stage-label,.section-kicker{font:12px var(--mono);letter-spacing:.14em;text-transform:uppercase;color:var(--accent)}h1{font:600 clamp(34px,4.5vw,48px) var(--display);letter-spacing:-.02em;margin:9px 0 12px}.tagline{max-width:73ch;color:var(--muted);font-size:16px;line-height:1.62;margin:0}.tagline code,.scope-note code,.section-sub code{font:12px var(--mono);background:var(--raised);border:1px solid var(--line);padding:2px 5px;border-radius:4px;color:var(--ink)}
+.theme{position:absolute;right:0;top:0;border:1px solid var(--line);border-radius:999px;padding:7px 10px;background:var(--raised);color:var(--muted);cursor:pointer;font:12px var(--mono)}.legend{display:flex;flex-wrap:wrap;gap:17px;margin-top:20px;font:11.5px var(--mono);color:var(--muted)}.legend span{display:inline-flex;gap:6px;align-items:center}.swatch{height:10px;width:10px;border-radius:2px;display:inline-block}
+.hint{font:12px var(--mono);color:var(--muted);margin:0 0 13px}.scope-note{border-left:3px solid var(--accent);background:var(--raised);padding:12px 15px;line-height:1.65;max-width:100ch;margin-bottom:24px}.scope-note b{color:var(--accent)}
+.pipeline-scroll{overflow-x:auto;padding-bottom:8px;scrollbar-width:thin;scrollbar-color:var(--muted) transparent}.pipeline{display:grid;grid-template-columns:repeat(5,minmax(225px,1fr));min-width:1090px}.stage{padding:0 16px 8px;border-right:1px dashed var(--line);display:flex;flex-direction:column;gap:12px}.stage:first-child{padding-left:0}.stage:last-child{border:0}.stage-label{border-bottom:2px solid var(--ink);padding:0 0 10px;margin-bottom:3px;color:var(--muted)}.stage-label b{color:var(--ink)}
+.node{position:relative;padding:13px 15px;background:var(--raised);border:1px solid var(--line);border-radius:var(--radius);font:13px/1.48 var(--mono);cursor:help;outline:0;transition:.14s ease}.node:hover,.node:focus-visible{border-color:var(--accent);box-shadow:0 0 0 2px color-mix(in srgb,var(--accent) 17%,transparent)}.node::after{content:"?";position:absolute;right:9px;top:9px;width:14px;height:14px;border:1px solid var(--line);border-radius:50%;font-size:9px;display:grid;place-items:center;color:var(--muted)}.node .name{display:block;font-weight:700;color:var(--ink);padding-right:18px;margin-bottom:3px}.node .desc{color:var(--muted);font-size:12px}.source{border-left:3px solid var(--muted)}.semantic{border-left:3px solid var(--semantic)}.tenant{border-left:3px solid var(--tenant)}.safety{border-left:3px solid var(--amber)}
+.section{margin-top:48px}.section-title{font:600 28px var(--display);letter-spacing:-.01em;margin-bottom:8px}.section-sub{margin:0 0 19px;color:var(--muted);line-height:1.62;max-width:87ch}.evidence-card{background:var(--raised);border:1px solid var(--line);border-radius:var(--radius);overflow:hidden}.evidence-question{padding:20px 22px;background:linear-gradient(110deg,var(--navy),var(--navy-2));color:#fff;font-size:18px}.evidence-question mark{background:var(--amber);padding:2px 4px}.evidence-fields{display:grid;grid-template-columns:repeat(4,1fr)}.field{padding:15px;border-right:1px solid var(--line);border-top:1px solid var(--line)}.field:last-child{border-right:0}.k{display:block;font:10.5px var(--mono);letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin-bottom:6px}.v{font:13px var(--mono);color:var(--ink);word-break:break-word}.v.good{color:var(--semantic);font-weight:bold}.v.warn{color:#b56d00;font-weight:bold}
+.three-up{display:grid;grid-template-columns:repeat(3,1fr);gap:15px}.card{border:1px solid var(--line);border-radius:var(--radius);background:var(--raised);padding:19px}.card h3{font:600 18px var(--display);margin:0 0 8px}.card p{font-size:14px;line-height:1.6;color:var(--muted);margin:0}.card .tag{font:11px var(--mono);color:var(--accent);text-transform:uppercase;letter-spacing:.08em;margin-bottom:11px}.rejection{margin-top:14px;padding:9px 11px;border-radius:5px;background:#fff3e8;color:#9d4e13;font:12px var(--mono)}
+.stack{border:1px solid var(--line);border-radius:var(--radius);overflow:hidden;background:var(--raised)}.stack-row{display:grid;grid-template-columns:250px 1fr;border-bottom:1px solid var(--line)}.stack-row:last-child{border:0}.stack-row .lbl{padding:15px 18px;background:color-mix(in srgb,var(--accent) 7%,var(--raised));font:12.5px var(--mono);font-weight:bold;color:var(--ink)}.stack-row .body{padding:15px 18px;color:var(--muted);font-size:14px;line-height:1.6}.stack-row code{font:12px var(--mono);color:var(--ink)}
+footer{margin-top:45px;padding-top:18px;border-top:1px solid var(--line);display:flex;justify-content:space-between;gap:16px;color:var(--muted);font:11.5px var(--mono)}#tooltip{position:fixed;z-index:10;max-width:410px;white-space:pre-wrap;background:var(--navy);color:#eaf7ff;border:1px solid var(--sky);border-radius:7px;padding:14px 15px;font:12px/1.55 var(--mono);pointer-events:none;opacity:0;transition:opacity .1s}.src{display:block;margin-top:9px;padding-top:8px;border-top:1px solid #31526a;color:var(--sky)}#tooltip.visible{opacity:1}
+@media(max-width:720px){body{padding:28px 16px 64px}.theme{position:static;margin-top:14px}.evidence-fields,.three-up{grid-template-columns:1fr 1fr}.stack-row{grid-template-columns:1fr}footer{flex-direction:column}.field:nth-child(2n){border-right:0}}
+</style>
+</head>
+<body>
+<main class="wrap">
+  <header>
+    <button class="theme" type="button" aria-label="Toggle colour theme">◐ theme</button>
+    <div class="eyebrow">Architecture — as implemented</div>
+    <h1>Energy Asset Intelligence</h1>
+    <p class="tagline">Synthetic <code>SAP</code>, <code>Snowflake</code> and <code>SharePoint</code>-shaped records become an evidence-backed RDF graph. A version-controlled <code>SPARQL</code> query produces a tenant-scoped, advisory maintenance answer; SHACL validation and regression tests protect the semantic contract. The client-facing workspace exposes the answer first and its technical trail on demand.</p>
+    <div class="legend"><span><i class="swatch" style="background:var(--muted)"></i> source-shaped record</span><span><i class="swatch" style="background:var(--semantic)"></i> RDF evidence / semantic control</span><span><i class="swatch" style="background:var(--tenant)"></i> tenant-scoped boundary</span><span><i class="swatch" style="background:var(--amber)"></i> advisory safety boundary</span></div>
+  </header>
+
+  <p class="hint">Hover or focus a box for an implementation example.</p>
+  <p class="hint scope-note"><b>Implemented POC path:</b> deterministic SAP-shaped SQLite export → checked-in R2RML mapping → RDF materialisation → version-controlled SPARQL query → evidence-backed answer and UI. The data is synthetic and the output is advisory only: it does not control equipment or create a work order. Production connectors, a managed RDF store, and live operational integration are extension work.</p>
+
+  <div class="pipeline-scroll"><section class="pipeline" aria-label="Energy knowledge graph pipeline">
+    <div class="stage"><div class="stage-label"><b>01</b> · Sources</div>
+      <div class="node source" tabindex="0" data-example="SQLite table: asset(asset_id, asset_type, site)&#10;row: WT-01 | WindTurbine | North Sea Demonstration Wind Farm&#10;&#10;scripts/create_energy_demo_sqlite.py"><span class="name">SAP-shaped asset + work order export</span><span class="desc">asset inventory · WO-9001</span></div>
+      <div class="node source" tabindex="0" data-example="Observation: WT-01 gearbox temperature = 96 °C&#10;source_id: snowflake://telemetry/obs-1001&#10;&#10;graphrag/domains/energy/demo.py"><span class="name">Snowflake-shaped telemetry</span><span class="desc">time-stamped temperature observation</span></div>
+      <div class="node source" tabindex="0" data-example="MFG-GBX-17-R2&#10;effective_from: 2026-06-01&#10;gearbox_review_threshold: 85 °C&#10;source_id: sharepoint://bulletins/MFG-GBX-17-R2&#10;&#10;graphrag/domains/energy/demo.py"><span class="name">SharePoint-shaped bulletins</span><span class="desc">manufacturer rules + effective dates</span></div>
+    </div>
+    <div class="stage"><div class="stage-label"><b>02</b> · Semantic materialisation</div>
+      <div class="node semantic" tabindex="0" data-example="rr:logicalTable [ rr:tableName &quot;asset&quot; ]&#10;rr:subjectMap [ rr:template &quot;https://example.org/energy/asset/{asset_id}&quot; ]&#10;rr:predicateObjectMap [ rr:predicate energy:status ]&#10;&#10;ontology/mappings/energy-assets.r2rml.ttl"><span class="name">R2RML mapping contract</span><span class="desc">relational fields → stable RDF IRIs</span></div>
+      <div class="node" tabindex="0" data-example="EnergyDemoService(source_db=artifacts/energy-demo-sap.sqlite)&#10;→ validates mapping with r2rml_to_mapping&#10;→ materialises source records into RDF&#10;&#10;graphrag/domains/energy/demo.py"><span class="name">Source-backed materialisation</span><span class="desc">SQLite source is mapped before answering</span></div>
+      <div class="node semantic" tabindex="0" data-example="energy:concernsAsset&#10;joins WorkOrder.asset_id → Asset.asset_id&#10;&#10;ontology/mappings/energy-assets.r2rml.ttl"><span class="name">Semantic relationships</span><span class="desc">observation · bulletin · work order · asset</span></div>
+    </div>
+    <div class="stage"><div class="stage-label"><b>03</b> · RDF + governance</div>
+      <div class="node semantic" tabindex="0" data-example="Asset WT-01&#10;  observation: 96 °C&#10;  openWorkOrder: WO-9001&#10;  authoritative bulletin: MFG-GBX-17-R2&#10;  threshold: 85 °C&#10;&#10;artifacts/energy-demo-e2e.ttl"><span class="name">Evidence graph</span><span class="desc">facts retain their source identifiers</span></div>
+      <div class="node safety" tabindex="0" data-example="SHACL invalid candidate result:&#10;conforms: false&#10;missing: energy:value&#10;missing: energy:unit&#10;&#10;graphrag/domains/energy/demo.py"><span class="name">SHACL validation</span><span class="desc">rejects incomplete observations</span></div>
+      <div class="node tenant" tabindex="0" data-example="get_tenant() reads tenant only from the signed JWT claim.&#10;The request body cannot select a tenant.&#10;&#10;api/auth/dependencies.py"><span class="name">Signed tenant identity</span><span class="desc">browser/API token scopes each request</span></div>
+    </div>
+    <div class="stage"><div class="stage-label"><b>04</b> · Retrieval + answer</div>
+      <div class="node semantic" tabindex="0" data-example="SELECT ?asset ?temperature ?threshold ?bulletin ?workOrder&#10;WHERE { ... VALUES ?bulletinId { &quot;{{BULLETIN_ID}}&quot; } }&#10;&#10;evals/energy_demo/sparql/maintenance_review.rq"><span class="name">Version-controlled SPARQL</span><span class="desc">joins current bulletin, telemetry and open work</span></div>
+      <div class="node" tabindex="0" data-example="WT-01: 96 °C &gt; 85 °C&#10;bulletin: MFG-GBX-17-R2&#10;work order: WO-9001&#10;answer_source: version-controlled SPARQL query&#10;&#10;graphrag/domains/energy/demo.py"><span class="name">Evidence-backed advisory</span><span class="desc">priority answer + source evidence</span></div>
+      <div class="node safety" tabindex="0" data-example="insufficient_evidence returns a safe response for WT-04—WT-10:&#10;No maintenance conclusion. Further telemetry is required.&#10;&#10;graphrag/domains/energy/demo.py"><span class="name">No-evidence boundary</span><span class="desc">absence of evidence never becomes certainty</span></div>
+    </div>
+    <div class="stage"><div class="stage-label"><b>05</b> · Serving + verification</div>
+      <div class="node tenant" tabindex="0" data-example="GET /energy-demo&#10;tenant = Depends(get_tenant)&#10;tenant != energy-demo → 404&#10;&#10;api/routes/energy_demo.py"><span class="name">Tenant-scoped Graph API</span><span class="desc">HTML workspace + questions + RDF + validation</span></div>
+      <div class="node" tabindex="0" data-example="Client workspace:&#10;WT-01 review priority&#10;evidence cards&#10;expandable RDF/SPARQL/validation trace&#10;&#10;api/routes/energy_demo.py"><span class="name">Operations workspace</span><span class="desc">business answer first; technical trail on demand</span></div>
+      <div class="node semantic" tabindex="0" data-example="python scripts/run_energy_demo_e2e.py&#10;python -m pytest tests/unit/test_energy_demo.py -q&#10;→ 5 passed&#10;&#10;scripts/run_energy_demo_e2e.py"><span class="name">Regression coverage</span><span class="desc">mapping, answer, isolation, RDF and validation</span></div>
+    </div>
+  </section></div>
+
+  <section class="section"><div class="section-kicker">Anatomy of an advisory answer</div><div class="section-title">A maintenance recommendation carries its proof</div><p class="section-sub">The UI does not present a free-floating AI claim. It renders the decision alongside the current rule, observed value, open work context, source identifiers, and the query that combined them.</p>
+    <div class="evidence-card"><div class="evidence-question">Which asset needs maintenance review? <mark>WT-01</mark> is above the current gearbox review threshold.</div><div class="evidence-fields">
+      <div class="field"><span class="k">observation</span><span class="v">96 °C · obs-1001</span></div><div class="field"><span class="k">authoritative rule</span><span class="v">R2 · threshold 85 °C</span></div><div class="field"><span class="k">work context</span><span class="v">WO-9001 · open</span></div><div class="field"><span class="k">answer source</span><span class="v good">version-controlled SPARQL</span></div>
+    </div></div>
+  </section>
+
+  <section class="section"><div class="section-kicker">Safety boundaries</div><div class="section-title">Useful advice without pretending to be a control system</div><p class="section-sub">The POC makes the intended decision boundary explicit. It is designed to earn review confidence, not to bypass operations governance.</p><div class="three-up">
+    <div class="card"><div class="tag">Temporal correctness</div><h3>Rules change over time</h3><p>The historical scenario selects R1 at 90 °C before 1 June 2026 and R2 at 85 °C after that date. A recommendation has an effective-date context.</p></div>
+    <div class="card"><div class="tag">Evidence discipline</div><h3>Unknown stays unknown</h3><p>Assets with no sufficient telemetry are surfaced as evidence gaps. The system requests further evidence rather than fabricating maintenance risk.</p><div class="rejection">No maintenance conclusion without evidence</div></div>
+    <div class="card"><div class="tag">Human control</div><h3>Advisory, not autonomous</h3><p>The workspace identifies a review priority. It does not issue a command to equipment, approve work, or mutate source systems.</p></div>
+  </div></section>
+
+  <section class="section"><div class="section-kicker">Layering</div><div class="section-title">Dependency direction and operational responsibility</div><p class="section-sub">The serving layer stays thin. RDF materialisation, semantic querying, validation, and answer construction are separated from the API and presentation layer.</p><div class="stack">
+    <div class="stack-row"><div class="lbl">api/routes/energy_demo.py</div><div class="body">Tenant-gated routes expose the dashboard, questions, answer, RDF export, and validation result. It shapes responses; semantic logic lives below it.</div></div>
+    <div class="stack-row"><div class="lbl">graphrag/domains/energy/demo.py</div><div class="body">Deterministic EnergyDemoService: materialises source-backed RDF, selects the applicable bulletin, executes the committed query and assembles evidence-backed advisory responses.</div></div>
+    <div class="stack-row"><div class="lbl">ontology/mappings/energy-assets.r2rml.ttl</div><div class="body">Checked-in mapping contract for asset and work-order source records, including <code>energy:status</code> and the asset relationship join.</div></div>
+    <div class="stack-row"><div class="lbl">evals/energy_demo/sparql/maintenance_review.rq</div><div class="body">Version-controlled semantic query that retrieves the affected asset, observed temperature, authoritative threshold, bulletin and open work order.</div></div>
+    <div class="stack-row"><div class="lbl">scripts/run_energy_demo_e2e.py</div><div class="body">Repeatable proof path: creates the synthetic export, materialises RDF, runs the advisory, exports Turtle and checks the candidate validation result.</div></div>
+    <div class="stack-row"><div class="lbl">tests/unit/test_energy_demo.py</div><div class="body">Regression tests cover current and historical answers, tenant isolation, RDF serialisation, SHACL rejection, and source-backed R2RML/SPARQL behaviour.</div></div>
+  </div></section>
+
+  <footer><span>ai-knowledge-graph-platform · Energy Asset Intelligence POC</span><span>Synthetic data · advisory demonstration · architecture reflects implemented workflow</span></footer>
+</main>
+<div id="tooltip" role="tooltip"></div>
+<script>
+(() => { const root=document.documentElement, button=document.querySelector('.theme'), tooltip=document.querySelector('#tooltip');
+  button.addEventListener('click',()=>root.dataset.theme=root.dataset.theme==='dark'?'light':'dark');
+  const source=(text)=>{const lines=text.split('\n'); const last=lines.at(-1).trim(); return /^[\w./-]+\.(py|ttl|rq)$/.test(last)?{body:lines.slice(0,-1).join('\n'),src:last}:{body:text,src:''}};
+  const show=(el)=>{const value=source(el.dataset.example); tooltip.textContent=value.body; if(value.src){const src=document.createElement('span');src.className='src';src.textContent=value.src;tooltip.append(src)} tooltip.classList.add('visible'); const r=el.getBoundingClientRect(), w=tooltip.offsetWidth||410; tooltip.style.left=Math.max(12,Math.min(window.innerWidth-w-12,r.left))+'px'; tooltip.style.top=Math.max(12,r.top-tooltip.offsetHeight-12)+'px'};
+  document.querySelectorAll('.node').forEach(el=>{el.addEventListener('mouseenter',()=>show(el));el.addEventListener('focus',()=>show(el));el.addEventListener('mouseleave',()=>tooltip.classList.remove('visible'));el.addEventListener('blur',()=>tooltip.classList.remove('visible'))});
+})();
+</script>
+</body>
+</html>

@@ -27,8 +27,9 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--as-of", default=None, help="Historical ISO-8601 instant")
     parser.add_argument("--export-turtle", type=Path, help="Write generated RDF Turtle to this path")
+    parser.add_argument("--source-sqlite", type=Path, help="Materialize the R2RML-mapped SQLite source into the RDF graph")
     args = parser.parse_args()
-    service = EnergyDemoService()
+    service = EnergyDemoService(source_db=args.source_sqlite)
     if args.export_turtle:
         args.export_turtle.parent.mkdir(parents=True, exist_ok=True)
         args.export_turtle.write_text(service.export_turtle(), encoding="utf-8")

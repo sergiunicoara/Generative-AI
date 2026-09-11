@@ -58,9 +58,9 @@ Every `RELATES_TO` edge carries a `relation` property (UPPER_SNAKE_CASE). The
 | Relation | Domain | Range | Notes |
 |---|---|---|---|
 | `CEO_OF` | PERSON | ORG | Functional: one target per source (per doc scope) |
-| `FOUNDED` | PERSON, ORG | ORG, PRODUCT | |
+| `FOUNDED` | PERSON | ORG, PRODUCT | Domain is PERSON only — `ORG FOUNDED ...` is not an allowed pair and is downgraded to `RELATED_TO` |
 | `FOUNDED_BY` | ORG, PRODUCT | PERSON | Inverse of FOUNDED (auto-inferred) |
-| `OWNS` | PERSON, ORG | ORG, PRODUCT | |
+| `OWNS` | PERSON→ORG, ORG→ORG, ORG→PRODUCT | | `PERSON OWNS PRODUCT` is not an allowed pair and is downgraded to `RELATED_TO` |
 | `ACQUIRED` | ORG | ORG, PRODUCT | |
 | `MANUFACTURES` | ORG | PRODUCT | Functional |
 | `LAUNCHED` | ORG, PERSON | PRODUCT | |

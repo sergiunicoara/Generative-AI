@@ -16,6 +16,11 @@ The existing records set the baseline:
 - [ADR-0004](adr/0004-groq-over-gemini-for-text-generation.md) — DeepSeek large generation, Groq fast routing/fallback, OpenAI embeddings
 - [ADR-0005](adr/0005-redis-as-cross-process-result-store.md) — Redis as cross-process result store
 - [ADR-0006](adr/0006-dual-llm-architecture.md) — Dual-LLM architecture: fast routing + quality synthesis
+- [ADR-0007](adr/0007-capability-gated-neo4j-vector-search.md) — Capability-gated Neo4j vector search
+- [ADR-0008](adr/0008-adaptive-retrieval-routing.md) — Measured adaptive retrieval routing
+- [ADR-0009](adr/0009-agent-platform-trust-boundaries.md) — Agent platform trust boundaries
+- [ADR-0010](adr/0010-audience-bound-access-tokens.md) — Audience-bound access tokens for API and MCP
+- [ADR-0011](adr/0011-jwt-key-rotation-and-revocation.md) — JWT key rotation and token revocation
 
 ### When to write an ADR
 
@@ -213,7 +218,7 @@ Some changes must not be merged or deployed without a human decision — automat
 
 | Trigger | Why human judgment is needed |
 |---|---|
-| Eval gate failure (`<9/13` automotive, `<28/39` aerospace) | Decide whether to revert, fix, or accept a permanent regression |
+| Eval gate failure (`<10/13` automotive, `<28/34` aerospace) | Decide whether to revert, fix, or accept a permanent regression |
 | Config threshold change (`alias_embedding_threshold`, `rerank_top_k`, `chunk_overlap`, etc.) | All have regression history — require an A/B eval result before merging |
 | Contradiction flagged between two documents | Which document supersedes which is a domain/legal call |
 | Assigning `authority_level` above `INFORMAL` (level 4) | Marking a document `AUTHORITATIVE` (level 1) changes confidence weighting across the whole tenant |

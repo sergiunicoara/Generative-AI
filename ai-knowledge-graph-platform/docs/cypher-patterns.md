@@ -1,8 +1,16 @@
 # Cypher Patterns
 
-Production Cypher queries used in the knowledge graph layer. Each pattern addresses
-a specific retrieval, reasoning, or compliance challenge that arises in multi-document
-enterprise knowledge graphs.
+**These are illustrative simplifications, not verbatim production queries.**
+Every pattern below is faithful to the *shape* of the reasoning it explains,
+but the real implementations add caps, quarantine filters, bitemporal
+boundaries, tenant scoping, and semantic-ranking branches this doc omits for
+readability. Where a pattern diverges from the real query in a way that
+matters operationally, the function pointer below says so explicitly — read
+the cited function for the exact current Cypher before copy-pasting into a
+production incident.
+
+Each pattern addresses a specific retrieval, reasoning, or compliance
+challenge that arises in multi-document enterprise knowledge graphs.
 
 ---
 
@@ -15,6 +23,10 @@ to find evidence distributed across separate documents.
 -- Find all chunks reachable from seed chunks up to `hops` RELATES_TO steps,
 -- weighted by path confidence and path length.
 -- Used in: graphrag/graph/neo4j_client.py → get_multihop_chunks()
+-- Real query differs: traversal is UNDIRECTED (-[:RELATES_TO*1..hops]-, no
+-- arrow), has a per-seed LIMIT plus an outer total LIMIT, quarantine-filters
+-- every node on the path (not just the far entity), and optionally blends
+-- path score with vector.similarity.cosine when a query embedding is given.
 
 MATCH (c:Chunk)-[:MENTIONS]->(e:Entity {tenant: $tenant})
 WHERE c.id IN $seed_chunk_ids
@@ -59,6 +71,9 @@ overwrite the state of knowledge at a prior date.
 -- VT  = when the fact was true in the real world (user-specified)
 -- TT  = when the fact was recorded in the database (audit cut-off)
 -- Used in: graphrag/graph/bitemporal.py → as_of_entities()
+-- Real query differs: valid_to bound is exclusive (e.valid_to > $vt, not
+-- >=), and both this and the edge query below filter out quarantined
+-- entities/edges (NOT e.quarantined = true) — not shown here.
 
 MATCH (e:Entity)
 WHERE e.tenant = $tenant
@@ -76,6 +91,13 @@ ORDER BY e.name
 Use only source-observed links for link-dependent multi-hop retrieval. The
 application additionally injects the shared ACL predicate for `source`, `link`,
 and `target` before returning target chunk text.
+
+Simplified from `get_linked_document_chunks()`
+(`graphrag/graph/neo4j_client.py`) — the real query also applies
+`valid_at`/`transaction_at` bitemporal filtering, ranks semantically via
+`query_embedding`/`vector.similarity.cosine` when supplied, and orders by
+`semantic_score DESC, link.observed_at DESC` (not just `observed_at DESC`,
+and not a hardcoded `<= datetime()`).
 
 ```cypher
 UNWIND $seed_chunk_ids AS seed_id
@@ -170,7 +192,9 @@ requirements. Used by `ContradictionDetector._detect_functional_violations()`.
 
 MATCH (s:Entity)-[r:RELATES_TO {relation: $rel}]->(t:Entity)
 WHERE r.source_doc_ids IS NOT NULL
-  AND ($tenant = 'default' OR s.tenant = $tenant)
+  AND s.tenant = $tenant
+  -- Real query in _detect_functional_violations() always filters tenant
+  -- unconditionally — there is no 'default' bypass; shown correctly here.
 
 WITH s.name AS src,
      collect(DISTINCT t.name)  AS targets,
@@ -208,8 +232,13 @@ CALL db.index.vector.queryNodes(
     $query_embedding
 ) YIELD node AS c, score
 
-WHERE ($tenant = 'default' OR c.tenant = $tenant)
-  AND NOT c.summary STARTS WITH '[fallback:'   -- exclude degraded communities
+WHERE c.tenant = $tenant
+-- Fallback-community exclusion ('[fallback:' summaries) is NOT in Cypher —
+-- it happens in Python, in global_search.py, after this query returns.
+-- The real vector_search_communities() also has four separate query
+-- branches (filtered-vector-index vs. over-fetch, bitemporal vs. plain) to
+-- work around a tenant-starvation bug (tasks/lessons.md A146) — this is the
+-- simplest of the four.
 
 RETURN c.id        AS community_id,
        c.summary   AS summary,
@@ -264,8 +293,12 @@ WHERE e1.id < e2.id
   AND NOT (e1)<-[:ALIAS_OF]-()   -- e1 has no aliases (not a canonical with known variants)
 
 WITH e1, e2,
-     gds.similarity.cosine(e1.embedding, e2.embedding) AS sim
+     vector.similarity.cosine(e1.embedding, e2.embedding) AS sim
 WHERE sim >= $similarity_threshold   -- e.g. 0.90
+-- Uses the built-in vector.similarity.cosine, not the Graph Data Science
+-- plugin's gds.similarity.cosine — every actual cosine-similarity call site
+-- in this codebase (neo4j_client.py, alias_registry.py) uses the built-in,
+-- consistent with this doc's own APOC/plugin-free philosophy (Pattern 4).
 
 RETURN e1.name AS name_a, e2.name AS name_b,
        e1.type AS type, round(sim, 4) AS cosine_similarity

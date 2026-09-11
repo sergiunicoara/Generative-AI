@@ -5,7 +5,7 @@ One-off development helper scripts — not part of the production pipeline.
 | Script | Purpose |
 |--------|---------|
 | `check_db.py` | Print entity/chunk/relation counts from a live Neo4j instance |
-| `check_embed.py` | Verify embedding dimensions for all entities |
+| `check_embed.py` | Smoke-test the Gemini embed API on one hardcoded string, print the resulting vector's dimension (legacy — Gemini is no longer on the default embedding path; see ADR 0004) |
 | `check_key.py` | Print first/last chars of the loaded Google API key (legacy — Gemini is no longer on the default path; see ADR 0004) |
 | `diagnose_aerospace_retrieval.py` | Trace retrieval scoring for a single aerospace query |
 | `diagnose_automotive_retrieval.py` | Trace retrieval scoring for a single automotive query |

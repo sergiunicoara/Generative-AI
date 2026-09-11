@@ -534,8 +534,8 @@ demonstrable:
 10. A real query or agent action — not just a standalone API call — actually
     produces a Context Graph trace. **Met**: every worker-path
     `HybridRetriever.retrieve_and_answer` call with referenced chunks now
-    records one (`hybrid_retriever.py:93-160,322,346`), fail-open, since
-    2026-07-30.
+    records one (`_record_context_trace`, `hybrid_retriever.py:172`, called
+    from `:849` and `:908`), fail-open, since 2026-07-30.
 
 ### Exit claim
 
@@ -694,7 +694,11 @@ production value, not trend visibility.
   relies on.
 
 - **Async rate limiting.** `api/limiter.py` was rebuilt on `limits.aio`;
-  slowapi is removed from the dependency set. Its Limiter is synchronous with
+  no code imports `slowapi` anymore (`tests/unit/test_rate_limit_identity.py`
+  asserts this). It is gone from the root `requirements.txt`, but
+  `requirements/api.txt` — the file the API Docker image actually builds
+  from — still pins `slowapi>=0.1.9` as of this writing; that's drift in the
+  per-image lock file, not yet cleaned up. Its Limiter is synchronous with
   no async variant in 0.1.x, so every Redis-backed check blocked the event loop
   — tolerable only while six low-rate endpoints were limited, and exactly wrong
   at the load where limiting matters. Enforcement is now a FastAPI dependency

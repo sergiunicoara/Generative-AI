@@ -13,7 +13,7 @@ An alternative name for an entity that refers to the same real-world thing.
 
 **Example:** "SpaceX", "Space Exploration Technologies", and "Space Exploration Corp." are all aliases of the same organisation entity.
 
-**In this project:** `graphrag/graph/alias_registry.py` — the registry stores aliases in Neo4j as `(:Alias {value})-[:ALIAS_OF]->(:Entity)` nodes. Resolution runs in 4 stages: exact match → normalized match → embedding similarity → human review queue.
+**In this project:** `graphrag/graph/alias_registry.py` — the registry stores aliases in Neo4j as `(:Alias {value})-[:ALIAS_OF]->(:Entity)` nodes. Resolution runs exact → normalized → fuzzy (rapidfuzz) → embedding similarity, each with a lower "ambiguous" band that routes to a review queue rather than a hard match/miss; see [docs/entity-resolution.md](entity-resolution.md) for the full pipeline.
 
 ---
 
@@ -105,7 +105,7 @@ A contiguous segment of a document that fits within an LLM's context window. Doc
 
 **Example:** A 20-page regulatory document is split into ~40 chunks of 512 tokens each. Each chunk is embedded and stored separately, with a link back to the parent document.
 
-**In this project:** `graphrag/core/models.py: Chunk` — has fields: `id`, `document_id`, `text`, `chunk_index`, `embedding`, `token_count`. Created by `graphrag/ingestion/chunker.py`.
+**In this project:** `graphrag/core/models.py: Chunk` — has fields: `id`, `document_id`, `text`, `chunk_index`, `embedding`, `metadata`, `tenant`. No dedicated `token_count` field; a token count would live inside `metadata` if computed at all. Created by `graphrag/ingestion/chunker.py`.
 
 ---
 
@@ -121,7 +121,7 @@ A dense cluster of entities in the graph — nodes that are more connected to ea
 ### Community summary
 An LLM-generated natural language summary of a community's entities and their relationships. Used as a high-level context source in global search.
 
-**In this project:** `graphrag/graph/community_summarizer.py` — generates summaries using `get_llm()` (Groq by default, DeepSeek fallback; provider overrides are configuration-driven). Stored as `Community.summary` in Neo4j.
+**In this project:** `graphrag/graph/community_summarizer.py` — generates summaries using `get_llm()` (default chain Cerebras → DeepSeek → Groq; provider overrides are configuration-driven). Stored as `Community.summary` in Neo4j.
 
 ---
 
@@ -130,7 +130,7 @@ A float [0.0, 1.0] representing how certain the system is that a relation is cor
 
 **Example:** "FAA-AD-2024-01-02 supersedes FAA-AD-2022-03-07" — explicit statement → confidence 0.95. "The 2024 directive appears to update the 2022 guidance" — implication → confidence 0.75.
 
-**In this project:** Extracted by the primary LLM (Groq via `get_llm()`, DeepSeek fallback) in the JSON output. Clamped to [0,1] in `graphrag/ingestion/extractor.py`. Merged with Bayesian accumulation in `merge_relation`. Decays per hop for inferred edges (default decay 0.95).
+**In this project:** Extracted by the primary LLM (`get_llm()`, default chain Cerebras → DeepSeek → Groq) in the JSON output. Clamped to [0,1] in `graphrag/ingestion/extractor.py`. Merged with Bayesian accumulation in `merge_relation`. Decays per hop for inferred edges (dataclass default `confidence_decay = 0.9`, `graphrag/graph/inference_engine.py`; individual rules override it — e.g. `subsidiary_transitivity` uses 0.85, `located_in_part_of` uses 0.8).
 
 ---
 
@@ -191,7 +191,7 @@ A message queue that receives messages that failed processing after the maximum 
 
 **Example:** A malformed document crashes the ingestion worker on 3 attempts. Rather than blocking the queue, the message moves to `graphrag.ingest.queue.dlq` for manual investigation.
 
-**In this project:** RabbitMQ DLQ per queue, configured in `workers/ingestion_worker.py`. Check via RabbitMQ management UI at `localhost:15672`.
+**In this project:** RabbitMQ DLQ per queue, configured in `graphrag/messaging/rabbitmq_client.py`. Check via RabbitMQ management UI at `localhost:15672`.
 
 ---
 
@@ -234,7 +234,7 @@ A discrete, named concept extracted from text — a person, organization, produc
 ### Entity resolution
 The process of determining that multiple textual mentions refer to the same real-world entity, and merging them into a canonical node. Also called entity disambiguation or record linkage.
 
-**In this project:** `graphrag/graph/alias_registry.py` — 4-stage pipeline. See full explanation in the defensibility drill, Q6.
+**In this project:** `graphrag/graph/alias_registry.py` — multi-stage pipeline. See [docs/entity-resolution.md](entity-resolution.md) for the full explanation, including the ambiguous-match review queue.
 
 ---
 
@@ -265,7 +265,7 @@ A technique for combining ranked lists from different retrieval methods (e.g., v
 
 **Example:** A chunk ranked 3rd by vector ANN and 1st by BM25 gets a higher fused score than one ranked 1st by vector only. This rewards results that appear consistently across multiple methods.
 
-**In this project:** `graphrag/retrieval/hybrid_retriever.py`. Stage 1+2 output is fused before cross-encoder reranking.
+**In this project:** `graphrag/retrieval/bm25_search.py` (`_reciprocal_rank_fusion()`, `RRF_K = 60`), invoked from `graphrag/retrieval/local_search.py`. Stage 1+2 output is fused before cross-encoder reranking; `hybrid_retriever.py` is the higher-level orchestrator that combines local+global search, not where the fusion itself runs.
 
 ---
 
@@ -276,14 +276,14 @@ A type of graph neural network that assigns different attention weights to diffe
 
 **Example:** Entity "G-ABCD" has edges to "FAA-AD-2024-01-02" (high attention — it's directly affected) and "Boeing 737 History" (lower attention — only loosely related). The GAT selectively amplifies the more relevant neighbors.
 
-**In this project:** `graphrag/graph/gnn_scorer.py` — implements both GCN and GAT. Selectable via config `gnn_type: gat`. The GAT implementation is lightweight and zero-shot: it does not train attention weights, but computes them from cosine similarity between entity embeddings already stored in Neo4j. For each node `i`, it scores all neighbours `j` in `N(i) ∪ {i}` with `cos(h_i, h_j)`, applies a softmax across those scores, then aggregates `h'_i = Σ_j α_ij h_j`. That means a node keeps its own embedding via the self-loop, but more similar neighbours get more influence.
+**In this project:** `graphrag/graph/gnn_scorer.py` — implements both GCN and GAT. **Default GNN type** (`config/settings.yml: gnn_type: gat`, `GNNScorer` default `gnn_type: str = "gat"`). The GAT implementation is lightweight and zero-shot: it does not train attention weights, but computes them from cosine similarity between entity embeddings already stored in Neo4j. For each node `i`, it scores all neighbours `j` in `N(i) ∪ {i}` with `cos(h_i, h_j)`, applies a softmax across those scores, then aggregates `h'_i = Σ_j α_ij h_j`. That means a node keeps its own embedding via the self-loop, but more similar neighbours get more influence.
 
 ---
 
 ### GCN (Graph Convolutional Network)
 A type of graph neural network that aggregates information from all neighbors with equal weight, using symmetric normalization.
 
-**In this project:** Default GNN type in `graphrag/graph/gnn_scorer.py`. Lighter than GAT; use GAT when neighbour selectivity matters. The code adds self-loops, computes `A_hat = A + I`, builds `D_hat^(-1/2) A_hat D_hat^(-1/2)`, then applies message passing as `H' = ReLU(A_norm H)` for intermediate layers. The last layer skips ReLU so cosine similarity to the query can stay signed before final clipping.
+**In this project:** Available in `graphrag/graph/gnn_scorer.py`, but GAT is the default (`gnn_type: gat`) — select GCN explicitly via config when neighbour selectivity doesn't matter and the lighter symmetric-normalization pass is preferred. The code adds self-loops, computes `A_hat = A + I`, builds `D_hat^(-1/2) A_hat D_hat^(-1/2)`, then applies message passing as `H' = ReLU(A_norm H)` for intermediate layers. The last layer skips ReLU so cosine similarity to the query can stay signed before final clipping.
 
 ---
 
@@ -409,7 +409,7 @@ A structured representation of entities and the relationships between them, stor
 (Boeing 737-800)    -[MANUFACTURED_BY]-> (Boeing)
 ```
 
-**In this project:** Stored in Neo4j. Entity nodes with typed relations. 51 modules in `graphrag/graph/` operate on the graph.
+**In this project:** Stored in Neo4j. Entity nodes with typed relations. 60 modules in `graphrag/graph/` operate on the graph.
 
 ---
 
@@ -525,7 +525,7 @@ The record of where a fact came from — which source document, which extraction
 
 **Example:** Edge `SUPERSEDES` between two ADs has properties: `source_doc_id="ad-compliance-check-2024-03"`, `extraction_model="llama-3.3-70b"`, `extracted_at=2026-05-31T12:00:00Z`.
 
-**In this project:** Every `RELATES_TO` edge stores `source_doc_id`, `source_doc_ids` (list for Bayesian merges), `extraction_model`, `prompt_version`, `extracted_at`. Queried via `GET /graph/entities/{id}/provenance`.
+**In this project:** Every `RELATES_TO` edge stores `source_doc_id`, `source_doc_ids` (list for Bayesian merges), `extraction_model`, `prompt_version`, `extracted_at`. No dedicated provenance-by-id REST endpoint exists today — query this data directly via Cypher (see `docs/cypher-patterns.md`) or through the SPARQL/RDF export (`POST /kg/sparql`, `scripts/export_rdf.py`).
 
 ### PROV-O
 
@@ -572,7 +572,7 @@ A W3C standard for representing knowledge as subject-predicate-object triples. T
 ### Reranking
 The process of re-scoring an initial set of retrieved documents with a more expensive but more accurate model. Trades query-time cost for precision.
 
-**In this project:** Stage 3 — cross-encoder `ms-marco-MiniLM-L-6-v2`. Takes top 50 chunks from stages 1+2, re-ranks to top 20 for subsequent stages.
+**In this project:** Stage 3 — cross-encoder `ms-marco-MiniLM-L-6-v2`. Takes the top `local_top_k` chunks from stages 1+2 (default 10), re-ranks to `rerank_top_k` for subsequent stages (default 5 — "validated baseline, precision 0.907 measured at this value"; some tenant profiles override to 8). Not 50/20.
 
 ---
 

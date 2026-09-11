@@ -43,6 +43,26 @@ Extracted entity name (raw LLM output)
    └─────────────────────────────┘
 ```
 
+**This diagram simplifies a real third outcome: ambiguous → review queue.**
+Stage 2 and Stage 3 aren't pure match/no-match — each has a band below its
+hard-match threshold that still isn't a clean miss:
+
+- Stage 2 (fuzzy): scores in `[review_fuzzy_min, alias_fuzzy_threshold)`
+  (default `[70, 85)`) return an `AmbiguousMatch`, not a hard match or miss.
+- Stage 3 (embedding): scores in `[review_embedding_min, alias_embedding_threshold)`
+  (default `[0.85, 0.92)`) do the same, via a separate method
+  (`find_candidate_by_embedding()`) from the hard-match method
+  (`find_duplicate_by_embedding()`).
+
+Both bands route the entity into a review queue in `graph_writer.py`, gated
+by `ingestion.review_queue_enabled` (default `true`), then **fail open** —
+ingestion proceeds as if the entity were new rather than blocking. This is
+what the benchmark below calls "one ambiguous supplier name routed to
+review/quarantine." Stage 1 also runs two lookup variants not shown above —
+a regulatory prefix-stripped match (e.g. `"EASA AD 2022-0201"` →
+`"AD 2022-0201"`) and a Romanian noun-stem fallback — before falling through
+to Stage 2.
+
 ---
 
 ## Reproducible Synthetic Supply-Chain Check
@@ -245,7 +265,7 @@ contradiction. It's now tracked as a trust signal (`independent_source_count`
 / `corroborated_edge_rate`) rather than an open conflict.
 
 Conflicts are persisted as `Conflict` nodes with `status: "open"` and surfaced via
-the `/corrections/list-conflicts` API for manual or authority-based resolution.
+the `GET /corrections/conflicts` API for manual or authority-based resolution.
 Retrieval also checks for open conflicts on entities in the result set
 (`ContradictionDetector.get_open_conflicts_for_entities`) and the answer prompt
 is warned when context includes a disputed fact, gated by

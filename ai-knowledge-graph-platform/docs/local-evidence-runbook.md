@@ -76,7 +76,7 @@ quality or customer accuracy.
 ## 5. Controlled-query model cost
 
 ```powershell
-python scripts/measure_controlled_query_cost.py artifacts/mcp-graph-fact-load.json --output artifacts/controlled-query-cost.json
+python scripts/measure_controlled_query_cost.py --load-report artifacts/mcp-graph-fact-load.json --output artifacts/controlled-query-cost.json
 ```
 
 `query_graph_facts` is deterministic and uses no model. This report therefore

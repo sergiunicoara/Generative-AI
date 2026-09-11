@@ -16,10 +16,16 @@ The specification-to-implementation runner is documented in
 - `mcp-operations.md` — authenticated remote MCP deployment and incident response
 - `local-evidence-runbook.md` — reproducible local MCP, retrieval, write, cost, and load evidence
 - `public-local-evaluation-report.md` — bounded results from the checked-in synthetic local run
-- `entity-resolution.md`, `ontology-model.md`, `cypher-patterns.md` — focused KG references
+- `entity-resolution.md`, `ontology-model.md`, `ontology-governance.md`,
+  `cypher-patterns.md` — focused KG references
 - `enterprise-content-governance.md` — provider-neutral ACL, SharePoint sync,
   explicit document-link topology, and late-target reconciliation
+- `intelligence-ingestion.md` — provenance and source-authority model for
+  ingested intelligence
 - `performance-metrics-inventory.md` — metric definitions and verification queries
+- `slo.md` — service-level indicators and objectives
+- `gcp-production-deployment.md` — Terraform/GKE production deployment path
+- `CONTRIBUTING.md` — branch, review, and eval-gate process
 - `../monitoring/prometheus/alerts.yml` — alerting rules, with the action an
   operator should take in each rule's annotations
 - `adr/` — architecture decisions, including the Context Graph decision trace,

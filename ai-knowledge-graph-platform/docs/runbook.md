@@ -15,13 +15,17 @@ Services have hard dependencies. Start in this order:
 
 2. Schema initialisation (requires Neo4j)
    python scripts/init_neo4j.py
-   → Wait for: "schema_ready" in output
+   → Wait for: "Neo4j schema initialized." in output
    → Verify: `SHOW INDEXES YIELD name, state` returns every index as ONLINE
+   (Workers separately log "schema_ready" at their own startup — see step 4.)
 
 3. API (requires RabbitMQ + Redis)
    uvicorn api.main:app --host 0.0.0.0 --port 8000
    → Verify: GET /health → {"status":"ok"}
-   → Verify: GET /health/ready → {"neo4j":"ok","redis":"ok"}
+   → Verify: GET /health/ready → {"neo4j":"ok","redis":"ok","llm_provider":"ok"}
+   (503 fires if Neo4j or Redis is down, or if every provider in the
+   Cerebras → DeepSeek → Groq fallback chain is unhealthy; a single link
+   down reports "degraded", not a 503.)
 
 4. Workers (require RabbitMQ + Neo4j + Redis)
    python workers/ingestion_worker.py   # or combined_worker.py
@@ -211,7 +215,7 @@ Long-term: `scripts/demo_regulatory.py` already calls `sys.stdout.reconfigure(en
 
 Common causes:
 1. **Reranker cold start**: first query loads `ms-marco-MiniLM-L-6-v2` (~105 weights). Subsequent queries fast.
-2. **Groq rate limit**: free tier bursts; 429 errors in worker logs. Retry with backoff is automatic.
+2. **Provider rate limit**: the default generation chain is Cerebras → DeepSeek → Groq (Groq is last-resort fallback, not primary); a 429 on the primary provider falls through the chain automatically, and 429 errors appear in worker logs. Retry with backoff is automatic.
 3. **Neo4j full scan**: missing index on a hot query path. Check `EXPLAIN` / `PROFILE` on slow Cypher.
 4. **Community not built**: global search ANN finds no communities → skip. Build with `python scripts/community_rebuild.py --tenant default`.
 
@@ -270,6 +274,11 @@ uvicorn api.main:app --host 0.0.0.0 --port 8000
 → http://localhost:8000/admin/
 ```
 
+Every `/admin/*` request is gated behind `GRAPHRAG_ADMIN_TOKEN` (header
+`X-Admin-Token`, or the `/admin/login` session flow) and **fails closed with
+a 403** if `GRAPHRAG_ADMIN_TOKEN` is unset outside a recognized dev
+environment — set it before expecting `/admin` to load.
+
 Tabs: Graph Health (gauges + contradiction trend) | Conflicts | Communities |
 GDPR | Calibration. Live data requires Neo4j + the ingestion pipeline.
 
@@ -306,11 +315,15 @@ Context Graph reads and writes are exposed under `/context-graph` and require
 the normal `read` or `write` scope. Useful checks include:
 
 ```bash
-# Validate a P0 trace
+# Load an existing trace (GET, tenant from the auth token)
 curl -H "Authorization: Bearer $TOKEN" \
-  "http://localhost:8000/context-graph/traces/validate?tenant=default"
-curl -H "Authorization: Bearer $TOKEN" \
-  "http://localhost:8000/context-graph/wpp/campaign-placement"
+  "http://localhost:8000/context-graph/traces/$DECISION_ID"
+
+# Validate a P0 trace (POST, body required — both routes take a JSON
+# body, not query params; ?tenant=... is not a real parameter on either)
+curl -X POST -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
+  -d '{"trace": {...}}' \
+  "http://localhost:8000/context-graph/traces/validate"
 ```
 
 Replay, correction, approval, exception, action, outcome, feedback, precedent,
@@ -360,25 +373,29 @@ doing anything; `--s3-bucket`, `--s3-prefix` and `--dry-run` never existed. S3 i
 addressed through the output path, not separate flags. Verify with
 `python scripts/kg_backup.py --help`.
 
+`--output`/`--input` are **file paths, not directories** — `backup` opens
+exactly one file handle and writes a single mixed NDJSON stream (one line
+per record, tagged by a `_type` field: `meta`/`entity`/`relation`/`chunk`),
+not three separate `nodes.ndjson`/`edges.ndjson`/`chunks.ndjson` files.
+
 ```bash
-# Backup to a local directory
-python scripts/kg_backup.py backup --tenant default --output backups/$(date +%Y%m%d)/
+# Backup to a local file
+python scripts/kg_backup.py backup --tenant default --output backups/$(date +%Y%m%d).ndjson
 
-# Backup to S3
-python scripts/kg_backup.py backup --tenant default --output s3://my-bucket/graphrag/
+# Backup to GCS or S3
+python scripts/kg_backup.py backup --tenant default --output gs://my-bucket/graphrag/kg.ndjson
+python scripts/kg_backup.py backup --tenant default --output s3://my-bucket/graphrag/kg.ndjson
 
-# List existing backups (local path or s3:// prefix)
-python scripts/kg_backup.py list --output backups/
+# List existing backups (--prefix, not --output; local path or gs://\s3:// prefix)
+python scripts/kg_backup.py list --prefix backups/
 ```
-
-Output: three NDJSON files per tenant — `nodes.ndjson`, `edges.ndjson`, `chunks.ndjson`.
 
 Or via make: `make backup TENANT=default` / `make backup-s3 TENANT=default S3_BUCKET=my-bucket`.
 
 ### Restore
 
 ```bash
-python scripts/kg_backup.py restore --input backups/20260531/ --tenant default
+python scripts/kg_backup.py restore --input backups/20260531.ndjson --tenant default
 ```
 
 ⚠️ Restore does **not** wipe existing data — it merges (idempotent). To wipe and restore:
@@ -439,7 +456,9 @@ This cascades to: Entity nodes, WikidataLink, Statement, RELATES_TO src_type/tgt
 ### Re-embedding after model change
 
 When switching embedding models (different dimensions):
-1. Update `GEMINI_EMBED_MODEL` in `.env`
+1. Update `OPENAI_EMBED_MODEL` in `.env` (default `text-embedding-3-large`,
+   3072d — embeddings are OpenAI by default; `GEMINI_EMBED_MODEL` is legacy
+   and not on the default path, see ADR-0004)
 2. Create a new vector index with the correct dimensions: `CREATE VECTOR INDEX chunk_embeddings_v2 ...`
 3. Run `python scripts/re_embed.py --tenant default --batch-size 50`
 4. Once complete, drop the old index and rename
@@ -479,9 +498,13 @@ Without communities, `global_search.no_communities` warning appears in logs and 
 
 Session cookies use `SESSION_SECRET_KEY` (separate from JWT). Rotating JWT does not affect browser sessions, and vice versa.
 
-### Rotating Groq API key
+### Rotating an LLM provider API key
 
-1. Update `GROQ_API_KEY` in `.env`
+The default generation chain is Cerebras → DeepSeek → Groq
+(`graphrag/core/llm_client.py`); rotate whichever link's key needs it, same
+procedure for each:
+
+1. Update `CEREBRAS_API_KEY`, `DEEPSEEK_API_KEY`, or `GROQ_API_KEY` in `.env`
 2. Restart all workers and the API (they load `.env` at startup via `python-dotenv`)
 
 ### Rotating Neo4j password

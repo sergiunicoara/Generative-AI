@@ -475,9 +475,10 @@ distinction is why the retired `multi_source` strategy was wrong (A135).
 ## Part 8 — APIs & Serving
 
 - **FastAPI** (`api/main.py`): `/query` (async — publishes to RabbitMQ,
-  poll for result), `/graph/entities/{id}/provenance`, `/kg/conflicts`,
-  `/kg/snapshots`, `/kpis/*`, `/demo` (interactive UI with
-  chain-of-thought trace steps).
+  poll for result), `/search` (sync semantic search, no LLM synthesis —
+  §8.4), `/kg/sparql` (SPARQL 1.1, local snapshot or remote-backed — §8.4),
+  `/graph/entities/{id}/provenance`, `/kg/conflicts`, `/kg/snapshots`,
+  `/kpis/*`, `/demo` (interactive UI with chain-of-thought trace steps).
 - **Workers**: consume the queue, run the five-stage retrieval pipeline, perform the separate LLM synthesis step, and write results to Redis.
 - Clean separation: API never touches Neo4j for queries — everything goes
   through the worker, so retrieval load can scale independently.
@@ -533,7 +534,8 @@ Redis failure. Concrete examples:
 | **Governed answer cache** (`query_cache.py`) | a stateless query enters `HybridRetriever`; Neo4j supplies the tenant corpus revision | SHA-256 over canonical tenant/query/corpus/model/prompt/ontology/retrieval inputs, then `GET`; on a governed miss, `SETEX` stores the answer and source trace | unchanged inputs return immediately with a new `query_id` linked to the original `source_trace_id`; any retrieval-visible mutation changes the corpus revision, making every old key unreachable |
 | **Alias registry** (`alias_registry.py`) | an ingestion batch finishes, new aliases exist (e.g. "Boeing" → "The Boeing Company") | `HSET graphrag:aliases:<tenant> alias "name\|type"`, `EXPIRE 86400` | a different worker sees "Boeing" in a query → resolves via Redis `HGET` instead of a Neo4j round-trip |
 | **Alerts** (`alerts.py`) | a monitoring check fires (e.g. LLM provider unhealthy) | `LPUSH graphrag:alerts:recent alert_json`, `LTRIM 0 ALERT_HISTORY-1` | dashboard reads the list to show recent alerts, capped history |
-| **Rate limiter** (`api/limiter.py`) | `POST /query` request arrives from a client | `slowapi` checks/increments the per-IP counter against `60/minute` | over limit → `429` immediately, no Neo4j/LLM touched; under limit → request proceeds |
+| **Rate limiter** (`api/limiter.py`) | `POST /query` (or `/search`) request arrives from a client | `AsyncRateLimiter` — a moving-window limiter, Redis-backed when `REDIS_URL` is set (shared across replicas), in-process fallback otherwise — checks/increments the per-client counter against the route's configured limit | over limit → `429` immediately, no Neo4j/LLM touched; under limit → request proceeds |
+| **Conversation limiter** (`api/limiter.py: enforce_conversation_limit`) | `POST /query` body carries a `session_id` | same moving-window mechanism, keyed by `conversation_key` = caller **and** session — deliberately never session-alone, so one caller can't drain another's bucket by guessing a session ID — against `GRAPHRAG_RATE_LIMIT_CONVERSATION` (default `20/minute`) | over limit → `429`; under limit → request proceeds to the per-client check above |
 
 The support caches degrade differently. Session and alias data can use local
 fallbacks. The governed answer cache uses memory only when Redis was
@@ -562,6 +564,42 @@ original message is `ack()`'d either way so it doesn't block the queue.
 | **Eval sampling** (`EvaluationConsumer`) | a query result just completed | `QueryConsumer` publishes an `EvalJob` for ~20% of queries (`eval_sample_rate`) — async, doesn't block the client's answer | `EvaluationConsumer` picks it up, runs RAGAS scoring (faithfulness, relevancy, etc.) against the sampled query |
 | **Handler failure, any consumer** | e.g. `IngestionAgent.run()` raises (Neo4j timeout, malformed LLM output) | message headers get `x-retry-count` incremented, republished after backoff (1s → 2s → 4s, cap 30s) | after 3 failed retries, message → `<queue>.dlq` with a structured envelope (`exception_type`, `error`, `payload_summary`) for manual triage; original message acked either way so the queue isn't blocked |
 | **Connection drop** (any consumer) | RabbitMQ container restarts or network blip | `aio_pika.connect_robust` detects the drop | connection and channels are re-established automatically in the background — consumers resume without code intervention, no manual reconnect logic needed |
+
+### 8.4 The two synchronous endpoints — `/search` and `/kg/sparql`
+
+Not every read needs the async queue-and-poll shape of `/query`. Two routes
+answer directly in the request/response cycle, bypassing RabbitMQ/Redis
+entirely:
+
+**`POST /search`** (`api/routes/search.py`) — retrieval only, no LLM
+synthesis. Runs `LocalSearch` against a server-fixed `text_hybrid` retrieval
+profile (never client-selectable) and returns ranked chunks, not an answer.
+The profile is fixed rather than exposed as a request parameter because five
+Neo4j query methods it can call have no `access_context` parameter and
+cannot be ACL-filtered — only a profile known not to touch those methods is
+safe to expose this way, and entities are never included in the response.
+`top_k` (1–50) threads into `config_overrides` as `local_top_k`/
+`rerank_top_k` rather than client-side slicing, so a requested `top_k` above
+the tenant's configured default isn't silently capped. Guarded by
+`enforce_tenant_quota`, a dedicated `GRAPHRAG_RATE_LIMIT_SEARCH` limit
+(default `60/minute`), and a 20s server-side timeout (`asyncio.wait_for`,
+`504` on expiry).
+
+**`POST /kg/sparql`** — real SPARQL 1.1, either against the local Turtle
+export (`SPARQLBridge`) or, when `GRAPHRAG_SPARQL_ENDPOINT` is set, proxied
+to a live remote SPARQL 1.1 Protocol endpoint (`RemoteSPARQLEndpoint`,
+`graphrag/graph/triplestore.py`) such as the Blazegraph mirror from
+ADR-0001. The route now negotiates standard SPARQL 1.1 Protocol content
+types (`application/sparql-query`, form-urlencoded requests;
+`application/sparql-results+json`/`+xml`/`text/csv` responses) alongside its
+original custom `{"rows", "count"}` JSON shape, which stays the default for
+an unspecified or `application/json` Content-Type/Accept. `POST
+/kg/sparql/update` always targets the local Turtle snapshot even with a
+remote endpoint configured for reads — see
+[docs/knowledge-graph-architecture.md §8](knowledge-graph-architecture.md)
+for the full request/response negotiation table and the SSRF rationale for
+running the same `_reject_unsafe_sparql` guard on both the local and remote
+paths.
 
 ---
 

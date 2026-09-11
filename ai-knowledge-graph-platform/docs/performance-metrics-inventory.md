@@ -12,6 +12,7 @@ This document catalogs every metric the platform measures, where it's recorded, 
 | Graph health | Neo4j (`GraphHealthSnapshot` nodes) | Per snapshot (24h default) | `GET /kg/snapshots` | Implemented, needs Neo4j running |
 | Confidence calibration | Neo4j (`CalibrationSample` nodes) | Per model version | Internal (no public API) | Implemented, needs Neo4j running |
 | GNN scoring | In-flight (retrieval results) | Per chunk | Returned in the `POST /query` response | Active |
+| Context composition | Prometheus histograms | Per assembled context | `graphrag_context_section_tokens{section}`, `graphrag_context_total_tokens` | **Active** |
 
 ---
 
@@ -462,6 +463,95 @@ Performance of each retrieval stage in the five-stage retrieval pipeline; LLM sy
 
 ---
 
+## Context Composition Metrics
+
+### What they measure
+
+`ContextBuilder.build()` assembles the prompt from up to seven section kinds
+(`chunks`, `linked_chunks`, `document_links`, `entity_context`,
+`graph_relationships`, `conflicts`, `community_knowledge`). Six are bounded
+by a count (top_k, `[:5]`, `[:10]`), not by tokens — five long entity
+descriptions cost more than ten short edges — and `community_knowledge` is
+bounded by nothing at all. These metrics attribute "the context is too big"
+to a specific section instead of leaving it a guess.
+
+### Storage
+
+Prometheus histograms, recorded per assembled context via
+`graphrag.observability.context_size.record_context_composition()`. Never
+raises — a metrics-backend problem must not fail a query.
+
+### Metrics
+
+| Metric | Type | Labels | Meaning |
+|---|---|---|---|
+| `graphrag_context_section_tokens` | Histogram | `section` (one of the seven kinds above) | Estimated tokens contributed by that section |
+| `graphrag_context_total_tokens` | Histogram | — | Estimated total tokens in the assembled context |
+
+Buckets: `16, 64, 256, 1024, 4096, 16384, 65536` — spans a single short edge
+line up to a context far larger than any current model window.
+
+### Token estimation
+
+`graphrag/core/tokens.py: estimate_tokens(text)` — `tiktoken` with the
+`cl100k_base` encoding (cached), falling back to a character-count heuristic
+if `tiktoken` is unavailable. This is an estimate for context-composition
+visibility, not a hard provider token-limit check.
+
+### Token budget
+
+`ContextBuilder.build(..., token_budget: int | None = None)` caps tokens
+spent on the primary top-k chunk admission loop only. It does **not** bound
+the two additive slots (reserved multi-hop slots, the document-link section)
+— those can still push the assembled context above `token_budget`. The first
+admitted chunk always counts toward the budget even though it is admitted
+unconditionally, so an oversized leading chunk still spends budget rather
+than being exempted.
+
+### Access patterns
+
+**Via Prometheus:**
+```promql
+histogram_quantile(0.95, sum(rate(graphrag_context_section_tokens_bucket[5m])) by (le, section))
+histogram_quantile(0.95, sum(rate(graphrag_context_total_tokens_bucket[5m])) by (le))
+```
+
+---
+
+## Rate Limiting & Quota Metrics
+
+### What they measure
+
+Per-client and per-conversation request throughput, and per-tenant
+consumption ceilings.
+
+### Storage
+
+`AsyncRateLimiter` (`api/limiter.py`) — a moving-window limiter backed by
+Redis when `REDIS_URL` is set (shared across replicas), with an in-process
+fallback otherwise. State lives in the limiter's own store, not a
+general-purpose metrics backend; no dedicated Prometheus counter for 429
+events exists yet.
+
+### Limits
+
+| Limit | Env var | Default | Bucket key |
+|---|---|---|---|
+| Per-client (IP/subject) | `GRAPHRAG_RATE_LIMIT_*` (per route) | route-specific | `client_key` — subject-or-IP |
+| Per-conversation | `GRAPHRAG_RATE_LIMIT_CONVERSATION` | `20/minute` | `conversation_key` — caller **and** session, deliberately never session-alone, to prevent one caller draining another's bucket by session ID |
+| Search | `GRAPHRAG_RATE_LIMIT_SEARCH` | `60/minute` | `client_key` |
+| Tenant quota | `graphrag/core/tenant_quota.py` | per-tenant configured ceiling | tenant |
+
+### Access patterns
+
+A 429 response body states which ceiling was hit and when it resets
+(`api/quota.py`); this is currently visible per-request, not yet aggregated
+as a metric. Adding a `graphrag_rate_limit_rejections_total{route,reason}`
+counter is a plausible next step (see "Next steps to instrument further"
+below) but does not exist today — do not cite one.
+
+---
+
 ## Derived Metrics (Dashboard)
 
 Computed from raw metrics for visibility:
@@ -566,3 +656,4 @@ If deployed to production, consider adding:
 - **Trend detection**: Alert when key metrics drift significantly (e.g., entity_resolution_quality drops from 0.92 to 0.85)
 - **Cost optimization**: Break down LLM costs by retrieval mode (hybrid vs. agentic) to identify expensive paths
 - **Extraction error analysis**: Tag specific extraction failures in the conflict queue and track them by model version
+- **Rate-limit rejection counter**: `graphrag_rate_limit_rejections_total{route,reason}` — 429s are currently visible per-request (response body) but not aggregated; a counter would let the dashboard show rejection rate by route without scraping logs

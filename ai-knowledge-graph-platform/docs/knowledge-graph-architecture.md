@@ -231,17 +231,51 @@ graph with the same degree distribution, not just raw intra/total edges),
 so a community that looks coherent by the simple ratio can still score low
 modularity if it's dominated by high-degree hub entities.
 
-**SPARQL is real and network-exposed, but bounded — precise framing
-matters here.** `POST /kg/sparql` (`api/routes/kg/knowledge.py`) runs real
-SPARQL 1.1 SELECT queries (`SPARQLBridge`, `graphrag/graph/sparql_bridge.py`,
-wrapping rdflib's built-in engine) against the last Turtle export on disk.
-This is a genuine, tested, callable SPARQL capability — not a stub. What it
-is *not*: a persistent triple-store service (no GraphDB/Stardog/Virtuoso),
-and not live against current graph state — it queries a snapshot file that
-only updates when `export_rdf.py` is re-run, so it can be stale relative to
-Neo4j. The live, continuously-updated system is Neo4j as a labeled property
-graph; RDF/OWL/SHACL/SPARQL is a real, tested interoperability layer
-exported from it, not a second production database running in parallel.
+**SPARQL is real and network-exposed, protocol-compliant, and optionally
+remote-backed — precise framing matters here.** `POST /kg/sparql`
+(`api/routes/kg/knowledge.py`) runs real SPARQL 1.1 SELECT queries against
+one of two backends, chosen by whether `GRAPHRAG_SPARQL_ENDPOINT` is set:
+
+- **Local (default, unset):** `SPARQLBridge` (`graphrag/graph/sparql_bridge.py`,
+  wrapping rdflib's built-in engine) against the last Turtle export on disk —
+  a snapshot that only updates when `export_rdf.py` is re-run, so it can be
+  stale relative to Neo4j.
+- **Remote (opt-in, `GRAPHRAG_SPARQL_ENDPOINT` set):** `RemoteSPARQLEndpoint`
+  (`graphrag/graph/triplestore.py`) proxies the query over HTTP to a live
+  SPARQL 1.1 Protocol endpoint — e.g. the Blazegraph mirror from §"optional
+  live SPARQL endpoint" in ADR-0001, or GraphDB/Stardog/RDFox/Virtuoso.
+  `_reject_unsafe_sparql` still runs on the outbound query in this path,
+  same as local — Blazegraph itself has no authentication and would
+  otherwise accept `SERVICE`/`LOAD` from any client that reached it through
+  this proxy.
+
+Either way, the route now negotiates standard SPARQL 1.1 Protocol content
+types (`graphrag/graph/sparql_results.py`) alongside its original custom
+JSON shape, which stays the default when Content-Type/Accept is unspecified
+or `application/json`:
+
+| Request `Content-Type` | Parsed as |
+|---|---|
+| `application/json` (or absent) | legacy `{"query", "namespaces"}` body — unchanged |
+| `application/sparql-query` | raw query in the request body |
+| `application/x-www-form-urlencoded` | `query=` form field |
+
+| Response `Accept` | Body |
+|---|---|
+| absent / `application/json` | legacy `{"rows": [...], "count": N}` — unchanged |
+| `application/sparql-results+json` | W3C bindings shape (`{"head", "results": {"bindings"}}`), full type/datatype/lang fidelity on the local path |
+| `application/sparql-results+xml`, `text/csv` | W3C serializations — local path only; a remote-backed query returns `501` for these rather than a silently incorrect conversion, since the remote store's own JSON is passed through verbatim instead of reconstructed |
+
+`POST /kg/sparql/update` always targets the local Turtle snapshot, even when
+a remote endpoint is configured for reads — writing through to the mirror
+would silently diverge it from the export that regenerates it.
+
+This remains a genuine, tested, callable SPARQL capability, not a stub — but
+it is still not a second production database: Neo4j is the live,
+continuously-updated system and the system of record for writes; RDF/OWL/
+SHACL/SPARQL (local or remote-mirrored) is a real, tested interoperability
+layer, never the target of an application write. See ADR-0001's addenda for
+the full remote-query and protocol-compliance rationale.
 
 ---
 

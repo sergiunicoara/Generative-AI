@@ -13,14 +13,20 @@ release a change without breaking a live tenant.
 |---|---|---|
 | `config/ontologies/*.yml` | Per-tenant domain ontologies — entity type hierarchy, relation domain/range rules, inference rules, deprecation state | `graphrag/graph/domain_ontology.py`, `graphrag/graph/ontology_registry.py` |
 | `ontology/shapes/*.ttl` | SHACL shapes that validate the platform's RDF representations (export + relational-ingestion mutation gate) | `graphrag/graph/shacl_validator.py` |
+| `ontology/mappings/*.r2rml.ttl` | R2RML mappings from a relational source (SQLite/PostgreSQL/Excel) to this ontology's entity/relation shape, e.g. `supply-chain.r2rml.ttl` | `graphrag/ingestion/r2rml.py` (`r2rml_to_mapping`), driven by `scripts/ingest_r2rml.py` |
 
-Two directories, not one, because they answer different questions: a domain
+Three directories, not one, because they answer different questions: a domain
 ontology YAML defines *what a tenant's graph is allowed to contain*
 (`config/ontologies/`); a SHACL shape defines *what shape a specific RDF
-representation of that graph must have* (`ontology/shapes/`). The domain
-ontology can be extended per-tenant; the SHACL shapes are shared structural
-invariants (a label must exist, a confidence must be a valid float) that
-don't vary by tenant.
+representation of that graph must have* (`ontology/shapes/`); an R2RML
+mapping defines *how to derive that graph from a relational table* that
+was never authored as RDF in the first place (`ontology/mappings/`). The
+domain ontology can be extended per-tenant; the SHACL shapes are shared
+structural invariants (a label must exist, a confidence must be a valid
+float) that don't vary by tenant; an R2RML mapping is source-specific — one
+per relational schema, validated against the domain ontology it targets
+before any row is ingested (`RelationalGraphIngestor.validate()`, called by
+`scripts/ingest_r2rml.py --validate-only`).
 
 ## Naming conventions and stable identifiers
 

@@ -215,6 +215,12 @@ local live Neo4j; production traffic and production-scale tuning remain open.
 | **Source catalog** | `/kg/sources` manages tenant-scoped source systems and versioned, secret-free mapping contracts; documents can link through `INGESTED_FROM` |
 | **End-to-end observability** | `X-Correlation-ID` flows HTTP -> RabbitMQ -> worker -> result -> `CGAgentRun`; Prometheus metrics and optional OTLP traces share the same request context |
 | **Multimodal provenance** | Media attachments plus OCR, transcript, caption, and visual-embedding transformation links; media bytes remain in object storage |
+| **Synchronous semantic search** | `POST /search` — retrieval only, no LLM synthesis, no async queue; server-fixed `text_hybrid` profile (never client-selectable — 5 Neo4j query methods it can reach have no `access_context` and can't be ACL-filtered), `top_k` threaded into retrieval config, 20s timeout |
+| **PROV-O provenance projection** | Full `prov:Activity`/`prov:Agent`/`prov:Entity` export alongside the RDF/Turtle graph — standards-aligned lineage, not a custom schema |
+| **Per-conversation rate limiting** | `AsyncRateLimiter`, moving-window, Redis-backed with in-process fallback; keyed by caller **and** session (never session-alone) so one caller can't drain another's bucket; default 20/min, configurable per-route |
+| **Context composition budgeting** | `ContextBuilder(token_budget=...)` caps the primary top-k chunk admission loop by estimated tokens (`tiktoken`); per-section Prometheus histograms (`graphrag_context_section_tokens`) attribute prompt size to a specific section |
+| **Remote SPARQL + protocol compliance** | `POST /kg/sparql` optionally proxies to a live SPARQL 1.1 Protocol endpoint (Blazegraph/GraphDB/Stardog/RDFox/Virtuoso) via `GRAPHRAG_SPARQL_ENDPOINT`, and negotiates standard SPARQL 1.1 Protocol content types alongside its original JSON shape; the same SSRF guard runs on local and remote queries alike |
+| **Declarative relational ingestion (R2RML)** | `scripts/ingest_r2rml.py` maps SQLite/PostgreSQL/Excel rows into the graph via an R2RML mapping (`ontology/mappings/*.r2rml.ttl`), validated against the target ontology before any write |
 
 ---
 
@@ -291,7 +297,9 @@ The cross-encoder scores text similarity. It doesn't know that *Falcon 9* and *S
 ai-knowledge-graph-platform/
 ├── api/
 │   ├── main.py                      # FastAPI app, lifespan hook, middleware, routes
-│   ├── limiter.py                   # slowapi rate-limiter (20/min ingest, 60/min query, 10/min auth)
+│   ├── limiter.py                   # AsyncRateLimiter — moving-window, Redis-backed w/ in-process fallback
+│                                    #   (per-route limits, e.g. 20/min ingest, 60/min query/search; plus a
+│                                    #   per-conversation limit keyed by caller+session, default 20/min)
 │   ├── auth/
 │   │   ├── dependencies.py          # get_current_user, get_tenant (token-scoped), require_scope
 │   │   ├── google.py                # Google OAuth 2.0 Authorization Code flow
@@ -300,6 +308,7 @@ ai-knowledge-graph-platform/
 │       ├── auth.py                  # /auth/login, /callback, /token, /clients (Redis-backed M2M)
 │       ├── ingest.py                # POST /ingest  (rate-limited)
 │       ├── query.py                 # POST /query, GET /query/{id}  (rate-limited; Redis result store)
+│       ├── search.py                # POST /search — sync semantic search, no LLM synthesis (fixed text_hybrid profile)
 │       ├── evaluation.py            # GET /evaluation/summary  (require_scope("read"))
 │       ├── kpis.py                  # GET /kpis/summary, /kpis/timeseries
 │       ├── agent.py                 # POST /agent/tool — ToolPolicy-gated tool dispatch
@@ -369,8 +378,9 @@ ai-knowledge-graph-platform/
 │   ├── evaluation_worker.py         # Consumes graphrag.eval queue; graceful SIGTERM shutdown
 │   └── combined_worker.py           # Runs ingestion + query consumers on one machine (co-location mode)
 │
-├── scripts/                         # 73 CLI tools — ingestion, evaluation, benchmarks, migrations
+├── scripts/                         # 82 CLI tools — ingestion, evaluation, benchmarks, migrations
 │   ├── ingest_corpus.py             # Full real-pipeline corpus ingestion
+│   ├── ingest_r2rml.py              # Declarative relational ingestion (SQLite/PostgreSQL/Excel) via an R2RML mapping
 │   ├── init_neo4j.py                # Idempotent schema initializer (run once after docker up)
 │   ├── run_golden_eval.py           # Golden-set faithfulness evaluation
 │   └── community_rebuild.py         # CLI: rebuild communities per tenant with staleness check

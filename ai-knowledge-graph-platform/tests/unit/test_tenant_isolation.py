@@ -664,7 +664,7 @@ class TestContextGraphBodyTenantMismatch:
 
     def _client(self):
         from fastapi import FastAPI
-        from fastapi.testclient import TestClient
+        from starlette.testclient import TestClient
 
         from api.auth.dependencies import get_current_user
         from api.routes import context_graph as cg_routes
@@ -730,7 +730,7 @@ class TestContextGraphBodyTenantMismatch:
 class TestSPARQLPerTenantExport:
     def _client(self, tenant: str = "acme"):
         from fastapi import FastAPI
-        from fastapi.testclient import TestClient
+        from starlette.testclient import TestClient
 
         from api.auth.dependencies import get_current_user
         from api.routes.kg import knowledge as kg_knowledge

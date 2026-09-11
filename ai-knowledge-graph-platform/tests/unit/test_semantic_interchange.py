@@ -11,6 +11,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 from openpyxl import Workbook
 from rdflib import Graph
+from rdflib.plugins.parsers.jsonld import to_rdf
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "scripts"))
 
@@ -67,7 +68,11 @@ async def test_jsonld_export_is_parseable_by_standard_rdflib(tmp_path):
     neo4j.close = AsyncMock()
     with patch("graphrag.graph.neo4j_client.get_neo4j", return_value=neo4j):
         await export(tenant="legal", output=output, limit=10, rdf_format="json-ld")
-    parsed = Graph().parse(output, format="json-ld")
+    # ``Graph.parse(..., format="json-ld")`` currently routes through RDFLib's
+    # deprecated ConjunctiveGraph compatibility sink. Exercise its standard
+    # JSON-LD-to-RDF implementation directly instead, without deprecated APIs.
+    parsed = Graph()
+    to_rdf(json.loads(output.read_text(encoding="utf-8")), parsed, base=output.as_uri())
     assert len(parsed) > 0
 
 

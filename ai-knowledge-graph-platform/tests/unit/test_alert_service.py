@@ -164,7 +164,7 @@ def test_recent_alerts_are_filtered_by_tenant_before_pagination():
 
 def test_health_alert_route_uses_the_token_tenant():
     from fastapi import FastAPI
-    from fastapi.testclient import TestClient
+    from starlette.testclient import TestClient
 
     from api.auth.dependencies import get_current_user
     from api.routes.kg import health as health_routes

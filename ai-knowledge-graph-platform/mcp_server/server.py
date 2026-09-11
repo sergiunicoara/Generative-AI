@@ -40,12 +40,17 @@ import structlog
 structlog.configure(logger_factory=structlog.PrintLoggerFactory(file=sys.stderr))
 
 from mcp.server.fastmcp import FastMCP  # noqa: E402
+from mcp.server.fastmcp.server import Settings as FastMCPSettings  # noqa: E402
 
 from mcp_server.capabilities import build_registry  # noqa: E402
 from mcp_server.identity import CallerIdentity  # noqa: E402
 from mcp_server.registry import DeniedCapabilityCall  # noqa: E402
 from graphrag.observability.correlation import current_correlation_id  # noqa: E402
 
+# The installed FastMCP settings model includes a generic ``lifespan`` forward
+# reference. Resolve it before BaseSettings reads environment sources, so MCP
+# startup stays warning-free and settings values remain fully typed.
+FastMCPSettings.model_rebuild()
 mcp = FastMCP("graphrag")
 _registry = build_registry()
 

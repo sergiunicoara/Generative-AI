@@ -17,7 +17,7 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 from fastapi import FastAPI
-from fastapi.testclient import TestClient
+from starlette.testclient import TestClient
 
 from api.auth.dependencies import get_current_user
 from api.routes import business as business_routes

@@ -34,8 +34,12 @@ uvicorn[standard]>=0.30.0
 PyJWT[crypto]>=2.10.1
 python-multipart>=0.0.31
 dash>=2.17.0
+dash-ag-grid>=32.3.0
 plotly>=5.22.0
 httpx>=0.27.0
+# Starlette TestClient prefers this successor package; without it Starlette
+# falls back to httpx and emits a deprecation warning on every API-test import.
+httpx2>=2.12.0
 
 # ── Storage ────────────────────────────────────────────────────────────────────
 sqlalchemy>=2.0.30

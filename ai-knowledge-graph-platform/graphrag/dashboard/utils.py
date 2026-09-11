@@ -12,12 +12,14 @@ a projector in front of a technical audience.
 from __future__ import annotations
 
 import os
+import re
 from pathlib import Path
 
+import dash_ag_grid as dag
 import httpx
 import plotly.graph_objects as go
 import structlog
-from dash import dash_table, html
+from dash import html
 
 log = structlog.get_logger(__name__)
 
@@ -271,33 +273,83 @@ def gauge(value: float, title: str, *, good_high: bool = True,
     return fig
 
 
-def themed_table(data: list[dict], columns: list[dict], **kwargs) -> dash_table.DataTable:
-    """A DataTable pre-styled to match the brand."""
-    style = {
-        "style_table": {"overflowX": "auto", "borderRadius": "12px",
-                        "border": f"1px solid {BORDER}", "overflow": "hidden"},
-        "style_cell": {
-            "textAlign": "left", "padding": "11px 14px",
-            "fontFamily": FONT, "fontSize": "13px", "color": INK,
-            "border": "none", "borderBottom": f"1px solid {BORDER}",
-        },
-        "style_header": {
-            "fontWeight": "700", "fontSize": "11px", "color": "white",
-            "backgroundColor": NAV, "border": "none",
-            "textTransform": "uppercase", "letterSpacing": "0.04em",
-            "padding": "12px 14px",
-        },
-        "style_data_conditional": [
-            {"if": {"row_index": "odd"}, "backgroundColor": "#F6F9FE"},
-        ],
+def _ag_row_style(rules: list[dict]) -> dict | None:
+    """Translate the small, safe subset of legacy table row rules we use.
+
+    Dashboard tables only use equality filters such as
+    ``{direction} = \"above\"``. Converting that explicit subset avoids
+    passing arbitrary JavaScript to AG Grid while retaining alert highlighting.
+    """
+    conditions = []
+    for rule in rules:
+        query = rule.get("if", {}).get("filter_query", "")
+        match = re.fullmatch(r'\{([A-Za-z_][A-Za-z0-9_]*)\}\s*=\s*"([^"]*)"', query)
+        if not match:
+            continue
+        style = {key: value for key, value in rule.items() if key != "if"}
+        conditions.append({
+            "condition": f"params.data.{match.group(1)} === {match.group(2)!r}",
+            "style": style,
+        })
+    return {"styleConditions": conditions} if conditions else None
+
+
+def themed_table(data: list[dict], columns: list[dict], **kwargs) -> dag.AgGrid:
+    """Return a branded, paginated AG Grid table.
+
+    Dash 4 deprecates its built-in ``dash_table.DataTable``. This adapter
+    retains the existing helper contract while using the supported AG Grid
+    component and its row-selection model.
+    """
+    table_id = kwargs.pop("id", None)
+    page_size = kwargs.pop("page_size", 20)
+    row_selectable = kwargs.pop("row_selectable", None)
+    selected_rows = kwargs.pop("selected_rows", [])
+    conditional_rules = kwargs.pop("style_data_conditional", [])
+    if kwargs:
+        unexpected = ", ".join(sorted(kwargs))
+        raise TypeError(f"Unsupported themed_table options: {unexpected}")
+
+    column_defs = [
+        {"headerName": column.get("name", column["id"]), "field": column["id"],
+         "sortable": True, "filter": True, "resizable": True}
+        for column in columns
+    ]
+    grid_options = {
+        "pagination": True,
+        "paginationPageSize": page_size,
+        "suppressCellFocus": True,
     }
-    # caller overrides win
-    for k, v in kwargs.items():
-        if k in style and isinstance(v, list) and k == "style_data_conditional":
-            style[k] = style[k] + v
-        else:
-            style[k] = v
-    return dash_table.DataTable(data=data, columns=columns, **style)
+    if row_selectable:
+        grid_options["rowSelection"] = row_selectable
+
+    grid_style = {
+        "height": f"{max(130, min(page_size, max(len(data), 1)) * 42 + 52)}px",
+        "width": "100%",
+        "border": f"1px solid {BORDER}",
+        "borderRadius": "12px",
+        "overflow": "hidden",
+        "fontFamily": FONT,
+        "--ag-header-background-color": NAV,
+        "--ag-header-foreground-color": "white",
+        "--ag-foreground-color": INK,
+        "--ag-background-color": CARDBG,
+        "--ag-odd-row-background-color": "#F6F9FE",
+        "--ag-row-border-color": BORDER,
+        "--ag-font-size": "13px",
+    }
+    options = {
+        "id": table_id,
+        "className": "ag-theme-alpine",
+        "columnDefs": column_defs,
+        "rowData": data,
+        "dashGridOptions": grid_options,
+        "selectedRows": selected_rows,
+        "style": grid_style,
+    }
+    if row_style := _ag_row_style(conditional_rules):
+        options["getRowStyle"] = row_style
+    return dag.AgGrid(**options)
 
 
 def section_title(text: str, subtitle: str | None = None) -> html.Div:

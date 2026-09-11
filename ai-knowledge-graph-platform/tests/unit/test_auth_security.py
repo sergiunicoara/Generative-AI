@@ -7,7 +7,7 @@ from unittest.mock import patch
 
 import pytest
 from fastapi import Depends, FastAPI, HTTPException
-from fastapi.testclient import TestClient
+from starlette.testclient import TestClient
 from starlette.requests import Request
 
 from api.auth.default_auth import RequireAuthMiddleware, _has_metrics_token, _is_public

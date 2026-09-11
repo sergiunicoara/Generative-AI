@@ -21,7 +21,7 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 from fastapi import FastAPI
-from fastapi.testclient import TestClient
+from starlette.testclient import TestClient
 from starlette.middleware.sessions import SessionMiddleware
 
 from api.auth import user_provisioning as up

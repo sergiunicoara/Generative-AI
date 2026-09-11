@@ -92,6 +92,8 @@ cryptography==50.0.0
 cycler==0.12.1
     # via matplotlib
 dash==4.4.1
+dash-ag-grid==35.3.0
+httpx2==2.12.0
     # via -r requirements.txt
 datasets==5.0.1
     # via

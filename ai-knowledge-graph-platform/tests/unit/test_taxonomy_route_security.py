@@ -1,7 +1,7 @@
 """Authorization coverage for the globally shared entity-type taxonomy."""
 
 from fastapi import FastAPI
-from fastapi.testclient import TestClient
+from starlette.testclient import TestClient
 
 from api.auth.dependencies import get_current_user
 from api.routes.kg import knowledge as knowledge_routes

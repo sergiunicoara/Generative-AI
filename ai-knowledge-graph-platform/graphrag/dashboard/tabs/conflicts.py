@@ -79,8 +79,8 @@ def render(tenant: str) -> html.Div:
 @callback(
     Output("resolve-result", "children"),
     Input("resolve-btn", "n_clicks"),
-    State("conflicts-table", "selected_rows"),
-    State("conflicts-table", "data"),
+    State("conflicts-table", "selectedRows"),
+    State("conflicts-table", "rowData"),
     State("resolve-resolution", "value"),
     State("resolve-winner-doc", "value"),
     prevent_initial_call=True,
@@ -88,7 +88,9 @@ def render(tenant: str) -> html.Div:
 def resolve_conflict(n_clicks, selected_rows, rows, resolution, winner_doc):
     if not selected_rows or not resolution:
         return "Select a row and choose a resolution type."
-    conflict_id = rows[selected_rows[0]].get("conflict_id", "")
+    selected = selected_rows[0]
+    selected_row = selected if isinstance(selected, dict) else rows[selected]
+    conflict_id = selected_row.get("conflict_id", "")
     result = _post("/corrections/conflict/resolve", {
         "conflict_id":   conflict_id,
         "resolution":    resolution,

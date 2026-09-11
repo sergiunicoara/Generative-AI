@@ -7,14 +7,14 @@ test file and backfilling it is out of scope for this change.
 
 from __future__ import annotations
 
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 from graphrag.graph.graph_evaluator import GraphEvaluator
 
 
 def _make_evaluator(rows: list[dict]) -> GraphEvaluator:
-    neo4j = AsyncMock()
-    neo4j.run.return_value = rows
+    neo4j = MagicMock()
+    neo4j.run = AsyncMock(return_value=rows)
     return GraphEvaluator(neo4j)
 
 
@@ -94,8 +94,8 @@ class TestCommunityModularity:
             {"source": "b1", "community_id": "c2", "targets": ["b2"]},
             {"source": "b2", "community_id": "c2", "targets": ["b1"]},
         ]
-        neo4j = AsyncMock()
-        neo4j.run.return_value = rows
+        neo4j = MagicMock()
+        neo4j.run = AsyncMock(return_value=rows)
         evaluator = GraphEvaluator(neo4j)
 
         with (

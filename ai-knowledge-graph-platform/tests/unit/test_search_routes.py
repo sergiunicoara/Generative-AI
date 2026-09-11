@@ -10,11 +10,11 @@ boundary, not a performance default.
 from __future__ import annotations
 
 import asyncio
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from fastapi import FastAPI
-from fastapi.testclient import TestClient
+from starlette.testclient import TestClient
 
 from api.auth.dependencies import get_current_user
 from api.routes import search as search_routes
@@ -45,7 +45,7 @@ class TestRankedResultsNoSynthesis:
             _chunk("high", rerank_score=0.9),
             _chunk("mid", rerank_score=0.5),
         ]
-        mock_searcher = AsyncMock()
+        mock_searcher = MagicMock()
         mock_searcher.search = AsyncMock(return_value={"chunks": chunks})
 
         with patch.object(search_routes, "_get_searcher", return_value=mock_searcher):
@@ -57,7 +57,7 @@ class TestRankedResultsNoSynthesis:
 
     def test_falls_back_to_raw_fusion_score_when_no_rerank_score(self):
         chunks = [_chunk("a", score=0.1), _chunk("b", score=0.7)]
-        mock_searcher = AsyncMock()
+        mock_searcher = MagicMock()
         mock_searcher.search = AsyncMock(return_value={"chunks": chunks})
 
         with patch.object(search_routes, "_get_searcher", return_value=mock_searcher):
@@ -70,7 +70,7 @@ class TestRankedResultsNoSynthesis:
         # entity context is produced by get_entity_neighbors, one of the
         # queries that cannot be ACL-filtered -- it must never reach the
         # client through this route regardless of what LocalSearch returns.
-        mock_searcher = AsyncMock()
+        mock_searcher = MagicMock()
         mock_searcher.search = AsyncMock(return_value={
             "chunks": [_chunk("c1", score=0.5)],
             "entities": [{"entity": "Boeing", "type": "ORG", "description": "x", "neighbors": []}],
@@ -89,7 +89,7 @@ class TestFixedProfileIsNotClientSelectable:
     def test_profile_field_in_the_body_is_ignored(self):
         # No `profile` field exists on SearchRequest at all -- a client
         # attempting to send one must have no effect, not be silently accepted.
-        mock_searcher = AsyncMock()
+        mock_searcher = MagicMock()
         mock_searcher.search = AsyncMock(return_value={"chunks": []})
 
         with patch.object(search_routes, "_get_searcher", return_value=mock_searcher):
@@ -109,7 +109,7 @@ class TestFixedProfileIsNotClientSelectable:
         assert overrides["entity_context_enabled"] is False
 
     def test_top_k_overrides_candidate_count_not_just_client_slice(self):
-        mock_searcher = AsyncMock()
+        mock_searcher = MagicMock()
         mock_searcher.search = AsyncMock(return_value={"chunks": []})
 
         with patch.object(search_routes, "_get_searcher", return_value=mock_searcher):
@@ -122,7 +122,7 @@ class TestFixedProfileIsNotClientSelectable:
 
 class TestAccessControlFromToken:
     def test_tenant_comes_from_the_token_not_the_body(self):
-        mock_searcher = AsyncMock()
+        mock_searcher = MagicMock()
         mock_searcher.search = AsyncMock(return_value={"chunks": []})
 
         with patch.object(search_routes, "_get_searcher", return_value=mock_searcher):
@@ -131,7 +131,7 @@ class TestAccessControlFromToken:
         assert mock_searcher.search.await_args.kwargs["tenant"] == "test-tenant"
 
     def test_access_context_is_built_from_claims_and_threaded_through(self):
-        mock_searcher = AsyncMock()
+        mock_searcher = MagicMock()
         mock_searcher.search = AsyncMock(return_value={"chunks": []})
 
         with patch.object(search_routes, "_get_searcher", return_value=mock_searcher):
@@ -152,7 +152,7 @@ class TestNoLLMIsEverInvoked:
         # The entire point of this route: LocalSearch.search() never touches
         # an LLM (see local_search.py's module docstring), and this route
         # must never reach HybridRetriever, the layer where synthesis lives.
-        mock_searcher = AsyncMock()
+        mock_searcher = MagicMock()
         mock_searcher.search = AsyncMock(return_value={"chunks": [_chunk("c1", score=0.9)]})
 
         with (
@@ -176,7 +176,7 @@ class TestInputLimits:
         ],
     )
     def test_invalid_requests_are_rejected_without_reaching_retrieval(self, payload):
-        mock_searcher = AsyncMock()
+        mock_searcher = MagicMock()
         with patch.object(search_routes, "_get_searcher", return_value=mock_searcher):
             resp = _make_client().post("/search", json=payload)
 
@@ -186,7 +186,7 @@ class TestInputLimits:
 
 class TestTimeout:
     def test_504_when_retrieval_exceeds_the_budget(self):
-        mock_searcher = AsyncMock()
+        mock_searcher = MagicMock()
         mock_searcher.search = AsyncMock(side_effect=asyncio.TimeoutError)
 
         with (
@@ -198,7 +198,7 @@ class TestTimeout:
         assert resp.status_code == 504
 
     def test_503_when_retrieval_raises(self):
-        mock_searcher = AsyncMock()
+        mock_searcher = MagicMock()
         mock_searcher.search = AsyncMock(side_effect=RuntimeError("neo4j down"))
 
         with patch.object(search_routes, "_get_searcher", return_value=mock_searcher):
@@ -211,7 +211,7 @@ class TestSearcherIsASingleton:
     def test_get_searcher_returns_the_same_instance_across_calls(self):
         search_routes._searcher = None
         with patch.object(search_routes, "LocalSearch") as mock_cls:
-            mock_cls.return_value = AsyncMock()
+            mock_cls.return_value = MagicMock()
             first = search_routes._get_searcher()
             second = search_routes._get_searcher()
 

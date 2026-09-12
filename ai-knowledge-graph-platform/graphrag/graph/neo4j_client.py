@@ -417,6 +417,126 @@ class Neo4jClient:
         )
         return rows[0]["tombstoned"] if rows else 0
 
+    # ── Durable, row-level incremental-ingestion checkpoints ────────────────────
+    #
+    # Generalizes the document-ingestion checkpoint pattern above
+    # (content_hash-at-write-start + ingest_complete-at-write-end +
+    # get_document_states() read-back) to relational sources, plus a
+    # lease/TTL guard for concurrent-run protection nothing above needed
+    # (a single document write is one Cypher statement; an ingest run is a
+    # whole read-diff-write-tombstone sequence that needs mutual exclusion
+    # for its full duration). See
+    # graphrag/ingestion/relational.py's RelationalGraphIngestor.ingest_incremental().
+
+    async def begin_relational_ingest_run(
+        self, tenant: str, source_id: str, run_id: str, lease_seconds: int,
+    ) -> bool:
+        """Claim the ingest lease for (tenant, source_id), or refuse if
+        another run already holds an unexpired one.
+
+        Same "a write that doesn't match performs no mutation" discipline
+        as the business-write StaleVersionError guard
+        (graphrag/business/repository.py) — the WHERE clause is what makes
+        this safe under a real concurrent race, not application-level
+        check-then-act.
+        """
+        rows = await self.run(
+            """
+            MERGE (c:RelationalSourceCheckpoint {tenant: $tenant, source_id: $source_id})
+            ON CREATE SET c.ingest_complete = false, c.row_hashes_json = '{}'
+            WITH c,
+                 (c.lease_run_id IS NULL
+                  OR c.lease_expires_at IS NULL
+                  OR c.lease_expires_at < datetime()
+                  OR c.lease_run_id = $run_id) AS claimable
+            FOREACH (_ IN CASE WHEN claimable THEN [1] ELSE [] END |
+              SET c.lease_run_id = $run_id,
+                  c.lease_expires_at = datetime() + duration({seconds: $lease_seconds}))
+            RETURN claimable
+            """,
+            tenant=tenant, source_id=source_id, run_id=run_id, lease_seconds=lease_seconds,
+        )
+        return bool(rows and rows[0]["claimable"])
+
+    async def get_relational_source_state(self, tenant: str, source_id: str) -> dict | None:
+        """The last checkpoint for (tenant, source_id), or None if this
+        source has never been ingested. `row_hashes` is only meaningful
+        when `ingest_complete` is True — a checkpoint from a crashed run
+        must never be trusted as "this is what's currently in the graph,"
+        same reasoning get_document_states() already documents for the
+        document path."""
+        rows = await self.run(
+            """
+            MATCH (c:RelationalSourceCheckpoint {tenant: $tenant, source_id: $source_id})
+            RETURN coalesce(c.row_hashes_json, '{}') AS row_hashes_json,
+                   coalesce(c.ingest_complete, false) AS ingest_complete,
+                   c.lease_run_id AS run_id,
+                   c.lease_expires_at AS lease_expires_at
+            """,
+            tenant=tenant, source_id=source_id,
+        )
+        if not rows:
+            return None
+        row = rows[0]
+        return {
+            "row_hashes": json.loads(row["row_hashes_json"] or "{}"),
+            "ingest_complete": bool(row["ingest_complete"]),
+            "run_id": row["run_id"],
+            "lease_expires_at": row["lease_expires_at"],
+        }
+
+    async def complete_relational_ingest_run(
+        self, tenant: str, source_id: str, run_id: str, row_hashes: dict[str, str],
+    ) -> None:
+        """Persist the new row-hash checkpoint and release the lease —
+        only if `run_id` is still the current lease holder, so a
+        crashed-then-superseded run can never clobber a newer run's
+        completion (the same failure merge_document's own docstring
+        documents for doc_id vs. real-identity MERGE keys, here guarded
+        explicitly instead of by choice of MERGE key)."""
+        await self.run(
+            """
+            MATCH (c:RelationalSourceCheckpoint {tenant: $tenant, source_id: $source_id})
+            WHERE c.lease_run_id = $run_id
+            SET c.ingest_complete = true,
+                c.row_hashes_json = $row_hashes_json,
+                c.completed_at = datetime(),
+                c.lease_run_id = null,
+                c.lease_expires_at = null
+            """,
+            tenant=tenant, source_id=source_id, run_id=run_id,
+            row_hashes_json=json.dumps(row_hashes, sort_keys=True),
+        )
+
+    async def tombstone_relational_rows(
+        self, tenant: str, source_id: str, entity_ids: list[str],
+    ) -> int:
+        """Soft-delete the Entity nodes for rows no longer present in the
+        source (same is_deleted/deleted_at shape as tombstone_documents(),
+        deliberately not a physical delete — see that method's docstring
+        for why). `entity_ids` are recomputed by the caller from the
+        existing deterministic uuid5(source_id:table:key) scheme, not
+        looked up here.
+
+        Note: unlike Document, nothing in graphrag/retrieval/ currently
+        filters on Entity.is_deleted -- this records the tombstone
+        durably, but wiring retrieval to respect it is a separate,
+        disclosed follow-up, not done here.
+        """
+        if not entity_ids:
+            return 0
+        rows = await self.run(
+            """
+            UNWIND $entity_ids AS eid
+            MATCH (e:Entity {id: eid, tenant: $tenant})
+            WHERE coalesce(e.is_deleted, false) = false
+            SET e.is_deleted = true, e.deleted_at = datetime()
+            RETURN count(e) AS tombstoned
+            """,
+            entity_ids=entity_ids, tenant=tenant,
+        )
+        return rows[0]["tombstoned"] if rows else 0
+
     async def merge_chunk(self, chunk: Chunk, tenant: str = "default"):
         """MERGE on (tenant, document_id, chunk_index) — stable across re-ingestion and
         re-chunking, unlike chunk.id (fresh uuid4() every run). Also writes

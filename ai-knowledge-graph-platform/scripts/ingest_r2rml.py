@@ -32,6 +32,7 @@ import argparse
 import asyncio
 import sys
 from pathlib import Path
+from uuid import uuid4
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
@@ -96,6 +97,28 @@ async def main(args: argparse.Namespace) -> None:
     if args.validate_only:
         return
 
+    if args.incremental:
+        # Closes a real gap: previous_hash was never supplied by this, the
+        # one real caller of ingest() -- see graphrag/ingestion/relational.py's
+        # ingest_incremental() docstring for what durability this adds
+        # (checkpoint, crash recovery, replay, concurrent-run protection)
+        # that plain ingest() (still the default below) does not have.
+        run_id = uuid4().hex
+        result = await ingestor.ingest_incremental(mapping, run_id=run_id)
+        log.info(
+            "ingest_r2rml.ingested_incremental",
+            tenant=result.tenant, run_id=run_id, skipped=result.skipped,
+            upserted=len(result.upserted), deleted=len(result.deleted),
+            unchanged=len(result.unchanged), shacl_conforms=result.shacl_conforms,
+        )
+        print(
+            f"Incremental ingest for tenant {result.tenant}: "
+            f"{'skipped (unchanged)' if result.skipped else 'wrote'} "
+            f"{len(result.upserted)} upserted, {len(result.deleted)} deleted, "
+            f"{len(result.unchanged)} unchanged row(s)."
+        )
+        return
+
     result = await ingestor.ingest(mapping)
     log.info(
         "ingest_r2rml.ingested",
@@ -123,6 +146,13 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--validate-only", action="store_true",
         help="Run mapping + SHACL validation and exit without writing to Neo4j",
+    )
+    parser.add_argument(
+        "--incremental", action="store_true",
+        help="Use ingest_incremental(): durable row-level checkpoint, crash "
+             "recovery/replay, and concurrent-run protection via a lease "
+             "(graphrag/ingestion/relational.py). Off by default -- plain "
+             "ingest() is unchanged.",
     )
     return parser.parse_args()
 

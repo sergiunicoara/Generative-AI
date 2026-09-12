@@ -11,6 +11,7 @@ import asyncio
 import json
 import re
 import sqlite3
+from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Protocol, runtime_checkable
@@ -30,6 +31,7 @@ from graphrag.ingestion.incremental import (
     compute_relational_snapshot_hash,
     should_skip_ingest,
 )
+from graphrag.ingestion.row_checkpoint import compute_row_hash, diff_rows
 
 _IDENTIFIER = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 
@@ -116,6 +118,39 @@ class MappingValidationReport(BaseModel):
     # when it matched the caller-supplied previous_hash and no write occurred.
     content_hash: str = ""
     skipped: bool = False
+
+
+class IncrementalIngestReport(MappingValidationReport):
+    """`MappingValidationReport` plus the row-level diff
+    `RelationalGraphIngestor.ingest_incremental()` computed against the
+    last completed checkpoint. `upserted`/`deleted` row keys are
+    `"entity:{table}:{key}"`/`"relation:{table}:{source_key}:{target_key}"`
+    -- see `graphrag/ingestion/row_checkpoint.py`."""
+
+    upserted: list[str] = Field(default_factory=list)
+    deleted: list[str] = Field(default_factory=list)
+    unchanged: list[str] = Field(default_factory=list)
+
+
+class ConcurrentIngestError(RuntimeError):
+    """Raised when another ingest run already holds the lease for this
+    (tenant, source_id) -- see `Neo4jClient.begin_relational_ingest_run`."""
+
+
+@dataclass
+class _BuildResult:
+    """What reading and building a mapping's entities/relations produces --
+    shared by `ingest()` and `ingest_incremental()` so both read/build
+    identically; only what each does with the result differs."""
+
+    entities: list[Entity]
+    relations: list[Relation]
+    payload: list[dict[str, Any]]
+    relation_payload: list[dict[str, Any]]
+    by_source_key: dict[tuple[str, str], Entity]
+    # "{entity|relation}:{table}:{key...}" -> per-row content hash, for
+    # ingest_incremental()'s row-level diff (graphrag/ingestion/row_checkpoint.py).
+    row_hashes: dict[str, str] = field(default_factory=dict)
 
 
 class SQLiteSourceConnector:
@@ -360,31 +395,17 @@ class RelationalGraphIngestor:
             errors=sorted(set(errors)),
         )
 
-    async def ingest(
-        self,
-        mapping: RelationalGraphMapping,
-        previous_hash: str | None = None,
-    ) -> MappingValidationReport:
-        """Validate, then write, `mapping`'s source through to the graph.
-
-        `previous_hash` is injected rather than fetched internally (e.g. via
-        a Neo4j lookup) so this method stays testable without a live graph —
-        matching this class's existing style, which already takes a
-        `connector`/`graph_writer` pair rather than reaching for either
-        itself. A real caller fetches it the same way
-        `scripts/ingest_corpus.py` already fetches a document's stored hash
-        (see `graphrag/ingestion/incremental.py`'s module docstring) and
-        passes it in. When the freshly-read snapshot's hash matches, the
-        write is skipped entirely — no SHACL check, no graph write — and the
-        returned report has `skipped=True`.
-        """
-        report = await self.validate(mapping)
-        if not report.valid:
-            raise ValueError("relational mapping rejected: " + "; ".join(report.errors))
-
+    async def _read_and_build(self, mapping: RelationalGraphMapping) -> _BuildResult:
+        """Read every entity/relation table and build `Entity`/`Relation`
+        model objects, payload rows (for the whole-snapshot hash), and a
+        per-row hash checkpoint map (for `ingest_incremental()`'s row-level
+        diff). Shared by `ingest()` and `ingest_incremental()` so both
+        read/build identically -- extracted from what used to be inline in
+        `ingest()` alone, no behavior change for it."""
         entities: list[Entity] = []
         by_source_key: dict[tuple[str, str], Entity] = {}
         payload: list[dict[str, Any]] = []
+        row_hashes: dict[str, str] = {}
         for table_map in mapping.entities:
             rows = await self.connector.read_table(table_map.table)
             for row in rows:
@@ -403,14 +424,17 @@ class RelationalGraphIngestor:
                 entities.append(entity)
                 by_source_key[(table_map.table, source_key)] = entity
                 payload.append({"table": table_map.table, "row": row})
+                row_hashes[f"entity:{table_map.table}:{source_key}"] = compute_row_hash(row)
 
         relations: list[Relation] = []
         relation_payload: list[dict[str, Any]] = []
         for table_map in mapping.relations:
             for row in await self.connector.read_table(table_map.table):
                 relation_payload.append({"table": table_map.table, "row": row})
-                source = by_source_key.get((table_map.source_table, str(row[table_map.source_column])))
-                target = by_source_key.get((table_map.target_table, str(row[table_map.target_column])))
+                source_key = str(row[table_map.source_column])
+                target_key = str(row[table_map.target_column])
+                source = by_source_key.get((table_map.source_table, source_key))
+                target = by_source_key.get((table_map.target_table, target_key))
                 if source is None or target is None:
                     raise ValueError(f"{table_map.table}: relation references an unknown entity")
                 relation_id = str(uuid5(NAMESPACE_URL, f"{mapping.source_id}:{table_map.table}:{source.id}:{target.id}"))
@@ -425,6 +449,43 @@ class RelationalGraphIngestor:
                     valid_to=self._timestamp(row.get(table_map.valid_to_column)) if table_map.valid_to_column else None,
                     source_doc_id=f"relational:{mapping.source_id}",
                 ))
+                row_hashes[f"relation:{table_map.table}:{source_key}:{target_key}"] = compute_row_hash(row)
+
+        return _BuildResult(
+            entities=entities, relations=relations, payload=payload,
+            relation_payload=relation_payload, by_source_key=by_source_key,
+            row_hashes=row_hashes,
+        )
+
+    async def ingest(
+        self,
+        mapping: RelationalGraphMapping,
+        previous_hash: str | None = None,
+    ) -> MappingValidationReport:
+        """Validate, then write, `mapping`'s source through to the graph.
+
+        `previous_hash` is injected rather than fetched internally (e.g. via
+        a Neo4j lookup) so this method stays testable without a live graph —
+        matching this class's existing style, which already takes a
+        `connector`/`graph_writer` pair rather than reaching for either
+        itself. A real caller fetches it the same way
+        `scripts/ingest_corpus.py` already fetches a document's stored hash
+        (see `graphrag/ingestion/incremental.py`'s module docstring) and
+        passes it in. When the freshly-read snapshot's hash matches, the
+        write is skipped entirely — no SHACL check, no graph write — and the
+        returned report has `skipped=True`.
+
+        Whole-snapshot, all-or-nothing, no durable checkpoint of its own —
+        see `ingest_incremental()` for row-level diffing, a durable
+        checkpoint, crash recovery, and concurrent-run protection.
+        """
+        report = await self.validate(mapping)
+        if not report.valid:
+            raise ValueError("relational mapping rejected: " + "; ".join(report.errors))
+
+        built = await self._read_and_build(mapping)
+        entities, relations = built.entities, built.relations
+        payload, relation_payload = built.payload, built.relation_payload
 
         # Snapshot hash covers entity AND relation rows -- a source where only
         # a relation table changed (e.g. supplies) must still be detected,
@@ -496,6 +557,155 @@ class RelationalGraphIngestor:
         await self.graph_writer.write_relations(relations, entity_map, doc_id=document_id, tenant=mapping.tenant)
         return report
 
+    async def ingest_incremental(
+        self,
+        mapping: RelationalGraphMapping,
+        *,
+        run_id: str,
+        lease_seconds: int = 300,
+    ) -> IncrementalIngestReport:
+        """Durable, row-level incremental ingest.
+
+        Acquires a lease for (tenant, source_id) before doing anything else
+        — concurrent-run protection: a second call for the same source
+        while a lease is held raises `ConcurrentIngestError` immediately,
+        no partial read or write. Then diffs this run's rows against the
+        last *completed* checkpoint (row-level upsert/delete detection — an
+        incomplete checkpoint from a crashed run is never trusted, same
+        reasoning `Neo4jClient.get_document_states()` already documents for
+        the document path), writes the current full row set (MERGE-
+        idempotent, so this is correct on any change, not just an unchanged
+        one — see the module docstring's "Out of scope" note on why this
+        isn't a selective/minimal write), tombstones entities whose row
+        disappeared, and only then persists the new checkpoint and releases
+        the lease.
+
+        Crash recovery and replay: a crash anywhere after the lease is
+        acquired leaves it claimed but the checkpoint's `ingest_complete`
+        unchanged — deliberately not released on error (fail-safe, not
+        fail-open: an immediate retry racing the same broken state is worse
+        than a bounded wait). The next call's lease acquisition succeeds
+        once `lease_seconds` elapses and safely replays the whole sequence
+        from scratch; this works *because* every write and tombstone here
+        is idempotent, not because of any special-cased resume logic.
+
+        Known limitation, stated plainly: a deleted *relation*-table row
+        (a join disappearing while both entities remain) is reported in
+        `deleted` for visibility but is not soft-deleted at the graph level
+        in this pass — only entity deletions are tombstoned. Extending
+        tombstoning to relationship edges is a real, separate follow-up.
+        """
+        neo4j = self.graph_writer.neo4j_client
+        acquired = await neo4j.begin_relational_ingest_run(
+            mapping.tenant, mapping.source_id, run_id, lease_seconds,
+        )
+        if not acquired:
+            raise ConcurrentIngestError(
+                f"{mapping.source_id!r}: another ingest run already holds the lease"
+            )
+
+        report = await self.validate(mapping)
+        if not report.valid:
+            raise ValueError("relational mapping rejected: " + "; ".join(report.errors))
+
+        built = await self._read_and_build(mapping)
+        current_hash = compute_relational_snapshot_hash(built.payload + built.relation_payload)
+
+        previous_state = await neo4j.get_relational_source_state(mapping.tenant, mapping.source_id)
+        previous_row_hashes = (
+            previous_state["row_hashes"]
+            if previous_state is not None and previous_state["ingest_complete"]
+            else {}
+        )
+        diff = diff_rows(previous_row_hashes, built.row_hashes)
+
+        if not diff.upserted and not diff.deleted and previous_state is not None and previous_state["ingest_complete"]:
+            # Row-level diff subsumes the whole-snapshot check ingest() uses
+            # -- nothing changed and nothing disappeared, so this is exactly
+            # ingest()'s should_skip_ingest() condition, just derived from
+            # the row-level checkpoint instead of a separate stored hash.
+            # Still refreshes the checkpoint/releases the lease: a skip must
+            # not leave a run "in flight" forever.
+            await neo4j.complete_relational_ingest_run(
+                mapping.tenant, mapping.source_id, run_id, built.row_hashes,
+            )
+            incremental_report = IncrementalIngestReport(**report.model_dump())
+            incremental_report.content_hash = current_hash
+            incremental_report.skipped = True
+            incremental_report.unchanged = diff.unchanged
+            return incremental_report
+
+        from graphrag.graph.shacl_validator import SHACLValidator
+
+        conforms, shacl_report = SHACLValidator.validate_relational_batch(
+            built.entities, built.relations, tenant=mapping.tenant,
+        )
+        report.shacl_conforms = conforms
+        if not conforms:
+            raise ValueError("relational mapping rejected by SHACL: " + shacl_report)
+
+        catalog = SourceCatalogRepository(neo4j)
+        await catalog.upsert_source(SourceSystem(
+            id=mapping.source_id,
+            tenant=mapping.tenant,
+            name=mapping.source_id,
+            kind=self.connector.kind,
+            uri=self.connector.uri,
+            owner="relational-ingestion",
+            classification="synthetic" if mapping.tenant == "sustainability" else "internal",
+        ))
+        await catalog.add_mapping(mapping.as_source_mapping())
+
+        raw = json.dumps(built.payload, sort_keys=True, default=str)
+        document = Document(
+            id=str(uuid5(NAMESPACE_URL, f"relational-document:{mapping.source_id}")),
+            filename=f"relational://{mapping.source_id}",
+            source_path=self.connector.uri,
+            raw_text=raw,
+            content_hash=current_hash,
+            tenant=mapping.tenant,
+            source_id=mapping.source_id,
+            status="done",
+            metadata={"mapping_id": mapping.id, "mapping_version": mapping.version,
+                      "ontology_version": mapping.ontology_version,
+                      "provenance": "local-relational-source"},
+        )
+        document_id = await self.graph_writer.write_document(document)
+        chunk = Chunk(
+            id=str(uuid5(NAMESPACE_URL, f"relational-chunk:{document_id}")),
+            document_id=document_id,
+            text=raw,
+            chunk_index=0,
+            tenant=mapping.tenant,
+            metadata={"source_id": mapping.source_id, "mapping_version": mapping.version},
+        )
+        await self.graph_writer.write_chunks([chunk])
+        written = await self.graph_writer.write_entities(built.entities, chunk)
+        entity_map = {entity.id: entity for entity in written}
+        await self.graph_writer.write_relations(
+            built.relations, entity_map, doc_id=document_id, tenant=mapping.tenant,
+        )
+
+        deleted_entity_ids = []
+        for key in diff.deleted:
+            if not key.startswith("entity:"):
+                continue
+            _, table, source_key = key.split(":", 2)
+            deleted_entity_ids.append(
+                str(uuid5(NAMESPACE_URL, f"{mapping.source_id}:{table}:{source_key}"))
+            )
+        if deleted_entity_ids:
+            await neo4j.tombstone_relational_rows(mapping.tenant, mapping.source_id, deleted_entity_ids)
+
+        await neo4j.complete_relational_ingest_run(
+            mapping.tenant, mapping.source_id, run_id, built.row_hashes,
+        )
+        return IncrementalIngestReport(
+            **report.model_dump(exclude={"content_hash"}),
+            content_hash=current_hash,
+            upserted=diff.upserted, deleted=diff.deleted, unchanged=diff.unchanged,
+        )
+
     @staticmethod
     def _timestamp(value: Any) -> datetime | None:
         if value in (None, ""):
@@ -506,7 +716,8 @@ class RelationalGraphIngestor:
 
 
 __all__ = [
-    "EntityTableMapping", "RelationTableMapping", "RelationalGraphMapping",
-    "MappingValidationReport", "TabularSourceConnector", "SQLiteSourceConnector",
-    "PostgreSQLSourceConnector", "ExcelWorkbookConnector", "RelationalGraphIngestor",
+    "ConcurrentIngestError", "EntityTableMapping", "RelationTableMapping",
+    "RelationalGraphMapping", "IncrementalIngestReport", "MappingValidationReport",
+    "TabularSourceConnector", "SQLiteSourceConnector", "PostgreSQLSourceConnector",
+    "ExcelWorkbookConnector", "RelationalGraphIngestor",
 ]

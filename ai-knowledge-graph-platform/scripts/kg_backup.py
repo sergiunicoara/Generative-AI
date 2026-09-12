@@ -283,9 +283,16 @@ async def do_restore(args: argparse.Namespace) -> None:
                 ON CREATE SET e.description  = $description,
                               e.confidence   = $confidence,
                               e.valid_from   = $valid_from,
+                              e.valid_to     = $valid_to,
                               e.wikidata_qid = $wikidata_qid,
+                              e.quarantined  = $quarantined,
                               e.recorded_at  = datetime()
-                ON MATCH SET  e.description  = $description
+                ON MATCH SET  e.description  = $description,
+                              e.confidence   = $confidence,
+                              e.valid_from   = $valid_from,
+                              e.valid_to     = $valid_to,
+                              e.wikidata_qid = $wikidata_qid,
+                              e.quarantined  = $quarantined
                 """,
                 name=obj.get("name", ""),
                 type=obj.get("type", "CONCEPT"),
@@ -293,7 +300,9 @@ async def do_restore(args: argparse.Namespace) -> None:
                 description=obj.get("description", ""),
                 confidence=obj.get("confidence", 1.0),
                 valid_from=obj.get("valid_from"),
+                valid_to=obj.get("valid_to"),
                 wikidata_qid=obj.get("wikidata_qid"),
+                quarantined=obj.get("quarantined", False),
             )
             n_entities += 1
 
@@ -306,7 +315,14 @@ async def do_restore(args: argparse.Namespace) -> None:
                 ON CREATE SET r.confidence    = $confidence,
                               r.source_type   = $source_type,
                               r.source_doc_ids = $source_doc_ids,
+                              r.valid_from    = $valid_from,
+                              r.valid_to      = $valid_to,
                               r.recorded_at   = datetime()
+                ON MATCH SET  r.confidence    = $confidence,
+                              r.source_type   = $source_type,
+                              r.source_doc_ids = $source_doc_ids,
+                              r.valid_from    = $valid_from,
+                              r.valid_to      = $valid_to
                 """,
                 src=obj.get("src", ""),
                 src_type=obj.get("src_type", "CONCEPT"),
@@ -317,6 +333,8 @@ async def do_restore(args: argparse.Namespace) -> None:
                 confidence=obj.get("confidence", 1.0),
                 source_type=obj.get("source_type", "backup"),
                 source_doc_ids=obj.get("source_doc_ids") or [],
+                valid_from=obj.get("valid_from"),
+                valid_to=obj.get("valid_to"),
             )
             n_relations += 1
 

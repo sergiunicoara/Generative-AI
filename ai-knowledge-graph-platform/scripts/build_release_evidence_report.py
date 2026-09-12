@@ -152,13 +152,17 @@ def benchmark_evidence() -> dict[str, Any]:
 
 
 def recovery_evidence() -> dict[str, Any]:
-    # scripts/run_production_exercises.py's `recovery` subcommand prints its
-    # result to stdout and is NOT redirected to a file by
-    # docs/local-evidence-runbook.md today -- so this will show `available:
-    # false` until that command's output is saved here, e.g.:
-    #   python scripts/run_production_exercises.py recovery <backup> <restored> \
-    #       > artifacts/recovery-exercise.json
-    return _read_json_if_exists(_RECOVERY_PATH, label="backup/restore recovery-exercise result")
+    # A legacy artifact at this path can only be a file-digest comparison; it
+    # must not be mistaken for database recovery evidence. Live recovery is
+    # exercised by the Docker-backed GraphDB/Neo4j e2e tests documented in
+    # docs/local-evidence-runbook.md.
+    result = _read_json_if_exists(_RECOVERY_PATH, label="database recovery result")
+    if result.get("available") and result.get("database_recovery_proof") is False:
+        return {
+            "available": False,
+            "reason": "artifact is a file-integrity check, not database recovery evidence",
+        }
+    return result
 
 
 def build_report() -> dict[str, Any]:

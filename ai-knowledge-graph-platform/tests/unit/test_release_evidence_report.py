@@ -110,6 +110,16 @@ class TestGracefulDegradationWhenAnArtifactIsMissing:
         assert result["available"] is False
         assert "not valid JSON" in result["reason"]
 
+    def test_digest_only_artifact_is_not_presented_as_database_recovery(self, tmp_path):
+        artifact = tmp_path / "recovery-exercise.json"
+        artifact.write_text(json.dumps({
+            "database_recovery_proof": False, "match": True,
+        }), encoding="utf-8")
+        with patch.object(report_mod, "_RECOVERY_PATH", artifact):
+            result = report_mod.recovery_evidence()
+        assert result["available"] is False
+        assert "file-integrity" in result["reason"]
+
 
 class TestBuildReportShape:
     def test_report_carries_schema_version_and_claim_policy(self):

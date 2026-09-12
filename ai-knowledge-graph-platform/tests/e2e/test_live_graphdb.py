@@ -1,6 +1,4 @@
-"""Docker-backed live GraphDB verification: R2RML materialization -> real
-repository auto-provisioning -> real load -> real SPARQL 1.1 query -> proof
-that data survives a container restart.
+"""Docker-backed live GraphDB verification for the Energy RDF workflow.
 
 Closes the exact gap named in a follow-up platform review: *"Run the Energy
 workflow against one RDF platform named in the JD, with automated load/
@@ -32,9 +30,8 @@ sys.path.insert(0, str(ROOT / "scripts"))
 # Matches tests/unit/test_r2rml_rdf_materialization.py's exact import
 # pattern for this script-shaped fixture builder.
 from create_energy_demo_sqlite import create as create_energy_demo_sqlite  # noqa: E402
+from graphrag.domains.energy.demo import EnergyDemoService  # noqa: E402
 from graphrag.graph.triplestore import TripleStoreTarget  # noqa: E402
-from graphrag.ingestion.r2rml_rdf import materialize_r2rml  # noqa: E402
-from graphrag.ingestion.relational import SQLiteSourceConnector  # noqa: E402
 
 
 def _docker_and_testcontainers_available() -> bool:
@@ -62,22 +59,23 @@ pytestmark = pytest.mark.skipif(
 _IMAGE = "ontotext/graphdb:10.8.1"
 _CONTAINER_PORT = 7200
 
-# Same "which assets have open work orders" finding tests/e2e/test_live_blazegraph.py
-# proves against Blazegraph -- proving the identical result over GraphDB too.
-_MAINTENANCE_SPARQL = """
-PREFIX energy: <https://example.energy.demo/ontology#>
-PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
-SELECT ?asset ?assetLabel ?workOrder ?status WHERE {
-  ?workOrder a energy:WorkOrder ;
-             energy:status ?status ;
-             energy:concernsAsset ?asset .
-  ?asset rdfs:label ?assetLabel .
-  FILTER(?status = "open")
-}
-ORDER BY ?asset
-"""
+_MAINTENANCE_QUERY_PATH = ROOT / "evals" / "energy_demo" / "sparql" / "maintenance_review.rq"
 
-_EXPECTED_OPEN_ASSETS = ["Wind turbine WT-01", "Wind turbine WT-02"]
+
+def _maintenance_review_query() -> str:
+    """Match EnergyDemoService.answer()'s committed-query execution path."""
+    return _MAINTENANCE_QUERY_PATH.read_text(encoding="utf-8").replace(
+        "{{BULLETIN_ID}}", "MFG-GBX-17-R2",
+    )
+
+
+def _assert_maintenance_result(rows: list[dict]) -> None:
+    assert len(rows) == 1
+    row = rows[0]
+    assert row["asset"].endswith("/WT-01")
+    assert row["workOrder"].endswith("/WO-9001")
+    assert row["temperature"] == "96"
+    assert row["threshold"] == "85.0"
 
 
 @pytest.fixture(scope="module")
@@ -121,16 +119,13 @@ def _endpoint_url(container) -> str:
     return f"http://{host}:{port}"
 
 
-class TestLiveGraphDBR2RMLPipeline:
+class TestLiveGraphDBEnergyRecovery:
     async def test_materialize_load_and_query_the_real_endpoint(
         self, graphdb_container, tmp_path,
     ) -> None:
         db_path = tmp_path / "energy-demo-sap.sqlite"
         create_energy_demo_sqlite(db_path)
-        mapping_path = ROOT / "ontology" / "mappings" / "energy-assets.r2rml.ttl"
-
-        graph = await materialize_r2rml(mapping_path, SQLiteSourceConnector(db_path))
-        ttl_bytes = graph.serialize(format="turtle").encode("utf-8")
+        ttl_bytes = EnergyDemoService(db_path).export_turtle().encode("utf-8")
 
         target = TripleStoreTarget(
             "graphdb", _endpoint_url(graphdb_container), repository="kg_e2e",
@@ -138,8 +133,7 @@ class TestLiveGraphDBR2RMLPipeline:
         status = await target.load(ttl_bytes)
         assert 200 <= status < 300
 
-        rows = await target.query(_MAINTENANCE_SPARQL)
-        assert sorted(row["assetLabel"] for row in rows) == _EXPECTED_OPEN_ASSETS
+        _assert_maintenance_result(await target.query(_maintenance_review_query()))
 
     async def test_repository_creation_is_idempotent(
         self, graphdb_container, tmp_path,
@@ -150,9 +144,7 @@ class TestLiveGraphDBR2RMLPipeline:
         tolerance check in TripleStoreTarget._ensure_graphdb_repository()."""
         db_path = tmp_path / "energy-demo-sap.sqlite"
         create_energy_demo_sqlite(db_path)
-        mapping_path = ROOT / "ontology" / "mappings" / "energy-assets.r2rml.ttl"
-        graph = await materialize_r2rml(mapping_path, SQLiteSourceConnector(db_path))
-        ttl_bytes = graph.serialize(format="turtle").encode("utf-8")
+        ttl_bytes = EnergyDemoService(db_path).export_turtle().encode("utf-8")
         endpoint = _endpoint_url(graphdb_container)
 
         first = await TripleStoreTarget("graphdb", endpoint, repository="kg_idempotent").load(ttl_bytes)
@@ -169,16 +161,13 @@ class TestLiveGraphDBR2RMLPipeline:
         in-memory session within one running container."""
         db_path = tmp_path / "energy-demo-sap.sqlite"
         create_energy_demo_sqlite(db_path)
-        mapping_path = ROOT / "ontology" / "mappings" / "energy-assets.r2rml.ttl"
-        graph = await materialize_r2rml(mapping_path, SQLiteSourceConnector(db_path))
-        ttl_bytes = graph.serialize(format="turtle").encode("utf-8")
+        ttl_bytes = EnergyDemoService(db_path).export_turtle().encode("utf-8")
 
         target = TripleStoreTarget(
             "graphdb", _endpoint_url(graphdb_container), repository="kg_restart",
         )
         await target.load(ttl_bytes)
-        before = await target.query(_MAINTENANCE_SPARQL)
-        assert sorted(row["assetLabel"] for row in before) == _EXPECTED_OPEN_ASSETS
+        _assert_maintenance_result(await target.query(_maintenance_review_query()))
 
         graphdb_container.get_wrapped_container().restart()
         _wait_for_graphdb(graphdb_container)
@@ -190,5 +179,34 @@ class TestLiveGraphDBR2RMLPipeline:
         restarted_target = TripleStoreTarget(
             "graphdb", _endpoint_url(graphdb_container), repository="kg_restart",
         )
-        after = await restarted_target.query(_MAINTENANCE_SPARQL)
-        assert sorted(row["assetLabel"] for row in after) == _EXPECTED_OPEN_ASSETS
+        _assert_maintenance_result(await restarted_target.query(_maintenance_review_query()))
+
+    async def test_turtle_export_restores_the_committed_energy_query(
+        self, graphdb_container, tmp_path,
+    ) -> None:
+        """Portable RDF recovery proof for GraphDB Lite.
+
+        The free GraphDB image used here has no tested binary-backup REST path
+        in this repository. A SPARQL CONSTRUCT export is therefore used as a
+        portable *dataset* backup, loaded into a fresh repository. This does
+        not claim to restore GraphDB repository settings or operational state.
+        """
+        db_path = tmp_path / "energy-demo-sap.sqlite"
+        create_energy_demo_sqlite(db_path)
+        source = TripleStoreTarget(
+            "graphdb", _endpoint_url(graphdb_container), repository="kg_recovery_source",
+        )
+        await source.load(EnergyDemoService(db_path).export_turtle().encode("utf-8"))
+        before = await source.query(_maintenance_review_query())
+        _assert_maintenance_result(before)
+
+        backup_turtle = await source.export_turtle()
+        assert b"MFG-GBX-17-R2" in backup_turtle
+
+        restored = TripleStoreTarget(
+            "graphdb", _endpoint_url(graphdb_container), repository="kg_recovery_restored",
+        )
+        await restored.load(backup_turtle)
+        after = await restored.query(_maintenance_review_query())
+        _assert_maintenance_result(after)
+        assert after == before

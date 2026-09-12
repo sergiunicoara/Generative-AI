@@ -132,7 +132,7 @@ example, not a measured study; do not generalize it to customer time savings.
 python scripts/run_engineering_workflow.py workflows/example.yaml --run-id evidence-demo
 python scripts/summarize_workflow_evidence.py artifacts/workflow-runs.json artifacts/cost-events.json --output artifacts/workflow-evidence.json
 python scripts/run_production_exercises.py security artifacts/security-cases.json
-python scripts/run_production_exercises.py recovery artifacts/backup.dump artifacts/restored.dump > artifacts/recovery-exercise.json
+python scripts/run_production_exercises.py artifact-integrity artifacts/backup.dump artifacts/restored.dump > artifacts/artifact-integrity.json
 ```
 
 Use `scripts/export_operational_evidence.py` to combine an authenticated
@@ -153,7 +153,24 @@ integrity. The Kubernetes commands validate rendered manifests and admission
 shape. See `docs/gcp-production-deployment.md` for rollout and rollback steps;
 neither exercise is a production availability or incident-prevention claim.
 
-With Docker Compose running, exercise a real dependency restart and restore:
+The command above compares two files only. It is an artifact-integrity check,
+not evidence that a database was restored. Use the Docker-backed recovery
+tests below for that proof.
+
+With Docker available, exercise a real RDF and property-graph recovery:
+
+```powershell
+python -m pytest -q tests/e2e/test_live_graphdb.py tests/e2e/test_live_neo4j_backup_restore.py
+```
+
+The GraphDB test exports the Energy RDF dataset using a SPARQL `CONSTRUCT`,
+loads it into a fresh repository, and reruns the committed
+`maintenance_review.rq` query. The Neo4j test runs `scripts/kg_backup.py`,
+wipes the test tenant, restores its NDJSON backup, and reruns Cypher against
+the restored data. These tests prove dataset recovery, not a vendor-native
+binary restore or repository-configuration recovery.
+
+With Docker Compose running, exercise a real dependency restart:
 
 ```powershell
 python scripts/run_docker_failure_exercise.py --service redis --output artifacts/docker-redis-failure-exercise.json

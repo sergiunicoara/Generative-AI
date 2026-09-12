@@ -6,7 +6,7 @@ from graphrag.ops.production_exercises import (
     run_backup_recovery_exercise, run_load_exercise, run_security_exercise,
 )
 from graphrag.retrieval.query_planner import classify_query, retrieval_plan
-from scripts.run_production_exercises import cost_exercise, recovery_exercise
+from scripts.run_production_exercises import artifact_integrity_check, cost_exercise, recovery_exercise
 
 
 def test_query_planner_routes_classes_and_fallbacks():
@@ -88,7 +88,10 @@ def test_executable_recovery_and_cost_exercises(tmp_path):
     restored = tmp_path / "restored.dump"
     backup.write_bytes(b"verified graph backup")
     restored.write_bytes(b"verified graph backup")
-    assert recovery_exercise(backup, restored)["match"] is True
+    integrity = artifact_integrity_check(backup, restored)
+    assert integrity["match"] is True
+    assert integrity["database_recovery_proof"] is False
+    assert recovery_exercise(backup, restored)["check_type"] == "artifact_integrity_only"
     report = cost_exercise([{
         "tenant": "acme", "stage": "synthesis", "provider": "groq",
         "model": "model", "cost_usd": 0.05, "latency_ms": 100,

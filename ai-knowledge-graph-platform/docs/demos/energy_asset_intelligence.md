@@ -95,6 +95,14 @@ GRAPHDB_LITE ... Licensee: Freeware ... Expiry date: none") — **GraphDB
 earlier pin to `11.2.0` here would not have booted. No GraphDB credentials
 are committed.
 
+The Docker-backed recovery test exports the Energy dataset as Turtle through
+a read-only SPARQL `CONSTRUCT`, loads it into a fresh GraphDB repository, and
+reruns the same committed `evals/energy_demo/sparql/maintenance_review.rq`
+query that `EnergyDemoService.answer()` uses. This is portable RDF *dataset*
+recovery, not a GraphDB binary backup: repository configuration, users,
+inference caches, and operational state remain the responsibility of the
+selected GraphDB backup procedure.
+
 ## Demo narrative
 
 1. Ask which assets need review. WT-01 is identified using a 96 C measurement,

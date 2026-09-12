@@ -177,6 +177,7 @@ class TestInputLimits:
     )
     def test_invalid_requests_are_rejected_without_reaching_retrieval(self, payload):
         mock_searcher = MagicMock()
+        mock_searcher.search = AsyncMock()
         with patch.object(search_routes, "_get_searcher", return_value=mock_searcher):
             resp = _make_client().post("/search", json=payload)
 
@@ -189,13 +190,11 @@ class TestTimeout:
         mock_searcher = MagicMock()
         mock_searcher.search = AsyncMock(side_effect=asyncio.TimeoutError)
 
-        with (
-            patch.object(search_routes, "_get_searcher", return_value=mock_searcher),
-            patch("api.routes.search.asyncio.wait_for", side_effect=asyncio.TimeoutError),
-        ):
+        with patch.object(search_routes, "_get_searcher", return_value=mock_searcher):
             resp = _make_client().post("/search", json={"query": "hello"})
 
         assert resp.status_code == 504
+        mock_searcher.search.assert_awaited_once()
 
     def test_503_when_retrieval_raises(self):
         mock_searcher = MagicMock()

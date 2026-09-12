@@ -6,8 +6,11 @@ import argparse
 import asyncio
 import hashlib
 import json
+import sys
 from pathlib import Path
 from urllib.request import Request, urlopen
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from graphrag.observability.cost_attribution import CostEvent, aggregate_costs
 from graphrag.ops.production_exercises import run_load_exercise, run_security_exercise
@@ -21,16 +24,30 @@ def file_digest(path: Path) -> str:
     return digest.hexdigest()
 
 
-def recovery_exercise(backup_path: Path, restored_path: Path) -> dict:
+def artifact_integrity_check(backup_path: Path, restored_path: Path) -> dict:
+    """Compare two files without claiming that a database was recovered.
+
+    This is useful for checking whether an exported artifact changed in
+    transit, but it does not call a database, restore data, or re-run a
+    workload. Live recovery evidence lives in the Docker-backed GraphDB and
+    Neo4j tests, which execute the actual restore and query paths.
+    """
     backup_digest = file_digest(backup_path)
     restored_digest = file_digest(restored_path)
     return {
+        "check_type": "artifact_integrity_only",
+        "database_recovery_proof": False,
         "backup_path": str(backup_path),
         "restored_path": str(restored_path),
         "backup_digest": backup_digest,
         "restored_digest": restored_digest,
         "match": backup_digest == restored_digest,
     }
+
+
+def recovery_exercise(backup_path: Path, restored_path: Path) -> dict:
+    """Deprecated compatibility alias for :func:`artifact_integrity_check`."""
+    return artifact_integrity_check(backup_path, restored_path)
 
 
 async def _http_operation(case: dict) -> None:
@@ -53,8 +70,8 @@ def cost_exercise(events: list[dict]) -> dict:
 async def run(args: argparse.Namespace) -> dict:
     if args.exercise == "security":
         return run_security_exercise(json.loads(args.cases.read_text(encoding="utf-8")))
-    if args.exercise == "recovery":
-        return recovery_exercise(args.backup, args.restored)
+    if args.exercise in {"recovery", "artifact-integrity"}:
+        return artifact_integrity_check(args.backup, args.restored)
     if args.exercise == "cost":
         return cost_exercise(json.loads(args.events.read_text(encoding="utf-8")))
     cases = json.loads(args.cases.read_text(encoding="utf-8"))
@@ -66,7 +83,10 @@ def main() -> None:
     subparsers = parser.add_subparsers(dest="exercise", required=True)
     security = subparsers.add_parser("security")
     security.add_argument("cases", type=Path)
-    recovery = subparsers.add_parser("recovery")
+    integrity = subparsers.add_parser("artifact-integrity")
+    integrity.add_argument("backup", type=Path)
+    integrity.add_argument("restored", type=Path)
+    recovery = subparsers.add_parser("recovery", help="deprecated; use artifact-integrity")
     recovery.add_argument("backup", type=Path)
     recovery.add_argument("restored", type=Path)
     cost = subparsers.add_parser("cost")

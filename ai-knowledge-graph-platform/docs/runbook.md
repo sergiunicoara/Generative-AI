@@ -405,6 +405,11 @@ MATCH (n) DETACH DELETE n
 -- Then run restore
 ```
 
+For an isolated, executable proof of backup → wipe → restore → Cypher re-query,
+run `python -m pytest -q tests/e2e/test_live_neo4j_backup_restore.py` with
+Docker available. The test uses `kg_backup.py` itself; it does not treat a
+matching pair of files as database-recovery evidence.
+
 ### Schema backup
 
 The schema is idempotent. Re-run `scripts/init_neo4j.py` to recreate indexes and constraints after any database wipe.

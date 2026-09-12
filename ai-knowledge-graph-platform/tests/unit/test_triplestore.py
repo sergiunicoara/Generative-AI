@@ -118,6 +118,18 @@ class TestRemoteSPARQLEndpointQuery:
             await endpoint.query("SELECT ?s WHERE { ?s ?p ?o }")
 
     @pytest.mark.asyncio
+    async def test_construct_turtle_requests_an_rdf_representation(self):
+        client = _mock_client()
+        client.post.return_value.content = b"<urn:asset:WT-01> <urn:p> <urn:o> ."
+        endpoint = RemoteSPARQLEndpoint("http://store.example/sparql", client=client)
+
+        exported = await endpoint.construct_turtle("CONSTRUCT { ?s ?p ?o } WHERE { ?s ?p ?o }")
+
+        assert exported.startswith(b"<urn:asset:WT-01>")
+        _, kwargs = client.post.call_args
+        assert kwargs["headers"]["Accept"] == "text/turtle"
+
+    @pytest.mark.asyncio
     async def test_has_no_update_method(self):
         # /kg/sparql/update must keep targeting the local Turtle snapshot
         # even when a remote endpoint is configured for reads -- this class
@@ -181,6 +193,16 @@ class TestTripleStoreTargetLoad:
         target = TripleStoreTarget("neptune", "https://neptune.example:8182")
         with pytest.raises(NotImplementedError, match="neptune"):
             await target.load(b"<a> <b> <c> .")
+
+    @pytest.mark.asyncio
+    async def test_export_turtle_uses_a_read_only_construct_query(self):
+        client = _mock_client()
+        client.post.return_value.content = b"<a> <b> <c> ."
+        target = TripleStoreTarget("graphdb", "http://localhost:7200", client=client, repository="kg")
+
+        assert await target.export_turtle() == b"<a> <b> <c> ."
+        _, kwargs = client.post.call_args
+        assert kwargs["content"] == "CONSTRUCT { ?s ?p ?o } WHERE { ?s ?p ?o }"
 
 
 def _mock_response(status_code: int, json_payload: dict | None = None) -> MagicMock:

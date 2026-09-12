@@ -176,6 +176,36 @@ class RemoteSPARQLEndpoint:
         """
         return await self._post_query(sparql)
 
+    async def construct_turtle(self, sparql: str) -> bytes:
+        """Run a read-only CONSTRUCT/DESCRIBE query and return Turtle bytes.
+
+        This is deliberately separate from :meth:`query`: SELECT results use
+        SPARQL Results JSON, whereas a graph export is an RDF representation.
+        It is used by the GraphDB recovery exercise to make a portable RDF
+        backup, then load it into a fresh repository. It is not a vendor
+        binary backup and makes no claim to preserve vendor configuration,
+        inference caches, users, or repository settings.
+        """
+        _reject_unsafe_sparql(sparql)
+        headers = {
+            "Content-Type": "application/sparql-query",
+            "Accept": "text/turtle",
+        }
+        try:
+            if self._client is not None:
+                response = await self._client.post(
+                    self._query_url, content=sparql, headers=headers, auth=self._auth,
+                )
+            else:
+                async with httpx.AsyncClient(timeout=self._timeout) as client:
+                    response = await client.post(
+                        self._query_url, content=sparql, headers=headers, auth=self._auth,
+                    )
+            response.raise_for_status()
+        except httpx.HTTPError as exc:
+            raise ValueError(f"remote SPARQL graph export failed: {exc}") from exc
+        return response.content
+
 
 # ── Vendor Graph Store URL builders ─────────────────────────────────────────
 #
@@ -287,6 +317,16 @@ class TripleStoreTarget:
         self, sparql: str, init_ns: dict[str, str] | None = None,
     ) -> list[dict]:
         return await self._endpoint().query(sparql, init_ns=init_ns)
+
+    async def export_turtle(self) -> bytes:
+        """Export the default graph as portable Turtle through SPARQL 1.1.
+
+        The result is a data backup suitable for loading into a fresh RDF
+        repository. It is intentionally not presented as a vendor-native
+        backup: repository configuration and operational metadata are outside
+        the RDF dataset and require the selected vendor's own recovery tools.
+        """
+        return await self._endpoint().construct_turtle("CONSTRUCT { ?s ?p ?o } WHERE { ?s ?p ?o }")
 
     async def _post(self, url: str, **kwargs) -> httpx.Response:
         """Shared raw-POST helper for the management calls below -- both

@@ -103,6 +103,29 @@ jobs:
             exit 1
           fi
 
+  clean-install:
+    name: Validate a clean installation
+    # Item 6 of a follow-up platform review: "validate a clean
+    # installation." Every other job here installs requirements-dev.txt
+    # (pytest/ruff/mypy extras) -- proving the DEV dependency set works,
+    # which nobody deploying this app ever installs. This job installs
+    # ONLY requirements.txt (the real production set) with no pip cache
+    # (a genuinely cold install, not a warm one) and imports the real ASGI
+    # app object with nothing else present, catching a prod/dev dependency
+    # split the other jobs structurally cannot.
+    runs-on: ubuntu-latest
+    env:
+      ENV: test
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install production dependencies only
+        run: pip install -r requirements.txt
+      - name: Import the real ASGI app with only production dependencies installed
+        run: python -c "import api.main; print('OK:', api.main.app.title)"
+
   lint:
     name: Lint
     runs-on: ubuntu-latest

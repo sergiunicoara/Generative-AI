@@ -67,6 +67,15 @@ relationship endpoints before mutation. Maximum relationship counts still
 need a same-transaction database check in a production connector to avoid a
 check-then-write race.
 
+The migration was introduced behind parity tests before the generated files
+replaced their manually maintained predecessors. The checked tests parse the
+generated Turtle with RDFLib, validate representative valid and invalid graphs
+through the project's actual SHACL service, compare the established Energy
+classes/properties, exercise compiler drift and source-location diagnostics,
+and rerun the existing Energy publication and answer flow. Generated Neo4j
+Cypher is tested structurally; it is not presented as proof of live database
+enforcement.
+
 The RDF graph is not served the moment it's built. Every time
 `EnergyDemoService` builds a candidate graph (R2RML/RML mapping execution
 plus the hand-written topology/bulletins), `graphrag/domains/energy/

@@ -20,6 +20,7 @@ import structlog
 from fastapi import Depends, HTTPException, status
 
 from api.auth.dependencies import get_tenant
+from graphrag.observability.access_control_metrics import record_quota_rejected
 
 log = structlog.get_logger(__name__)
 
@@ -61,6 +62,7 @@ async def enforce_tenant_quota(tenant: str = Depends(get_tenant)) -> str:
             used=verdict.used,
             limit=verdict.limit,
         )
+        record_quota_rejected(tenant, verdict.dimension)
         raise TenantQuotaExceeded(verdict)
     await store.consume(tenant, requests=1.0)
     return tenant

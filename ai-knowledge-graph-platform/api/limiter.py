@@ -80,6 +80,7 @@ from dataclasses import dataclass
 import structlog
 from fastapi import HTTPException, Request, status
 
+from graphrag.observability.access_control_metrics import record_rate_limit_rejected
 from graphrag.observability.operational_metrics import set_store_degraded
 
 log = structlog.get_logger(__name__)
@@ -192,6 +193,7 @@ async def enforce_conversation_limit(
             key=conversation_key(request, session_id)[:32],
             limit=limit,
         )
+        record_rate_limit_rejected(request.url.path)
         raise RateLimitExceeded(retry_after, limit)
 
 
@@ -337,6 +339,7 @@ def rate_limit(limit: str):
                 key=client_key(request)[:32],
                 limit=limit,
             )
+            record_rate_limit_rejected(request.url.path)
             raise RateLimitExceeded(retry_after, limit)
 
     return _check

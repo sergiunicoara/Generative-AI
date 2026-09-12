@@ -18,12 +18,15 @@ from rdflib import Graph, Literal, Namespace, URIRef
 from rdflib.namespace import RDF, RDFS, XSD
 
 from graphrag.domains.energy.fixtures import create_sap_fixture_sqlite
+from graphrag.domains.energy.publication import DatasetPublisher, PublicationReport
+from graphrag.graph.shacl_validator import SHACLValidator
 from graphrag.graph.sparql_bridge import SPARQLBridge
 from graphrag.ingestion.r2rml_rdf import materialize_r2rml
 from graphrag.ingestion.relational import SQLiteSourceConnector
 from graphrag.ingestion.rml_rdf import materialize_rml
 
 ROOT = Path(__file__).resolve().parents[3]
+SHAPES_PATH = ROOT / "ontology" / "shapes" / "energy-asset-intelligence.shapes.ttl"
 
 ENERGY = Namespace("https://example.energy.demo/ontology#")
 ASSET = Namespace("https://example.energy.demo/asset/")
@@ -63,7 +66,16 @@ class EnergyDemoService:
 
     def __init__(self, source_db: Path | None = None) -> None:
         self.source_db = source_db
-        self.graph = self._build_graph()
+        self._publisher = DatasetPublisher(SHAPES_PATH)
+        candidate = self._build_graph()
+        # SHACL as a publication gate: the candidate graph is staged,
+        # validated, and only the conformant subset is published -- any
+        # record that violates ontology/shapes/energy-asset-intelligence.shapes.ttl
+        # is quarantined (see graphrag/domains/energy/publication.py), not
+        # silently served. Every existing query path (answer(),
+        # export_turtle()) now only ever sees this published graph.
+        self._publisher.stage_and_publish(candidate)
+        self.graph = self._publisher.current
 
     def _build_graph(self) -> Graph:
         graph = Graph()
@@ -114,7 +126,13 @@ class EnergyDemoService:
         graph.add((node, RDF.type, ENERGY.DocumentRevision))
         graph.add((node, ENERGY.documentId, Literal(bulletin)))
         graph.add((node, ENERGY.appliesToComponentType, Literal("gearbox")))
-        graph.add((node, ENERGY.temperatureReviewThreshold, Literal(threshold, datatype=XSD.decimal)))
+        # str() first: Literal(<float>, datatype=XSD.decimal) keeps the
+        # passed value's own Python type for .toPython() (a float, not a
+        # Decimal) rather than parsing it through xsd:decimal's own
+        # converter -- ill-typed under strict SHACL sh:datatype checking.
+        # Same root-cause fix as graphrag/ingestion/rml_rdf.py's reference
+        # object maps.
+        graph.add((node, ENERGY.temperatureReviewThreshold, Literal(str(threshold), datatype=XSD.decimal)))
         graph.add((node, ENERGY.validFrom, Literal(valid_from, datatype=XSD.dateTime)))
         if valid_to:
             graph.add((node, ENERGY.validTo, Literal(valid_to, datatype=XSD.dateTime)))
@@ -125,23 +143,42 @@ class EnergyDemoService:
     def export_turtle(self) -> str:
         return self.graph.serialize(format="turtle")
 
-    def validate_candidate(self) -> dict[str, Any]:
-        """Reject an invalid observation through the version-controlled SHACL shapes."""
-        from pyshacl import validate
+    def publication_report(self) -> PublicationReport:
+        """The current published version's report -- version id, publish
+        timestamp, published/candidate counts, and any quarantined records."""
+        return self._publisher.current_report
 
+    def publication_history(self) -> list[PublicationReport]:
+        """Every version published so far for this service instance, oldest
+        first (in-memory only -- does not persist across processes)."""
+        return self._publisher.history()
+
+    def rollback(self, version_id: str | None = None) -> PublicationReport:
+        """Roll back to `version_id`, or the version immediately before the
+        current one when omitted. Refreshes `self.graph` to match -- every
+        subsequent query/export sees the restored content immediately."""
+        report = self._publisher.rollback(version_id)
+        self.graph = self._publisher.current
+        return report
+
+    def validate_candidate(self) -> dict[str, Any]:
+        """Demonstrate SHACL rejection against one hardcoded invalid
+        observation (missing energy:value/energy:unit) -- a fixed capability
+        probe, not a validation of the live published graph (see
+        publication_report() for that). Now goes through the real
+        SHACLValidator (configurable shapes_path) instead of calling
+        pyshacl.validate() directly, closing the exact inconsistency this
+        session's SHACL-publication-gate work found: the two code paths
+        used to validate the platform's RDF two different ways."""
         candidate = Graph()
         candidate.add((REC["obs-WT-10-temperature_c-invalid"], RDF.type, ENERGY.Observation))
         candidate.add((REC["obs-WT-10-temperature_c-invalid"], ENERGY.observedAsset, ASSET["WT-10"]))
         candidate.add((REC["obs-WT-10-temperature_c-invalid"], ENERGY.observedAt, Literal("2026-08-28T08:00:00Z", datatype=XSD.dateTime)))
-        shapes = Graph().parse(
-            Path(__file__).resolve().parents[3] / "ontology/shapes/energy-asset-intelligence.shapes.ttl",
-            format="turtle",
-        )
-        conforms, results, _ = validate(candidate, shacl_graph=shapes, inference="none", abort_on_first=False)
+        report = SHACLValidator(candidate, shapes_path=SHAPES_PATH).validate_report(target="energy")
         return {
-            "conforms": bool(conforms),
+            "conforms": report.conforms,
             "rejected_records": ["obs-WT-10-temperature_c-invalid"],
-            "violations": [str(message) for message in results.objects(None, URIRef("http://www.w3.org/ns/shacl#resultMessage"))],
+            "violations": [r.message for r in report.results],
         }
 
     def answer(self, question_id: str, *, tenant: str, as_of: str | None = None) -> dict[str, Any]:

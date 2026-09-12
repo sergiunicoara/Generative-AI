@@ -32,11 +32,38 @@ GET /energy-demo/answer/maintenance_review
 GET /energy-demo/answer/historical_state?as_of=2026-05-01T00:00:00Z
 GET /energy-demo/rdf
 GET /energy-demo/validation
+GET /energy-demo/publication
+GET /energy-demo/quarantine
+POST /energy-demo/rollback?version_id=<id>   (requires scope `write`)
 ```
 
 Use only the five fixed question IDs. This POC does not expose arbitrary client
 SPARQL. The `maintenance_review.rq` query is version controlled under
 `evals/energy_demo/sparql/` for technical inspection.
+
+## SHACL as a publication gate
+
+The RDF graph is not served the moment it's built. Every time
+`EnergyDemoService` builds a candidate graph (R2RML/RML mapping execution
+plus the hand-written topology/bulletins), `graphrag/domains/energy/
+publication.py`'s `DatasetPublisher` stages it, validates it against
+`ontology/shapes/energy-asset-intelligence.shapes.ttl` (via the platform's
+real `SHACLValidator`, not a separate ad hoc check), quarantines any record
+that violates a shape (its own triples excluded, with the SHACL violation
+messages recorded as the reason), and publishes the conformant remainder
+as a new version. `GET /rdf` and every `/answer/*` question only ever see
+that published graph. `GET /publication` reports the current version;
+`GET /quarantine` lists whatever is currently quarantined (normally
+empty — item 2's mapping-completion work, plus a decimal-literal-typing
+fix this gate found live, made the real pipeline fully conformant).
+`POST /rollback` restores an earlier version (the one just before current,
+or a named `version_id`) as a new version — history is append-only and is
+never rewritten or deleted.
+
+`GET /validation` is a separate, older capability probe: it demonstrates
+SHACL rejection against one fixed synthetic invalid record, not the live
+published graph — kept for that narrower purpose, now also routed through
+the real `SHACLValidator` instead of a bypassing `pyshacl.validate()` call.
 
 ## GraphDB path
 

@@ -1,13 +1,15 @@
 """Read-only, tenant-scoped Energy Asset & Maintenance Intelligence POC API."""
 
+from dataclasses import asdict
 from pathlib import Path
 import json
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import HTMLResponse
 
-from api.auth.dependencies import get_tenant
+from api.auth.dependencies import get_tenant, require_scope
 from graphrag.domains.energy.demo import EnergyDemoService
+from graphrag.domains.energy.publication import PublicationRollbackError
 
 router = APIRouter()
 _source_db = Path(__file__).resolve().parents[2] / "artifacts/energy-demo-sap.sqlite"
@@ -59,3 +61,33 @@ async def validation(tenant: str = Depends(get_tenant)):
     if tenant != "energy-demo":
         raise HTTPException(status_code=404, detail="Energy demonstration not found")
     return _service.validate_candidate()
+
+
+@router.get("/publication")
+async def publication(tenant: str = Depends(get_tenant)):
+    """The currently published version: id, publish timestamp,
+    published/candidate record counts, and quarantined records -- the real
+    state of the SHACL publication gate, not a synthetic probe (see
+    GET /validation for that)."""
+    if tenant != "energy-demo":
+        raise HTTPException(status_code=404, detail="Energy demonstration not found")
+    return asdict(_service.publication_report())
+
+
+@router.get("/quarantine")
+async def quarantine(tenant: str = Depends(get_tenant)):
+    if tenant != "energy-demo":
+        raise HTTPException(status_code=404, detail="Energy demonstration not found")
+    report = _service.publication_report()
+    return {"version_id": report.version_id, "quarantined_records": [asdict(r) for r in report.quarantined_records]}
+
+
+@router.post("/rollback", dependencies=[Depends(require_scope("write"))])
+async def rollback(version_id: str | None = Query(default=None), tenant: str = Depends(get_tenant)):
+    if tenant != "energy-demo":
+        raise HTTPException(status_code=404, detail="Energy demonstration not found")
+    try:
+        report = _service.rollback(version_id)
+    except PublicationRollbackError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    return asdict(report)

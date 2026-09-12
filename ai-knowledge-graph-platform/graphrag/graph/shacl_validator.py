@@ -243,12 +243,17 @@ ing:MappedRelationShape a sh:NodeShape ;
 _INGEST = Namespace("https://graphrag.example.com/ingestion#")
 
 
-def _load_shapes_graph(path: Path, fallback_ttl: str) -> Graph:
+def _load_shapes_graph(path: Path, fallback_ttl: str | None) -> Graph:
     """Load a shapes graph from `path`; fall back to the inline Turtle string
-    if the file is missing. Never silently returns an empty shapes graph —
-    a parse error in either source is a real bug and should raise."""
+    if the file is missing and a fallback was given. Never silently returns
+    an empty shapes graph — a parse error in either source is a real bug and
+    should raise, and a missing path with no fallback raises FileNotFoundError
+    rather than validating against nothing (or, worse, against some other
+    shapes file's fallback -- the two are not interchangeable)."""
     if path.exists():
         return Graph().parse(str(path), format="turtle")
+    if fallback_ttl is None:
+        raise FileNotFoundError(f"SHACL shapes file not found: {path}")
     log.warning("shacl_validator.shapes_file_missing", path=str(path),
                note="using inline fallback shapes")
     return Graph().parse(data=fallback_ttl, format="turtle")
@@ -367,10 +372,22 @@ class SHACLValidator:
     ----------
     graph :
         rdflib Graph to validate (typically the output of ``export_rdf.py``).
+    shapes_path :
+        SHACL shapes file to validate against. Defaults to the platform's
+        general export shapes (``export.shapes.ttl``) -- every existing
+        caller keeps that behavior unchanged. Pass a different shapes file
+        (e.g. a domain's own ``ontology/shapes/*.ttl``) to validate against
+        it instead, using this same machinery rather than a second,
+        parallel ``pyshacl.validate()`` call site. A custom path that
+        doesn't exist raises ``FileNotFoundError`` -- there is no inline
+        fallback for anything but the default export shapes (the fallback
+        Turtle below is specific to that one file's content, not
+        interchangeable with another shapes file).
     """
 
-    def __init__(self, graph: Graph) -> None:
+    def __init__(self, graph: Graph, *, shapes_path: Path | None = None) -> None:
         self._g = graph
+        self._shapes_path = shapes_path
 
     # ── Constructors ───────────────────────────────────────────────────────────
 
@@ -408,15 +425,21 @@ class SHACLValidator:
         report = self.validate_report()
         return report.conforms, report.text
 
-    def validate_report(self) -> ShaclReport:
+    def validate_report(self, *, target: str = "export") -> ShaclReport:
         """Run SHACL validation and return a machine-readable ``ShaclReport``.
 
-        Also records Prometheus counters (validated runs, failures by
-        severity, failures by shape) when ``prometheus_client`` is installed
-        — a no-op otherwise, same optional-dependency pattern used elsewhere
-        in ``graphrag/observability``.
+        ``target`` is only the Prometheus metrics label (e.g. ``"export"``,
+        ``"energy"``) -- which shapes file is used was already fixed at
+        construction time (see ``shapes_path`` on ``__init__``). Also
+        records Prometheus counters (validated runs, failures by severity,
+        failures by shape) when ``prometheus_client`` is installed — a
+        no-op otherwise, same optional-dependency pattern used elsewhere in
+        ``graphrag/observability``.
         """
-        shapes_graph = _load_shapes_graph(_EXPORT_SHAPES_PATH, _SHAPES_TTL_FALLBACK)
+        if self._shapes_path is None:
+            shapes_graph = _load_shapes_graph(_EXPORT_SHAPES_PATH, _SHAPES_TTL_FALLBACK)
+        else:
+            shapes_graph = _load_shapes_graph(self._shapes_path, None)
         conforms, results_graph, results_text = _run_pyshacl(self._g, shapes_graph)
         report = ShaclReport(
             conforms=conforms,
@@ -424,8 +447,8 @@ class SHACLValidator:
             results=_parse_results(results_graph),
         )
         log.info("shacl_validator.validated", conforms=conforms, triples=len(self._g),
-                 **report.counts)
-        _record_metrics("export", report)
+                 target=target, **report.counts)
+        _record_metrics(target, report)
         return report
 
     @staticmethod

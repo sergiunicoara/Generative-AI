@@ -186,7 +186,21 @@ async def materialize_rml(mapping_path: str | Path, base_dir: str | Path) -> Gra
                     key, datatype = payload
                     if key not in item or item[key] is None:
                         continue
-                    literal = Literal(item[key], datatype=datatype) if datatype is not None else Literal(item[key])
+                    if datatype is not None:
+                        # str(...) first, not the raw Python value: rdflib's
+                        # Literal(value, datatype=...) keeps the *passed*
+                        # value's own Python type for toPython() rather than
+                        # re-parsing it through the datatype's own converter
+                        # -- Literal(96.0, datatype=XSD.decimal).toPython()
+                        # is a float, not a Decimal, which is ill-typed and
+                        # a real, confirmed SHACL sh:datatype violation
+                        # (found live while building the publication gate
+                        # this feeds). Routing every value through its
+                        # lexical string form makes rdflib parse it
+                        # correctly regardless of the JSON value's own type.
+                        literal = Literal(str(item[key]), datatype=datatype)
+                    else:
+                        literal = Literal(item[key])
                     out.add((subject, predicate, literal))
                 elif kind == "template":
                     out.add((subject, predicate, URIRef(_substitute_template(payload, item))))

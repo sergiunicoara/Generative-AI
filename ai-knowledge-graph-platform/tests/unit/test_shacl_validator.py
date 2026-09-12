@@ -273,3 +273,56 @@ class TestValidateRelationalBatchReport:
         conforms, text = SHACLValidator.validate_relational_batch([e], [], tenant="acme")
         assert conforms is True
         assert isinstance(text, str)
+
+
+# ── Configurable shapes_path / target (item 3: SHACL as a publication gate) ────
+
+class TestConfigurableShapesPath:
+    def test_default_shapes_path_behavior_is_unchanged(self) -> None:
+        """Omitting shapes_path validates against the export shapes exactly
+        as before -- a plain NamedIndividual+label+type graph conforms."""
+        report = SHACLValidator(_valid_entity_graph()).validate_report()
+        assert report.conforms is True
+
+    def test_custom_shapes_path_validates_against_that_file_instead(self, tmp_path) -> None:
+        shapes = tmp_path / "custom.shapes.ttl"
+        shapes.write_text(
+            "@prefix sh: <http://www.w3.org/ns/shacl#> .\n"
+            "@prefix ex: <https://example.com/test#> .\n"
+            "ex:RequireNameShape a sh:NodeShape ; sh:targetClass ex:Thing ;\n"
+            "  sh:property [ sh:path ex:name ; sh:minCount 1 ] .\n",
+            encoding="utf-8",
+        )
+        g = Graph()
+        g.add((EX.thing1, RDF.type, EX.Thing))  # missing ex:name -> violates
+        report = SHACLValidator(g, shapes_path=shapes).validate_report(target="custom")
+        assert report.conforms is False
+        # The failing constraint is the inline blank-node property shape
+        # (`sh:property [ sh:path ex:name; ... ]`), not the named NodeShape
+        # wrapping it -- pyshacl reports sh:sourceShape as that property
+        # shape, same as this repo's own export/ingestion shapes already do
+        # for every minCount check. One result, one shape, on this subject.
+        assert report.counts == {"total_results": 1, "violations": 1, "warnings": 0}
+        assert report.results[0].focus_node == str(EX.thing1)
+        assert report.results[0].result_path == str(EX.name)
+
+    def test_a_graph_conforming_to_export_shapes_does_not_conform_to_an_unrelated_custom_shape(self, tmp_path) -> None:
+        """Proves the custom shapes file is genuinely used, not silently
+        ignored in favor of the default -- a graph valid under the export
+        shapes must still fail a custom shape it doesn't satisfy."""
+        shapes = tmp_path / "custom.shapes.ttl"
+        shapes.write_text(
+            "@prefix sh: <http://www.w3.org/ns/shacl#> .\n"
+            "@prefix owl: <http://www.w3.org/2002/07/owl#> .\n"
+            "@prefix ex: <https://example.com/test#> .\n"
+            "ex:RequireCommentShape a sh:NodeShape ; sh:targetClass owl:NamedIndividual ;\n"
+            "  sh:property [ sh:path ex:neverPresent ; sh:minCount 1 ] .\n",
+            encoding="utf-8",
+        )
+        report = SHACLValidator(_valid_entity_graph(), shapes_path=shapes).validate_report()
+        assert report.conforms is False
+
+    def test_missing_custom_shapes_path_raises_file_not_found(self, tmp_path) -> None:
+        missing = tmp_path / "does-not-exist.shapes.ttl"
+        with pytest.raises(FileNotFoundError):
+            SHACLValidator(Graph(), shapes_path=missing).validate_report()

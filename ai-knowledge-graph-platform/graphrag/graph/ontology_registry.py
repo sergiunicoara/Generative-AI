@@ -23,9 +23,13 @@ from __future__ import annotations
 import hashlib
 import json
 import re
+from typing import TYPE_CHECKING
 from uuid import uuid4
 
 import structlog
+
+if TYPE_CHECKING:
+    from graphrag.graph.competency_gate import CompetencyGateReport
 
 log = structlog.get_logger(__name__)
 
@@ -427,12 +431,39 @@ class OntologyRegistry:
             results[old_rel] = count
         return results
 
-    async def apply_ontology_migration(self, current: dict, target: dict) -> dict:
-        """Validate a versioned ontology diff, then apply its relation map."""
-        from graphrag.graph.ontology_migration import plan_migration
+    async def apply_ontology_migration(
+        self,
+        current: dict,
+        target: dict,
+        *,
+        competency_report: "CompetencyGateReport | None" = None,
+        force: bool = False,
+    ) -> dict:
+        """Validate a versioned ontology diff, then apply its relation map.
+
+        ``competency_report``, if given, gates the migration on top of the
+        plain compatibility check above: a report with ``passed=False``
+        blocks the migration (no graph write is attempted) unless
+        ``force=True``, in which case it proceeds anyway but the override is
+        logged with the failing question ids for audit. Omitting
+        ``competency_report`` (the default) preserves this method's
+        pre-existing behavior exactly -- see graphrag/graph/competency_gate.py
+        for how to build one.
+        """
+        from graphrag.graph.ontology_migration import OntologyMigrationBlockedError, plan_migration
         report = plan_migration(current, target)
         if not report.compatible:
             raise ValueError("ontology migration has unmapped removals")
+        if competency_report is not None and not competency_report.passed:
+            if not force:
+                raise OntologyMigrationBlockedError(
+                    "ontology migration blocked: competency questions failed: "
+                    + ", ".join(competency_report.failed_ids)
+                )
+            log.warning(
+                "ontology_registry.migration_forced_despite_competency_failure",
+                failed_ids=competency_report.failed_ids,
+            )
         self._migration_map.update({str(k).upper(): str(v).upper()
                                     for k, v in (target.get("migration_map") or {}).items()})
         changes = await self.apply_graph_migrations()

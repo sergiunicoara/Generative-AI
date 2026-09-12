@@ -5,6 +5,18 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 
 
+class OntologyMigrationBlockedError(RuntimeError):
+    """Raised when a migration's competency-query gate fails and wasn't forced.
+
+    See ``graphrag/graph/competency_gate.py`` and
+    ``OntologyRegistry.apply_ontology_migration``'s ``competency_report``
+    parameter -- this is distinct from a plain incompatible-diff rejection
+    (``ValueError``, raised earlier in the same method): a competency
+    failure means the diff itself is structurally fine, but the ontology
+    can no longer answer a question it was previously able to answer.
+    """
+
+
 @dataclass(frozen=True)
 class MigrationReport:
     compatible: bool

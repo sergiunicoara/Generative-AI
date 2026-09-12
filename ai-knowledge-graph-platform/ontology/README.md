@@ -142,9 +142,29 @@ load and detects:
 - an inference rule with a missing required field;
 - a major-version incompatibility against the previous loaded version.
 
-It does **not** currently detect duplicate relation definitions across two
-ontology files, or an orphaned type (declared but never used in any relation
-rule) — both are real gaps, not silently claimed as covered here.
+It also detects duplicate relation definitions across two ontology files
+(conflicting domain/range for the same relation name) and orphaned types
+(declared but never used in any relation rule) — added in commit `46fa83f`,
+surfaced as non-fatal warnings; see `tests/unit/test_domain_ontology_lint.py`.
+
+### Competency-query migration gate
+
+The "adding a new domain ontology should add ... competency questions" rule
+above was, until now, an honor-system PR-description ask — nothing actually
+ran those questions before a migration landed. `graphrag/graph/
+competency_gate.py` makes it executable: `run_competency_suite()` runs a
+pluggable set of `CompetencyQuestion`s and reports pass/fail, and
+`OntologyRegistry.apply_ontology_migration()` accepts an optional
+`competency_report` that blocks the migration (raising
+`OntologyMigrationBlockedError`, no graph write attempted) when it fails,
+unless explicitly `force`d. Only one concrete, fully-executable
+implementation ships today —
+`energy_maintenance_review_competency_questions()`, reusing `evals/
+energy_demo/sparql/maintenance_review.rq` against the Energy tenant's RDF
+graph — since it's the one competency question in this repo that needs no
+LLM or live service to run deterministically. Wiring the aerospace/
+automotive/marketing questions above into the same gate (Cypher against a
+live Neo4j graph) is documented follow-up, not built here.
 
 ## SHACL shapes (`ontology/shapes/`)
 

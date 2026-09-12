@@ -593,6 +593,24 @@ class TokenRevokeResponse(BaseModel):
     durable: bool
 
 
+def _subject_tenant(subject: str) -> str | None:
+    """Best-effort lookup of the tenant that owns `subject` (a `sub` claim).
+
+    Checked against both places a subject can be registered: the M2M client
+    registry (`sub` == `client_id`) and a provisioned Google identity (`sub`
+    is the Google account id) -- see register_client and the callback route
+    above. Returns None when `subject` is not found in either, which callers
+    must treat as "cannot verify ownership", not "belongs to no one".
+    """
+    client = _client_get(subject)
+    if client is not None:
+        return client.get("tenant")
+    record = get_user_record_by_identity(_GOOGLE_ISSUER, subject)
+    if record is not None:
+        return record.get("tenant")
+    return None
+
+
 @router.post(
     "/revoke",
     response_model=TokenRevokeResponse,
@@ -645,6 +663,23 @@ async def revoke_token(
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Token predates revocation support and carries no jti; revoke the subject instead",
+            )
+
+    if target_subject:
+        # req.token (above) already tenant-checked its own claims -- this
+        # covers the subject-only path, which previously had NO tenant check
+        # at all: an admin for tenant B who merely knew (from a log line, a
+        # shared client id, a leaked doc) another tenant's client_id or
+        # Google subject could silently log every one of that tenant's
+        # sessions out. Fail open only when the subject cannot be identified
+        # at all (unknown to both registries) -- consistent with
+        # revocation's existing deny-list, fail-open-by-default design; see
+        # graphrag/core/token_revocation.py's module docstring.
+        owner_tenant = _subject_tenant(target_subject)
+        if owner_tenant is not None and owner_tenant != tenant:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Subject belongs to a different tenant",
             )
 
     if target_jti:

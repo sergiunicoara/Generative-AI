@@ -78,6 +78,16 @@ class SourceSystem(BaseModel):
     schema_version: str = "kg-source/v1"
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
+    # `uri` deliberately has NO scheme guard (unlike TripleStoreTarget.base_url
+    # and RESTAPISourceConfig.base_url/token_url -- see
+    # graphrag/core/connector_url_safety.py). It is a general source
+    # identifier, not necessarily something this codebase will ever fetch
+    # over HTTP: graphrag/ingestion/relational.py's own ingestion path sets
+    # it to a connector's DSN (sqlite:///..., postgresql://...), which an
+    # http(s)-only allow-list would reject outright. Confirmed by tracing
+    # that call site while wiring this guard -- an http(s)-only validator
+    # here would have been a real regression, not a hardening.
+
 
 class SourceMapping(BaseModel):
     id: str = Field(default_factory=lambda: str(uuid4()), min_length=1)

@@ -27,6 +27,7 @@ from typing import Any
 
 import httpx
 
+from graphrag.core.connector_url_safety import assert_safe_connector_url
 from graphrag.graph.source_catalog import SourceKind
 from graphrag.ingestion.relational import _identifier
 
@@ -45,6 +46,9 @@ class OAuth2ClientCredentialsConfig:
     client_secret_env: str
     scope: str = ""
 
+    def __post_init__(self) -> None:
+        assert_safe_connector_url(self.token_url, context="OAuth2ClientCredentialsConfig token_url")
+
 
 @dataclass(frozen=True)
 class RESTAPISourceConfig:
@@ -60,6 +64,9 @@ class RESTAPISourceConfig:
     # 0 in tests to avoid real delays; a real deployment should override this.
     backoff_seconds: float = 0.5
     timeout_seconds: float = 30.0
+
+    def __post_init__(self) -> None:
+        assert_safe_connector_url(self.base_url, context="RESTAPISourceConfig base_url")
 
 
 class RESTAPISourceConnector:

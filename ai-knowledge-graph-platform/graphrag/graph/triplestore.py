@@ -47,6 +47,7 @@ from typing import Any, Protocol, runtime_checkable
 import httpx
 import structlog
 
+from graphrag.core.connector_url_safety import assert_safe_connector_url
 from graphrag.graph.sparql_bridge import _reject_unsafe_sparql
 
 log = structlog.get_logger(__name__)
@@ -115,6 +116,7 @@ class RemoteSPARQLEndpoint:
         client: httpx.AsyncClient | None = None,
         timeout: float = _DEFAULT_TIMEOUT,
     ) -> None:
+        assert_safe_connector_url(query_url, context="RemoteSPARQLEndpoint query_url")
         self._query_url = query_url
         self._auth = auth
         self._client = client
@@ -262,6 +264,7 @@ class TripleStoreTarget:
                 f"unknown triplestore vendor {vendor!r}; expected one of "
                 f"{', '.join(sorted(_VENDOR_URL_BUILDERS))}"
             )
+        assert_safe_connector_url(base_url, context=f"TripleStoreTarget({vendor!r}) base_url")
         self.vendor = vendor
         self.query_url, self.load_url = builder(base_url, **vendor_kwargs)
         self._auth = auth

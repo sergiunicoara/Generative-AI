@@ -62,12 +62,42 @@ _ALLOWED_UPDATE_FORMS = ("INSERT", "DELETE", "CLEAR", "DROP",
 _FORBIDDEN_UPDATE = ("SERVICE", "LOAD")
 
 _COMMENT_RE = re.compile(r"#[^\n]*")
+# Triple-quoted (SPARQL "long string") literals, blanked before the short-string
+# pattern below: they may legitimately span multiple lines and contain a lone
+# `"`/`'` or an unescaped `#`, either of which would otherwise confuse the
+# short-string pattern or get misread as a comment by _COMMENT_RE.
+_LONG_STRING_RE = re.compile(
+    r'"""(?:[^"\\]|\\.|"{1,2}(?!"))*"""|\'\'\'(?:[^\'\\]|\\.|\'{1,2}(?!\'))*\'\'\''
+)
 _STRING_RE  = re.compile(r'"(?:[^"\\]|\\.)*"|\'(?:[^\'\\]|\\.)*\'')
 # An IRI may legitimately contain a keyword (<http://ex/DELETE>); a variable may
 # legitimately be named ?ADD. Neither is a SPARQL keyword occurrence, so both are
 # blanked before the update guard scans for one.
 _IRI_RE     = re.compile(r"<[^<>\s]*>")
 _VAR_RE     = re.compile(r"[?$][A-Za-z_][A-Za-z0-9_]*")
+
+
+def _blank_strings_and_comments(sparql: str) -> str:
+    """Neutralize string and comment content before any keyword scan.
+
+    Strings are blanked *before* comments are stripped -- order matters. A
+    ``#`` genuinely inside a string literal (``"Room #101"``) is ordinary
+    SPARQL, not a comment. Stripping comments first (the original order)
+    treated everything after that ``#`` as a comment running to end of
+    line, which silently deleted a real forbidden clause placed later on
+    the same line -- e.g. ``"Room #101" . SERVICE <http://169.254.169.254/>
+    {?a ?b ?c}`` -- from the scanned copy while leaving it fully intact in
+    the query actually handed to rdflib. Confirmed live as a working
+    SSRF/write bypass past both guards below before this fix, not a
+    hypothetical; see tests/unit/test_sparql_injection_adversarial.py.
+
+    Long (triple-quoted) strings are blanked first, ahead of short strings,
+    for the same reason: they may themselves legitimately contain a ``#``
+    or a lone quote character that would otherwise be misread.
+    """
+    without_long_strings = _LONG_STRING_RE.sub('""', sparql)
+    without_strings = _STRING_RE.sub('""', without_long_strings)
+    return _COMMENT_RE.sub("", without_strings)
 
 
 def _reject_unsafe_sparql(sparql: str) -> None:
@@ -77,7 +107,7 @@ def _reject_unsafe_sparql(sparql: str) -> None:
     inside them (e.g. a label containing the word "delete") does not trip the
     check, and conversely so a forbidden keyword cannot be smuggled past it.
     """
-    stripped = _STRING_RE.sub('""', _COMMENT_RE.sub("", sparql))
+    stripped = _blank_strings_and_comments(sparql)
     upper = stripped.upper()
 
     if not any(re.search(rf"\b{form}\b", upper) for form in _ALLOWED_FORMS):
@@ -98,8 +128,7 @@ def _reject_unsafe_update(sparql: str) -> None:
     ``INSERT DATA { <a> <b> <http://ex/SERVICE> }`` from being misread as
     federation, while a bare ``SERVICE`` clause is still caught.
     """
-    stripped = _COMMENT_RE.sub("", sparql)
-    stripped = _STRING_RE.sub('""', stripped)
+    stripped = _blank_strings_and_comments(sparql)
     stripped = _IRI_RE.sub("<>", stripped)
     stripped = _VAR_RE.sub("?v", stripped)
     upper = stripped.upper()

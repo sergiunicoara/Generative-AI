@@ -262,6 +262,13 @@ class TripleStoreTarget:
         self._auth = auth
         self._client = client
         self._timeout = timeout
+        # Kept for ensure_namespace(): Blazegraph's namespace-management
+        # endpoint (POST <base>/<context_path>/namespace) is a different URL
+        # from query_url/load_url (<base>/<context_path>/namespace/<ns>/sparql),
+        # and building it needs base_url/context_path/namespace back out --
+        # cheaper to keep the inputs than to parse them back out of query_url.
+        self._base_url = base_url
+        self._vendor_kwargs = vendor_kwargs
 
     def _endpoint(self) -> RemoteSPARQLEndpoint:
         return RemoteSPARQLEndpoint(
@@ -273,8 +280,68 @@ class TripleStoreTarget:
     ) -> list[dict]:
         return await self._endpoint().query(sparql, init_ns=init_ns)
 
+    async def ensure_namespace(self) -> None:
+        """Create this target's Blazegraph namespace if it doesn't already
+        exist. Idempotent -- a 409 Conflict (namespace already exists) is
+        treated as success, not an error.
+
+        Confirmed live (2026-09, lyrasis/blazegraph:2.1.5): POSTing a Turtle
+        document to a namespace that was never created returns 404, not an
+        implicit auto-create -- found by actually running this module's own
+        documented `load_blazegraph.py --namespace acme_kb` usage example
+        against a real container, which failed 404 before this existed.
+        Blazegraph's default "kb" namespace ships pre-created, which is why
+        that specific case was never caught before.
+
+        A no-op for every other vendor: GraphDB/Stardog repositories and
+        databases are provisioned out of band by an operator, and
+        Virtuoso/RDFox have no equivalent per-request namespace-creation
+        call this module has verified.
+        """
+        if self.vendor != "blazegraph":
+            return
+        context_path = self._vendor_kwargs.get("context_path", "bigdata")
+        namespace = self._vendor_kwargs.get("namespace", "kb")
+        management_url = f"{self._base_url.rstrip('/')}/{context_path.strip('/')}/namespace"
+        # Minimal required property is com.bigdata.rdf.sail.namespace; the
+        # rest are the same defaults Blazegraph's own "kb" namespace ships
+        # with, kept explicit rather than relying on server-side defaults
+        # that could differ across image versions.
+        body = (
+            f"com.bigdata.rdf.sail.namespace={namespace}\n"
+            "com.bigdata.rdf.sail.truthMaintenance=false\n"
+            "com.bigdata.rdf.store.AbstractTripleStore.quads=false\n"
+            "com.bigdata.rdf.store.AbstractTripleStore.geoSpatial=false\n"
+            "com.bigdata.rdf.store.AbstractTripleStore.statementIdentifiers=false\n"
+            "com.bigdata.rdf.store.AbstractTripleStore.textIndex=false\n"
+            "com.bigdata.rdf.store.AbstractTripleStore.axiomsClass=com.bigdata.rdf.axioms.NoAxioms\n"
+        )
+        headers = {"Content-Type": "text/plain"}
+        try:
+            if self._client is not None:
+                response = await self._client.post(
+                    management_url, content=body, headers=headers, auth=self._auth,
+                )
+            else:
+                async with httpx.AsyncClient(timeout=self._timeout) as client:
+                    response = await client.post(
+                        management_url, content=body, headers=headers, auth=self._auth,
+                    )
+            if response.status_code == 409:
+                return  # already exists -- exactly what we want
+            response.raise_for_status()
+            log.info("triplestore.namespace_created", vendor=self.vendor, namespace=namespace)
+        except httpx.HTTPError as exc:
+            raise ValueError(f"triplestore namespace creation failed: {exc}") from exc
+
     async def load(self, ttl_bytes: bytes) -> int:
         """POST a Turtle document to this vendor's Graph Store endpoint.
+
+        Creates the target namespace first when the vendor supports it and
+        it doesn't already exist (see ensure_namespace()) -- Blazegraph
+        returns 404 rather than auto-creating on load, so skipping this for
+        any namespace other than the pre-provisioned default would silently
+        break every non-default namespace.
 
         Returns the HTTP status code on success; raises for network errors,
         a non-2xx response, or a vendor with no supported load path.
@@ -284,6 +351,7 @@ class TripleStoreTarget:
                 f"{self.vendor} has no supported direct-POST Graph Store "
                 f"Protocol load path -- see this module's docstring"
             )
+        await self.ensure_namespace()
         headers = {"Content-Type": "text/turtle"}
         try:
             if self._client is not None:

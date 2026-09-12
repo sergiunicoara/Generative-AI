@@ -33,3 +33,9 @@ pip-tools>=7.4.0
 # Not yet part of the CI gate (`make ci`) — 108 pre-existing errors remain
 # across older modules; see Makefile's `typecheck` target.
 mypy>=1.10.0
+
+# Dependency vulnerability scan consumed by
+# scripts/build_release_evidence_report.py's "dependencies" section — with
+# this absent, that section degrades to an explicit "pip-audit is not
+# installed" reason rather than failing.
+pip-audit>=2.7.0

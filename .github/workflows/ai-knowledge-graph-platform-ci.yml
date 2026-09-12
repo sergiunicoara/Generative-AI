@@ -136,3 +136,34 @@ jobs:
           checkov -d ai-knowledge-graph-platform/infra/terraform --framework terraform --quiet
       - name: Render Kubernetes manifests
         run: kubectl kustomize deploy/kubernetes > /dev/null
+
+  release-evidence:
+    name: Release evidence report
+    # Runs after test/lint so the report can (when this job is later
+    # extended to download their outputs as artifacts) reflect this run's
+    # own results, not stand alone -- for now it stamps commit/dependency
+    # evidence unconditionally and degrades every other section
+    # explicitly, per scripts/build_release_evidence_report.py's docstring.
+    needs: [test, lint]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: ai-knowledge-graph-platform/requirements*.txt
+      - name: Install dependencies
+        run: pip install -r requirements-dev.txt
+      - name: Build release evidence report
+        run: |
+          python scripts/build_release_evidence_report.py \
+            --output artifacts/release-evidence.json \
+            --markdown artifacts/release-evidence.md
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-evidence
+          path: |
+            ai-knowledge-graph-platform/artifacts/release-evidence.json
+            ai-knowledge-graph-platform/artifacts/release-evidence.md

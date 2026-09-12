@@ -132,7 +132,7 @@ example, not a measured study; do not generalize it to customer time savings.
 python scripts/run_engineering_workflow.py workflows/example.yaml --run-id evidence-demo
 python scripts/summarize_workflow_evidence.py artifacts/workflow-runs.json artifacts/cost-events.json --output artifacts/workflow-evidence.json
 python scripts/run_production_exercises.py security artifacts/security-cases.json
-python scripts/run_production_exercises.py recovery artifacts/backup.dump artifacts/restored.dump
+python scripts/run_production_exercises.py recovery artifacts/backup.dump artifacts/restored.dump > artifacts/recovery-exercise.json
 ```
 
 Use `scripts/export_operational_evidence.py` to combine an authenticated
@@ -163,6 +163,22 @@ python scripts/run_docker_failure_exercise.py --service neo4j --output artifacts
 The command stops only the selected local dependency and always attempts to
 start it again. It records container recovery, not application-level incident
 prevention.
+
+## 11. Release-evidence report
+
+Stitches commit info, a dependency/vulnerability scan, and whichever of the
+live-test, benchmark, and recovery artifacts above are present into one
+report — the "keep the generated report with the commit SHA and environment
+details" instruction from section 1 above, automated instead of manual:
+
+```powershell
+python scripts/build_release_evidence_report.py --output artifacts/release-evidence.json --markdown artifacts/release-evidence.md
+```
+
+Every section is independently optional: a source artifact this run didn't
+produce shows as `available: false` with a stated reason, not a crash or a
+silently missing key. Run it last, after whichever sections above you
+generated for this evidence run.
 
 ## Public artifacts
 

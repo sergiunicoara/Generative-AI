@@ -218,7 +218,10 @@ domain type; every `owl:Axiom` needs a complete source/property/target triple;
 confidence must be `xsd:float` in `[0,1]`) and runs them via `pyshacl.validate()`.
 `tests/unit/test_export_rdf.py::TestExportProducesConformantGraph` asserts the
 *real* `export()` pipeline output — not just hand-built test graphs — conforms,
-which runs in `pytest tests/unit/` on every push (`.github/workflows/ci.yml`).
+which runs in `pytest tests/unit/` on every push. That workflow lives at the
+monorepo root, not inside this project directory — GitHub Actions only
+discovers workflows there — see
+`../.github/workflows/ai-knowledge-graph-platform-ci.yml`.
 A change that breaks the export's shape guarantees fails CI, not just a manual
 `--validate` run.
 

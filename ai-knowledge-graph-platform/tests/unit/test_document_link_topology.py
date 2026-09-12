@@ -43,7 +43,17 @@ def test_html_link_extraction_is_explicit_normalised_and_does_not_follow_urls() 
 
 @pytest.mark.asyncio
 async def test_link_persistence_keeps_provenance_tenant_and_acl_snapshot() -> None:
-    client = _client([[], [], [{"references": 1}]])
+    # merge_document_links makes 3 sequential self.run() calls (delete stale
+    # LINKS_TO edges, delete stale DocumentLinkReference nodes, then the
+    # merge+count query) with a non-empty links list, and only the third
+    # call's return value is actually consumed (result[0].get("references")).
+    # _client()'s AsyncMock(return_value=...) returns the SAME value on
+    # every call, so it can't express "this specific call returns this" --
+    # side_effect is what steps through one value per call, which is what
+    # this test needs and the other single-call-method tests in this file
+    # don't (see _client()'s docstring-equivalent usage below it).
+    client = Neo4jClient.__new__(Neo4jClient)
+    client.run = AsyncMock(side_effect=[[], [], [{"references": 1}]])
     policy = DocumentAccessPolicy(
         mode="restricted", state=ACLState.KNOWN,
         allow_principals=["group:legal"], requires_group_resolution=True,

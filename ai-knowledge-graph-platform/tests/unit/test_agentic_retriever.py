@@ -80,10 +80,17 @@ class TestFinalSynthesisDashNormalization:
 
 class TestAnswerNamedDocumentCitations:
     def test_explicit_document_and_southwest_alias_are_cited(self) -> None:
+        # The Southwest -> SWA bridge is gated behind answer_policy ==
+        # "aerospace_regulatory" (real callers pass
+        # cfg.get("answer_policy", "generic"), which resolves to this for
+        # the aerospace tenant) -- see _answer_named_document_citations'
+        # own docstring. Omitting it exercises the "generic" tenant path,
+        # where this corpus-specific alias must NOT fire.
         citations = _answer_named_document_citations(
             "Southwest Airlines must comply with FAA AD 2024-01-02.",
             ["FAA-AD-2022-03-07"],
             ["FAA-AD-2024-01-02.txt", "SWA_fleet_registry_2024.txt"],
+            answer_policy="aerospace_regulatory",
         )
 
         assert citations == [
@@ -91,3 +98,12 @@ class TestAnswerNamedDocumentCitations:
             "FAA-AD-2024-01-02",
             "SWA_fleet_registry_2024",
         ]
+
+    def test_southwest_alias_does_not_fire_for_a_generic_tenant(self) -> None:
+        citations = _answer_named_document_citations(
+            "Southwest Airlines must comply with FAA AD 2024-01-02.",
+            ["FAA-AD-2022-03-07"],
+            ["FAA-AD-2024-01-02.txt", "SWA_fleet_registry_2024.txt"],
+        )  # answer_policy defaults to "generic"
+
+        assert citations == ["FAA-AD-2022-03-07", "FAA-AD-2024-01-02"]

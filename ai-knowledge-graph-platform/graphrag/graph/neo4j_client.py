@@ -1971,6 +1971,49 @@ class Neo4jClient:
             chunk_ids=chunk_ids,
             tenant=tenant,
         )
+        if not rows:
+            return []
+
+        # Phase 2: split into cache hits (skip Neo4j entirely) and misses
+        # (need one batched fetch for just the missing entities).
+        miss_pairs: list[dict[str, str]] = []
+        seen_misses: set[tuple[str, str]] = set()
+        for r in rows:
+            key = (r["entity_name"], r["entity_type"])
+            if cache.get(tenant, *key) is None and key not in seen_misses:
+                seen_misses.add(key)
+                miss_pairs.append({"name": key[0], "type": key[1]})
+
+        if miss_pairs:
+            fetched = await self.run(
+                """
+                UNWIND $pairs AS pair
+                MATCH (e:Entity {name: pair.name, type: pair.type, tenant: $tenant})
+                WHERE e.embedding IS NOT NULL AND size(e.embedding) > 0
+                RETURN e.name AS entity_name, e.type AS entity_type, e.embedding AS embedding
+                """,
+                pairs=miss_pairs, tenant=tenant,
+            )
+            for f in fetched:
+                cache.set(tenant, f["entity_name"], f["entity_type"], f["embedding"])
+
+        # Merge: attach each row's embedding from the (now fully warmed for
+        # this batch) cache. A row whose entity has no embedding after
+        # phase 2 (e.g. quarantined/deleted between phase 1 and phase 2) is
+        # dropped, matching the old query's e.embedding IS NOT NULL filter.
+        results = []
+        for r in rows:
+            emb = cache.get(tenant, r["entity_name"], r["entity_type"])
+            if emb is None:
+                continue
+            results.append({
+                "chunk_id":    r["chunk_id"],
+                "entity_name": r["entity_name"],
+                "entity_type": r["entity_type"],
+                "embedding":   emb,
+                "degree":      r["degree"],
+            })
+        return results
 
     async def merge_contextual_entity_representations(
         self,
@@ -2043,49 +2086,6 @@ class Neo4jClient:
             tenant=tenant,
         )
         return int(result[0].get("assertions", 0)) if result else 0
-        if not rows:
-            return []
-
-        # Phase 2: split into cache hits (skip Neo4j entirely) and misses
-        # (need one batched fetch for just the missing entities).
-        miss_pairs: list[tuple[str, str]] = []
-        seen_misses: set[tuple[str, str]] = set()
-        for r in rows:
-            key = (r["entity_name"], r["entity_type"])
-            if cache.get(tenant, *key) is None and key not in seen_misses:
-                seen_misses.add(key)
-                miss_pairs.append({"name": key[0], "type": key[1]})
-
-        if miss_pairs:
-            fetched = await self.run(
-                """
-                UNWIND $pairs AS pair
-                MATCH (e:Entity {name: pair.name, type: pair.type, tenant: $tenant})
-                WHERE e.embedding IS NOT NULL AND size(e.embedding) > 0
-                RETURN e.name AS entity_name, e.type AS entity_type, e.embedding AS embedding
-                """,
-                pairs=miss_pairs, tenant=tenant,
-            )
-            for f in fetched:
-                cache.set(tenant, f["entity_name"], f["entity_type"], f["embedding"])
-
-        # Merge: attach each row's embedding from the (now fully warmed for
-        # this batch) cache. A row whose entity has no embedding after
-        # phase 2 (e.g. quarantined/deleted between phase 1 and phase 2) is
-        # dropped, matching the old query's e.embedding IS NOT NULL filter.
-        results = []
-        for r in rows:
-            emb = cache.get(tenant, r["entity_name"], r["entity_type"])
-            if emb is None:
-                continue
-            results.append({
-                "chunk_id":    r["chunk_id"],
-                "entity_name": r["entity_name"],
-                "entity_type": r["entity_type"],
-                "embedding":   emb,
-                "degree":      r["degree"],
-            })
-        return results
 
     async def get_entity_relations_subgraph(
         self,

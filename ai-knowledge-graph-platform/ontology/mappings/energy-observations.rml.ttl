@@ -2,10 +2,21 @@
 @prefix ql: <http://semweb.mmlab.be/ns/ql#> .
 @prefix rr: <http://www.w3.org/ns/r2rml#> .
 @prefix energy: <https://example.energy.demo/ontology#> .
+@prefix prov: <http://www.w3.org/ns/prov#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
 
-# RML source mapping retained as an executable-contract artifact. Running it
-# requires an external RML processor; the local demo uses its equivalent
-# deterministic Python fixture loader and declares this limitation in docs.
+# Genuinely executed by graphrag/ingestion/rml_rdf.py's materialize_rml() --
+# a small, self-built, deliberately narrow RML executor (no third-party RML
+# processor or JSONPath library needed for this mapping's shape: a top-level
+# JSON array iterator plus direct-key references, constants, and one
+# templated-IRI object map). See that module's docstring for exactly which
+# RML/R2RML constructs it supports and which it rejects.
 energy:ObservationMap a rr:TriplesMap;
   rml:logicalSource [ rml:source "data/energy_demo/snowflake_observations.json"; rml:referenceFormulation ql:JSONPath; rml:iterator "$[*]" ];
-  rr:subjectMap [ rr:template "https://example.energy.demo/record/{observation_id}"; rr:class energy:Observation ].
+  rr:subjectMap [ rr:template "https://example.energy.demo/record/{observation_id}"; rr:class energy:Observation ];
+  rr:predicateObjectMap [ rr:predicate energy:observedAsset; rr:objectMap [ rr:template "https://example.energy.demo/asset/{asset_id}" ] ];
+  rr:predicateObjectMap [ rr:predicate energy:metric; rr:objectMap [ rml:reference "metric" ] ];
+  rr:predicateObjectMap [ rr:predicate energy:value; rr:objectMap [ rml:reference "value"; rr:datatype xsd:decimal ] ];
+  rr:predicateObjectMap [ rr:predicate energy:unit; rr:objectMap [ rml:reference "unit" ] ];
+  rr:predicateObjectMap [ rr:predicate energy:observedAt; rr:objectMap [ rml:reference "observed_at"; rr:datatype xsd:dateTime ] ];
+  rr:predicateObjectMap [ rr:predicate prov:wasDerivedFrom; rr:objectMap [ rr:constant <urn:synthetic:snowflake:telemetry> ] ].

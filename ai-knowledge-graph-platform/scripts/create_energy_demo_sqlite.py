@@ -4,27 +4,18 @@
 from __future__ import annotations
 
 import argparse
-import sqlite3
+import sys
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-def create(path: Path) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    with sqlite3.connect(path) as connection:
-        connection.executescript("""
-            DROP TABLE IF EXISTS sap_assets;
-            DROP TABLE IF EXISTS sap_work_orders;
-            CREATE TABLE sap_assets (asset_id TEXT PRIMARY KEY, asset_name TEXT NOT NULL);
-            CREATE TABLE sap_work_orders (work_order_id TEXT PRIMARY KEY, asset_id TEXT NOT NULL, status TEXT NOT NULL);
-        """)
-        connection.executemany(
-            "INSERT INTO sap_assets VALUES (?, ?)",
-            [(f"WT-{index:02d}", f"Wind turbine WT-{index:02d}") for index in range(1, 11)],
-        )
-        connection.executemany(
-            "INSERT INTO sap_work_orders VALUES (?, ?, ?)",
-            [("WO-9001", "WT-01", "open"), ("WO-9002", "WT-02", "open"), ("WO-9003", "WT-03", "closed")],
-        )
+# Thin CLI wrapper -- the real fixture-building logic lives in
+# graphrag/domains/energy/fixtures.py so graphrag/domains/energy/demo.py
+# (library code) can build the identical fixture without importing from
+# scripts/. Re-exported under the same name so every existing
+# `from scripts.create_energy_demo_sqlite import create` call site keeps
+# working unchanged.
+from graphrag.domains.energy.fixtures import create_sap_fixture_sqlite as create  # noqa: E402
 
 
 def main() -> None:

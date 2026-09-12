@@ -151,9 +151,20 @@ class SQLiteSourceConnector:
     def _read_table(self, table: str) -> list[dict[str, Any]]:
         if not self.path.exists():
             raise FileNotFoundError(self.path)
-        with sqlite3.connect(f"file:{self.path}?mode=ro", uri=True) as conn:
+        # `with sqlite3.connect(...) as conn:` commits/rolls back on exit --
+        # it does NOT close the connection (a well-known sqlite3 gotcha), so
+        # every call here used to leak an open connection/file handle until
+        # garbage collection got around to it. Harmless on Linux (a file can
+        # be deleted while a handle is still open); on Windows it means a
+        # caller that deletes this file right after reading it (an ephemeral
+        # fixture DB, say) can hit a real PermissionError -- confirmed live
+        # while wiring exactly that pattern for the Energy demo.
+        conn = sqlite3.connect(f"file:{self.path}?mode=ro", uri=True)
+        try:
             conn.row_factory = sqlite3.Row
             return [dict(row) for row in conn.execute(f'SELECT * FROM "{table}"')]
+        finally:
+            conn.close()
 
     async def read_table(self, table: str) -> list[dict[str, Any]]:
         loop = asyncio.get_running_loop()

@@ -13,7 +13,7 @@ release a change without breaking a live tenant.
 |---|---|---|
 | `config/ontologies/*.yml` | Per-tenant domain ontologies — entity type hierarchy, relation domain/range rules, inference rules, deprecation state | `graphrag/graph/domain_ontology.py`, `graphrag/graph/ontology_registry.py` |
 | `ontology/shapes/*.ttl` | SHACL shapes that validate the platform's RDF representations (export + relational-ingestion mutation gate) | `graphrag/graph/shacl_validator.py` |
-| `ontology/mappings/*.r2rml.ttl` | R2RML mappings from a relational source (SQLite/PostgreSQL/Excel) to this ontology's entity/relation shape, e.g. `supply-chain.r2rml.ttl` | `graphrag/ingestion/r2rml.py` (`r2rml_to_mapping`), driven by `scripts/ingest_r2rml.py` |
+| `ontology/mappings/*.r2rml.ttl` | R2RML mappings from a relational source (SQLite/PostgreSQL/Excel) to this ontology's entity/relation shape, e.g. `supply-chain.r2rml.ttl` | `graphrag/ingestion/r2rml.py` (`r2rml_to_mapping`), driven by `scripts/ingest_r2rml.py` — that's the Neo4j-shaped ingestion path. The Energy demo's RDF path instead executes the mapping directly into real triples via `graphrag/ingestion/r2rml_rdf.py`'s `materialize_r2rml()` (RML sources: `graphrag/ingestion/rml_rdf.py`'s `materialize_rml()`), no Neo4j intermediary — see `docs/demos/energy_asset_intelligence.md`'s "Limitations" section. |
 
 Three directories, not one, because they answer different questions: a domain
 ontology YAML defines *what a tenant's graph is allowed to contain*

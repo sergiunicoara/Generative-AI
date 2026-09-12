@@ -53,3 +53,18 @@ def test_energy_demo_materializes_the_sqlite_source_and_uses_sparql_for_review(t
         "bulletin": "https://example.energy.demo/document/MFG-GBX-17-R2",
         "workOrder": "https://example.energy.demo/record/WO-9001",
     }]
+
+
+def test_explicit_and_ephemeral_source_db_produce_the_identical_graph(tmp_path):
+    """No source_db (the default) now builds an ephemeral SQLite fixture and
+    runs the same real R2RML materialization an explicit source_db does --
+    the two code paths that used to independently hand-write the same data
+    are now genuinely one path. Proves that directly: same triple content
+    either way, not just individually-passing assertions."""
+    database = tmp_path / "energy.sqlite"
+    create(database)
+
+    explicit = EnergyDemoService(source_db=database).graph
+    ephemeral = EnergyDemoService().graph
+
+    assert set(explicit) == set(ephemeral)

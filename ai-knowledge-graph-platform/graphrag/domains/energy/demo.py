@@ -7,17 +7,23 @@ are explicitly synthetic exports for reproducible local demonstrations.
 
 from __future__ import annotations
 
+import asyncio
+import tempfile
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
-import sqlite3
 from typing import Any
 
 from rdflib import Graph, Literal, Namespace, URIRef
 from rdflib.namespace import RDF, RDFS, XSD
 
+from graphrag.domains.energy.fixtures import create_sap_fixture_sqlite
 from graphrag.graph.sparql_bridge import SPARQLBridge
-from graphrag.ingestion.r2rml import r2rml_to_mapping
+from graphrag.ingestion.r2rml_rdf import materialize_r2rml
+from graphrag.ingestion.relational import SQLiteSourceConnector
+from graphrag.ingestion.rml_rdf import materialize_rml
+
+ROOT = Path(__file__).resolve().parents[3]
 
 ENERGY = Namespace("https://example.energy.demo/ontology#")
 ASSET = Namespace("https://example.energy.demo/asset/")
@@ -66,10 +72,7 @@ class EnergyDemoService:
         site = ASSET["north-sea-wind-farm"]
         graph.add((site, RDF.type, ENERGY.Site))
         graph.add((site, RDFS.label, Literal("North Sea Demonstration Wind Farm")))
-        if self.source_db:
-            self._materialize_r2rml_source(graph, self.source_db)
-        else:
-            self._add_fixture_source(graph)
+        self._materialize_assets_and_work_orders(graph)
         for index in range(1, 11):
             turbine = ASSET[f"WT-{index:02d}"]
             gearbox = ASSET[f"WT-{index:02d}-gearbox"]
@@ -77,62 +80,33 @@ class EnergyDemoService:
             graph.add((gearbox, RDF.type, ENERGY.Component))
             graph.add((gearbox, ENERGY.componentType, Literal("gearbox")))
             graph.add((turbine, ENERGY.hasComponent, gearbox))
-        self._add_observation(graph, "WT-01", "temperature_c", 96.0, "2026-08-28T08:00:00Z")
-        self._add_observation(graph, "WT-02", "vibration_mm_s", 12.4, "2026-08-28T08:05:00Z")
-        self._add_observation(graph, "WT-03", "temperature_c", 72.0, "2026-08-28T08:10:00Z")
+        graph += asyncio.run(materialize_rml(
+            ROOT / "ontology/mappings/energy-observations.rml.ttl", ROOT,
+        ))
         self._add_bulletin(graph, "MFG-GBX-17-R1", "2026-01-01T00:00:00Z", "2026-06-01T00:00:00Z", 90.0, None)
         self._add_bulletin(graph, "MFG-GBX-17-R2", "2026-06-01T00:00:00Z", None, 85.0, "MFG-GBX-17-R1")
         return graph
 
-    @staticmethod
-    def _add_fixture_source(graph: Graph) -> None:
-        for index in range(1, 11):
-            turbine = ASSET[f"WT-{index:02d}"]
-            graph.add((turbine, RDF.type, ENERGY.Asset))
-            graph.add((turbine, ENERGY.assetId, Literal(f"WT-{index:02d}")))
-            graph.add((turbine, RDFS.label, Literal(f"Wind turbine WT-{index:02d}")))
-        for work_order, turbine, status in (
-            ("WO-9001", "WT-01", "open"), ("WO-9002", "WT-02", "open"),
-            ("WO-9003", "WT-03", "closed"),
-        ):
-            node = REC[work_order]
-            graph.add((node, RDF.type, ENERGY.WorkOrder))
-            graph.add((node, ENERGY.workOrderId, Literal(work_order)))
-            graph.add((node, ENERGY.status, Literal(status)))
-            graph.add((node, ENERGY.concernsAsset, ASSET[turbine]))
-            graph.add((node, PROV.wasDerivedFrom, URIRef("urn:synthetic:sap:work-orders")))
+    def _materialize_assets_and_work_orders(self, graph: Graph) -> None:
+        """Execute the shipped energy R2RML mapping into this RDF graph, for
+        real -- no hand-written SQL/triples duplicating what the mapping
+        already declares.
 
-    @staticmethod
-    def _materialize_r2rml_source(graph: Graph, source_db: Path) -> None:
-        """Materialize the shipped energy R2RML source into this RDF graph."""
-        root = Path(__file__).resolve().parents[3]
-        mapping = root / "ontology/mappings/energy-assets.r2rml.ttl"
-        r2rml_to_mapping(mapping, mapping_id="energy-assets", version="1.0.0", source_id="synthetic-sap", tenant=TENANT)
-        with sqlite3.connect(source_db) as connection:
-            for asset_id, asset_name in connection.execute("SELECT asset_id, asset_name FROM sap_assets ORDER BY asset_id"):
-                asset = ASSET[asset_id]
-                graph.add((asset, RDF.type, ENERGY.Asset))
-                graph.add((asset, ENERGY.assetId, Literal(asset_id)))
-                graph.add((asset, RDFS.label, Literal(asset_name)))
-            for work_order_id, asset_id, status in connection.execute("SELECT work_order_id, asset_id, status FROM sap_work_orders ORDER BY work_order_id"):
-                node = REC[work_order_id]
-                graph.add((node, RDF.type, ENERGY.WorkOrder))
-                graph.add((node, RDFS.label, Literal(work_order_id)))
-                graph.add((node, ENERGY.workOrderId, Literal(work_order_id)))
-                graph.add((node, ENERGY.status, Literal(status)))
-                graph.add((node, ENERGY.concernsAsset, ASSET[asset_id]))
-                graph.add((node, PROV.wasDerivedFrom, URIRef("urn:synthetic:sap:work-orders")))
-
-    @staticmethod
-    def _add_observation(graph: Graph, turbine: str, metric: str, value: float, observed_at: str) -> None:
-        node = REC[f"obs-{turbine}-{metric}"]
-        graph.add((node, RDF.type, ENERGY.Observation))
-        graph.add((node, ENERGY.observedAsset, ASSET[turbine]))
-        graph.add((node, ENERGY.metric, Literal(metric)))
-        graph.add((node, ENERGY.value, Literal(value, datatype=XSD.decimal)))
-        graph.add((node, ENERGY.unit, Literal("C" if metric == "temperature_c" else "mm/s")))
-        graph.add((node, ENERGY.observedAt, Literal(observed_at, datatype=XSD.dateTime)))
-        graph.add((node, PROV.wasDerivedFrom, URIRef("urn:synthetic:snowflake:telemetry")))
+        If the caller gave no `source_db`, an ephemeral SQLite file with the
+        identical fixture data `scripts/create_energy_demo_sqlite.py` builds
+        is created in a temp directory and materialized instead -- the two
+        code paths that used to exist here (a real-SQLite R2RML path and a
+        wholly separate hand-written "no source_db" fixture path producing
+        the same data by hand) are now one path.
+        """
+        mapping_path = ROOT / "ontology/mappings/energy-assets.r2rml.ttl"
+        if self.source_db is not None:
+            graph += asyncio.run(materialize_r2rml(mapping_path, SQLiteSourceConnector(self.source_db)))
+            return
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            ephemeral_db = Path(tmp_dir) / "energy-demo-sap.sqlite"
+            create_sap_fixture_sqlite(ephemeral_db)
+            graph += asyncio.run(materialize_r2rml(mapping_path, SQLiteSourceConnector(ephemeral_db)))
 
     @staticmethod
     def _add_bulletin(graph: Graph, bulletin: str, valid_from: str, valid_to: str | None, threshold: float, supersedes: str | None) -> None:

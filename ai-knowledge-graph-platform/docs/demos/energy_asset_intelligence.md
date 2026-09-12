@@ -82,10 +82,22 @@ are committed.
 
 ## Limitations
 
-The R2RML mapping is executable with the repository's supported mapping subset.
-The RML mapping is a version-controlled contract, but no maintained RML
-processor is bundled or executed by this POC. Add an approved processor and a
-live integration test before representing RML processing as implemented.
+Both mapping files are genuinely executed, not just parsed as contracts.
+`ontology/mappings/energy-assets.r2rml.ttl` runs via
+`graphrag/ingestion/r2rml_rdf.py`'s `materialize_r2rml()` (also independently
+verified live against GraphDB/Blazegraph, see `tests/e2e/`).
+`ontology/mappings/energy-observations.rml.ttl` runs via a small,
+self-built, deliberately narrow RML executor,
+`graphrag/ingestion/rml_rdf.py`'s `materialize_rml()` -- narrow because no
+RML processor or JSONPath library is installed anywhere in this repo, and
+this mapping's shape (a top-level JSON array, direct-key references) needs
+neither. Both raise on any construct outside their documented supported
+subset rather than silently approximating it.
+
+What's still hand-written, and stays that way deliberately:
+`graphrag/domains/energy/demo.py`'s turbine/gearbox topology (structural
+scaffolding, not sourced data) and the two manufacturer-bulletin document
+revisions (narrative document content, not naturally a mapping target).
 
 The sample is deliberately small. It demonstrates contracts, provenance,
 revision handling, and permission behavior; it makes no enterprise-scale claim.

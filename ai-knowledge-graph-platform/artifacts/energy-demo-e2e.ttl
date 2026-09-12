@@ -24,6 +24,30 @@
     energy:temperatureReviewThreshold 85.0 ;
     energy:validFrom "2026-06-01T00:00:00+00:00"^^xsd:dateTime .
 
+<https://example.energy.demo/record/SNOW-OBS-WT-01> a energy:Observation ;
+    prov:wasDerivedFrom <urn:synthetic:snowflake:telemetry> ;
+    energy:metric "temperature_c" ;
+    energy:observedAsset <https://example.energy.demo/asset/WT-01> ;
+    energy:observedAt "2026-08-28T08:00:00+00:00"^^xsd:dateTime ;
+    energy:unit "C" ;
+    energy:value 96.0 .
+
+<https://example.energy.demo/record/SNOW-OBS-WT-02> a energy:Observation ;
+    prov:wasDerivedFrom <urn:synthetic:snowflake:telemetry> ;
+    energy:metric "vibration_mm_s" ;
+    energy:observedAsset <https://example.energy.demo/asset/WT-02> ;
+    energy:observedAt "2026-08-28T08:05:00+00:00"^^xsd:dateTime ;
+    energy:unit "mm/s" ;
+    energy:value 12.4 .
+
+<https://example.energy.demo/record/SNOW-OBS-WT-03> a energy:Observation ;
+    prov:wasDerivedFrom <urn:synthetic:snowflake:telemetry> ;
+    energy:metric "temperature_c" ;
+    energy:observedAsset <https://example.energy.demo/asset/WT-03> ;
+    energy:observedAt "2026-08-28T08:10:00+00:00"^^xsd:dateTime ;
+    energy:unit "C" ;
+    energy:value 72.0 .
+
 <https://example.energy.demo/record/WO-9001> a energy:WorkOrder ;
     rdfs:label "WO-9001" ;
     prov:wasDerivedFrom <urn:synthetic:sap:work-orders> ;
@@ -44,30 +68,6 @@
     energy:concernsAsset <https://example.energy.demo/asset/WT-03> ;
     energy:status "closed" ;
     energy:workOrderId "WO-9003" .
-
-<https://example.energy.demo/record/obs-WT-01-temperature_c> a energy:Observation ;
-    prov:wasDerivedFrom <urn:synthetic:snowflake:telemetry> ;
-    energy:metric "temperature_c" ;
-    energy:observedAsset <https://example.energy.demo/asset/WT-01> ;
-    energy:observedAt "2026-08-28T08:00:00+00:00"^^xsd:dateTime ;
-    energy:unit "C" ;
-    energy:value 96.0 .
-
-<https://example.energy.demo/record/obs-WT-02-vibration_mm_s> a energy:Observation ;
-    prov:wasDerivedFrom <urn:synthetic:snowflake:telemetry> ;
-    energy:metric "vibration_mm_s" ;
-    energy:observedAsset <https://example.energy.demo/asset/WT-02> ;
-    energy:observedAt "2026-08-28T08:05:00+00:00"^^xsd:dateTime ;
-    energy:unit "mm/s" ;
-    energy:value 12.4 .
-
-<https://example.energy.demo/record/obs-WT-03-temperature_c> a energy:Observation ;
-    prov:wasDerivedFrom <urn:synthetic:snowflake:telemetry> ;
-    energy:metric "temperature_c" ;
-    energy:observedAsset <https://example.energy.demo/asset/WT-03> ;
-    energy:observedAt "2026-08-28T08:10:00+00:00"^^xsd:dateTime ;
-    energy:unit "C" ;
-    energy:value 72.0 .
 
 <https://example.energy.demo/asset/WT-01-gearbox> a energy:Component ;
     energy:componentType "gearbox" .

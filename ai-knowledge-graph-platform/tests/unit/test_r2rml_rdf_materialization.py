@@ -59,6 +59,23 @@ class TestMaterializeEnergyAssets:
         # relation it can represent only as a Neo4j edge, never a real triple.
         assert (WORK_ORDER, URIRef(ENERGY_NS + "concernsAsset"), ASSET) in graph
 
+    async def test_asset_id_and_work_order_id_columns_are_materialized(self, energy_sqlite):
+        """SHACL-required (ontology/shapes/energy-asset-intelligence.shapes.ttl's
+        energy:AssetShape, sh:minCount 1 on energy:assetId) -- missing from
+        the mapping until this was wired into the live Energy demo for real."""
+        graph = await materialize_r2rml(ENERGY_MAPPING, SQLiteSourceConnector(energy_sqlite))
+
+        assert (ASSET, URIRef(ENERGY_NS + "assetId"), Literal("WT-01")) in graph
+        assert (WORK_ORDER, URIRef(ENERGY_NS + "workOrderId"), Literal("WO-9001")) in graph
+
+    async def test_work_order_provenance_constant_is_materialized(self, energy_sqlite):
+        """rr:constant -- an rdflib.namespace.PROV.wasDerivedFrom IRI fixed
+        for every row, independent of any column."""
+        graph = await materialize_r2rml(ENERGY_MAPPING, SQLiteSourceConnector(energy_sqlite))
+
+        provenance = URIRef("http://www.w3.org/ns/prov#wasDerivedFrom")
+        assert (WORK_ORDER, provenance, URIRef("urn:synthetic:sap:work-orders")) in graph
+
     async def test_closed_work_order_is_still_materialized_with_its_own_status(self, energy_sqlite):
         graph = await materialize_r2rml(ENERGY_MAPPING, SQLiteSourceConnector(energy_sqlite))
 
@@ -97,7 +114,31 @@ class TestMaterializeEnergyAssets:
 
 
 class TestUnsupportedConstructsFailClosed:
-    async def test_rr_constant_object_map_is_rejected(self, tmp_path, energy_sqlite):
+    async def test_rr_constant_object_map_is_materialized_not_rejected(self, tmp_path, energy_sqlite):
+        """rr:constant used to be rejected outright; it's a real, supported
+        construct now (see TestMaterializeEnergyAssets's provenance test
+        above for the shipped-mapping case) -- this pins the standalone
+        behavior with a literal constant too, not just an IRI."""
+        mapping = tmp_path / "constant.r2rml.ttl"
+        mapping.write_text(
+            """
+            @prefix rr: <http://www.w3.org/ns/r2rml#> .
+            @prefix energy: <https://example.energy.demo/ontology#> .
+            energy:AssetMap a rr:TriplesMap;
+              rr:logicalTable [ rr:tableName "sap_assets" ];
+              rr:subjectMap [ rr:template "https://example.energy.demo/asset/{asset_id}"; rr:class energy:Asset ];
+              rr:predicateObjectMap [ rr:predicate energy:region; rr:objectMap [ rr:constant "eu-west" ] ].
+            """,
+            encoding="utf-8",
+        )
+        graph = await materialize_r2rml(mapping, SQLiteSourceConnector(energy_sqlite))
+        assert (ASSET, URIRef(ENERGY_NS + "region"), Literal("eu-west")) in graph
+        # A constant attaches to EVERY row, not just the one probed above.
+        other_asset = URIRef("https://example.energy.demo/asset/WT-02")
+        assert (other_asset, URIRef(ENERGY_NS + "region"), Literal("eu-west")) in graph
+
+    async def test_object_map_with_both_column_and_constant_is_rejected(self, tmp_path, energy_sqlite):
+        """Ambiguous: an object map must be exactly one shape, not several."""
         bad_mapping = tmp_path / "bad.r2rml.ttl"
         bad_mapping.write_text(
             """
@@ -106,7 +147,7 @@ class TestUnsupportedConstructsFailClosed:
             energy:AssetMap a rr:TriplesMap;
               rr:logicalTable [ rr:tableName "sap_assets" ];
               rr:subjectMap [ rr:template "https://example.energy.demo/asset/{asset_id}"; rr:class energy:Asset ];
-              rr:predicateObjectMap [ rr:predicate energy:region; rr:objectMap [ rr:constant "eu-west" ] ].
+              rr:predicateObjectMap [ rr:predicate energy:region; rr:objectMap [ rr:column "asset_name"; rr:constant "eu-west" ] ].
             """,
             encoding="utf-8",
         )

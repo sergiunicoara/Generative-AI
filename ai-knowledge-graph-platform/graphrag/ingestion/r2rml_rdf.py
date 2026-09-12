@@ -30,10 +30,13 @@ guessed at. Supported per ``rr:TriplesMap``:
   materialized (TriplesMaps are processed in file order; both shipped
   mappings already satisfy this) -- an unresolved forward reference raises
   rather than silently reordering or guessing.
+- ``rr:predicateObjectMap`` with ``rr:objectMap/rr:constant`` -- a fixed
+  value (typically an IRI, e.g. a provenance source tag) attached to every
+  row unconditionally, independent of any column.
 
-Anything else -- ``rr:constant``, a multi-column template, ``rr:datatype``,
-``rr:language``, an object map that is neither ``rr:column`` nor
-``rr:parentTriplesMap`` -- raises ``R2RMLMappingError``.
+Anything else -- a multi-column template, ``rr:datatype``, ``rr:language``,
+an object map that is not exactly one of ``rr:column``,
+``rr:parentTriplesMap``, or ``rr:constant`` -- raises ``R2RMLMappingError``.
 """
 
 from __future__ import annotations
@@ -106,18 +109,23 @@ async def materialize_r2rml(
             object_map = _one(mapping_graph, pom, RR.objectMap, "rr:predicateObjectMap/rr:objectMap")
             column = mapping_graph.value(object_map, RR.column)
             parent_map = mapping_graph.value(object_map, RR.parentTriplesMap)
-            if mapping_graph.value(object_map, RR.constant) is not None:
-                raise R2RMLMappingError("rr:constant object maps are not supported")
+            constant = mapping_graph.value(object_map, RR.constant)
             if mapping_graph.value(object_map, RR.datatype) is not None:
                 raise R2RMLMappingError("rr:datatype is not supported")
             if mapping_graph.value(object_map, RR.language) is not None:
                 raise R2RMLMappingError("rr:language is not supported")
-            if column is not None and parent_map is not None:
+            shapes = [v for v in (column, parent_map, constant) if v is not None]
+            if len(shapes) != 1:
                 raise R2RMLMappingError(
-                    "a predicateObjectMap must be exactly one of rr:column or rr:parentTriplesMap"
+                    "a predicateObjectMap must be exactly one of rr:column, "
+                    "rr:parentTriplesMap, or rr:constant"
                 )
             if column is not None:
                 resolved_poms.append((predicate, "column", str(column), None))
+            elif constant is not None:
+                # A fixed value attached to every row -- e.g. a provenance
+                # IRI naming the source system, not derived from any column.
+                resolved_poms.append((predicate, "constant", constant, None))
             elif parent_map is not None:
                 if parent_map not in subjects_by_map:
                     raise R2RMLMappingError(
@@ -130,7 +138,8 @@ async def materialize_r2rml(
                 resolved_poms.append((predicate, "join", child_column, (parent_map, parent_column)))
             else:
                 raise R2RMLMappingError(
-                    "a predicateObjectMap's rr:objectMap must have rr:column or rr:parentTriplesMap"
+                    "a predicateObjectMap's rr:objectMap must have rr:column, "
+                    "rr:parentTriplesMap, or rr:constant"
                 )
 
         rows = await connector.read_table(table)
@@ -149,6 +158,8 @@ async def materialize_r2rml(
                     if value is None:
                         continue
                     out.add((subject, predicate, Literal(value)))
+                elif kind == "constant":
+                    out.add((subject, predicate, key))
                 else:
                     child_value = row.get(key)
                     if child_value is None:

@@ -152,6 +152,10 @@ def validate_ontology_document(
     unknown_sections = set(ontology) - _ONTOLOGY_SECTIONS - {"ontology", "domain", "version", "migration_map"}
     # Unknown keys are warnings rather than errors to allow provenance fields.
     warnings = [f"unknown top-level section '{key}'" for key in sorted(unknown_sections)]
+    warnings.extend(
+        f"type '{t}' is declared in type_hierarchy but never used as a "
+        "relation domain or target" for t in find_orphaned_types(ontology)
+    )
 
     if previous:
         prev_meta = previous.get("ontology", {}) if isinstance(previous, dict) else {}
@@ -337,6 +341,77 @@ def get_exclusive_state_pairs(ontology: dict) -> list[tuple[str, str]]:
 def get_functional_relations(ontology: dict) -> list[str]:
     """Extract functional (one-to-one) relation names."""
     return [str(r).upper() for r in ontology.get("functional_relations", [])]
+
+
+def _as_upper_list(value) -> list[str]:
+    """Normalize a relation_rules domain/target field (string or list) into
+    an uppercased list — mirrors the string-or-list tolerance every other
+    reader of these fields in this module already has."""
+    if isinstance(value, str):
+        return [value.upper()]
+    if isinstance(value, (list, tuple)):
+        return [str(v).upper() for v in value]
+    return []
+
+
+def find_orphaned_types(ontology: dict) -> list[str]:
+    """Entity types declared in type_hierarchy but never used as any
+    relation's domain or target.
+
+    Not necessarily wrong — a type can be legitimately pure-taxonomy (only
+    ever a SUBCLASS_OF parent for narrower types, never itself a relation
+    endpoint) — so this is advisory (feeds validate_ontology_document's
+    warnings, not its errors), matching ontology/README.md's "Automated
+    checks" list of what this repo has never had automated before.
+    """
+    declared: set[str] = set()
+    for child, parent in get_type_hierarchy_pairs(ontology):
+        declared.add(child)
+        declared.add(parent)
+    used: set[str] = set()
+    for rule in get_relation_rules(ontology).values():
+        if not isinstance(rule, dict):
+            continue
+        used.update(_as_upper_list(rule.get("domain")))
+        used.update(_as_upper_list(rule.get("target")))
+    return sorted(declared - used)
+
+
+def find_duplicate_relations(ontologies: list[dict]) -> list[str]:
+    """Detect the same relation name defined with conflicting domain/range
+    across two or more ontology documents (e.g. two tenants' domain-ontology
+    YAML files both defining OWNS with different allowed type pairs).
+
+    Cross-file *agreement* on a relation's domain/range is not flagged —
+    that's two files legitimately declaring the same rule, not a conflict.
+    This is the multi-document counterpart to
+    validate_ontology_document's single-document checks; it takes a list
+    because a conflict is inherently a property of more than one file, which
+    validate_ontology_document's single-`ontology` signature can't express.
+    Intended for a repo-wide lint pass over every loaded
+    config/ontologies/*.yml file, not per-file validation at load time.
+    """
+    seen: dict[str, tuple[str, tuple[str, ...], tuple[str, ...]]] = {}
+    conflicts: list[str] = []
+    for ontology in ontologies:
+        source = str((ontology.get("ontology") or {}).get("id", "<unknown>"))
+        for relation, rule in get_relation_rules(ontology).items():
+            if not isinstance(rule, dict):
+                continue
+            rel = str(relation).upper()
+            domain = tuple(sorted(_as_upper_list(rule.get("domain"))))
+            target = tuple(sorted(_as_upper_list(rule.get("target"))))
+            if rel not in seen:
+                seen[rel] = (source, domain, target)
+                continue
+            prev_source, prev_domain, prev_target = seen[rel]
+            if (domain, target) != (prev_domain, prev_target):
+                conflicts.append(
+                    f"relation '{rel}' defined with conflicting domain/range in "
+                    f"'{prev_source}' ({'|'.join(prev_domain)} -> {'|'.join(prev_target)}) "
+                    f"and '{source}' ({'|'.join(domain)} -> {'|'.join(target)})"
+                )
+    return conflicts
 
 
 def build_inference_rules_from_ontology(ontology: dict):

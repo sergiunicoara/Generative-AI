@@ -42,7 +42,7 @@ deployment gate, not a claim that an enterprise deployment is already live.
 ```powershell
 make semantic-model-check
 python -m pytest -q tests/unit/test_energy_demo.py tests/unit/test_r2rml_rdf_materialization.py tests/unit/test_energy_lpg_projection.py tests/unit/test_energy_dev_login.py
-python scripts/run_energy_demo.py --export-turtle artifacts/energy-demo.ttl
+python scripts/run_energy_demo_e2e.py --output artifacts/energy-demo-e2e-report.json
 python scripts/project_energy_rdf_to_neo4j.py  # requires local Neo4j
 ```
 

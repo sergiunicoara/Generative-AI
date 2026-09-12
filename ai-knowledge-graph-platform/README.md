@@ -35,6 +35,9 @@ The graph is not a RAG index. It is a formally modeled knowledge base:
 | **Domain ontologies** | Config-driven domain overlays (including `legal_contracts.yml`) — extend type hierarchy and relation schema without code changes; `generate_synthetic_ontology.py` generates large synthetic ontologies for load testing (no benchmark figure is committed — do not quote one) |
 
 **Further reading:**
+- [`docs/demos/energy_asset_intelligence.md`](docs/demos/energy_asset_intelligence.md) — Energy Asset Intelligence POC: R2RML/RML → RDF → SHACL publication → SPARQL evidence → optional Neo4j GraphRAG read model
+- [`docs/demos/energy_demo_presentation_script.md`](docs/demos/energy_demo_presentation_script.md) — client-facing and technical script for the repeatable Energy E2E scenario
+- [`docs/energy-production-readiness-preflight.md`](docs/energy-production-readiness-preflight.md) — repository controls versus client-environment deployment evidence
 - [`docs/roadmap.md`](docs/roadmap.md) — current implementation status, Context Graph evaluation gate, and scaling path
 - [`docs/archive/audits/audit-2026-08-21.md`](docs/archive/audits/audit-2026-08-21.md) — historical architecture, security, dependency, scalability, and state-of-the-art audit
 - [`docs/adr/ADR-Context-Graph-Decision-Trace.md`](docs/adr/ADR-Context-Graph-Decision-Trace.md) — decision trace, manifest, governance, and integrity contract

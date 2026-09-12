@@ -1,5 +1,41 @@
 # Ontology governance
 
+## Canonical Energy semantic model
+
+The Energy domain now has one storage-independent, reviewable source of truth:
+[`models/energy-asset-intelligence.yaml`](models/energy-asset-intelligence.yaml).
+It declares classes, single inheritance, reusable mixins, properties,
+relationships, datatypes, keys, cardinalities, LPG labels, and lifecycle
+metadata. The following files are generated projections and must not be edited
+directly:
+
+- `energy/energy-asset-intelligence.ttl` — RDFS/OWL semantics;
+- `shapes/energy-asset-intelligence.shapes.ttl` — closed-world SHACL checks;
+- `generated/energy/neo4j-constraints.cypher` — Neo4j-enforceable keys;
+- `generated/energy/diagnostics.json` — explicit target capability losses and
+  their runtime controls.
+
+Regenerate them with:
+
+```text
+python -m graphrag.semantic_model compile ontology/models/energy-asset-intelligence.yaml
+```
+
+CI uses the same command with `--check`, so a pull request fails if committed
+artifacts drift from the YAML. Generation is deterministic and each output is
+atomically replaced only after the complete model validates. R2RML and RML
+files remain separate source-to-model mapping contracts; they consume this
+vocabulary rather than competing with it.
+
+The normal compiler succeeds when a target has a known limitation, but prints
+the corresponding diagnostic and writes it to JSON. Deployments that permit no
+runtime-only rules can add `--fail-on-unenforceable`; this fails before writing
+any artifact. The migration is parity-gated by `tests/unit/test_semantic_model.py`,
+which parses both generated Turtle targets, exercises the real SHACL validator,
+checks established Energy vocabulary, verifies deterministic output and drift,
+and proves shared-write rejection. Existing Energy publication tests continue
+to exercise R2RML/RML → candidate RDF → SHACL → quarantine/publication → SPARQL.
+
 This directory is the SHACL-shapes half of the platform's ontology system —
 see [`docs/ontology-model.md`](../docs/ontology-model.md) for the technical
 model (type hierarchy, relation domain/range rules, inference rules,
@@ -11,9 +47,10 @@ release a change without breaking a live tenant.
 
 | Location | Contains | Enforced by |
 |---|---|---|
+| `ontology/models/*.yaml` | Canonical storage-independent domain semantics compiled to RDF and LPG targets | `graphrag/semantic_model/`; drift-gated by `make semantic-model-check` |
 | `config/ontologies/*.yml` | Per-tenant domain ontologies — entity type hierarchy, relation domain/range rules, inference rules, deprecation state | `graphrag/graph/domain_ontology.py`, `graphrag/graph/ontology_registry.py` |
 | `ontology/shapes/*.ttl` | SHACL shapes that validate the platform's RDF representations (export + relational-ingestion mutation gate) | `graphrag/graph/shacl_validator.py` |
-| `ontology/mappings/*.r2rml.ttl` | R2RML mappings from a relational source (SQLite/PostgreSQL/Excel) to this ontology's entity/relation shape, e.g. `supply-chain.r2rml.ttl` | `graphrag/ingestion/r2rml.py` (`r2rml_to_mapping`), driven by `scripts/ingest_r2rml.py` — that's the Neo4j-shaped ingestion path. The Energy demo's RDF path instead executes the mapping directly into real triples via `graphrag/ingestion/r2rml_rdf.py`'s `materialize_r2rml()` (RML sources: `graphrag/ingestion/rml_rdf.py`'s `materialize_rml()`), no Neo4j intermediary — see `docs/demos/energy_asset_intelligence.md`'s "Limitations" section. |
+| `ontology/mappings/*.r2rml.ttl` | R2RML mappings from a relational source (SQLite/PostgreSQL/Excel) to this ontology's entity/relation shape, e.g. `supply-chain.r2rml.ttl` | `graphrag/ingestion/r2rml.py` (`r2rml_to_mapping`), driven by `scripts/ingest_r2rml.py`, supports the Neo4j-shaped ingestion path. The Energy path executes the mapping directly into RDF via `graphrag/ingestion/r2rml_rdf.py`'s `materialize_r2rml()` (RML sources: `graphrag/ingestion/rml_rdf.py`'s `materialize_rml()`), validates and publishes RDF first, then optionally projects that published graph one-way to Neo4j for GraphRAG. |
 
 Three directories, not one, because they answer different questions: a domain
 ontology YAML defines *what a tenant's graph is allowed to contain*

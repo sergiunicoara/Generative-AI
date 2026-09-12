@@ -8,9 +8,9 @@ guidance can become RDF evidence for an advisory maintenance review.
 
 The synthetic demo module owns its local RDF projection only. Source-shaped
 records are fixtures, not live SAP, Snowflake, or SharePoint integrations.
-Neo4j remains unchanged and receives no POC writes. The optional GraphDB store
-is an RDF serving copy loaded from the Turtle export; it is not a second source
-of truth.
+The optional GraphDB store is an RDF serving copy loaded from the Turtle export;
+it is not a second source of truth. Neo4j is optional and receives only a
+governed, rebuildable RDF-derived read model; it never writes back to RDF.
 
 ## Run locally
 
@@ -21,6 +21,7 @@ python scripts/run_energy_demo.py --export-turtle artifacts/energy-demo.ttl
 python scripts/run_energy_demo.py --as-of 2026-05-01T00:00:00Z
 python scripts/evaluate_energy_demo.py
 python scripts/build_energy_evaluation_report.py
+python scripts/project_energy_rdf_to_neo4j.py  # requires configured Neo4j
 python -m pytest tests/unit/test_energy_demo.py -q
 ```
 
@@ -97,6 +98,21 @@ never rewritten or deleted.
 SHACL rejection against one fixed synthetic invalid record, not the live
 published graph — kept for that narrower purpose, now also routed through
 the real `SHACLValidator` instead of a bypassing `pyshacl.validate()` call.
+
+## Optional Neo4j GraphRAG read model
+
+`scripts/project_energy_rdf_to_neo4j.py` projects the **published Energy RDF
+graph** into the platform's Neo4j `Entity` / `RELATES_TO` model for traversal
+and GraphRAG retrieval. It preserves each resource's RDF IRI, selected Energy
+type, literals and datatype metadata, source provenance, and trusted tenant.
+The direction is deliberately one way: RDF remains the evidence source of
+truth, while Neo4j can be dropped and rebuilt from the published RDF version.
+
+The projector fails closed if it sees a blank node, an unsupported vocabulary
+term, a repeated literal that needs a collection mapping, or an Energy resource
+without a supported concrete type. This prevents a convenient but lossy RDF ↔
+property-graph synchronization claim. It is a read-model projection, not a
+bidirectional sync engine and not a replacement for RDF/SPARQL governance.
 
 ## GraphDB path
 
@@ -182,6 +198,7 @@ revisions (narrative document content, not naturally a mapping target).
 
 The sample is deliberately small. It demonstrates contracts, provenance,
 revision handling, and permission behavior; it makes no enterprise-scale claim.
-The Energy demo's running publication path remains RDF-native and does not write
-to Neo4j; the generated Cypher and shared mutation validator demonstrate how
-the same canonical model governs an LPG deployment of the wider platform.
+Its running publication path remains RDF-native. Neo4j is an optional,
+rebuildable GraphRAG read model, governed by the same canonical semantic model.
+See [the production-readiness preflight](../energy-production-readiness-preflight.md)
+for the deployment evidence still required outside this repository.

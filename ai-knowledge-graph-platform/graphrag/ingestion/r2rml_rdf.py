@@ -20,8 +20,8 @@ Deliberately narrow, same philosophy as ``r2rml.py``: unsupported R2RML
 constructs raise ``R2RMLMappingError`` rather than being silently dropped or
 guessed at. Supported per ``rr:TriplesMap``:
 
-- ``rr:subjectMap`` with a single-column ``rr:template`` and ``rr:class``
-  (subject IRI + one ``rdf:type`` triple).
+- ``rr:subjectMap`` with a single-column ``rr:template`` and one or more
+  ``rr:class`` declarations (subject IRI + explicit ``rdf:type`` triples).
 - ``rr:predicateObjectMap`` with ``rr:objectMap/rr:column`` -- a literal
   triple straight from the row.
 - ``rr:predicateObjectMap`` with ``rr:objectMap/rr:parentTriplesMap`` +
@@ -97,7 +97,9 @@ async def materialize_r2rml(
         subject_map = _one(mapping_graph, triples_map, RR.subjectMap, "rr:subjectMap")
         template = str(_one(mapping_graph, subject_map, RR.template, "rr:subjectMap/rr:template"))
         id_column = _single_template_column(template, "rr:subjectMap/rr:template")
-        rdf_class = _one(mapping_graph, subject_map, RR["class"], "rr:subjectMap/rr:class")
+        rdf_classes = list(mapping_graph.objects(subject_map, RR["class"]))
+        if not rdf_classes:
+            raise R2RMLMappingError("rr:subjectMap requires at least one rr:class")
 
         pred_obj_maps = list(mapping_graph.objects(triples_map, RR.predicateObjectMap))
         # Validate every predicate-object map's shape up front, before
@@ -150,7 +152,12 @@ async def materialize_r2rml(
                 raise R2RMLMappingError(f"{table}: row missing identifier column {id_column!r}")
             subject = URIRef(template.format(**{id_column: id_value}))
             subjects_by_map[triples_map][str(id_value)] = subject
-            out.add((subject, RDF.type, rdf_class))
+            # R2RML permits more than one rr:class on a subject map.  Keeping
+            # every declared type is important for a domain model where a
+            # concrete WindTurbine is also an Asset, and avoids relying on a
+            # triplestore's optional RDFS inference at query time.
+            for rdf_class in rdf_classes:
+                out.add((subject, RDF.type, rdf_class))
 
             for predicate, kind, key, extra in resolved_poms:
                 if kind == "column":

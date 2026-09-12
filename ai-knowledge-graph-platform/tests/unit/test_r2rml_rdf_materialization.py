@@ -52,6 +52,7 @@ class TestMaterializeEnergyAssets:
         graph = await materialize_r2rml(ENERGY_MAPPING, SQLiteSourceConnector(energy_sqlite))
 
         assert (ASSET, RDF.type, URIRef(ENERGY_NS + "Asset")) in graph
+        assert (ASSET, RDF.type, URIRef(ENERGY_NS + "WindTurbine")) in graph
         assert (WORK_ORDER, RDF.type, URIRef(ENERGY_NS + "WorkOrder")) in graph
         assert (WORK_ORDER, URIRef(ENERGY_NS + "status"), Literal("open")) in graph
         # The join predicate: the plain-column predicate the old

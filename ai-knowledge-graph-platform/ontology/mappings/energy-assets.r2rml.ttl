@@ -6,6 +6,9 @@
 energy:AssetMap a rr:TriplesMap;
   rr:logicalTable [ rr:tableName "sap_assets" ];
   rr:subjectMap [ rr:template "https://example.energy.demo/asset/{asset_id}"; rr:class energy:Asset ];
+  # Keep the generic Asset class for portable relational ingestion, and make
+  # the concrete turbine type explicit without relying on RDFS inference.
+  rr:predicateObjectMap [ rr:predicate <http://www.w3.org/1999/02/22-rdf-syntax-ns#type>; rr:objectMap [ rr:constant energy:WindTurbine ] ];
   rr:predicateObjectMap [ rr:predicate rdfs:label; rr:objectMap [ rr:column "asset_name" ] ];
   rr:predicateObjectMap [ rr:predicate energy:assetId; rr:objectMap [ rr:column "asset_id" ] ].
 energy:WorkOrderMap a rr:TriplesMap;

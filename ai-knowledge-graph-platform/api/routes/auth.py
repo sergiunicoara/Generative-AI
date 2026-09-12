@@ -137,11 +137,24 @@ def _client_set(client_id: str, data: dict) -> None:
 @router.get("/dev-login", summary="⚡ Dev login — issues cookie without Google (dev only)",
             dependencies=[Depends(rate_limit(AUTH_LIMIT))],
             include_in_schema=True)
-async def dev_login(request: Request, response: Response, next: str = "/docs"):
+async def dev_login(
+    request: Request,
+    response: Response,
+    next: str = "/docs",
+    tenant: str | None = None,
+):
     if not is_dev_env(get_settings().env):
         raise HTTPException(status_code=403, detail="Only available in development")
 
-    tenant = get_settings().default_tenant
+    redirect_to = _safe_next(next)
+    # Keep the documented local Energy-demo entry point frictionless.  The
+    # workspace is deliberately tenant-gated, so a default-tenant cookie would
+    # authenticate successfully yet receive its intentional 404.  This only
+    # applies to the development-only login route; production identity still
+    # derives its tenant from the authenticated identity provider.
+    effective_tenant = tenant or (
+        "energy-demo" if redirect_to == "/energy-demo" else get_settings().default_tenant
+    )
     # Dev-only bootstrap credential: full scope set so a developer can mint
     # properly scoped-down M2M clients via POST /auth/clients afterward
     # (which enforces requested-scopes-subset-of-caller-scopes) rather than
@@ -153,11 +166,10 @@ async def dev_login(request: Request, response: Response, next: str = "/docs"):
         "name": "Dev User",
         "picture": "",
         "type": "browser",
-        "scope": " ".join(sorted(FIXED_SCOPES | {tenant_scope(tenant)})),
-        "tenant": tenant,
+        "scope": " ".join(sorted(FIXED_SCOPES | {tenant_scope(effective_tenant)})),
+        "tenant": effective_tenant,
     })
     secure = _cookie_secure()
-    redirect_to = _safe_next(next)
     r = RedirectResponse(redirect_to, status_code=302)
     r.set_cookie(
         key="access_token",

@@ -25,3 +25,11 @@ mutmut>=3.2.0
 
 ruff>=0.6.0
 pip-tools>=7.4.0
+
+# Usable today (0 errors attributable to every file added in the R2RML,
+# IR-metrics-eval, and no-Docker-wishlist-items work — see those commits) but
+# was never pinned anywhere, so nobody could `pip install -r
+# requirements-dev.txt` and get the same mypy the rest of this session ran.
+# Not yet part of the CI gate (`make ci`) — 108 pre-existing errors remain
+# across older modules; see Makefile's `typecheck` target.
+mypy>=1.10.0

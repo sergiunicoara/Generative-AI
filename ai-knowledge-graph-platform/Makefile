@@ -8,6 +8,7 @@ UVICORN   ?= $(PYTHON) -m uvicorn
 PIP       ?= $(PYTHON) -m pip
 
 .PHONY: help install install-dev lock test test-collect test-integration test-load test-all test-fuzz mutation lint \
+	typecheck ci \
 	terraform-fmt terraform-validate terraform-test terraform-security \
         api dashboard backup services-up services-down \
         community-rebuild re-embed entity-migrate smoke-test
@@ -81,6 +82,15 @@ lint:          ## Lint with ruff (fast, replaces flake8 + isort)
 
 lint-fix:      ## Auto-fix lint issues
 	$(PYTHON) -m ruff check --fix graphrag/ api/ scripts/ tests/
+
+typecheck:     ## Type-check with mypy (advisory: 108 pre-existing errors remain, not yet gated)
+	-$(PYTHON) -m mypy graphrag/ api/ scripts/
+
+# ── CI ─────────────────────────────────────────────────────────────────────────
+
+ci:            ## The one command CI runs: lint + unit tests (no live services, no Docker)
+	$(MAKE) lint
+	$(MAKE) test
 
 # ── Services ───────────────────────────────────────────────────────────────────
 

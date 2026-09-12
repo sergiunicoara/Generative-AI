@@ -8,6 +8,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from api.auth.dependencies import require_scope
 from api.auth.default_auth import RequireAuthMiddleware
+from api.auth.access_audit_middleware import AccessAuditMiddleware
 from starlette.middleware.sessions import SessionMiddleware
 
 from api.limiter import limiter
@@ -149,6 +150,12 @@ app.add_middleware(
 )
 
 app.add_middleware(RequireAuthMiddleware)
+
+# Records one AccessAuditEvent per request (graphrag/observability/access_audit.py).
+# Reads request.state only after call_next returns, so its position relative
+# to RequireAuthMiddleware in this stack doesn't affect correctness -- see
+# that module's own docstring.
+app.add_middleware(AccessAuditMiddleware)
 
 # This middleware buffers at most the configured bound and therefore must run
 # outside application parsing. It applies to both fixed-length and chunked

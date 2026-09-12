@@ -22,6 +22,7 @@ python scripts/run_energy_demo.py --as-of 2026-05-01T00:00:00Z
 python scripts/evaluate_energy_demo.py
 python scripts/build_energy_evaluation_report.py
 python scripts/project_energy_rdf_to_neo4j.py  # requires configured Neo4j
+python scripts/run_energy_demo_e2e.py --output artifacts/energy-demo-e2e-report.json
 python -m pytest tests/unit/test_energy_demo.py -q
 ```
 
@@ -153,6 +154,16 @@ inference caches, and operational state remain the responsibility of the
 selected GraphDB backup procedure.
 
 ## Demo narrative
+
+For one repeatable proof of the complete local workflow, run
+`python scripts/run_energy_demo_e2e.py`. It writes the source-shaped SQLite
+fixture and Turtle export, then asserts R2RML/RML materialisation, explicit
+`WindTurbine` typing, SHACL publication, the committed SPARQL answer, evidence
+provenance, historical revision selection, the no-evidence boundary, tenant
+isolation, and the RDF-to-Neo4j batch projection contract. Add
+`--live-neo4j` only when a configured Neo4j instance should receive the
+rebuildable read model. The JSON report is suitable for attaching to the demo
+or using as a regression artifact.
 
 1. Ask which assets need review. WT-01 is identified using a 96 C measurement,
    open work order WO-9001, and bulletin MFG-GBX-17-R2.

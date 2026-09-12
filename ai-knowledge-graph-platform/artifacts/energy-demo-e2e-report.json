@@ -1,0 +1,190 @@
+{
+  "scenario": "energy-asset-intelligence/e2e-v2",
+  "status": "passed",
+  "source": {
+    "kind": "synthetic SAP-shaped SQLite",
+    "path": "artifacts\\energy-demo-e2e-sap.sqlite",
+    "mapping": "ontology/mappings/energy-assets.r2rml.ttl",
+    "rml_mapping": "ontology/mappings/energy-observations.rml.ttl"
+  },
+  "publication": {
+    "version_id": "2babefa079e44bfc8da05e12f64e3c4d",
+    "candidate_records": 29,
+    "published_triples": 135,
+    "quarantined_records": 0,
+    "shacl_invalid_probe": {
+      "conforms": false,
+      "rejected_records": [
+        "obs-WT-10-temperature_c-invalid"
+      ],
+      "violations": [
+        "Less than 1 values on <https://example.energy.demo/record/obs-WT-10-temperature_c-invalid>->energy:unit",
+        "Less than 1 values on <https://example.energy.demo/record/obs-WT-10-temperature_c-invalid>->energy:value",
+        "Value does not have class energy:Asset"
+      ]
+    }
+  },
+  "rdf": {
+    "turtle": "artifacts\\energy-demo-e2e.ttl",
+    "triples": 135,
+    "explicit_wind_turbine_type": true
+  },
+  "answers": {
+    "maintenance_review": {
+      "status": "advisory",
+      "answer": "Advisory review is required for WT-01. Its gearbox temperature is 96\u00b0C, above the 85\u00b0C threshold in MFG-GBX-17-R2; WO-9001 is open.",
+      "current_as_of": "2026-08-28T12:00:00Z",
+      "authoritative_bulletin": "MFG-GBX-17-R2",
+      "evidence": [
+        {
+          "source_id": "SAP-WO-9001",
+          "source_type": "synthetic_sap_export",
+          "field_or_span": "work_orders.status",
+          "observed_at": "2026-08-28T08:15:00Z",
+          "valid_from": "2026-08-28T08:15:00Z",
+          "valid_to": null,
+          "access_scope": "energy-demo",
+          "value": "open"
+        },
+        {
+          "source_id": "SNOW-OBS-WT-01",
+          "source_type": "synthetic_snowflake_export",
+          "field_or_span": "temperature_c=96",
+          "observed_at": "2026-08-28T08:00:00Z",
+          "valid_from": "2026-08-28T08:00:00Z",
+          "valid_to": null,
+          "access_scope": "energy-demo",
+          "value": "96 C"
+        },
+        {
+          "source_id": "MFG-GBX-17-R2",
+          "source_type": "synthetic_sharepoint_export",
+          "field_or_span": "Gearbox review threshold: 85 C.",
+          "observed_at": "2026-06-01T00:00:00Z",
+          "valid_from": "2026-06-01T00:00:00Z",
+          "valid_to": null,
+          "access_scope": "energy-demo",
+          "value": "85 C"
+        }
+      ],
+      "query_version": "energy-demo/v1",
+      "mapping_version": "energy-r2rml/1.0.0",
+      "query_rows": [
+        {
+          "asset": "https://example.energy.demo/asset/WT-01",
+          "temperature": "96.0",
+          "threshold": "85.0",
+          "bulletin": "https://example.energy.demo/document/MFG-GBX-17-R2",
+          "workOrder": "https://example.energy.demo/record/WO-9001"
+        }
+      ],
+      "answer_source": "version-controlled SPARQL query"
+    },
+    "historical_state": {
+      "status": "advisory",
+      "answer": "As of 2026-05-01T00:00:00Z, MFG-GBX-17-R1 was authoritative and the review threshold was 90\u00b0C.",
+      "current_as_of": "2026-05-01T00:00:00Z",
+      "authoritative_bulletin": "MFG-GBX-17-R1",
+      "evidence": [
+        {
+          "source_id": "SAP-WO-9001",
+          "source_type": "synthetic_sap_export",
+          "field_or_span": "work_orders.status",
+          "observed_at": "2026-08-28T08:15:00Z",
+          "valid_from": "2026-08-28T08:15:00Z",
+          "valid_to": null,
+          "access_scope": "energy-demo",
+          "value": "open"
+        },
+        {
+          "source_id": "SNOW-OBS-WT-01",
+          "source_type": "synthetic_snowflake_export",
+          "field_or_span": "temperature_c=96",
+          "observed_at": "2026-08-28T08:00:00Z",
+          "valid_from": "2026-08-28T08:00:00Z",
+          "valid_to": null,
+          "access_scope": "energy-demo",
+          "value": "96 C"
+        },
+        {
+          "source_id": "MFG-GBX-17-R1",
+          "source_type": "synthetic_sharepoint_export",
+          "field_or_span": "Gearbox review threshold: 90 C.",
+          "observed_at": "2026-06-01T00:00:00Z",
+          "valid_from": "2026-06-01T00:00:00Z",
+          "valid_to": null,
+          "access_scope": "energy-demo",
+          "value": "90 C"
+        }
+      ],
+      "query_version": "energy-demo/v1",
+      "mapping_version": "energy-r2rml/1.0.0"
+    },
+    "insufficient_evidence": {
+      "status": "insufficient_evidence",
+      "answer": "WT-04 through WT-10 cannot be fully assessed because the synthetic export lacks a current gearbox observation or an open-work-order status. No maintenance conclusion is made for them.",
+      "current_as_of": "2026-08-28T12:00:00Z",
+      "authoritative_bulletin": "MFG-GBX-17-R2",
+      "evidence": [
+        {
+          "source_id": "SAP-WO-9001",
+          "source_type": "synthetic_sap_export",
+          "field_or_span": "work_orders.status",
+          "observed_at": "2026-08-28T08:15:00Z",
+          "valid_from": "2026-08-28T08:15:00Z",
+          "valid_to": null,
+          "access_scope": "energy-demo",
+          "value": "open"
+        },
+        {
+          "source_id": "SNOW-OBS-WT-01",
+          "source_type": "synthetic_snowflake_export",
+          "field_or_span": "temperature_c=96",
+          "observed_at": "2026-08-28T08:00:00Z",
+          "valid_from": "2026-08-28T08:00:00Z",
+          "valid_to": null,
+          "access_scope": "energy-demo",
+          "value": "96 C"
+        },
+        {
+          "source_id": "MFG-GBX-17-R2",
+          "source_type": "synthetic_sharepoint_export",
+          "field_or_span": "Gearbox review threshold: 85 C.",
+          "observed_at": "2026-06-01T00:00:00Z",
+          "valid_from": "2026-06-01T00:00:00Z",
+          "valid_to": null,
+          "access_scope": "energy-demo",
+          "value": "85 C"
+        }
+      ],
+      "query_version": "energy-demo/v1",
+      "mapping_version": "energy-r2rml/1.0.0"
+    },
+    "wrong_tenant": {
+      "status": "not_found",
+      "answer": "No energy demonstration is available for this tenant.",
+      "evidence": []
+    }
+  },
+  "neo4j_projection": {
+    "mode": "dry-run",
+    "rdf_is_authoritative": true,
+    "rebuildable_read_model": true,
+    "nodes": 29,
+    "relationships": 27,
+    "live_result": null
+  },
+  "capabilities_demonstrated": [
+    "R2RML relational-to-RDF materialization",
+    "RML telemetry-to-RDF materialization",
+    "explicit RDF/OWL domain typing",
+    "SHACL publication gate and invalid-record rejection",
+    "version-controlled SPARQL advisory",
+    "evidence-backed recommendation with provenance",
+    "historical revision-aware reasoning",
+    "no-evidence abstention boundary",
+    "tenant isolation",
+    "Turtle export and reparsing",
+    "governed RDF-to-Neo4j GraphRAG projection"
+  ]
+}

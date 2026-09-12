@@ -26,6 +26,10 @@ from graphrag.graph.source_catalog import (
     SourceMapping,
     SourceSystem,
 )
+from graphrag.ingestion.incremental import (
+    compute_relational_snapshot_hash,
+    should_skip_ingest,
+)
 
 _IDENTIFIER = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 
@@ -107,6 +111,11 @@ class MappingValidationReport(BaseModel):
     relation_rows: int = 0
     errors: list[str] = Field(default_factory=list)
     shacl_conforms: bool | None = None
+    # Set by ingest()'s content-hash checkpoint (graphrag/ingestion/incremental.py).
+    # content_hash is always populated once rows are read; skipped is True only
+    # when it matched the caller-supplied previous_hash and no write occurred.
+    content_hash: str = ""
+    skipped: bool = False
 
 
 class SQLiteSourceConnector:
@@ -340,7 +349,24 @@ class RelationalGraphIngestor:
             errors=sorted(set(errors)),
         )
 
-    async def ingest(self, mapping: RelationalGraphMapping) -> MappingValidationReport:
+    async def ingest(
+        self,
+        mapping: RelationalGraphMapping,
+        previous_hash: str | None = None,
+    ) -> MappingValidationReport:
+        """Validate, then write, `mapping`'s source through to the graph.
+
+        `previous_hash` is injected rather than fetched internally (e.g. via
+        a Neo4j lookup) so this method stays testable without a live graph —
+        matching this class's existing style, which already takes a
+        `connector`/`graph_writer` pair rather than reaching for either
+        itself. A real caller fetches it the same way
+        `scripts/ingest_corpus.py` already fetches a document's stored hash
+        (see `graphrag/ingestion/incremental.py`'s module docstring) and
+        passes it in. When the freshly-read snapshot's hash matches, the
+        write is skipped entirely — no SHACL check, no graph write — and the
+        returned report has `skipped=True`.
+        """
         report = await self.validate(mapping)
         if not report.valid:
             raise ValueError("relational mapping rejected: " + "; ".join(report.errors))
@@ -368,8 +394,10 @@ class RelationalGraphIngestor:
                 payload.append({"table": table_map.table, "row": row})
 
         relations: list[Relation] = []
+        relation_payload: list[dict[str, Any]] = []
         for table_map in mapping.relations:
             for row in await self.connector.read_table(table_map.table):
+                relation_payload.append({"table": table_map.table, "row": row})
                 source = by_source_key.get((table_map.source_table, str(row[table_map.source_column])))
                 target = by_source_key.get((table_map.target_table, str(row[table_map.target_column])))
                 if source is None or target is None:
@@ -386,6 +414,17 @@ class RelationalGraphIngestor:
                     valid_to=self._timestamp(row.get(table_map.valid_to_column)) if table_map.valid_to_column else None,
                     source_doc_id=f"relational:{mapping.source_id}",
                 ))
+
+        # Snapshot hash covers entity AND relation rows -- a source where only
+        # a relation table changed (e.g. supplies) must still be detected,
+        # not just an entity-table change. Computed here, after both tables
+        # are read but before any write, so an unchanged source costs one
+        # read pass and a hash, never a SHACL check or a graph write.
+        current_hash = compute_relational_snapshot_hash(payload + relation_payload)
+        report.content_hash = current_hash
+        if should_skip_ingest(previous_hash, current_hash):
+            report.skipped = True
+            return report
 
         from graphrag.graph.shacl_validator import SHACLValidator
 
@@ -412,11 +451,18 @@ class RelationalGraphIngestor:
         await catalog.add_mapping(mapping.as_source_mapping())
 
         raw = json.dumps(payload, sort_keys=True, default=str)
+        # Keyed by source_id alone, not mapping.version: merge_document MERGEs
+        # on (tenant, filename) (graphrag/graph/neo4j_client.py), so a stable
+        # identity here is what lets a re-ingest of the same source under a
+        # newer mapping version update the existing Document in place instead
+        # of creating a parallel one every version bump -- mapping_version is
+        # still recorded in metadata below, just no longer part of identity.
         document = Document(
-            id=str(uuid5(NAMESPACE_URL, f"relational-document:{mapping.source_id}:{mapping.version}")),
-            filename=f"relational://{mapping.source_id}/{mapping.version}",
+            id=str(uuid5(NAMESPACE_URL, f"relational-document:{mapping.source_id}")),
+            filename=f"relational://{mapping.source_id}",
             source_path=self.connector.uri,
             raw_text=raw,
+            content_hash=current_hash,
             tenant=mapping.tenant,
             source_id=mapping.source_id,
             status="done",

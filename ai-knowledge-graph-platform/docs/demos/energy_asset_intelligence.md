@@ -20,8 +20,15 @@ python scripts/ingest_r2rml.py --mapping ontology/mappings/energy-assets.r2rml.t
 python scripts/run_energy_demo.py --export-turtle artifacts/energy-demo.ttl
 python scripts/run_energy_demo.py --as-of 2026-05-01T00:00:00Z
 python scripts/evaluate_energy_demo.py
+python scripts/build_energy_evaluation_report.py
 python -m pytest tests/unit/test_energy_demo.py -q
 ```
+
+`build_energy_evaluation_report.py` writes a versioned local evidence artifact
+covering fixed-answer correctness, maintenance-evidence coverage, abstention,
+tenant isolation, publication freshness, p95 local answer latency and RDF
+materialisation throughput. Its claim policy explicitly limits those timing and
+throughput observations to the small synthetic fixture.
 
 The API is tenant-scoped and requires an authenticated token with tenant
 `energy-demo` and scope `read`:
@@ -42,6 +49,23 @@ SPARQL. The `maintenance_review.rq` query is version controlled under
 `evals/energy_demo/sparql/` for technical inspection.
 
 ## SHACL as a publication gate
+
+The vocabulary and validation contract are not maintained as two competing
+models. `ontology/models/energy-asset-intelligence.yaml` is the canonical
+semantic model; `python -m graphrag.semantic_model compile ...` deterministically
+projects it into the OWL/RDFS ontology, SHACL shapes, Neo4j key constraints,
+and machine-readable capability diagnostics. `make semantic-model-check`
+detects hand edits or stale generated files.
+
+This keeps the modelling decision independent of storage. OWL states domain
+meaning under open-world semantics; SHACL rejects incomplete candidate RDF;
+Neo4j DDL enforces the subset its schema supports. Required non-key properties,
+abstract types, and relationship cardinalities that Neo4j cannot express are
+reported rather than silently dropped. `SemanticMutationValidator`, injected
+into the shared `GraphWriter` for compiled domains, rejects invalid nodes and
+relationship endpoints before mutation. Maximum relationship counts still
+need a same-transaction database check in a production connector to avoid a
+check-then-write race.
 
 The RDF graph is not served the moment it's built. Every time
 `EnergyDemoService` builds a candidate graph (R2RML/RML mapping execution
@@ -115,6 +139,19 @@ selected GraphDB backup procedure.
    maintenance conclusion.
 6. Use a different tenant token and show that the POC returns no evidence.
 
+## Governed maintenance workflow
+
+The POC also exposes a small operational lifecycle for `WO-9001`. Source RDF
+continues to describe the SAP-shaped work-order evidence; workflow changes are
+separate, append-only transition records: `review_required` → `approved` →
+`completed`. Each transition records its actor, timestamp and reason, is
+tenant-scoped, and requires the API's `write` scope. The lifecycle is available
+at `GET /energy-demo/work-orders/WO-9001/lifecycle`; a transition is requested
+through `POST /energy-demo/work-orders/WO-9001/transition`.
+
+This is a local, in-memory demonstration of governed graph operations. It does
+not update SAP or control equipment.
+
 ## Limitations
 
 Both mapping files are genuinely executed, not just parsed as contracts.
@@ -136,3 +173,6 @@ revisions (narrative document content, not naturally a mapping target).
 
 The sample is deliberately small. It demonstrates contracts, provenance,
 revision handling, and permission behavior; it makes no enterprise-scale claim.
+The Energy demo's running publication path remains RDF-native and does not write
+to Neo4j; the generated Cypher and shared mutation validator demonstrate how
+the same canonical model governs an LPG deployment of the wider platform.

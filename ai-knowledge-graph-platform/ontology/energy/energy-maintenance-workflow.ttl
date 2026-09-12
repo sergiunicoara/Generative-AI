@@ -1,0 +1,31 @@
+@prefix energy: <https://example.energy.demo/ontology#> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix prov: <http://www.w3.org/ns/prov#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+
+energy:MaintenanceState a owl:Class ;
+  rdfs:label "Maintenance workflow state" .
+
+energy:OperationalTransition a owl:Class ;
+  rdfs:subClassOf prov:Activity ;
+  rdfs:label "Operational maintenance transition" .
+
+energy:changesWorkOrder a owl:ObjectProperty ;
+  rdfs:domain energy:OperationalTransition ;
+  rdfs:range energy:WorkOrder .
+energy:fromState a owl:ObjectProperty ;
+  rdfs:domain energy:OperationalTransition ;
+  rdfs:range energy:MaintenanceState .
+energy:toState a owl:ObjectProperty ;
+  rdfs:domain energy:OperationalTransition ;
+  rdfs:range energy:MaintenanceState .
+energy:changedAt a owl:DatatypeProperty ;
+  rdfs:domain energy:OperationalTransition ;
+  rdfs:range xsd:dateTime .
+energy:changedBy a owl:DatatypeProperty ;
+  rdfs:domain energy:OperationalTransition ;
+  rdfs:range xsd:string .
+energy:transitionReason a owl:DatatypeProperty ;
+  rdfs:domain energy:OperationalTransition ;
+  rdfs:range xsd:string .

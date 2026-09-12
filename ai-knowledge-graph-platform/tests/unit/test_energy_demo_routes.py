@@ -16,6 +16,7 @@ from starlette.testclient import TestClient
 from api.auth.dependencies import get_current_user
 from api.routes import energy_demo as energy_demo_routes
 from graphrag.domains.energy.demo import EnergyDemoService
+from graphrag.domains.energy.workflow import MaintenanceWorkflow
 
 
 def _client(*, scope: str = "read") -> TestClient:
@@ -32,6 +33,7 @@ def _client(*, scope: str = "read") -> TestClient:
 
 def _fresh_service(monkeypatch) -> None:
     monkeypatch.setattr(energy_demo_routes, "_service", EnergyDemoService())
+    monkeypatch.setattr(energy_demo_routes, "_workflow", MaintenanceWorkflow())
 
 
 class TestGetPublication:
@@ -91,3 +93,32 @@ class TestPostRollback:
         assert response.status_code == 200
         body = response.json()
         assert body["rolled_back_from"] == first_version_id
+
+
+class TestOperationalWorkflow:
+    def test_read_scope_can_view_the_initial_lifecycle(self, monkeypatch):
+        _fresh_service(monkeypatch)
+        response = _client().get("/energy-demo/work-orders/WO-9001/lifecycle")
+        assert response.status_code == 200
+        assert response.json()["current_state"] == "review_required"
+
+    def test_write_scope_records_a_governed_transition_with_actor_and_reason(self, monkeypatch):
+        _fresh_service(monkeypatch)
+        response = _client(scope="write").post(
+            "/energy-demo/work-orders/WO-9001/transition",
+            json={"to_state": "approved", "reason": "Reviewed mapped telemetry and bulletin"},
+        )
+        assert response.status_code == 200
+        assert response.json()["changed_by"] == "reviewer-1"
+
+        lifecycle = _client().get("/energy-demo/work-orders/WO-9001/lifecycle").json()
+        assert lifecycle["current_state"] == "approved"
+        assert len(lifecycle["transitions"]) == 1
+
+    def test_read_scope_cannot_change_the_lifecycle(self, monkeypatch):
+        _fresh_service(monkeypatch)
+        response = _client(scope="read").post(
+            "/energy-demo/work-orders/WO-9001/transition",
+            json={"to_state": "approved", "reason": "Not authorized"},
+        )
+        assert response.status_code == 403

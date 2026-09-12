@@ -6,14 +6,22 @@ import json
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import HTMLResponse
+from pydantic import BaseModel, Field
 
-from api.auth.dependencies import get_tenant, require_scope
+from api.auth.dependencies import get_current_user, get_tenant, require_scope
 from graphrag.domains.energy.demo import EnergyDemoService
 from graphrag.domains.energy.publication import PublicationRollbackError
+from graphrag.domains.energy.workflow import MaintenanceWorkflow, WorkflowTransitionError
 
 router = APIRouter()
 _source_db = Path(__file__).resolve().parents[2] / "artifacts/energy-demo-sap.sqlite"
 _service = EnergyDemoService(source_db=_source_db if _source_db.exists() else None)
+_workflow = MaintenanceWorkflow()
+
+
+class WorkflowTransitionRequest(BaseModel):
+    to_state: str = Field(pattern="^(approved|completed)$")
+    reason: str = Field(min_length=1, max_length=500)
 
 def _dashboard_html() -> str:
     current = _service.answer("maintenance_review", tenant="energy-demo")
@@ -80,6 +88,42 @@ async def quarantine(tenant: str = Depends(get_tenant)):
         raise HTTPException(status_code=404, detail="Energy demonstration not found")
     report = _service.publication_report()
     return {"version_id": report.version_id, "quarantined_records": [asdict(r) for r in report.quarantined_records]}
+
+
+@router.get("/work-orders/{work_order_id}/lifecycle")
+async def work_order_lifecycle(work_order_id: str, tenant: str = Depends(get_tenant)):
+    if tenant != "energy-demo":
+        raise HTTPException(status_code=404, detail="Energy demonstration not found")
+    try:
+        return {
+            "work_order_id": work_order_id,
+            "current_state": _workflow.current_state(work_order_id),
+            "transitions": [item.as_dict() for item in _workflow.history(work_order_id)],
+            "rdf": _workflow.rdf_projection(work_order_id).serialize(format="turtle"),
+        }
+    except WorkflowTransitionError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@router.post("/work-orders/{work_order_id}/transition", dependencies=[Depends(require_scope("write"))])
+async def transition_work_order(
+    work_order_id: str,
+    request: WorkflowTransitionRequest,
+    tenant: str = Depends(get_tenant),
+    user: dict = Depends(get_current_user),
+):
+    if tenant != "energy-demo":
+        raise HTTPException(status_code=404, detail="Energy demonstration not found")
+    try:
+        transition = _workflow.transition(
+            work_order_id,
+            to_state=request.to_state,
+            changed_by=str(user.get("sub", "unknown")),
+            reason=request.reason,
+        )
+    except WorkflowTransitionError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    return transition.as_dict()
 
 
 @router.post("/rollback", dependencies=[Depends(require_scope("write"))])

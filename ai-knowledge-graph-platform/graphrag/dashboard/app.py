@@ -1,12 +1,13 @@
 """Admin dashboard — Dash-based operator UI for GraphRAG.
 
-Five tabs covering all operational concerns:
+Six tabs covering all operational concerns:
 
   1. Graph Health   — KPI cards + staleness trend line       (tabs/health.py)
-  2. Conflicts      — DataTable + resolve action             (tabs/conflicts.py)
+  2. Conflicts      — AG Grid + resolve action               (tabs/conflicts.py)
   3. Communities    — staleness badge, rebuild, history      (tabs/communities.py)
   4. GDPR & PII     — audit log, forget-entity form          (tabs/gdpr.py)
   5. Calibration    — Brier score trend, isotonic bins       (tabs/calibration.py)
+  6. Review Queue   — pending alias matches, approve/reject  (tabs/review_queue.py)
 
 Architecture
 ------------
@@ -39,7 +40,9 @@ from dash import Input, Output, State, callback, dcc, html
 
 # Tab modules imported here so their @callback decorators are registered.
 import graphrag.dashboard.tabs  # noqa: F401 — side-effect import
-from graphrag.dashboard.tabs import calibration, communities, conflicts, gdpr, health
+from graphrag.dashboard.tabs import (
+    calibration, communities, conflicts, gdpr, health, review_queue,
+)
 from graphrag.dashboard.utils import (
     CANVAS, FONT, NAV, NAV2, TAB_SELECTED_STYLE, TAB_STYLE, TEAL, TEAL2,
 )
@@ -231,6 +234,7 @@ app.layout = html.Div([
             dcc.Tab(label="Communities",   value="communities", style=TAB_STYLE, selected_style=TAB_SELECTED_STYLE),
             dcc.Tab(label="GDPR & PII",    value="gdpr",        style=TAB_STYLE, selected_style=TAB_SELECTED_STYLE),
             dcc.Tab(label="Calibration",   value="calibration", style=TAB_STYLE, selected_style=TAB_SELECTED_STYLE),
+            dcc.Tab(label="Review Queue",  value="review_queue", style=TAB_STYLE, selected_style=TAB_SELECTED_STYLE),
         ]),
         style={"background": "white", "padding": "0 16px",
                "borderBottom": f"1px solid {TEAL}", "boxShadow": "0 2px 8px rgba(15,31,71,0.04)"},
@@ -266,6 +270,7 @@ def render_tab(tab: str, _n: int, tenant: str):
         "communities": communities.render,
         "gdpr":        gdpr.render,
         "calibration": calibration.render,
+        "review_queue": review_queue.render,
     }
     renderer = _tab_renderers.get(tab)
     if renderer is None:

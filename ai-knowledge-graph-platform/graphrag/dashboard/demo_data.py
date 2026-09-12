@@ -102,6 +102,19 @@ CONFLICTS = {
     ]
 }
 
+# ── Review Queue ────────────────────────────────────────────────────────────
+
+REVIEW_QUEUE = {
+    "items": [
+        {"item_id": "r-4a12b", "raw_name": "ISO IATF", "raw_type": "CONCEPT",
+         "candidate_name": "IATF 16949:2016", "candidate_type": "CONCEPT",
+         "score": 0.79, "match_type": "fuzzy", "source_doc": "IATF-16949-2016.pdf"},
+        {"item_id": "r-9c04e", "raw_name": "Musk", "raw_type": "PERSON",
+         "candidate_name": "Elon Musk", "candidate_type": "PERSON",
+         "score": 0.88, "match_type": "embedding", "source_doc": "spacex-2024-report.pdf"},
+    ]
+}
+
 # ── Communities ─────────────────────────────────────────────────────────────
 
 COMMUNITY_SUMMARY = {"change_fraction": 0.14, "changed_entities": 312}

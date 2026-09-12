@@ -46,14 +46,27 @@ Start the optional RDF service with:
 docker compose -f compose.energy-demo.yaml up -d
 ```
 
-GraphDB is exposed only on `127.0.0.1:7200`. Create a local repository named
-`energy-demo` through the GraphDB UI, then load `artifacts/energy-demo.ttl`
-using the repository's Graph Store HTTP endpoint. The repository contains a
-generic GraphDB URL builder in `graphrag.graph.triplestore.TripleStoreTarget`.
+GraphDB is exposed only on `127.0.0.1:7200`. The repository no longer needs to
+be created by hand through the GraphDB UI first —
+`graphrag.graph.triplestore.TripleStoreTarget.load()` now auto-provisions it
+via GraphDB's `/rest/repositories` REST API (`ensure_namespace()`) before
+loading, the same way it already did for Blazegraph namespaces:
 
-The GraphDB image and live repository path have not been verified in this
-environment. Check GraphDB image availability and license terms before client
-use. No GraphDB credentials are committed.
+```python
+from graphrag.graph.triplestore import TripleStoreTarget
+
+target = TripleStoreTarget("graphdb", "http://localhost:7200", repository="energy-demo")
+await target.load(Path("artifacts/energy-demo.ttl").read_bytes())
+```
+
+Verified live end to end (2026-09) against `ontotext/graphdb:10.8.1` — the
+tag `compose.energy-demo.yaml` now pins — including repository
+auto-creation, load, query, and that data survives a container restart; see
+`tests/e2e/test_live_graphdb.py`. That image runs unlicensed ("Product:
+GRAPHDB_LITE ... Licensee: Freeware ... Expiry date: none") — **GraphDB
+11.0+ requires a registered license file to start at all**, which is why an
+earlier pin to `11.2.0` here would not have booted. No GraphDB credentials
+are committed.
 
 ## Demo narrative
 

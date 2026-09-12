@@ -22,16 +22,21 @@ close. This module never sends a query that guard would reject.
 
 Verification status of the vendor Graph Store URL builders
 ------------------------------------------------------------
-Only Blazegraph's URL shape is verified end to end (see
-scripts/load_blazegraph.py's own docstring: tested against
-lyrasis/blazegraph:2.1.5). The others follow each vendor's published SPARQL
-1.1 Graph Store HTTP Protocol documentation but are not exercised against a
-running instance anywhere in this repo -- there is no GraphDB/Stardog/RDFox/
-Virtuoso container in docker-compose.yml. Treat them as a documented starting
-point, not a verified claim. Amazon Neptune does not expose a standard direct
-Graph Store Protocol load path (AWS recommends its bulk loader from S3), so
-``load()`` raises ``NotImplementedError`` for it rather than emitting a
-request that would silently fail or behave unexpectedly.
+Blazegraph (see scripts/load_blazegraph.py's own docstring: tested against
+lyrasis/blazegraph:2.1.5) and GraphDB (tested against
+ontotext/graphdb:10.8.1, the Free/unlicensed "GRAPHDB_LITE" edition -- see
+tests/e2e/test_live_graphdb.py) are verified end to end, including
+``ensure_namespace()``'s auto-provisioning path for both. Stardog, RDFox and
+Virtuoso follow each vendor's published SPARQL 1.1 Graph Store HTTP Protocol
+documentation but are not exercised against a running instance anywhere in
+this repo -- Stardog and RDFox have no obtainable license here, and Virtuoso
+has no verified image. Treat them as a documented starting point, not a
+verified claim. Note GraphDB 11.0+ requires a registered license to start at
+all (Ontotext's own licensing docs); the 10.x tag above runs unlicensed.
+Amazon Neptune does not expose a standard direct Graph Store Protocol load
+path (AWS recommends its bulk loader from S3), so ``load()`` raises
+``NotImplementedError`` for it rather than emitting a request that would
+silently fail or behave unexpectedly.
 """
 
 from __future__ import annotations
@@ -280,9 +285,30 @@ class TripleStoreTarget:
     ) -> list[dict]:
         return await self._endpoint().query(sparql, init_ns=init_ns)
 
+    async def _post(self, url: str, **kwargs) -> httpx.Response:
+        """Shared raw-POST helper for the management calls below -- both
+        branches of ensure_namespace() need "use the injected client if
+        present, else a scratch one," and duplicating that once per vendor
+        would drift the two copies over time."""
+        if self._client is not None:
+            return await self._client.post(url, auth=self._auth, **kwargs)
+        async with httpx.AsyncClient(timeout=self._timeout) as client:
+            return await client.post(url, auth=self._auth, **kwargs)
+
     async def ensure_namespace(self) -> None:
-        """Create this target's Blazegraph namespace if it doesn't already
-        exist. Idempotent -- a 409 Conflict (namespace already exists) is
+        """Create this target's namespace/repository if it doesn't already
+        exist. Idempotent -- an "already exists" response is treated as
+        success, not an error. A no-op for every vendor without a verified
+        per-request provisioning call (Stardog databases and Virtuoso have
+        none confirmed here).
+        """
+        if self.vendor == "blazegraph":
+            await self._ensure_blazegraph_namespace()
+        elif self.vendor == "graphdb":
+            await self._ensure_graphdb_repository()
+
+    async def _ensure_blazegraph_namespace(self) -> None:
+        """Idempotent -- a 409 Conflict (namespace already exists) is
         treated as success, not an error.
 
         Confirmed live (2026-09, lyrasis/blazegraph:2.1.5): POSTing a Turtle
@@ -292,14 +318,7 @@ class TripleStoreTarget:
         against a real container, which failed 404 before this existed.
         Blazegraph's default "kb" namespace ships pre-created, which is why
         that specific case was never caught before.
-
-        A no-op for every other vendor: GraphDB/Stardog repositories and
-        databases are provisioned out of band by an operator, and
-        Virtuoso/RDFox have no equivalent per-request namespace-creation
-        call this module has verified.
         """
-        if self.vendor != "blazegraph":
-            return
         context_path = self._vendor_kwargs.get("context_path", "bigdata")
         namespace = self._vendor_kwargs.get("namespace", "kb")
         management_url = f"{self._base_url.rstrip('/')}/{context_path.strip('/')}/namespace"
@@ -316,23 +335,69 @@ class TripleStoreTarget:
             "com.bigdata.rdf.store.AbstractTripleStore.textIndex=false\n"
             "com.bigdata.rdf.store.AbstractTripleStore.axiomsClass=com.bigdata.rdf.axioms.NoAxioms\n"
         )
-        headers = {"Content-Type": "text/plain"}
         try:
-            if self._client is not None:
-                response = await self._client.post(
-                    management_url, content=body, headers=headers, auth=self._auth,
-                )
-            else:
-                async with httpx.AsyncClient(timeout=self._timeout) as client:
-                    response = await client.post(
-                        management_url, content=body, headers=headers, auth=self._auth,
-                    )
+            response = await self._post(
+                management_url, content=body, headers={"Content-Type": "text/plain"},
+            )
             if response.status_code == 409:
                 return  # already exists -- exactly what we want
             response.raise_for_status()
             log.info("triplestore.namespace_created", vendor=self.vendor, namespace=namespace)
         except httpx.HTTPError as exc:
             raise ValueError(f"triplestore namespace creation failed: {exc}") from exc
+
+    async def _ensure_graphdb_repository(self) -> None:
+        """Idempotent -- "repository already exists" is treated as success.
+
+        Confirmed live (2026-09, ontotext/graphdb:10.8.1, Free/unlicensed
+        edition): docs/demos/energy_asset_intelligence.md previously
+        documented creating a GraphDB repository *manually through the
+        GraphDB UI* -- there was no automated path at all, unlike
+        Blazegraph's namespace (which at least 404s cleanly). Unlike
+        Blazegraph's 409, an existing repository here returns **400** with a
+        JSON body `{"message": "Repository <id> already exists."}` --
+        confirmed by actually creating the same repository twice against a
+        running container, not assumed from the vendor's docs (which don't
+        document the conflict status at all).
+        """
+        repository = self._vendor_kwargs.get("repository", "")
+        management_url = f"{self._base_url.rstrip('/')}/rest/repositories"
+        # Minimal RDF4J/GraphDB SAIL repository config -- graphdb:Sail is the
+        # vendor's own default rule-set-backed store, the same kind the
+        # GraphDB Workbench UI creates when an operator does this by hand.
+        config_ttl = (
+            "@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .\n"
+            "@prefix rep: <http://www.openrdf.org/config/repository#> .\n"
+            "@prefix sr: <http://www.openrdf.org/config/repository/sail#> .\n"
+            "@prefix sail: <http://www.openrdf.org/config/sail#> .\n"
+            "@prefix graphdb: <http://www.ontotext.com/config/graphdb#> .\n\n"
+            "[] a rep:Repository ;\n"
+            f'    rep:repositoryID "{repository}" ;\n'
+            '    rdfs:label "" ;\n'
+            "    rep:repositoryImpl [\n"
+            '        rep:repositoryType "graphdb:SailRepository" ;\n'
+            "        sr:sailImpl [\n"
+            '            sail:sailType "graphdb:Sail"\n'
+            "        ]\n"
+            "    ] .\n"
+        )
+        try:
+            response = await self._post(
+                management_url,
+                files={"config": ("repo-config.ttl", config_ttl.encode(), "text/turtle")},
+            )
+            if response.status_code == 400:
+                message = ""
+                try:
+                    message = str(response.json().get("message", ""))
+                except ValueError:
+                    pass
+                if "already exists" in message.lower():
+                    return  # already exists -- exactly what we want
+            response.raise_for_status()
+            log.info("triplestore.repository_created", vendor=self.vendor, repository=repository)
+        except httpx.HTTPError as exc:
+            raise ValueError(f"triplestore repository creation failed: {exc}") from exc
 
     async def load(self, ttl_bytes: bytes) -> int:
         """POST a Turtle document to this vendor's Graph Store endpoint.

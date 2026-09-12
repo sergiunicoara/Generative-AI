@@ -1,12 +1,21 @@
 services:
   graphdb:
-    # Pinned tag for the optional local RDF-store demonstration. Validate image
-    # availability and GraphDB license terms before using in a client setting.
-    image: ontotext/graphdb:11.2.0
+    # 11.2.0 was previously pinned here with a "validate license terms"
+    # hedge -- confirmed live (2026-09, see tests/e2e/test_live_graphdb.py)
+    # that hedge was load-bearing: GraphDB 11.0+ requires a registered
+    # license file to start at all, so 11.2.0 cannot boot without one.
+    # 10.8.1 is the tag this repo's own live e2e test actually verified:
+    # "Product: GRAPHDB_LITE ... Licensee: Freeware ... Expiry date: none"
+    # -- genuinely unlicensed, no registration needed.
+    image: ontotext/graphdb:10.8.1
     ports: ["127.0.0.1:7200:7200"]
     volumes: ["energy_graphdb_data:/opt/graphdb/home"]
     healthcheck:
-      test: ["CMD-SHELL", "wget -qO- http://localhost:7200/rest/monitor/health | grep -q alive"]
+      # /rest/monitor/health confirmed live to 500 on a plain GET
+      # ("Request method 'GET' not supported") against this image --
+      # /protocol (any 200 response means the workbench HTTP server is up)
+      # is the endpoint actually confirmed to work.
+      test: ["CMD-SHELL", "wget --spider -q http://localhost:7200/protocol"]
       interval: 15s
       timeout: 5s
       retries: 12

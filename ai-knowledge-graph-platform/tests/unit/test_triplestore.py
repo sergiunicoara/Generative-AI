@@ -7,6 +7,7 @@ from __future__ import annotations
 import os
 from unittest.mock import AsyncMock, MagicMock, patch
 
+import httpx
 import pytest
 
 from graphrag.graph.triplestore import (
@@ -180,6 +181,115 @@ class TestTripleStoreTargetLoad:
         target = TripleStoreTarget("neptune", "https://neptune.example:8182")
         with pytest.raises(NotImplementedError, match="neptune"):
             await target.load(b"<a> <b> <c> .")
+
+
+def _mock_response(status_code: int, json_payload: dict | None = None) -> MagicMock:
+    """Build a single canned httpx.Response-shaped mock -- distinct from
+    _mock_client() above, which always returns 200/{} and can't express the
+    per-status-code cases ensure_namespace()'s branches need.
+
+    raise_for_status() must raise a real httpx.HTTPStatusError (not a bare
+    Exception): the code under test catches `except httpx.HTTPError`
+    specifically, so a mock raising anything else would silently bypass
+    that handling and fail the test for the wrong reason.
+    """
+    response = MagicMock()
+    response.status_code = status_code
+    response.json = MagicMock(return_value=json_payload or {})
+    if status_code >= 400:
+        response.raise_for_status = MagicMock(
+            side_effect=httpx.HTTPStatusError(f"HTTP {status_code}", request=MagicMock(), response=response)
+        )
+    else:
+        response.raise_for_status = MagicMock()
+    return response
+
+
+def _client_returning(response: MagicMock) -> MagicMock:
+    client = MagicMock()
+    client.post = AsyncMock(return_value=response)
+    return client
+
+
+class TestEnsureNamespace:
+    """Mocked coverage for the auto-provisioning branches -- fast,
+    infra-free regression guard alongside tests/e2e/test_live_blazegraph.py
+    and tests/e2e/test_live_graphdb.py, which prove the real HTTP behavior
+    these mocks encode was actually observed against a running container."""
+
+    @pytest.mark.asyncio
+    async def test_blazegraph_409_already_exists_is_tolerated(self):
+        client = _client_returning(_mock_response(409))
+        target = TripleStoreTarget("blazegraph", "http://localhost:9999", client=client, namespace="kb")
+
+        await target.ensure_namespace()  # must not raise
+
+        client.post.assert_awaited_once()
+
+    @pytest.mark.asyncio
+    async def test_blazegraph_created_successfully(self):
+        client = _client_returning(_mock_response(201))
+        target = TripleStoreTarget("blazegraph", "http://localhost:9999", client=client, namespace="acme_kb")
+
+        await target.ensure_namespace()
+
+        url, kwargs = client.post.call_args[0][0], client.post.call_args.kwargs
+        assert url.endswith("/bigdata/namespace")
+        assert "com.bigdata.rdf.sail.namespace=acme_kb" in kwargs["content"]
+
+    @pytest.mark.asyncio
+    async def test_blazegraph_other_error_is_raised(self):
+        client = _client_returning(_mock_response(500))
+        target = TripleStoreTarget("blazegraph", "http://localhost:9999", client=client, namespace="kb")
+
+        with pytest.raises(ValueError, match="namespace creation failed"):
+            await target.ensure_namespace()
+
+    @pytest.mark.asyncio
+    async def test_graphdb_400_already_exists_is_tolerated(self):
+        response = _mock_response(400, {"message": "Repository kg already exists."})
+        client = _client_returning(response)
+        target = TripleStoreTarget("graphdb", "http://localhost:7200", client=client, repository="kg")
+
+        await target.ensure_namespace()  # must not raise
+
+        client.post.assert_awaited_once()
+
+    @pytest.mark.asyncio
+    async def test_graphdb_created_successfully(self):
+        client = _client_returning(_mock_response(201))
+        target = TripleStoreTarget("graphdb", "http://localhost:7200", client=client, repository="kg")
+
+        await target.ensure_namespace()
+
+        url, kwargs = client.post.call_args[0][0], client.post.call_args.kwargs
+        assert url == "http://localhost:7200/rest/repositories"
+        assert 'rep:repositoryID "kg"' in kwargs["files"]["config"][1].decode()
+
+    @pytest.mark.asyncio
+    async def test_graphdb_400_for_an_unrelated_reason_is_raised(self):
+        response = _mock_response(400, {"message": "Malformed repository configuration."})
+        client = _client_returning(response)
+        target = TripleStoreTarget("graphdb", "http://localhost:7200", client=client, repository="kg")
+
+        with pytest.raises(ValueError, match="repository creation failed"):
+            await target.ensure_namespace()
+
+    @pytest.mark.asyncio
+    async def test_graphdb_other_error_is_raised(self):
+        client = _client_returning(_mock_response(500))
+        target = TripleStoreTarget("graphdb", "http://localhost:7200", client=client, repository="kg")
+
+        with pytest.raises(ValueError, match="repository creation failed"):
+            await target.ensure_namespace()
+
+    @pytest.mark.asyncio
+    async def test_neptune_ensure_namespace_is_a_no_op(self):
+        # No client at all -- if this vendor tried to POST anything, the
+        # scratch-httpx.AsyncClient path would attempt a real network call
+        # and this test would hang/fail, not silently pass.
+        target = TripleStoreTarget("neptune", "https://neptune.example:8182")
+        await target.ensure_namespace()  # must return immediately, no error
 
 
 class TestAuthFromEnv:

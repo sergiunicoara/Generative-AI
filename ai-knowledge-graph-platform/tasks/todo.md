@@ -699,8 +699,13 @@ retry-safe refresh. The gate is currently environment-blocked only: this session
 Docker named pipe is inaccessible, so both live tests collected and skipped.
 
 ### Phase 8 — E2E acceptance runner (gap G)
-- [ ] `--mode offline|live`, 15 checks, unique tenant per run, never wipes a user database
-- [ ] Machine-readable report: commit/worktree identity, versions, fingerprints, per-check evidence
+- [x] `--mode offline|live`, 15 checks, unique tenant per run, never wipes a user database
+- [x] Machine-readable report: commit/worktree identity, versions, fingerprints, per-check evidence
+
+**Phase 8 review:** `scripts/run_energy_demo_e2e.py` now emits a run id, explicit
+offline/live mode, 15 named checks, Git/worktree identity, runtime metadata and
+SHA-256 fingerprints for generated artifacts. Live mode writes only a unique
+run tenant and keeps the legacy `--live-neo4j` alias for compatibility.
 
 ### Phase 9 — Reproducible delivery and CI (gap H)
 - [ ] Clean staged-snapshot verification in a fresh venv

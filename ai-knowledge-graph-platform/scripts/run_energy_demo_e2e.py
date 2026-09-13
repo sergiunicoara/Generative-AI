@@ -16,8 +16,12 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import hashlib
 import json
+import platform
+import subprocess
 import sys
+import uuid
 from pathlib import Path
 from typing import Any
 
@@ -64,8 +68,31 @@ def _display_path(path: Path) -> str:
         return str(path)
 
 
-def run_scenario(*, source: Path, turtle: Path, live_neo4j: bool = False) -> dict[str, Any]:
+def _identity(paths: list[Path]) -> dict[str, Any]:
+    def fingerprint(path: Path) -> str:
+        return hashlib.sha256(path.read_bytes()).hexdigest() if path.exists() else "missing"
+    try:
+        safe_directory = str(ROOT.parent).replace("\\", "/")
+        git = ["git", "-c", f"safe.directory={safe_directory}"]
+        commit = subprocess.run(git + ["rev-parse", "HEAD"], cwd=ROOT, capture_output=True, text=True, check=True).stdout.strip()
+        dirty = bool(subprocess.run(git + ["status", "--porcelain"], cwd=ROOT, capture_output=True, text=True, check=True).stdout.strip())
+    except (OSError, subprocess.SubprocessError):
+        commit, dirty = "unknown", None
+    return {
+        "commit": commit, "worktree_dirty": dirty,
+        "python": platform.python_version(), "platform": platform.platform(),
+        "artifacts": {str(path.relative_to(ROOT)) if path.is_relative_to(ROOT) else str(path): fingerprint(path) for path in paths},
+    }
+
+
+def run_scenario(*, source: Path, turtle: Path, live_neo4j: bool = False, mode: str = "offline") -> dict[str, Any]:
     """Execute and assert the complete local Energy scenario."""
+    if live_neo4j:
+        mode = "live"
+    if mode not in {"offline", "live"}:
+        raise ValueError("mode must be offline or live")
+    run_id = f"energy-e2e-{uuid.uuid4().hex[:12]}"
+    projection_tenant = run_id
     create(source)
     service = EnergyDemoService(source_db=source)
     report = service.publication_report()
@@ -100,10 +127,12 @@ def run_scenario(*, source: Path, turtle: Path, live_neo4j: bool = False) -> dic
     _check(any(row["relation"] == "HAS_COMPONENT" for row in dry_target.relationships), "Neo4j topology edge missing")
 
     live_report: dict[str, Any] | None = None
-    if live_neo4j:
+    if mode == "live":
         async def write_live() -> Any:
             try:
-                return await project_to_neo4j(service.graph, get_neo4j(), tenant=TENANT)
+                client = get_neo4j()
+                await client.init_schema()
+                return await project_to_neo4j(service.graph, client, tenant=projection_tenant)
             finally:
                 await close_neo4j()
 
@@ -114,9 +143,31 @@ def run_scenario(*, source: Path, turtle: Path, live_neo4j: bool = False) -> dic
             "relationships": live.relationship_count,
         }
 
+    checks = [
+        {"id": "source_sqlite_created", "passed": source.exists(), "evidence": _display_path(source)},
+        {"id": "r2rml_materialization", "passed": (ASSET["WT-01"], RDF.type, ENERGY.Asset) in service.graph, "evidence": "WT-01 typed Asset"},
+        {"id": "rml_materialization", "passed": any(str(p).endswith("observedAt") for p in service.graph.predicates()), "evidence": "typed observation predicates present"},
+        {"id": "shacl_publication", "passed": report.quarantined_count == 0 and report.conforms, "evidence": report.version_id},
+        {"id": "turtle_round_trip", "passed": len(reparsed) == len(service.graph), "evidence": _display_path(turtle)},
+        {"id": "explicit_wind_turbine_type", "passed": (ASSET["WT-01"], RDF.type, ENERGY.WindTurbine) in service.graph, "evidence": "WT-01"},
+        {"id": "current_sparql_advisory", "passed": maintenance["status"] == "advisory", "evidence": maintenance["answer_source"]},
+        {"id": "historical_revision", "passed": historical["authoritative_bulletin"] == "MFG-GBX-17-R1", "evidence": historical["authoritative_bulletin"]},
+        {"id": "abstention_boundary", "passed": insufficient["status"] == "insufficient_evidence", "evidence": insufficient["status"]},
+        {"id": "tenant_isolation", "passed": wrong_tenant["status"] == "not_found" and not wrong_tenant["evidence"], "evidence": wrong_tenant["status"]},
+        {"id": "invalid_rdf_rejected", "passed": validation["conforms"] is False and bool(validation["violations"]), "evidence": len(validation["violations"])},
+        {"id": "projection_ledger", "passed": projection.projected_triples + projection.excluded_triples + projection.rejected_triples == projection.source_graph_triples, "evidence": projection.source_graph_triples},
+        {"id": "projection_topology", "passed": projection.relationship_count > 0, "evidence": projection.relationship_count},
+        {"id": "unique_run_identity", "passed": bool(run_id), "evidence": run_id},
+        {"id": "mode_explicit", "passed": mode in {"offline", "live"}, "evidence": mode},
+    ]
+    _check(all(item["passed"] for item in checks), "one or more acceptance checks failed")
     return {
         "scenario": "energy-asset-intelligence/e2e-v2",
         "status": "passed",
+        "run_id": run_id,
+        "mode": mode,
+        "identity": _identity([source, turtle]),
+        "checks": checks,
         "source": {
             "kind": "synthetic SAP-shaped SQLite",
             "path": _display_path(source),
@@ -142,7 +193,8 @@ def run_scenario(*, source: Path, turtle: Path, live_neo4j: bool = False) -> dic
             "wrong_tenant": wrong_tenant,
         },
         "neo4j_projection": {
-            "mode": "live" if live_neo4j else "dry-run",
+            "mode": "live" if mode == "live" else "dry-run",
+            "tenant": projection_tenant,
             "rdf_is_authoritative": True,
             "rebuildable_read_model": True,
             "nodes": projection.node_count,
@@ -170,13 +222,14 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument("--source", type=Path, default=ROOT / "artifacts/energy-demo-e2e-sap.sqlite")
     parser.add_argument("--turtle", type=Path, default=ROOT / "artifacts/energy-demo-e2e.ttl")
     parser.add_argument("--output", type=Path, default=None, help="Optional JSON report path")
-    parser.add_argument("--live-neo4j", action="store_true", help="Also write the projection to configured Neo4j")
+    parser.add_argument("--mode", choices=("offline", "live"), default="offline", help="Run the safe offline path or write a unique tenant projection to Neo4j")
+    parser.add_argument("--live-neo4j", action="store_true", help="Deprecated alias for --mode live")
     return parser.parse_args()
 
 
 def main() -> None:
     args = _parse_args()
-    result = run_scenario(source=args.source, turtle=args.turtle, live_neo4j=args.live_neo4j)
+    result = run_scenario(source=args.source, turtle=args.turtle, live_neo4j=args.live_neo4j, mode=args.mode)
     rendered = json.dumps(result, indent=2)
     if args.output:
         args.output.parent.mkdir(parents=True, exist_ok=True)

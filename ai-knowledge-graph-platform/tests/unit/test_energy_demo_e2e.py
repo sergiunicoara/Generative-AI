@@ -18,3 +18,7 @@ def test_complete_energy_scenario(tmp_path: Path) -> None:
     assert result["answers"]["wrong_tenant"]["status"] == "not_found"
     assert result["neo4j_projection"]["mode"] == "dry-run"
     assert len(result["capabilities_demonstrated"]) >= 10
+    assert result["mode"] == "offline"
+    assert len(result["checks"]) == 15
+    assert all(check["passed"] for check in result["checks"])
+    assert result["identity"]["artifacts"]

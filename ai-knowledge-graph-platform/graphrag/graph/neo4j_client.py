@@ -6,6 +6,8 @@ import hashlib
 import json
 from datetime import datetime, timezone
 from pathlib import Path
+from collections.abc import Awaitable, Callable
+from typing import TypeVar
 
 import structlog
 from neo4j import AsyncGraphDatabase, AsyncDriver
@@ -30,6 +32,7 @@ from graphrag.enterprise.access import access_params, document_access_predicate,
 from graphrag.enterprise.models import AccessContext, DocumentLink, normalise_document_url
 
 log = structlog.get_logger(__name__)
+_TransactionResult = TypeVar("_TransactionResult")
 
 
 class Neo4jClient:
@@ -108,6 +111,26 @@ class Neo4jClient:
                 async with self._driver.session() as session:
                     result = await session.run(cypher, parameters=params)
                     return [record.data() async for record in result]
+        finally:
+            self._in_flight -= 1
+            set_graph_pool(self._in_flight, self.MAX_CONNECTION_POOL_SIZE)
+
+    @with_retry(exceptions=(TransientError, ServiceUnavailable), max_attempts=3)
+    async def run_in_transaction(
+        self, work: Callable[[object], Awaitable[_TransactionResult]],
+    ) -> _TransactionResult:
+        """Execute a caller-supplied write unit atomically.
+
+        This deliberately complements, rather than replaces, ``run``.  It is
+        used where a staged projection must write a candidate and flip its
+        active pointer as one all-or-nothing operation.
+        """
+        self._in_flight += 1
+        set_graph_pool(self._in_flight, self.MAX_CONNECTION_POOL_SIZE)
+        try:
+            with record_graph_query():
+                async with self._driver.session() as session:
+                    return await session.execute_write(work)
         finally:
             self._in_flight -= 1
             set_graph_pool(self._in_flight, self.MAX_CONNECTION_POOL_SIZE)

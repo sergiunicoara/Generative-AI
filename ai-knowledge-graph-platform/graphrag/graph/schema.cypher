@@ -85,6 +85,7 @@ CREATE INDEX entity_source_doc IF NOT EXISTS FOR (e:Entity) ON (e.source_doc_id)
 CREATE INDEX relation_valid_to IF NOT EXISTS FOR ()-[r:RELATES_TO]-() ON (r.valid_to);
 CREATE INDEX relation_source_doc_ids IF NOT EXISTS FOR ()-[r:RELATES_TO]-() ON (r.source_doc_ids);
 CREATE INDEX relation_tenant IF NOT EXISTS FOR ()-[r:RELATES_TO]-() ON (r.tenant);
+CREATE INDEX relation_tenant_relation IF NOT EXISTS FOR ()-[r:RELATES_TO]-() ON (r.tenant, r.relation);
 CREATE INDEX conflict_status IF NOT EXISTS FOR (c:Conflict) ON (c.status);
 CREATE INDEX conflict_tenant IF NOT EXISTS FOR (c:Conflict) ON (c.tenant);
 CREATE INDEX intelligence_artifact_type IF NOT EXISTS FOR (a:IntelligenceArtifact) ON (a.tenant, a.artifact_type);

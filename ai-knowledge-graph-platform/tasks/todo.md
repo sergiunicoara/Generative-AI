@@ -674,12 +674,17 @@ two-process stale CAS conflict, idempotent byte-for-byte HTTP replay, transition
 replay, active-graph work-order lookup, and the API's 409 stale-write response.
 
 ### Phase 6 — Governed projection (gap E)
-- [ ] `Neo4jClient.run_in_transaction` (additive)
-- [ ] Single-pass `TripleLedger`: projected / excluded-by-named-rule / rejected, summing to `len(graph)`
-- [ ] Fidelity: decimal lexical form, language tags, all rdf:types as labels, all provenance sources
-- [ ] Typed edges dual-written; `(tenant, relation)` index added
-- [ ] Versioned publication via CAS pointer flip; retire N−2 scoped by tenant + projection marker
-- [ ] Gate: ledger totals; written-side count assertion; tenant-leak tests
+- [x] `Neo4jClient.run_in_transaction` (additive)
+- [x] Single-pass `TripleLedger`: projected / excluded-by-named-rule / rejected, summing to `len(graph)`
+- [x] Fidelity: decimal lexical form, language tags, all rdf:types as labels, all provenance sources
+- [x] Typed edges dual-written; `(tenant, relation)` index added
+- [x] Versioned publication via CAS pointer flip; retire N−2 scoped by tenant + projection marker
+- [x] Gate: ledger totals; written-side count assertion; tenant-leak tests
+
+**Phase 6 review:** `test_energy_lpg_projection.py` verifies triple-ledger completeness,
+literal/provenance fidelity, tenant-scoped entity/relationship rows, generic-plus-typed
+edge writes, active pointer handling, and count assertions. The live projection test
+remains the Phase 7 acceptance gate.
 
 ### Phase 7 — Live Neo4j acceptance (gap F)
 - [ ] Live testcontainers projection, read-back, directed traversal, bounded impact query

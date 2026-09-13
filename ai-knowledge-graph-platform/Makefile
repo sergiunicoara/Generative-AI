@@ -7,7 +7,7 @@ PYTEST    ?= $(PYTHON) scripts/run_pytest.py
 UVICORN   ?= $(PYTHON) -m uvicorn
 PIP       ?= $(PYTHON) -m pip
 
-.PHONY: help install install-dev lock test test-collect test-integration test-load test-all test-fuzz mutation lint semantic-model-check \
+.PHONY: help install install-dev lock test test-collect test-integration test-load test-all test-fuzz mutation lint semantic-model-check clean-snapshot-check \
 	typecheck ci \
 	terraform-fmt terraform-validate terraform-test terraform-security \
         api dashboard backup services-up services-down \
@@ -92,6 +92,9 @@ ci:            ## The one command CI runs: lint + unit tests (no live services, 
 	$(MAKE) semantic-model-check
 	$(MAKE) lint
 	$(MAKE) test
+
+clean-snapshot-check: ## Archive the staged/HEAD tree and verify it in a fresh venv
+	$(PYTHON) scripts/verify_energy_clean_snapshot.py
 
 semantic-model-check: ## Fail when generated Energy semantic artifacts drift from canonical YAML
 	$(PYTHON) -m graphrag.semantic_model compile ontology/models/energy-asset-intelligence.yaml --check

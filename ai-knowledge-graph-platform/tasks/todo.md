@@ -708,9 +708,15 @@ SHA-256 fingerprints for generated artifacts. Live mode writes only a unique
 run tenant and keeps the legacy `--live-neo4j` alias for compatibility.
 
 ### Phase 9 — Reproducible delivery and CI (gap H)
-- [ ] Clean staged-snapshot verification in a fresh venv
-- [ ] CI separates deterministic checks from service-dependent acceptance
-- [ ] One final integrated regression with captured output
+- [x] Clean staged-snapshot verification in a fresh venv
+- [x] CI separates deterministic checks from service-dependent acceptance
+- [x] One final integrated regression entry point with captured output
+
+**Phase 9 review:** `scripts/verify_energy_clean_snapshot.py` archives the
+staged tree when present (HEAD otherwise), extracts it into an isolated
+temporary workspace, creates a fresh venv, installs `requirements-dev.txt`,
+and runs Ruff plus deterministic Energy gates. Existing repository CI keeps
+unit/lint/clean-install separate from Docker-backed E2E and release evidence.
 
 ### Phase 10 — Documentation and presentation (gap I)
 - [ ] Docs/diagram/README/interview material match the verified implementation

@@ -165,14 +165,15 @@ isolation, and the RDF-to-Neo4j batch projection contract. Add
 rebuildable read model. The JSON report is suitable for attaching to the demo
 or using as a regression artifact.
 
-1. Ask which assets need review. WT-01 is identified using a 96 C measurement,
-   open work order WO-9001, and bulletin MFG-GBX-17-R2.
+1. Ask which assets need review. WT-01 is identified using the latest known
+   91.5 C correction for its 2026-08-28 measurement, open work order WO-9001,
+   and bulletin MFG-GBX-17-R2.
 2. Show the evidence records and the source/revision timestamps.
 3. Ask about the revision: R2 supersedes R1 and changes the threshold from 90 C
    to 85 C.
 4. Query 2026-05-01 to recover R1 as the authoritative historical guidance.
-5. Ask for incomplete assessments and show that WT-04 through WT-10 receive no
-   maintenance conclusion.
+5. Ask for incomplete assessments and show that WT-02 and WT-04 through WT-10
+   receive no maintenance conclusion.
 6. Use a different tenant token and show that the POC returns no evidence.
 
 ## Governed maintenance workflow
@@ -185,8 +186,9 @@ tenant-scoped, and requires the API's `write` scope. The lifecycle is available
 at `GET /energy-demo/work-orders/WO-9001/lifecycle`; a transition is requested
 through `POST /energy-demo/work-orders/WO-9001/transition`.
 
-This is a local, in-memory demonstration of governed graph operations. It does
-not update SAP or control equipment.
+This is a local demonstration with durable publication and workflow state in
+the configured governance store (SQLite/WAL by default, with a configurable
+Postgres URL). It does not update SAP or control equipment.
 
 ## Limitations
 

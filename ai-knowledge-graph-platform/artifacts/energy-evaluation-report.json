@@ -1,6 +1,6 @@
 {
   "report_schema_version": "energy-evaluation/v1",
-  "generated_at": "2026-09-12T16:55:38.730415+00:00",
+  "generated_at": "2026-09-13T03:26:23.235000+00:00",
   "dataset": "energy-demo/v1",
   "synthetic": true,
   "claim_policy": "This report is reproducible local evidence over a small synthetic Energy dataset. It demonstrates workflow correctness and implementation behavior only; it does not establish enterprise-scale throughput, production latency, availability, or customer outcomes.",
@@ -62,13 +62,13 @@
     "passed": true,
     "expected_source_ids": [
       "MFG-GBX-17-R2",
-      "SAP-WO-9001",
-      "SNOW-OBS-WT-01"
+      "SNOW-OBS-WT-01-R2",
+      "WO-9001"
     ],
     "observed_source_ids": [
       "MFG-GBX-17-R2",
-      "SAP-WO-9001",
-      "SNOW-OBS-WT-01"
+      "SNOW-OBS-WT-01-R2",
+      "WO-9001"
     ],
     "query_row_count": 1,
     "query_row_matches": true,
@@ -87,37 +87,37 @@
   },
   "freshness": {
     "available": true,
-    "published_at": "2026-09-12T16:55:38.519239+00:00",
-    "publication_age_ms_at_report": 288.725,
-    "version_id": "b53f78a67d834343b1fb106a5846fcef",
-    "published_triple_count": 135,
-    "candidate_record_count": 29,
+    "published_at": "2026-09-13T03:26:22.792059+00:00",
+    "publication_age_ms_at_report": 947.958,
+    "version_id": "b1c4734df30a4a56b043a991ebfe7bb8",
+    "published_triple_count": 154,
+    "candidate_record_count": 30,
     "quarantined_count": 0,
     "synthetic_source_observed_at": [
       "2026-06-01T00:00:00Z",
-      "2026-08-28T08:00:00Z",
-      "2026-08-28T08:15:00Z"
+      "2026-08-15T09:00:00Z",
+      "2026-08-28T08:00:00Z"
     ],
     "claim_policy": "published_at measures local in-process publication time. Source timestamps are synthetic fixture metadata, not an SLA or live-source freshness measurement."
   },
   "latency": {
     "available": true,
     "sample_count": 5,
-    "p50_latency_ms": 0.029,
-    "p95_latency_ms": 103.998,
-    "p99_latency_ms": 103.998,
-    "throughput_rps": 47.858,
+    "p50_latency_ms": 59.835,
+    "p95_latency_ms": 171.172,
+    "p99_latency_ms": 171.172,
+    "throughput_rps": 13.199,
     "failed": 0,
     "claim_policy": "Measured locally against a synthetic, in-process RDF graph; not a service latency SLA."
   },
   "ingestion_throughput": {
     "available": true,
     "iterations": 1,
-    "elapsed_seconds": 0.101793,
-    "candidate_records": 29,
-    "published_triples": 135,
-    "candidate_records_per_second": 284.892,
-    "published_triples_per_second": 1326.223,
+    "elapsed_seconds": 0.062275,
+    "candidate_records": 30,
+    "published_triples": 154,
+    "candidate_records_per_second": 481.73,
+    "published_triples_per_second": 2472.883,
     "claim_policy": "Measured locally while materialising the tiny synthetic Energy fixture; it is a repeatable implementation check, not an enterprise ingestion-capacity benchmark."
   }
 }

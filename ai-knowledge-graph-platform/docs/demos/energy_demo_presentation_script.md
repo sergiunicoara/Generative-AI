@@ -33,7 +33,7 @@ flowchart LR
 
 Open the Energy workspace or show the report’s `maintenance_review` section.
 
-> WT-01 needs advisory review. Its gearbox temperature is 96°C, above the
+> WT-01 needs advisory review. Its latest known gearbox temperature is 91.5°C, above the
 > current 85°C manufacturer threshold, and work order WO-9001 is still open.
 > The application shows the evidence rather than a free-floating AI claim.
 
@@ -50,7 +50,7 @@ Open `scripts/create_energy_demo_sqlite.py`, then
 > a WindTurbine. RML maps the Snowflake-shaped telemetry. The graph is not
 > hand-written Turtle; these source mappings execute on every scenario run.
 
-Highlight `artifacts/energy-demo-e2e.ttl` and its 135 triples after the run.
+Highlight `artifacts/energy-demo-e2e.ttl` and its 154 triples after the run.
 
 ## Scene 3 — Semantic safety gate (1:30–2:10)
 
@@ -62,7 +62,7 @@ SHACL and Neo4j constraints.
 > and publishes only the conformant version. The scenario also injects an
 > incomplete observation and proves that it is rejected rather than used.
 
-Highlight `published_triples: 135`, `quarantined_records: 0`, and the invalid
+Highlight `published_triples: 154`, `quarantined_records: 0`, and the invalid
 probe’s `conforms: false` result in the JSON report.
 
 ## Scene 4 — Explainable SPARQL advisory (2:10–3:00)
@@ -74,14 +74,17 @@ Open `evals/energy_demo/sparql/maintenance_review.rq` beside the report.
 > open work order. The resulting answer includes the query version, mapping
 > version, source identifiers, timestamps and values.
 
-Point to WT-01, 96°C, MFG-GBX-17-R2, 85°C and WO-9001.
+Point to WT-01, 91.5°C, MFG-GBX-17-R2, 85°C and WO-9001. Explain that 91.5°C
+is a late-recorded correction selected only when it was known at the requested
+time.
 
 ## Scene 5 — Temporal and no-evidence behavior (3:00–3:40)
 
 Show `historical_state` and `insufficient_evidence` in the report.
 
-> The model is revision-aware: before 1 June 2026, R1 was authoritative and
-> the threshold was 90°C; afterwards R2 lowered it to 85°C. Equally important,
+> The model is bitemporal: before 1 June 2026, R1 was authoritative and the
+> threshold was 90°C; afterwards R2 lowered it to 85°C. It also separates when
+> a fact occurred from when the system learned it. Equally important, WT-02 and
 > WT-04 through WT-10 return insufficient evidence. Missing telemetry or work
 > context is never converted into a maintenance conclusion.
 

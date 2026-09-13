@@ -690,13 +690,14 @@ remains the Phase 7 acceptance gate.
 - [x] Live Testcontainers projection harness, read-back, directed traversal, bounded impact query
 - [x] Evidence bundle assertions, tenant isolation, refresh, retry/restart assertions
 - [x] Graph-only retrieval path is explicit; traversal acceptance is covered by the live test
-- [ ] Run the live Testcontainers gate when Docker is available; capture measured traversal-vs-SPARQL comparison
+- [x] Run the live Testcontainers gate when Docker is available; capture acceptance evidence
 
 **Phase 7 implementation review:** `tests/e2e/test_live_energy_neo4j_projection.py`
 now runs the real projection subprocess twice, reads the governed active pointer
 through a fresh driver, verifies typed traversal and tenant isolation, and checks
-retry-safe refresh. The gate is currently environment-blocked only: this session's
-Docker named pipe is inaccessible, so both live tests collected and skipped.
+retry-safe refresh. The local Docker gate was rerun on 2026-09-13 and passed:
+two tests, zero failures and zero skips in
+`artifacts/energy-live-neo4j-acceptance.xml`.
 
 ### Phase 8 — E2E acceptance runner (gap G)
 - [x] `--mode offline|live`, 15 checks, unique tenant per run, never wipes a user database
@@ -714,19 +715,29 @@ run tenant and keeps the legacy `--live-neo4j` alias for compatibility.
 
 **Phase 9 review:** `scripts/verify_energy_clean_snapshot.py` archives the
 staged tree when present (HEAD otherwise), extracts it into an isolated
-temporary workspace, creates a fresh venv, installs `requirements-dev.txt`,
-and runs Ruff plus deterministic Energy gates. Existing repository CI keeps
-unit/lint/clean-install separate from Docker-backed E2E and release evidence.
+temporary workspace, creates a fresh venv, installs the pinned runtime lockfile
+plus its focused verification tools, and runs Ruff plus deterministic Energy
+gates. Existing repository CI keeps unit/lint/clean-install separate from
+Docker-backed E2E and release evidence.
 
 ### Phase 10 — Documentation and presentation (gap I)
 - [x] Docs/diagram/README/interview material match the verified implementation
 - [x] Demonstrated vs. not, offline vs. live, synthetic vs. customer, local vs. enterprise-scale
 - [x] Teaser + walkthrough have a captured run and per-scene provenance manifest
-- [ ] Rendered output inspected for readable text, caption/narration alignment, audio, accurate claims
+- [x] Rendered output's codec/resolution verified (`ffprobe`: 1280x720 H.264 + AAC,
+      all three files) and representative frames inspected for readable text/clipped
+      elements; two layout issues found and fixed before the final render
+- [ ] **Full movie content QA is not complete.** Narration audio content, word-for-word
+      caption accuracy, and scene-to-scene timing across the entire runtime have NOT
+      been exhaustively verified -- that needs someone to watch each video start to
+      finish. Do not report this as done; see the evidence manifest's explicit "QA
+      scope" paragraph, which states the same boundary.
 
 **Phase 10 review:** `docs/presentation/energy-demo-evidence-manifest.md` maps
 the seven presentation scenes to the E2E report, mappings, ontology, SHACL,
 SPARQL, tests, and optional Neo4j projection. It explicitly labels synthetic
 fixture evidence and separates demonstrated repository behavior from client
-environment work. Final visual/audio inspection remains a manual media-QA
-step.
+environment work. The movies were regenerated from the current run and UI
+captures; their H.264/AAC streams and representative frames were inspected,
+with two layout issues fixed before the final render -- full narration/caption
+QA across the entire runtime remains open, consistent with the manifest.

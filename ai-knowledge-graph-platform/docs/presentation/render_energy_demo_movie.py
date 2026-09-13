@@ -82,7 +82,7 @@ SCENES = [
         "Return an Evidence-shaped Assessment",
         28,
         "The maintenance-review path brings the relevant records together. WT-01 "
-        "has a gearbox temperature of 96 degrees Celsius. Bulletin MFG-GBX-17-R2 "
+        "has a latest-known corrected gearbox temperature of 91 point 5 degrees Celsius. Bulletin MFG-GBX-17-R2 "
         "sets an 85-degree review threshold, and work order WO-9001 is open. The "
         "response returns the advisory assessment together with the source IDs, "
         "fields, timestamps, access scope, mapping version, and query version.",
@@ -92,7 +92,7 @@ SCENES = [
         26,
         "The model also records that bulletin R2 supersedes R1 and lowers the "
         "threshold from 90 to 85 degrees. Supplying a May 2026 date selects R1 "
-        "as the authoritative bulletin. Separate fixed questions identify assets "
+        "as the authoritative bulletin, while known-as time keeps later corrections out of earlier views. Separate fixed questions identify assets "
         "with insufficient evidence. They return no maintenance conclusion when "
         "the required synthetic observations or work-order state are absent.",
     ),
@@ -230,13 +230,13 @@ def scene_3(draw: ImageDraw.ImageDraw) -> None:
     items = [
         ((165, 315), "WT-01", "asset"),
         ((420, 220), "GEARBOX", "component"),
-        ((420, 430), "96 °C", "telemetry"),
+        ((420, 380), "91.5 °C", "corrected telemetry"),
         ((700, 220), "WO-9001", "open work order"),
         ((970, 315), "R2", "85 °C bulletin"),
     ]
     for position, label, sublabel in items:
-        node(draw, position, label, sublabel, GOLD if label in ("96 °C", "R2") else CYAN)
-    for start, end in (((239, 315), (346, 220)), ((239, 315), (346, 430)), ((494, 220), (626, 220)), ((774, 220), (896, 315))):
+        node(draw, position, label, sublabel, GOLD if label in ("91.5 °C", "R2") else CYAN)
+    for start, end in (((239, 315), (346, 220)), ((239, 315), (346, 380)), ((494, 220), (626, 220)), ((774, 220), (896, 315))):
         arrow(draw, start, end, GOLD)
     text(draw, (640, 543), "Executed R2RML + RML graph with explicit types, links, dates, and provenance", 19, GREEN, True, "mm")
     command_box(draw, "python scripts/run_energy_demo.py --export-turtle artifacts/energy-demo.ttl", ["Wrote RDF Turtle: artifacts/energy-demo.ttl"])
@@ -245,12 +245,12 @@ def scene_3(draw: ImageDraw.ImageDraw) -> None:
 def scene_4(draw: ImageDraw.ImageDraw) -> None:
     panel(draw, (72, 155, 640, 425), outline=GREEN)
     text(draw, (108, 190), "maintenance_review", 17, GOLD, True)
-    wrapped(draw, (108, 235), "Advisory review is required for WT-01. Its gearbox temperature is 96°C, above the 85°C threshold in MFG-GBX-17-R2; WO-9001 is open.", 47, 20, WHITE, True)
+    wrapped(draw, (108, 235), "Advisory review is required for WT-01. Its latest known corrected gearbox temperature is 91.5°C, above the 85°C threshold in MFG-GBX-17-R2; WO-9001 is open.", 47, 20, WHITE, True)
     panel(draw, (700, 155, 1208, 425), outline=CYAN)
     text(draw, (735, 190), "Evidence bundle", 17, GOLD, True)
-    for index, line in enumerate(("SAP-WO-9001 · work_orders.status · open", "SNOW-OBS-WT-01 · temperature_c=96", "MFG-GBX-17-R2 · threshold: 85 C", "tenant: energy-demo")):
+    for index, line in enumerate(("WO-9001 · work_orders.status · open", "SNOW-OBS-WT-01-R2 · temperature_c=91.5", "MFG-GBX-17-R2 · threshold: 85 C", "tenant: energy-demo")):
         text(draw, (735, 240 + index * 42), line, 16, WHITE)
-    command_box(draw, "python scripts/run_energy_demo.py", ["status: advisory", "mapping_version: energy-r2rml/1.0.0", "query_version: energy-demo/v1"])
+    command_box(draw, "python scripts/run_energy_demo.py", ["status: advisory", "mapping_version: energy-r2rml/1.0.0", "query_version: energy-demo/v2"])
 
 
 def scene_5(draw: ImageDraw.ImageDraw) -> None:
@@ -263,7 +263,7 @@ def scene_5(draw: ImageDraw.ImageDraw) -> None:
     text(draw, (480, 325), "85 °C · valid from 2026-06-01", 17, MUTED)
     panel(draw, (700, 160, 1200, 420), outline=RED)
     text(draw, (735, 200), "Insufficient evidence", 18, GOLD, True)
-    wrapped(draw, (735, 260), "WT-04 through WT-10: missing current gearbox observation or open-work-order state.", 39, 21, WHITE)
+    wrapped(draw, (735, 260), "WT-02 and WT-04 through WT-10: missing current gearbox observation or open-work-order state.", 39, 21, WHITE)
     text(draw, (735, 365), "No maintenance conclusion", 20, RED, True)
     command_box(draw, "python scripts/run_energy_demo.py --as-of 2026-05-01T00:00:00Z", ["historical_state  authoritative_bulletin=MFG-GBX-17-R1", "review threshold: 90 °C"])
 

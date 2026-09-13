@@ -61,6 +61,12 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements-dev.txt
 
+      - name: Verify generated semantic-model artifacts
+        run: python -m graphrag.semantic_model compile ontology/models/energy-asset-intelligence.yaml --check
+
+      - name: Verify the deliverable from a clean Git snapshot
+        run: python scripts/verify_energy_clean_snapshot.py
+
       - name: Run unit tests
         run: pytest tests/unit/ -v --tb=short
 

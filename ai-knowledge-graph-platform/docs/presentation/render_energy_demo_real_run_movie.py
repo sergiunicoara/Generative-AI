@@ -102,7 +102,7 @@ SCENES = [
     Scene(
         "run_demo", "Run the RDF evidence demo", 28,
         "The deterministic service executes the committed mappings and exports an RDF Turtle graph. "
-        "The captured maintenance assessment identifies WT-01, its 96 degree "
+        "The captured maintenance assessment identifies WT-01, its latest known 91 point 5 degree "
         "temperature, the 85 degree threshold from bulletin R2, and open work "
         "order WO-9001. The returned evidence includes the SAP, Snowflake, and "
         "SharePoint-shaped source identifiers.",
@@ -110,8 +110,8 @@ SCENES = [
     Scene(
         "run_historical", "Run the historical bulletin scenario", 24,
         "A second real run supplies the first of May 2026. The captured historical "
-        "answer selects bulletin R1 and its 90 degree threshold. This demonstrates "
-        "the implemented bulletin effective-date selection.",
+        "answer selects bulletin R1 and its 90 degree threshold. The service applies "
+        "both valid time and recorded time, so it cannot cite a correction before it was known.",
     ),
     Scene(
         "shacl", "Reject an invalid observation", 20,
@@ -201,8 +201,8 @@ def draw_scene(index: int, image: Image.Image, draw: ImageDraw.ImageDraw) -> Non
     if scene.key == "run_summary":
         panel(draw, (85, 150, 1195, 520), outline=GOLD)
         text(draw, (640, 215), "RECORDED COMMAND TRACE", 20, GOLD, True, "mm")
-        for item, y in (("create synthetic source", 255), ("validate R2RML", 292), ("export and run RDF demo", 329), ("run historical scenario", 366), ("evaluate labelled cases", 403), ("run complete E2E scenario", 440), ("build local scorecard", 477), ("run targeted unit tests", 514)):
-            text(draw, (260, y), "✓", 23, GREEN, True, "mm")
+        for item, y in (("create synthetic source", 248), ("validate R2RML", 281), ("export and run RDF demo", 314), ("run historical scenario", 347), ("evaluate labelled cases", 380), ("run complete E2E scenario", 413), ("build local scorecard", 446), ("run targeted unit tests", 479)):
+            text(draw, (260, y), "PASS", 13, GREEN, True, "mm")
             text(draw, (300, y), item, 20, WHITE)
         panel(draw, (220, 565, 1060, 655), outline=GREEN)
         text(draw, (640, 600), "8 commands completed · 8 exit codes were zero", 24, GREEN, True, "mm")

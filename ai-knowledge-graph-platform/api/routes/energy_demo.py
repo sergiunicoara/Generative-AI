@@ -61,7 +61,7 @@ body{{margin:0;background:#f4f7fa;color:#102235;font:15px Segoe UI,system-ui,san
 const s=data.summary,esc=t=>String(t).replace(/[&<>"]/g,c=>({{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}}[c]));
 const reviewed=(data.current.query_rows||[]).map(r=>String(r.asset).split('/').pop());
 document.getElementById('tiles').innerHTML=[
-  ['Assets under review',s.assets_under_review,reviewed.length?esc(reviewed.join(', '))+' need attention':'None above threshold',s.assets_under_review?'red':'green'],
+  ['Assets under review',s.assets_under_review,reviewed.length?esc(reviewed.join(', '))+' needs attention':'None above threshold',s.assets_under_review?'red':'green'],
   ['Open work orders',s.open_work_orders,'Covered by '+esc(s.authoritative_bulletin),''],
   ['Evidence coverage',s.assets_with_telemetry+' / '+s.assets_total,'Assets with telemetry',''],
   ['Data quality',data.validation.conforms?'Unchecked':'Checked','Invalid records rejected','green']

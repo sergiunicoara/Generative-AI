@@ -249,7 +249,8 @@ threshold is exceeded.
    with a review threshold, and an open `energy:WorkOrder`.
 4. **SPARQL decision.** `maintenance_review.rq` joins those facts and applies
    `FILTER(?temperature > ?threshold)`. For the demo fixture, the returned
-   evidence is **WT-01 | 96°C | 85°C | MFG-GBX-17-R2 | WO-9001**.
+   evidence is **WT-01 | 91.5°C (latest known correction) | 85°C |
+   MFG-GBX-17-R2 | WO-9001**.
 5. **Recommendation.** “WT-01 needs maintenance review: its temperature is
    above the currently selected bulletin threshold and an open work order gives
    an operational path to act.” The response carries source/evidence IDs; it
@@ -391,8 +392,9 @@ SAP-shaped assets/work orders
     tenant-scoped API + operations UI
 ```
 
-The current scenario is deliberately explainable: WT-01 has a 96 °C gearbox
-observation, the effective manufacturer bulletin sets an 85 °C threshold, and
+The current scenario is deliberately explainable: WT-01 has a 91.5 °C gearbox
+observation (its latest known reading, corrected from an original 96 °C
+observation), the effective manufacturer bulletin sets an 85 °C threshold, and
 open work order WO-9001 provides operational context. When evidence is missing,
 the answer says more telemetry is required.
 

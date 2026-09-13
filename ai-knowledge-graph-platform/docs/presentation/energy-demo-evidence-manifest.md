@@ -21,9 +21,10 @@ physical equipment is connected.
 
 The checked-in capture at `docs/presentation/energy_demo_real_run.json` records
 the commands, return codes, stdout, and final capability list from the real
-local workflow. Its run produced 135 published RDF triples, 29 candidate
-records, 0 quarantined records, and a dry-run Neo4j projection of 29 nodes and
-27 relationships. These are fixture-level implementation observations, not
+local workflow. The current captured run produced 154 published RDF triples,
+30 candidate records, 0 quarantined records, and a dry-run Neo4j projection
+whose 30-node, 28-relationship topology passed the projection acceptance
+checks. These are fixture-level implementation observations, not
 enterprise-scale performance claims.
 
 The rendered assets are:
@@ -31,6 +32,12 @@ The rendered assets are:
 - `energy_asset_intelligence_real_run_demo.mp4` — implementation walkthrough
 - `energy_asset_intelligence_client_teaser.mp4` — short stakeholder teaser
 - `energy_architecture_preview.png` — architecture visual
+
+The current local live-acceptance record is
+`artifacts/energy-live-neo4j-acceptance.xml`: two tests passed with no errors,
+failures, or skips. They ran the real projection CLI against Neo4j 5.20,
+then read the graph back through a new driver to prove directed traversal,
+tenant isolation, and retry-safe refresh.
 
 ## Claim boundaries to keep on screen
 
@@ -54,3 +61,22 @@ python -m pytest -q tests/unit/test_energy_demo_e2e.py tests/unit/test_energy_lp
 
 If the report changes, regenerate or relabel the movie capture so the visible
 numbers and provenance remain aligned with the run being presented.
+
+## Render QA record
+
+On 2026-09-13, the teaser, implementation walkthrough, and real-run
+walkthrough were regenerated after the current command trace and UI screenshots.
+Representative frames were inspected for readable text and clipped elements;
+two layout defects found in that inspection were corrected before the final
+render. Each movie's video/audio stream shape was verified with `ffprobe`:
+1280×720 H.264 video and an AAC narration stream, on all three files.
+Scene duration is calculated from its generated narration, so the captions and
+voiceover use the same scene boundaries. The client-facing caption remains
+**Synthetic data · Advisory POC · No equipment control**.
+
+**QA scope, stated plainly:** the checks above are codec/resolution
+verification (`ffprobe`) and spot-checked representative frames -- not a
+full watch-through. Narration audio content, word-for-word caption accuracy,
+and scene-to-scene timing across the entire runtime have **not** been
+exhaustively verified. Treat full narration/caption correctness as open
+until someone watches each video start to finish.

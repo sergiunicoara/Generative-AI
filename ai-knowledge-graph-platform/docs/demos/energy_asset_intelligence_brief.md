@@ -23,7 +23,7 @@ supersession, no-evidence abstention, tenant-scoped API access, portable RDF
 export, and an optional one-way Neo4j GraphRAG read model.
 
 The business demonstration follows one story: WT-01 is flagged because its
-96 C gearbox observation exceeds the current bulletin’s 85 C threshold while
+latest-known corrected 91.5 C gearbox observation exceeds the current bulletin’s 85 C threshold while
 work order WO-9001 is open. A historical query shows that revision R1 was
 authoritative before 2026-06-01 and used a 90 C threshold. Assets without
 enough evidence return an incomplete assessment rather than a recommendation.

@@ -3,8 +3,13 @@
 
 With staged changes present, ``git write-tree`` is archived; otherwise HEAD is
 used. The check never reads the developer's working tree after extraction.
-CI uses the default fresh-install path. ``--no-install`` is useful for a fast
-local smoke run when dependencies are already available.
+CI uses the default fresh-install path. It installs the checked-in runtime
+lockfile plus only the focused verification tools, avoiding an unbounded
+resolver pass over the broad development requirements, then runs ``pip
+check`` to confirm those installs are actually mutually compatible --
+``--no-deps`` and passing a couple of focused tests prove neither of those on
+their own. ``--no-install`` is useful for a fast local smoke run when
+dependencies are already available.
 """
 
 from __future__ import annotations
@@ -71,7 +76,32 @@ def main() -> None:
             venv_dir = Path(temporary) / "venv"
             venv.EnvBuilder(with_pip=True, clear=True).create(venv_dir)
             python = str(venv_dir / ("Scripts/python.exe" if os.name == "nt" else "bin/python"))
-            _run([python, "-m", "pip", "install", "--disable-pip-version-check", "-r", "requirements-dev.txt"], cwd=project)
+            # setuptools isn't in requirements.lock -- pip-compile excludes it
+            # by policy (pinning your own build toolchain via a normal
+            # requirements file is its own hazard), so it's whatever version
+            # `venv`'s own bootstrap happens to ship. torch's wheel declares a
+            # floor pip check will not silently ignore; satisfy it explicitly
+            # rather than let a bootstrap-version accident fail the gate.
+            _run([python, "-m", "pip", "install", "--disable-pip-version-check", "--upgrade", "setuptools>=77.0.3"], cwd=project)
+            _run([python, "-m", "pip", "install", "--disable-pip-version-check", "--no-deps", "-r", "requirements.lock"], cwd=project)
+            _run([python, "-m", "pip", "install", "--disable-pip-version-check", "pytest", "pytest-asyncio", "ruff"], cwd=project)
+            # Explicit, visible evidence of the version actually left standing
+            # after every later install -- not merely "pip check raised
+            # nothing about it," which proves the same thing but leaves no
+            # trace of what was actually checked.
+            _run([python, "-c", "import setuptools; print('setuptools', setuptools.__version__)"], cwd=project)
+            # --no-deps above deliberately skips resolution against the
+            # lockfile's own pins (that's the whole point -- no unbounded
+            # resolver pass). But it also means nothing has yet confirmed
+            # those pins are mutually compatible, or that installing the
+            # three focused tools afterward (which DOES resolve their own
+            # deps) didn't quietly upgrade something the lockfile pinned.
+            # `pip check` inspects installed package metadata for exactly
+            # that: unmet or conflicting requirements. Passing tests is not
+            # the same claim as "this environment's dependencies are
+            # consistent" -- a real but latent conflict can sit in a code
+            # path the two focused test files don't exercise.
+            _run([python, "-m", "pip", "check"], cwd=project)
 
         env = {**os.environ, "ENV": "test", "PYTHONDONTWRITEBYTECODE": "1"}
         _run([python, "-m", "ruff", "check", "graphrag/", "api/", "scripts/", "tests/"], cwd=project, env=env)

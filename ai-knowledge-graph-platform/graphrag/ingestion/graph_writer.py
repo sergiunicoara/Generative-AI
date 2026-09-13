@@ -66,7 +66,10 @@ def _resolved_pair(resolved) -> tuple[str, str] | None:
 
 
 class GraphWriter:
-    def __init__(self, changed_by: str = "ingestion_worker", *, neo4j_client=None):
+    def __init__(
+        self, changed_by: str = "ingestion_worker", *, neo4j_client=None,
+        semantic_validator=None,
+    ):
         self._neo4j                  = neo4j_client or get_neo4j()
         self._audit                  = AuditTrail(self._neo4j)
         self._validator              = IngestionValidator(self._neo4j)
@@ -76,6 +79,10 @@ class GraphWriter:
         self._contradiction          = ContradictionDetector(self._neo4j)
         self._ontology               = get_ontology_registry(self._neo4j)
         self._changed_by             = changed_by
+        # Optional because most tenants still use OntologyRegistry's existing
+        # YAML contract. A compiled domain model can inject the stronger
+        # property/cardinality validator without changing those paths.
+        self._semantic_validator     = semantic_validator
         self._registry_loaded_tenants: set[str] = set()   # per-tenant load tracking
         self._ontology_loaded_tenants: set[str] = set()
         self._ontology_tenant        = "default"
@@ -342,6 +349,11 @@ class GraphWriter:
         for entity in entities:
             # Propagate tenant onto the entity so merge_entity stores it correctly
             entity.tenant = tenant
+            semantic_validator = getattr(self, "_semantic_validator", None)
+            if semantic_validator is not None:
+                semantic_validator.require_node(
+                    entity.type, entity.semantic_properties, tenant=tenant,
+                )
 
             # 1. Alias resolution — name-based
             canonical = registry.resolve(entity.name)
@@ -550,6 +562,12 @@ class GraphWriter:
             src_type = src_canonical[1] if src_canonical else src.type
             tgt_name = tgt_canonical[0] if tgt_canonical else tgt.name
             tgt_type = tgt_canonical[1] if tgt_canonical else tgt.type
+
+            semantic_validator = getattr(self, "_semantic_validator", None)
+            if semantic_validator is not None:
+                semantic_validator.require_relation(
+                    rel.relation, src_type, tgt_type, tenant=tenant,
+                )
 
             is_valid, normalized_relation = self._ontology.validate_relation_triplet(
                 src_type,

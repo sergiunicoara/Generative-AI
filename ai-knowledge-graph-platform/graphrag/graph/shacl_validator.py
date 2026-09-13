@@ -272,6 +272,13 @@ class ShaclResult:
     message: str
     shape: str              # local name of the sh:sourceShape, e.g. "EntityLabelProperty"
     result_path: str = ""
+    # sh:value -- the offending term, when the constraint identifies one (a
+    # sh:class/sh:datatype/sh:nodeKind failure does; a sh:minCount failure
+    # does not, because the whole point is that no value is there). Together
+    # with focus_node and result_path this names the exact triple at fault,
+    # which is what lets a caller prune one bad reference instead of
+    # discarding the entire subject. Empty when SHACL reports no value.
+    value: str = ""
 
 
 @dataclass
@@ -318,12 +325,14 @@ def _parse_results(results_graph: Graph) -> list[ShaclResult]:
         focus = results_graph.value(result, SH.focusNode)
         path = results_graph.value(result, SH.resultPath)
         shape = results_graph.value(result, SH.sourceShape)
+        value = results_graph.value(result, SH.value)
         parsed.append(ShaclResult(
             severity=_local_name(str(severity_uri)) if severity_uri else "Violation",
             focus_node=str(focus) if focus else "",
             message=str(message) if message else "",
             shape=_local_name(str(shape)) if shape else "",
             result_path=str(path) if path else "",
+            value=str(value) if value is not None else "",
         ))
     return parsed
 

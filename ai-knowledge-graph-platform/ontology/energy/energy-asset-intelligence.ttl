@@ -1,21 +1,73 @@
+# DO NOT EDIT — generated from energy-asset-intelligence.yaml.
+@prefix dcterms: <http://purl.org/dc/terms/> .
 @prefix energy: <https://example.energy.demo/ontology#> .
 @prefix owl: <http://www.w3.org/2002/07/owl#> .
 @prefix prov: <http://www.w3.org/ns/prov#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
 @prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
 @prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
 
-energy: a owl:Ontology ; rdfs:label "Synthetic Energy Asset Intelligence ontology" .
-energy:Site a owl:Class . energy:Asset a owl:Class . energy:Component a owl:Class .
-energy:Observation a owl:Class ; rdfs:subClassOf prov:Entity .
-energy:WorkOrder a owl:Class ; rdfs:subClassOf prov:Entity .
-energy:TechnicalDocument a owl:Class ; rdfs:subClassOf prov:Entity .
-energy:DocumentRevision a owl:Class ; rdfs:subClassOf energy:TechnicalDocument .
-energy:MaintenanceReviewFinding a owl:Class .
-energy:hasAsset a owl:ObjectProperty . energy:hasComponent a owl:ObjectProperty .
-energy:observedAsset a owl:ObjectProperty . energy:concernsAsset a owl:ObjectProperty .
-energy:supersedes a owl:ObjectProperty .
-energy:assetId a owl:DatatypeProperty . energy:unit a owl:DatatypeProperty .
-energy:value a owl:DatatypeProperty ; rdfs:range xsd:decimal .
-energy:observedAt a owl:DatatypeProperty ; rdfs:range xsd:dateTime .
-energy:validFrom a owl:DatatypeProperty ; rdfs:range xsd:dateTime .
-energy:validTo a owl:DatatypeProperty ; rdfs:range xsd:dateTime .
+energy: a owl:Ontology ; rdfs:label "Synthetic Energy Asset Intelligence ontology" ; owl:versionInfo "1.0.0" .
+
+energy:Asset a owl:Class ;
+  rdfs:label "Asset" ;
+  rdfs:comment "An operational asset with a stable source identifier." .
+energy:Component a owl:Class ;
+  rdfs:label "Component" .
+energy:DocumentRevision a owl:Class ;
+  rdfs:label "Document revision" ;
+  rdfs:subClassOf energy:TechnicalDocument .
+energy:MaintenanceReviewFinding a owl:Class ;
+  rdfs:label "Maintenance review finding" .
+energy:Observation a owl:Class ;
+  rdfs:label "Observation" ;
+  rdfs:subClassOf prov:Entity .
+energy:Site a owl:Class ;
+  rdfs:label "Site" .
+energy:TechnicalDocument a owl:Class ;
+  rdfs:label "Technical document" ;
+  rdfs:subClassOf prov:Entity .
+energy:WindTurbine a owl:Class ;
+  rdfs:label "Wind turbine" ;
+  rdfs:subClassOf energy:Asset .
+energy:WorkOrder a owl:Class ;
+  rdfs:label "Work order" ;
+  rdfs:subClassOf prov:Entity .
+
+energy:appliesToComponentType a owl:DatatypeProperty ; rdfs:domain energy:DocumentRevision ; rdfs:range xsd:string .
+energy:assetId a owl:DatatypeProperty ; rdfs:domain energy:Asset ; rdfs:range xsd:string .
+energy:componentType a owl:DatatypeProperty ; rdfs:domain energy:Component ; rdfs:range xsd:string .
+energy:createdAt a owl:DatatypeProperty ; rdfs:domain owl:Thing ; rdfs:range xsd:dateTime .
+energy:documentId a owl:DatatypeProperty ; rdfs:domain energy:DocumentRevision ; rdfs:range xsd:string .
+energy:metric a owl:DatatypeProperty ; rdfs:domain energy:Observation ; rdfs:range xsd:string .
+energy:observedAt a owl:DatatypeProperty ; rdfs:domain energy:Observation ; rdfs:range xsd:dateTime .
+energy:recordedAt a owl:DatatypeProperty ; rdfs:domain energy:Observation ; rdfs:range xsd:dateTime ; rdfs:comment "Bitemporal recorded-time axis: when the platform learned this reading, distinct from observedAt (the valid-time axis: when the reading was actually taken). Equal to observedAt for an immediately-ingested reading; later than observedAt for a late-arriving correction to an earlier reading." .
+energy:status a owl:DatatypeProperty ; rdfs:domain energy:WorkOrder ; rdfs:range xsd:string .
+energy:temperatureReviewThreshold a owl:DatatypeProperty ; rdfs:domain energy:DocumentRevision ; rdfs:range xsd:decimal .
+energy:unit a owl:DatatypeProperty ; rdfs:domain energy:Observation ; rdfs:range xsd:string .
+energy:updatedAt a owl:DatatypeProperty ; rdfs:domain owl:Thing ; rdfs:range xsd:dateTime .
+energy:validFrom a owl:DatatypeProperty ; rdfs:domain energy:WorkOrder ; rdfs:range xsd:dateTime ; rdfs:comment "Bitemporal valid-time axis -- when this status took effect." .
+energy:validTo a owl:DatatypeProperty ; rdfs:domain energy:DocumentRevision ; rdfs:range xsd:dateTime .
+energy:value a owl:DatatypeProperty ; rdfs:domain energy:Observation ; rdfs:range xsd:decimal .
+energy:workOrderId a owl:DatatypeProperty ; rdfs:domain energy:WorkOrder ; rdfs:range xsd:string .
+energy:concernsAsset a owl:ObjectProperty ; rdfs:domain energy:WorkOrder ; rdfs:range energy:Asset .
+energy:hasAsset a owl:ObjectProperty ; rdfs:domain energy:Site ; rdfs:range energy:Asset .
+energy:hasComponent a owl:ObjectProperty ; rdfs:domain energy:Asset ; rdfs:range energy:Component .
+energy:observedAsset a owl:ObjectProperty ; rdfs:domain energy:Observation ; rdfs:range energy:Asset .
+energy:supersedes a owl:ObjectProperty ; rdfs:domain energy:DocumentRevision ; rdfs:range energy:DocumentRevision .
+
+energy:Asset owl:hasKey ( energy:assetId ) .
+energy:Asset rdfs:subClassOf [ a owl:Restriction ; owl:onProperty energy:assetId ; owl:minCardinality "1"^^xsd:nonNegativeInteger ] .
+energy:DocumentRevision owl:hasKey ( energy:documentId ) .
+energy:DocumentRevision rdfs:subClassOf [ a owl:Restriction ; owl:onProperty energy:documentId ; owl:minCardinality "1"^^xsd:nonNegativeInteger ] .
+energy:DocumentRevision rdfs:subClassOf [ a owl:Restriction ; owl:onProperty energy:recordedAt ; owl:minCardinality "1"^^xsd:nonNegativeInteger ] .
+energy:DocumentRevision rdfs:subClassOf [ a owl:Restriction ; owl:onProperty energy:validFrom ; owl:minCardinality "1"^^xsd:nonNegativeInteger ] .
+energy:Observation rdfs:subClassOf [ a owl:Restriction ; owl:onProperty energy:observedAt ; owl:minCardinality "1"^^xsd:nonNegativeInteger ] .
+energy:Observation rdfs:subClassOf [ a owl:Restriction ; owl:onProperty energy:recordedAt ; owl:minCardinality "1"^^xsd:nonNegativeInteger ] .
+energy:Observation rdfs:subClassOf [ a owl:Restriction ; owl:onProperty energy:unit ; owl:minCardinality "1"^^xsd:nonNegativeInteger ] .
+energy:Observation rdfs:subClassOf [ a owl:Restriction ; owl:onProperty energy:value ; owl:minCardinality "1"^^xsd:nonNegativeInteger ] .
+energy:WindTurbine owl:hasKey ( energy:assetId ) .
+energy:WindTurbine rdfs:subClassOf [ a owl:Restriction ; owl:onProperty energy:assetId ; owl:minCardinality "1"^^xsd:nonNegativeInteger ] .
+energy:WorkOrder owl:hasKey ( energy:workOrderId ) .
+energy:WorkOrder rdfs:subClassOf [ a owl:Restriction ; owl:onProperty energy:recordedAt ; owl:minCardinality "1"^^xsd:nonNegativeInteger ] .
+energy:WorkOrder rdfs:subClassOf [ a owl:Restriction ; owl:onProperty energy:validFrom ; owl:minCardinality "1"^^xsd:nonNegativeInteger ] .

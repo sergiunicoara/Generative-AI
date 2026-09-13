@@ -1,0 +1,22 @@
+# Presentation/video-rendering dependencies only.
+#
+# Used exclusively by docs/presentation/render_energy_demo_*.py to narrate and
+# encode the Energy demo teaser/walkthrough/real-run movies. Previously
+# undeclared anywhere (not in requirements.txt, requirements-dev.txt, or
+# pyproject.toml) -- the render scripts worked locally only because gTTS
+# happened to already be installed in this environment. A clean checkout
+# following requirements.txt/requirements-dev.txt alone would fail at
+# `from gtts import gTTS`.
+#
+# Deliberately kept OUT of requirements.txt and requirements-dev.txt: the CI
+# `clean-install` job installs requirements.txt alone specifically to prove
+# the real runtime/API dependency set is complete, and requirements-dev.txt is
+# installed by every test job. Video rendering is neither -- it's an
+# on-demand authoring step, not something the app or its test suite imports.
+#
+# Install with:  pip install -r requirements-presentation.txt
+#
+# Also required on PATH, not pip-installable: ffmpeg + ffprobe (verified
+# present in this environment: /c/ffmpeg/bin).
+
+gTTS>=2.5.0

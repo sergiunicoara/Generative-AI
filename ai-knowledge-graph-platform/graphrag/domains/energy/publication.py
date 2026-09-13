@@ -17,21 +17,41 @@ This module uses the real `SHACLValidator` (now genuinely reusable via its
 `shapes_path` parameter -- see that module) against the actual candidate
 graph, not a synthetic probe.
 
-Quarantine granularity and a stated limitation
-------------------------------------------------
-Validation runs once against the whole candidate graph; every `sh:Violation`
-result's `focus_node` names a record (subject) to quarantine -- its own
-triples are excluded from the published graph, and the reason is recorded.
-Everything else publishes, including subjects no shape targets at all (a
-`Site` or `Component`, say, which this domain's shapes don't constrain).
+Quarantine granularity: a prune -> revalidate fixpoint
+------------------------------------------------------
+Validation used to run exactly once. Every `sh:Violation`'s `focus_node`
+named a record to quarantine, its triples were dropped, and whatever
+remained was published unchecked. That left a real hole, disclosed at the
+time as a bounded choice: a still-published record referencing a quarantined
+subject (a valid WorkOrder whose `energy:concernsAsset` points at an Asset
+that was just removed) was neither quarantined nor rewritten, so the
+"published" graph could still violate the very shapes it was gated on.
 
-Known, deliberate limitation: quarantining a subject removes only *that
-subject's own* triples. A still-published record that merely references a
-quarantined subject (e.g. a valid WorkOrder's `energy:concernsAsset`
-pointing at a quarantined Asset) is not itself quarantined or rewritten.
-A referential-integrity cascade is materially bigger scope than this gate
-is trying to close -- this is a bounded, disclosed choice, not a silently
-cut corner.
+It no longer can. Validation now iterates: validate, remove what the report
+condemns, revalidate, and repeat until the graph conforms. Publication
+asserts conformance as a post-condition, so a non-conformant graph cannot be
+published at all.
+
+Two removal granularities, because they answer different failures:
+
+* When a result carries `sh:resultPath` *and* an IRI `sh:value` naming a
+  triple that is actually present, that one triple is pruned and the subject
+  stays published. This is the referential case -- `sh:class` on
+  `energy:concernsAsset` -- and pruning the reference rather than the record
+  matters: `SiteShape`'s `energy:hasAsset sh:class energy:Asset` means
+  subject-granularity alone would quarantine the entire Site over one bad
+  turbine, destroying the topology of nine healthy ones.
+* Otherwise the subject is quarantined whole. A `sh:minCount` failure has a
+  path but no value -- the absence *is* the violation -- and a bad
+  `sh:datatype` prunes to a missing required property, which the next pass
+  then quarantines. Both converge; neither guesses.
+
+Termination: each pass removes at least one triple from a graph that only
+ever shrinks, or aborts on "no progress". The quarantine set is monotone --
+a subject is never un-quarantined -- which is what makes the bound real; the
+violation count itself is not monotone, since removing a triple can satisfy
+a `sh:maxCount`. `max_iterations` fails closed well before the theoretical
+bound of one pass per triple.
 
 Version history is in-memory and append-only, matching this session's
 earlier audit-trail-style patterns (e.g. `OntologyEvent` nodes): a
@@ -46,9 +66,31 @@ from datetime import datetime, timezone
 from pathlib import Path
 from uuid import uuid4
 
-from rdflib import Graph
+from rdflib import Graph, URIRef
 
-from graphrag.graph.shacl_validator import SHACLValidator
+from graphrag.graph.shacl_validator import SHACLValidator, ShaclResult
+
+# A sh:value naming an IRI is a reference this gate can prune on its own.
+# A literal value cannot be reconstructed faithfully from SHACL's string form
+# (its datatype and language tag are not carried on the result), so those
+# fall through to subject quarantine rather than being guessed at.
+_IRI_PREFIXES = ("http://", "https://", "urn:")
+
+
+def _referential_triple(graph: Graph, result: ShaclResult) -> tuple | None:
+    """The single triple this violation condemns, when it names one.
+
+    Requires a focus node, a result path and an IRI value that together
+    identify a triple actually present in `graph`. Returns None for every
+    other shape of violation -- notably `sh:minCount`, where the missing
+    value is the whole point and there is nothing to prune.
+    """
+    if not (result.focus_node and result.result_path and result.value):
+        return None
+    if not result.value.startswith(_IRI_PREFIXES):
+        return None
+    triple = (URIRef(result.focus_node), URIRef(result.result_path), URIRef(result.value))
+    return triple if triple in graph else None
 
 
 class PublicationRollbackError(RuntimeError):
@@ -57,10 +99,35 @@ class PublicationRollbackError(RuntimeError):
     (there is nothing before the current version to roll back to)."""
 
 
+class PublicationGateError(RuntimeError):
+    """The fixpoint could not reach a conformant graph.
+
+    Raised rather than publishing what it has: the entire purpose of this
+    gate is that a published graph conforms, so a graph that will not
+    converge must not be published at all.
+    """
+
+
 @dataclass(frozen=True)
 class QuarantinedRecord:
     subject: str
     reasons: list[str] = field(default_factory=list)
+    # 0 = intrinsically invalid on the first pass. >=1 = collateral, removed
+    # only once an earlier pass took away something it depended on. Recorded
+    # because "my WorkOrder was valid, why was it dropped?" is otherwise an
+    # unanswerable question.
+    iteration: int = 0
+
+
+@dataclass(frozen=True)
+class PrunedReference:
+    """One referential triple removed so its subject could stay published."""
+
+    subject: str
+    predicate: str
+    obj: str
+    reason: str
+    iteration: int
 
 
 @dataclass(frozen=True)
@@ -71,10 +138,19 @@ class PublicationReport:
     candidate_record_count: int
     quarantined_records: list[QuarantinedRecord] = field(default_factory=list)
     rolled_back_from: str | None = None
+    pruned_references: list[PrunedReference] = field(default_factory=list)
+    revalidation_passes: int = 1
+    # The asserted post-condition, persisted rather than assumed: this graph
+    # was validated to conform after the last removal, not merely before.
+    conforms: bool = True
 
     @property
     def quarantined_count(self) -> int:
         return len(self.quarantined_records)
+
+    @property
+    def pruned_count(self) -> int:
+        return len(self.pruned_references)
 
 
 def _now_iso() -> str:
@@ -93,41 +169,84 @@ class DatasetPublisher:
         # mutates or removes an earlier one.
         self._versions: list[tuple[PublicationReport, Graph]] = []
 
-    def stage_and_publish(self, candidate: Graph) -> PublicationReport:
-        """Validate `candidate` against this dataset's SHACL shapes, quarantine
-        the records that violate them, and publish the conformant remainder
-        as a new version. Always succeeds -- "publish" here means "publish
-        whatever conforms," not "refuse to publish anything if one record is
-        bad," matching the critique's own wording ("quarantine invalid
-        records, publish complete version": the *complete* version is the
-        valid subset, not a synthetic gate everyone must pass wholesale)."""
-        report_shacl = SHACLValidator(candidate, shapes_path=self._shapes_path).validate_report(target="energy")
+    def stage_and_publish(self, candidate: Graph, *, max_passes: int = 10) -> PublicationReport:
+        """Validate, remove what fails, revalidate, and publish what conforms.
 
-        violating_subjects: dict[str, list[str]] = {}
-        for result in report_shacl.results:
-            if result.severity != "Violation" or not result.focus_node:
-                continue
-            violating_subjects.setdefault(result.focus_node, []).append(result.message)
-
-        candidate_subjects = {str(s) for s in candidate.subjects()}
-        published = Graph()
+        "Publish" means "publish whatever conforms" -- one bad record does
+        not block the rest -- but unlike the single-pass version this
+        replaced, what gets published is *verified* to conform rather than
+        assumed to. See the module docstring for the two removal
+        granularities and the termination argument.
+        """
+        candidate_subjects = {str(subject) for subject in candidate.subjects()}
+        working = Graph()
         for prefix, namespace in candidate.namespaces():
-            published.bind(prefix, namespace)
-        for subject, predicate, obj in candidate:
-            if str(subject) in violating_subjects:
-                continue
-            published.add((subject, predicate, obj))
+            working.bind(prefix, namespace)
+        for triple in candidate:
+            working.add(triple)
 
-        quarantined = [
-            QuarantinedRecord(subject=subject, reasons=reasons)
-            for subject, reasons in sorted(violating_subjects.items())
-        ]
+        quarantined: dict[str, QuarantinedRecord] = {}
+        pruned: list[PrunedReference] = []
+
+        for iteration in range(max_passes):
+            report_shacl = SHACLValidator(working, shapes_path=self._shapes_path).validate_report(target="energy")
+            violations = [
+                result for result in report_shacl.results
+                if result.severity == "Violation" and result.focus_node
+            ]
+            if not violations:
+                return self._publish(
+                    working, candidate_subjects, quarantined, pruned, iteration + 1,
+                )
+
+            removed_any = False
+            for result in violations:
+                triple = _referential_triple(working, result)
+                if triple is not None:
+                    working.remove(triple)
+                    pruned.append(PrunedReference(
+                        subject=str(triple[0]), predicate=str(triple[1]), obj=str(triple[2]),
+                        reason=result.message, iteration=iteration,
+                    ))
+                    removed_any = True
+                    continue
+                subject = URIRef(result.focus_node)
+                existing = quarantined.get(result.focus_node)
+                reasons = list(existing.reasons) if existing else []
+                reasons.append(result.message)
+                quarantined[result.focus_node] = QuarantinedRecord(
+                    subject=result.focus_node, reasons=reasons,
+                    iteration=existing.iteration if existing else iteration,
+                )
+                for owned in list(working.triples((subject, None, None))):
+                    working.remove(owned)
+                    removed_any = True
+
+            if not removed_any:
+                raise PublicationGateError(
+                    f"SHACL reported {len(violations)} violation(s) that identify nothing "
+                    "removable; refusing to publish a non-conformant graph"
+                )
+
+        raise PublicationGateError(
+            f"validation did not reach a fixpoint within {max_passes} passes; "
+            "refusing to publish a non-conformant graph"
+        )
+
+    def _publish(
+        self, published: Graph, candidate_subjects: set[str],
+        quarantined: dict[str, QuarantinedRecord], pruned: list[PrunedReference],
+        passes: int,
+    ) -> PublicationReport:
         report = PublicationReport(
             version_id=uuid4().hex,
             published_at=_now_iso(),
             published_triple_count=len(published),
             candidate_record_count=len(candidate_subjects),
-            quarantined_records=quarantined,
+            quarantined_records=[quarantined[key] for key in sorted(quarantined)],
+            pruned_references=pruned,
+            revalidation_passes=passes,
+            conforms=True,
         )
         self._versions.append((report, published))
         return report
@@ -189,6 +308,8 @@ class DatasetPublisher:
 
 __all__ = [
     "DatasetPublisher",
+    "PrunedReference",
+    "PublicationGateError",
     "PublicationReport",
     "PublicationRollbackError",
     "QuarantinedRecord",

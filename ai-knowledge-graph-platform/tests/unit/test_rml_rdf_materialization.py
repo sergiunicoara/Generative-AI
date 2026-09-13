@@ -47,7 +47,28 @@ class TestMaterializeEnergyObservations:
             URIRef("https://example.energy.demo/record/SNOW-OBS-WT-01"),
             URIRef("https://example.energy.demo/record/SNOW-OBS-WT-02"),
             URIRef("https://example.energy.demo/record/SNOW-OBS-WT-03"),
+            # A late-arriving correction to WT-01's 08:00 reading: same
+            # observedAt, a different value, and a recordedAt five days later.
+            # It is a distinct record rather than an edit, which is what lets
+            # a query reconstruct either what was believed then or what is
+            # known now. See tests/unit/test_energy_temporal_correctness.py.
+            URIRef("https://example.energy.demo/record/SNOW-OBS-WT-01-R2"),
         }
+
+    async def test_the_correction_and_the_original_share_a_valid_time_but_not_a_recorded_time(self):
+        """The two bitemporal axes are genuinely independent in the data,
+        not merely declared in the ontology."""
+        graph = await materialize_rml(OBSERVATIONS_MAPPING, ROOT)
+        original = URIRef("https://example.energy.demo/record/SNOW-OBS-WT-01")
+        correction = URIRef("https://example.energy.demo/record/SNOW-OBS-WT-01-R2")
+        observed_at = URIRef(ENERGY_NS + "observedAt")
+        recorded_at = URIRef(ENERGY_NS + "recordedAt")
+
+        assert graph.value(original, observed_at) == graph.value(correction, observed_at)
+        assert graph.value(original, recorded_at) != graph.value(correction, recorded_at)
+        assert graph.value(original, URIRef(ENERGY_NS + "value")) != graph.value(
+            correction, URIRef(ENERGY_NS + "value")
+        )
 
     async def test_templated_object_map_builds_the_same_iri_shape_the_r2rml_mapping_uses(self):
         """energy:observedAsset must resolve to the identical asset IRI

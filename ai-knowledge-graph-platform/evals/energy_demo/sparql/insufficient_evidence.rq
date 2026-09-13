@@ -1,0 +1,43 @@
+# Which assets cannot be assessed because required evidence is missing?
+#
+# Bitemporal: evidence only counts if it existed by {{AS_OF}} and was known
+# by {{KNOWN_AS}}. An asset whose only temperature reading was recorded after
+# the asking view is therefore correctly reported as un-assessable *at that
+# view* -- the abstention moves with the temporal window rather than being a
+# fixed list of asset ids.
+#
+# An asset is assessable for gearbox-temperature review only when BOTH a
+# temperature reading and a work-order status exist within that window; this
+# reports the ones where either is absent, and says which.
+PREFIX energy: <https://example.energy.demo/ontology#>
+PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+PREFIX xsd: <http://www.w3.org/2001/XMLSchema#>
+# DISTINCT: an asset with several readings in the window (an original plus a
+# correction, say) would otherwise be reported once per reading.
+SELECT DISTINCT ?asset ?assetLabel ?hasTemperature ?hasWorkOrder
+WHERE {
+  ?asset a energy:WindTurbine .
+  OPTIONAL { ?asset rdfs:label ?assetLabel }
+  OPTIONAL {
+    ?temperatureObservation a energy:Observation ;
+                            energy:observedAsset ?asset ;
+                            energy:metric "temperature_c" ;
+                            energy:observedAt ?temperatureObservedAt ;
+                            energy:recordedAt ?temperatureRecordedAt .
+    FILTER(?temperatureObservedAt <= "{{AS_OF}}"^^xsd:dateTime)
+    FILTER(?temperatureRecordedAt <= "{{KNOWN_AS}}"^^xsd:dateTime)
+  }
+  OPTIONAL {
+    ?statusWorkOrder a energy:WorkOrder ;
+                     energy:concernsAsset ?asset ;
+                     energy:status ?workOrderStatus ;
+                     energy:validFrom ?workOrderValidFrom ;
+                     energy:recordedAt ?workOrderRecordedAt .
+    FILTER(?workOrderValidFrom <= "{{AS_OF}}"^^xsd:dateTime)
+    FILTER(?workOrderRecordedAt <= "{{KNOWN_AS}}"^^xsd:dateTime)
+  }
+  BIND(BOUND(?temperatureObservation) AS ?hasTemperature)
+  BIND(BOUND(?statusWorkOrder) AS ?hasWorkOrder)
+  FILTER(!BOUND(?temperatureObservation) || !BOUND(?statusWorkOrder))
+}
+ORDER BY ?asset

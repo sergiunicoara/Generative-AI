@@ -8,9 +8,9 @@
     "rml_mapping": "ontology/mappings/energy-observations.rml.ttl"
   },
   "publication": {
-    "version_id": "2babefa079e44bfc8da05e12f64e3c4d",
-    "candidate_records": 29,
-    "published_triples": 135,
+    "version_id": "f0b1409417c744b398dbf5205dcd3e69",
+    "candidate_records": 30,
+    "published_triples": 154,
     "quarantined_records": 0,
     "shacl_invalid_probe": {
       "conforms": false,
@@ -18,6 +18,7 @@
         "obs-WT-10-temperature_c-invalid"
       ],
       "violations": [
+        "Less than 1 values on <https://example.energy.demo/record/obs-WT-10-temperature_c-invalid>->energy:recordedAt",
         "Less than 1 values on <https://example.energy.demo/record/obs-WT-10-temperature_c-invalid>->energy:unit",
         "Less than 1 values on <https://example.energy.demo/record/obs-WT-10-temperature_c-invalid>->energy:value",
         "Value does not have class energy:Asset"
@@ -26,139 +27,204 @@
   },
   "rdf": {
     "turtle": "artifacts\\energy-demo-e2e.ttl",
-    "triples": 135,
+    "triples": 154,
     "explicit_wind_turbine_type": true
   },
   "answers": {
     "maintenance_review": {
       "status": "advisory",
-      "answer": "Advisory review is required for WT-01. Its gearbox temperature is 96\u00b0C, above the 85\u00b0C threshold in MFG-GBX-17-R2; WO-9001 is open.",
-      "current_as_of": "2026-08-28T12:00:00Z",
+      "answer": "Advisory review is required for 1 asset. WT-01 (Wind turbine WT-01): gearbox temperature_c 91.5 C observed 2026-08-28T08:00:00Z exceeds the 85.0 C threshold in MFG-GBX-17-R2; work order WO-9001 is open.",
+      "current_as_of": "2026-09-02T10:00:00Z",
+      "known_as": "2026-09-02T10:00:00Z",
       "authoritative_bulletin": "MFG-GBX-17-R2",
       "evidence": [
         {
-          "source_id": "SAP-WO-9001",
-          "source_type": "synthetic_sap_export",
-          "field_or_span": "work_orders.status",
-          "observed_at": "2026-08-28T08:15:00Z",
-          "valid_from": "2026-08-28T08:15:00Z",
+          "source_id": "SNOW-OBS-WT-01-R2",
+          "source_type": "snowflake_telemetry",
+          "source_document": "urn:synthetic:snowflake:telemetry",
+          "field_or_span": "temperature_c",
+          "observed_at": "2026-08-28T08:00:00Z",
+          "valid_from": "2026-08-28T08:00:00Z",
           "valid_to": null,
+          "recorded_at": "2026-09-02T10:00:00Z",
+          "access_scope": "energy-demo",
+          "value": "91.5 C"
+        },
+        {
+          "source_id": "WO-9001",
+          "source_type": "sap_work_orders",
+          "source_document": "urn:synthetic:sap:work-orders",
+          "field_or_span": "status",
+          "observed_at": "2026-08-15T09:00:00Z",
+          "valid_from": "2026-08-15T09:00:00Z",
+          "valid_to": null,
+          "recorded_at": "2026-08-15T09:00:00Z",
           "access_scope": "energy-demo",
           "value": "open"
         },
         {
-          "source_id": "SNOW-OBS-WT-01",
-          "source_type": "synthetic_snowflake_export",
-          "field_or_span": "temperature_c=96",
-          "observed_at": "2026-08-28T08:00:00Z",
-          "valid_from": "2026-08-28T08:00:00Z",
-          "valid_to": null,
-          "access_scope": "energy-demo",
-          "value": "96 C"
-        },
-        {
           "source_id": "MFG-GBX-17-R2",
-          "source_type": "synthetic_sharepoint_export",
-          "field_or_span": "Gearbox review threshold: 85 C.",
+          "source_type": "sharepoint_technical_guidance",
+          "source_document": "urn:synthetic:sharepoint:technical-guidance",
+          "field_or_span": "temperatureReviewThreshold",
           "observed_at": "2026-06-01T00:00:00Z",
           "valid_from": "2026-06-01T00:00:00Z",
           "valid_to": null,
+          "recorded_at": "2026-06-01T00:00:00Z",
           "access_scope": "energy-demo",
-          "value": "85 C"
+          "value": "85.0 C"
         }
       ],
-      "query_version": "energy-demo/v1",
-      "mapping_version": "energy-r2rml/1.0.0",
       "query_rows": [
         {
           "asset": "https://example.energy.demo/asset/WT-01",
-          "temperature": "96.0",
+          "temperature": "91.5",
           "threshold": "85.0",
           "bulletin": "https://example.energy.demo/document/MFG-GBX-17-R2",
-          "workOrder": "https://example.energy.demo/record/WO-9001"
+          "workOrder": "https://example.energy.demo/record/WO-9001",
+          "assetLabel": "Wind turbine WT-01",
+          "observation": "https://example.energy.demo/record/SNOW-OBS-WT-01-R2",
+          "metric": "temperature_c",
+          "unit": "C",
+          "observedAt": "2026-08-28T08:00:00+00:00",
+          "observationRecordedAt": "2026-09-02T10:00:00+00:00",
+          "bulletinId": "MFG-GBX-17-R2",
+          "componentType": "gearbox",
+          "workOrderId": "WO-9001",
+          "status": "open",
+          "workOrderValidFrom": "2026-08-15T09:00:00+00:00",
+          "workOrderRecordedAt": "2026-08-15T09:00:00+00:00"
         }
       ],
-      "answer_source": "version-controlled SPARQL query"
+      "answer_source": "version-controlled SPARQL query",
+      "query_version": "energy-demo/v2",
+      "mapping_version": "energy-r2rml/1.0.0",
+      "guidance": {
+        "status": "current",
+        "reason": "",
+        "resolution": ""
+      }
     },
     "historical_state": {
       "status": "advisory",
-      "answer": "As of 2026-05-01T00:00:00Z, MFG-GBX-17-R1 was authoritative and the review threshold was 90\u00b0C.",
+      "answer": "As of 2026-05-01T00:00:00Z, MFG-GBX-17-R1 was authoritative (in force from 2026-01-01T00:00:00Z until 2026-06-01T00:00:00Z) and the gearbox temperature review threshold was 90.0 C.",
       "current_as_of": "2026-05-01T00:00:00Z",
+      "known_as": "2026-05-01T00:00:00Z",
       "authoritative_bulletin": "MFG-GBX-17-R1",
       "evidence": [
         {
-          "source_id": "SAP-WO-9001",
-          "source_type": "synthetic_sap_export",
-          "field_or_span": "work_orders.status",
-          "observed_at": "2026-08-28T08:15:00Z",
-          "valid_from": "2026-08-28T08:15:00Z",
-          "valid_to": null,
-          "access_scope": "energy-demo",
-          "value": "open"
-        },
-        {
-          "source_id": "SNOW-OBS-WT-01",
-          "source_type": "synthetic_snowflake_export",
-          "field_or_span": "temperature_c=96",
-          "observed_at": "2026-08-28T08:00:00Z",
-          "valid_from": "2026-08-28T08:00:00Z",
-          "valid_to": null,
-          "access_scope": "energy-demo",
-          "value": "96 C"
-        },
-        {
           "source_id": "MFG-GBX-17-R1",
-          "source_type": "synthetic_sharepoint_export",
-          "field_or_span": "Gearbox review threshold: 90 C.",
-          "observed_at": "2026-06-01T00:00:00Z",
-          "valid_from": "2026-06-01T00:00:00Z",
-          "valid_to": null,
+          "source_type": "sharepoint_technical_guidance",
+          "source_document": "urn:synthetic:sharepoint:technical-guidance",
+          "field_or_span": "temperatureReviewThreshold",
+          "observed_at": "2026-01-01T00:00:00Z",
+          "valid_from": "2026-01-01T00:00:00Z",
+          "valid_to": "2026-06-01T00:00:00Z",
+          "recorded_at": "2026-01-01T00:00:00Z",
           "access_scope": "energy-demo",
-          "value": "90 C"
+          "value": "90.0 C"
         }
       ],
-      "query_version": "energy-demo/v1",
-      "mapping_version": "energy-r2rml/1.0.0"
+      "query_rows": [
+        {
+          "bulletin": "https://example.energy.demo/document/MFG-GBX-17-R1",
+          "bulletinId": "MFG-GBX-17-R1",
+          "threshold": "90.0",
+          "componentType": "gearbox",
+          "validFrom": "2026-01-01T00:00:00+00:00",
+          "validTo": "2026-06-01T00:00:00+00:00",
+          "recordedAt": "2026-01-01T00:00:00+00:00",
+          "supersedes": "",
+          "supersededBy": "https://example.energy.demo/document/MFG-GBX-17-R2"
+        }
+      ],
+      "answer_source": "version-controlled SPARQL query",
+      "query_version": "energy-demo/v2",
+      "mapping_version": "energy-r2rml/1.0.0",
+      "guidance": {
+        "status": "current",
+        "reason": "",
+        "resolution": ""
+      }
     },
     "insufficient_evidence": {
       "status": "insufficient_evidence",
-      "answer": "WT-04 through WT-10 cannot be fully assessed because the synthetic export lacks a current gearbox observation or an open-work-order status. No maintenance conclusion is made for them.",
-      "current_as_of": "2026-08-28T12:00:00Z",
+      "answer": "8 assets cannot be assessed against MFG-GBX-17-R2 because required evidence is missing at 2026-09-02T10:00:00Z: WT-02 (no temperature_c observation); WT-04 (no temperature_c observation and no work-order status); WT-05 (no temperature_c observation and no work-order status); WT-06 (no temperature_c observation and no work-order status); WT-07 (no temperature_c observation and no work-order status); WT-08 (no temperature_c observation and no work-order status); WT-09 (no temperature_c observation and no work-order status); WT-10 (no temperature_c observation and no work-order status). No maintenance conclusion is made for them.",
+      "current_as_of": "2026-09-02T10:00:00Z",
+      "known_as": "2026-09-02T10:00:00Z",
       "authoritative_bulletin": "MFG-GBX-17-R2",
       "evidence": [
         {
-          "source_id": "SAP-WO-9001",
-          "source_type": "synthetic_sap_export",
-          "field_or_span": "work_orders.status",
-          "observed_at": "2026-08-28T08:15:00Z",
-          "valid_from": "2026-08-28T08:15:00Z",
-          "valid_to": null,
-          "access_scope": "energy-demo",
-          "value": "open"
-        },
-        {
-          "source_id": "SNOW-OBS-WT-01",
-          "source_type": "synthetic_snowflake_export",
-          "field_or_span": "temperature_c=96",
-          "observed_at": "2026-08-28T08:00:00Z",
-          "valid_from": "2026-08-28T08:00:00Z",
-          "valid_to": null,
-          "access_scope": "energy-demo",
-          "value": "96 C"
-        },
-        {
           "source_id": "MFG-GBX-17-R2",
-          "source_type": "synthetic_sharepoint_export",
-          "field_or_span": "Gearbox review threshold: 85 C.",
+          "source_type": "sharepoint_technical_guidance",
+          "source_document": "urn:synthetic:sharepoint:technical-guidance",
+          "field_or_span": "temperatureReviewThreshold",
           "observed_at": "2026-06-01T00:00:00Z",
           "valid_from": "2026-06-01T00:00:00Z",
           "valid_to": null,
+          "recorded_at": "2026-06-01T00:00:00Z",
           "access_scope": "energy-demo",
-          "value": "85 C"
+          "value": "85.0 C"
         }
       ],
-      "query_version": "energy-demo/v1",
-      "mapping_version": "energy-r2rml/1.0.0"
+      "query_rows": [
+        {
+          "asset": "https://example.energy.demo/asset/WT-02",
+          "assetLabel": "Wind turbine WT-02",
+          "hasTemperature": "false",
+          "hasWorkOrder": "true"
+        },
+        {
+          "asset": "https://example.energy.demo/asset/WT-04",
+          "assetLabel": "Wind turbine WT-04",
+          "hasTemperature": "false",
+          "hasWorkOrder": "false"
+        },
+        {
+          "asset": "https://example.energy.demo/asset/WT-05",
+          "assetLabel": "Wind turbine WT-05",
+          "hasTemperature": "false",
+          "hasWorkOrder": "false"
+        },
+        {
+          "asset": "https://example.energy.demo/asset/WT-06",
+          "assetLabel": "Wind turbine WT-06",
+          "hasTemperature": "false",
+          "hasWorkOrder": "false"
+        },
+        {
+          "asset": "https://example.energy.demo/asset/WT-07",
+          "assetLabel": "Wind turbine WT-07",
+          "hasTemperature": "false",
+          "hasWorkOrder": "false"
+        },
+        {
+          "asset": "https://example.energy.demo/asset/WT-08",
+          "assetLabel": "Wind turbine WT-08",
+          "hasTemperature": "false",
+          "hasWorkOrder": "false"
+        },
+        {
+          "asset": "https://example.energy.demo/asset/WT-09",
+          "assetLabel": "Wind turbine WT-09",
+          "hasTemperature": "false",
+          "hasWorkOrder": "false"
+        },
+        {
+          "asset": "https://example.energy.demo/asset/WT-10",
+          "assetLabel": "Wind turbine WT-10",
+          "hasTemperature": "false",
+          "hasWorkOrder": "false"
+        }
+      ],
+      "answer_source": "version-controlled SPARQL query",
+      "query_version": "energy-demo/v2",
+      "mapping_version": "energy-r2rml/1.0.0",
+      "guidance": {
+        "status": "current",
+        "reason": "",
+        "resolution": ""
+      }
     },
     "wrong_tenant": {
       "status": "not_found",
@@ -170,8 +236,8 @@
     "mode": "dry-run",
     "rdf_is_authoritative": true,
     "rebuildable_read_model": true,
-    "nodes": 29,
-    "relationships": 27,
+    "nodes": 30,
+    "relationships": 28,
     "live_result": null
   },
   "capabilities_demonstrated": [

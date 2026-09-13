@@ -1,8 +1,71 @@
+# Which assets need maintenance review, and why?
+#
+# Bitemporal: a reading is only considered when it was taken by {{AS_OF}}
+# (valid time) AND was already recorded by {{KNOWN_AS}} (recorded time). Where
+# several readings survive that filter for one asset+metric, exactly one wins
+# -- the most recently observed, and among readings of the same instant, the
+# most recently recorded. That last clause is what makes a late-arriving
+# correction supersede the original reading of the same moment once, and only
+# once, the asking view is late enough to know about it.
+#
+# The winner is selected with FILTER NOT EXISTS ("no better candidate
+# exists") rather than a GROUP BY/subquery, because it expresses the
+# composite (observedAt, recordedAt) ordering directly and executes the same
+# way on rdflib and on GraphDB -- both are exercised against this file.
+#
+# Work-order caveat, stated rather than hidden: the synthetic SAP export
+# carries one status row per work order, so a work order's valid time is
+# "from validFrom onwards" with no end. Status history would need a second
+# row per transition; this demo does not model it, and the operational
+# workflow layer (graphrag/domains/energy/workflow.py) is a separate concern.
+#
+# ?asset ?temperature ?threshold ?bulletin ?workOrder are a pinned contract:
+# tests/e2e/test_live_graphdb.py executes this same file against live GraphDB.
 PREFIX energy: <https://example.energy.demo/ontology#>
-SELECT ?asset ?temperature ?threshold ?bulletin ?workOrder WHERE {
+PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+PREFIX xsd: <http://www.w3.org/2001/XMLSchema#>
+SELECT ?asset ?temperature ?threshold ?bulletin ?workOrder
+       ?assetLabel ?observation ?metric ?unit ?observedAt ?observationRecordedAt
+       ?bulletinId ?componentType ?workOrderId ?status ?workOrderValidFrom ?workOrderRecordedAt
+WHERE {
   VALUES ?bulletinId { "{{BULLETIN_ID}}" }
-  ?observation a energy:Observation ; energy:observedAsset ?asset ; energy:metric "temperature_c" ; energy:value ?temperature .
-  ?bulletin a energy:DocumentRevision ; energy:documentId ?bulletinId ; energy:temperatureReviewThreshold ?threshold .
-  ?workOrder a energy:WorkOrder ; energy:concernsAsset ?asset ; energy:status "open" .
+  ?observation a energy:Observation ;
+               energy:observedAsset ?asset ;
+               energy:metric ?metric ;
+               energy:value ?temperature ;
+               energy:unit ?unit ;
+               energy:observedAt ?observedAt ;
+               energy:recordedAt ?observationRecordedAt .
+  FILTER(?metric = "temperature_c")
+  FILTER(?observedAt <= "{{AS_OF}}"^^xsd:dateTime)
+  FILTER(?observationRecordedAt <= "{{KNOWN_AS}}"^^xsd:dateTime)
+  FILTER NOT EXISTS {
+    ?betterObservation a energy:Observation ;
+                       energy:observedAsset ?asset ;
+                       energy:metric ?metric ;
+                       energy:observedAt ?betterObservedAt ;
+                       energy:recordedAt ?betterRecordedAt .
+    FILTER(?betterObservedAt <= "{{AS_OF}}"^^xsd:dateTime)
+    FILTER(?betterRecordedAt <= "{{KNOWN_AS}}"^^xsd:dateTime)
+    FILTER(?betterObservedAt > ?observedAt
+           || (?betterObservedAt = ?observedAt && ?betterRecordedAt > ?observationRecordedAt))
+  }
+  ?bulletin a energy:DocumentRevision ;
+            energy:documentId ?bulletinId ;
+            energy:temperatureReviewThreshold ?threshold ;
+            energy:appliesToComponentType ?componentType .
+  ?asset energy:hasComponent ?component .
+  ?component energy:componentType ?componentType .
+  ?workOrder a energy:WorkOrder ;
+             energy:concernsAsset ?asset ;
+             energy:status ?status ;
+             energy:workOrderId ?workOrderId ;
+             energy:validFrom ?workOrderValidFrom ;
+             energy:recordedAt ?workOrderRecordedAt .
+  FILTER(?status = "open")
+  FILTER(?workOrderValidFrom <= "{{AS_OF}}"^^xsd:dateTime)
+  FILTER(?workOrderRecordedAt <= "{{KNOWN_AS}}"^^xsd:dateTime)
+  OPTIONAL { ?asset rdfs:label ?assetLabel }
   FILTER(?temperature > ?threshold)
 }
+ORDER BY ?asset

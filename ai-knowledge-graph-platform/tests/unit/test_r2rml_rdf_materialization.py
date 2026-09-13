@@ -83,6 +83,26 @@ class TestMaterializeEnergyAssets:
         closed = URIRef("https://example.energy.demo/record/WO-9003")
         assert (closed, URIRef(ENERGY_NS + "status"), Literal("closed")) in graph
 
+    async def test_bitemporal_columns_are_materialized_as_typed_datetime_literals(self, energy_sqlite):
+        """rr:column + rr:datatype (this session's addition -- previously
+        rejected outright by this executor): the SAP work-order table's new
+        valid_from/recorded_at columns must come through as real xsd:dateTime
+        literals, not untyped strings, or SHACL's sh:datatype check on
+        WorkOrder.validFrom/recordedAt would quarantine every work order."""
+        from rdflib.namespace import XSD
+
+        graph = await materialize_r2rml(ENERGY_MAPPING, SQLiteSourceConnector(energy_sqlite))
+
+        valid_from = graph.value(WORK_ORDER, URIRef(ENERGY_NS + "validFrom"))
+        recorded_at = graph.value(WORK_ORDER, URIRef(ENERGY_NS + "recordedAt"))
+        assert valid_from is not None and valid_from.datatype == XSD.dateTime
+        assert recorded_at is not None and recorded_at.datatype == XSD.dateTime
+        # The SQLite connector parses the TEXT column into an aware datetime,
+        # so the literal's lexical form uses "+00:00" rather than the source
+        # column's own "Z" suffix -- an equivalent instant either way, and
+        # exactly the kind of typed value .toPython() must round-trip.
+        assert valid_from.toPython().isoformat() == "2026-08-15T09:00:00+00:00"
+
     async def test_row_to_triples_to_sparql_finding(self, energy_sqlite):
         """The maintenance query this pipeline exists to answer: which
         assets currently have open work orders. Proves the full chain --
@@ -137,6 +157,26 @@ class TestUnsupportedConstructsFailClosed:
         # A constant attaches to EVERY row, not just the one probed above.
         other_asset = URIRef("https://example.energy.demo/asset/WT-02")
         assert (other_asset, URIRef(ENERGY_NS + "region"), Literal("eu-west")) in graph
+
+    async def test_datatype_without_column_is_rejected(self, tmp_path, energy_sqlite):
+        """rr:datatype is only meaningful alongside rr:column (a literal
+        straight from a row) -- pairing it with rr:constant or
+        rr:parentTriplesMap is not a construct this executor interprets."""
+        bad_mapping = tmp_path / "bad.r2rml.ttl"
+        bad_mapping.write_text(
+            """
+            @prefix rr: <http://www.w3.org/ns/r2rml#> .
+            @prefix energy: <https://example.energy.demo/ontology#> .
+            @prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+            energy:AssetMap a rr:TriplesMap;
+              rr:logicalTable [ rr:tableName "sap_assets" ];
+              rr:subjectMap [ rr:template "https://example.energy.demo/asset/{asset_id}"; rr:class energy:Asset ];
+              rr:predicateObjectMap [ rr:predicate energy:region; rr:objectMap [ rr:constant "eu-west"; rr:datatype xsd:string ] ].
+            """,
+            encoding="utf-8",
+        )
+        with pytest.raises(R2RMLMappingError):
+            await materialize_r2rml(bad_mapping, SQLiteSourceConnector(energy_sqlite))
 
     async def test_object_map_with_both_column_and_constant_is_rejected(self, tmp_path, energy_sqlite):
         """Ambiguous: an object map must be exactly one shape, not several."""

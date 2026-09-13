@@ -55,9 +55,10 @@ SCENES = [
     ),
     Scene(
         "Built for trust and scale", 22,
-        "Behind the business view, enterprise data is mapped into RDF, evaluated by "
-        "version-controlled SPARQL, and checked by semantic validation. The technical "
-        "trace remains available whenever an engineer or auditor needs it.",
+        "Behind the business view, source data is mapped into RDF, checked through a "
+        "SHACL publication gate, and evaluated by version-controlled SPARQL. A governed "
+        "maintenance lifecycle keeps human review explicit, while the technical trace "
+        "remains available whenever an engineer or auditor needs it.",
         "dashboard_technical_trace.png",
     ),
 ]

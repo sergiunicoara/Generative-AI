@@ -32,7 +32,14 @@ from graphrag.ops.production_exercises import run_load_exercise  # noqa: E402
 
 _QUESTION_PATH = ROOT / "evals" / "energy_demo" / "questions.json"
 _DEFAULT_OUTPUT = ROOT / "artifacts" / "energy-evaluation-report.json"
-_MAINTENANCE_EVIDENCE_IDS = {"SAP-WO-9001", "SNOW-OBS-WT-01", "MFG-GBX-17-R2"}
+# The real record identifiers the citations carry at the current view.
+# "SAP-WO-9001" used to be expected here, but no record with that id exists
+# anywhere in the graph -- it was part of a hand-written evidence list, not
+# derived from the data; the work order's actual energy:workOrderId is
+# "WO-9001". The cited reading is SNOW-OBS-WT-01-R2, not SNOW-OBS-WT-01,
+# because a late-arriving correction supersedes the original reading of the
+# same instant once the asking view is late enough to know about it.
+_MAINTENANCE_EVIDENCE_IDS = {"WO-9001", "SNOW-OBS-WT-01-R2", "MFG-GBX-17-R2"}
 
 
 def _read_cases(path: Path) -> list[dict[str, Any]]:

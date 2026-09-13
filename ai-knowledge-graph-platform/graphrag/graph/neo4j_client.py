@@ -1074,6 +1074,12 @@ class Neo4jClient:
                 "source_doc_id": e.source_doc_id,
                 "extraction_model": e.extraction_model,
                 "prompt_version": e.prompt_version,
+                # Reserved identity/scope fields cannot be overwritten by a
+                # caller-supplied semantic property map.
+                "semantic_properties": {
+                    key: value for key, value in e.semantic_properties.items()
+                    if key not in {"id", "name", "type", "tenant"}
+                },
             }
             for e in entities
         ]
@@ -1098,10 +1104,12 @@ class Neo4jClient:
                           e.source_doc_id    = row.source_doc_id,
                           e.extraction_model = row.extraction_model,
                           e.prompt_version   = row.prompt_version,
+                          e += row.semantic_properties,
                           e.created_at       = datetime(),
                           e.recorded_at      = datetime()
             ON MATCH SET  e.description = CASE WHEN e.description = '' THEN row.description ELSE e.description END,
                           e.embedding   = CASE WHEN row.embedding IS NOT NULL AND size(row.embedding) > 0 THEN row.embedding ELSE e.embedding END,
+                          e += row.semantic_properties,
                           e.updated_at  = datetime()
             RETURN row.name AS name, row.type AS type, prior_similarity
             """,

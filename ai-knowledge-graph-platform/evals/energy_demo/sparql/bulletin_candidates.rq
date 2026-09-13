@@ -1,0 +1,24 @@
+# Every guidance revision known by {{KNOWN_AS}} (recorded-time filter only),
+# with its valid-time window and supersession edges.
+#
+# Deliberately does not filter by as_of / validFrom / validTo: which window
+# a candidate falls into (currently applicable, expired, or conflicting with
+# another) is a classification decision, made once in Python
+# (graphrag/domains/energy/answers.py's select_bulletin) rather than
+# duplicated across several near-identical SPARQL files.
+PREFIX energy: <https://example.energy.demo/ontology#>
+PREFIX xsd: <http://www.w3.org/2001/XMLSchema#>
+SELECT ?bulletin ?bulletinId ?threshold ?componentType ?validFrom ?validTo ?recordedAt ?supersedes ?supersededBy
+WHERE {
+  ?bulletin a energy:DocumentRevision ;
+            energy:documentId ?bulletinId ;
+            energy:temperatureReviewThreshold ?threshold ;
+            energy:appliesToComponentType ?componentType ;
+            energy:validFrom ?validFrom ;
+            energy:recordedAt ?recordedAt .
+  OPTIONAL { ?bulletin energy:validTo ?validTo }
+  OPTIONAL { ?bulletin energy:supersedes ?supersedes }
+  OPTIONAL { ?supersededBy energy:supersedes ?bulletin }
+  FILTER(?recordedAt <= "{{KNOWN_AS}}"^^xsd:dateTime)
+}
+ORDER BY ?validFrom

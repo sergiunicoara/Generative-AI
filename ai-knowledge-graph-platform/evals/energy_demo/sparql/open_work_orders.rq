@@ -1,0 +1,31 @@
+# Which open work orders concern components covered by the given bulletin?
+#
+# Bitemporal: a work order counts only once it had taken effect by {{AS_OF}}
+# (valid time) and was already recorded by {{KNOWN_AS}} (recorded time), so a
+# question asked about an earlier instant cannot cite a work order raised
+# after it. The component-type join is the actual "concerns components
+# mentioned in the bulletin" condition.
+PREFIX energy: <https://example.energy.demo/ontology#>
+PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+PREFIX xsd: <http://www.w3.org/2001/XMLSchema#>
+SELECT ?workOrder ?workOrderId ?status ?asset ?assetLabel ?componentType
+       ?bulletinId ?validFrom ?recordedAt
+WHERE {
+  VALUES ?bulletinId { "{{BULLETIN_ID}}" }
+  ?bulletin a energy:DocumentRevision ;
+            energy:documentId ?bulletinId ;
+            energy:appliesToComponentType ?componentType .
+  ?asset energy:hasComponent ?component .
+  ?component energy:componentType ?componentType .
+  ?workOrder a energy:WorkOrder ;
+             energy:concernsAsset ?asset ;
+             energy:status ?status ;
+             energy:workOrderId ?workOrderId ;
+             energy:validFrom ?validFrom ;
+             energy:recordedAt ?recordedAt .
+  OPTIONAL { ?asset rdfs:label ?assetLabel }
+  FILTER(?status = "open")
+  FILTER(?validFrom <= "{{AS_OF}}"^^xsd:dateTime)
+  FILTER(?recordedAt <= "{{KNOWN_AS}}"^^xsd:dateTime)
+}
+ORDER BY ?workOrderId

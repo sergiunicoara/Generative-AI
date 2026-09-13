@@ -47,8 +47,8 @@ SCENES = [
         "This walkthrough follows the implementation of an Energy Asset and "
         "Maintenance Intelligence proof of concept. It uses synthetic wind-farm "
         "data, so every step can be run locally. The goal is to show how source "
-        "contracts, semantic modelling, validation, and an evidence response fit "
-        "together in working code.",
+        "contracts, semantic modelling, governed publication, and an evidence response "
+        "fit together in working code.",
     ),
     Scene(
         "Create the SAP-shaped Source Contract",
@@ -71,12 +71,12 @@ SCENES = [
     Scene(
         "Build the RDF Evidence Graph",
         28,
-        "The demonstration service then builds an in-memory RDFLib graph from its "
-        "synthetic fixtures. It creates turbines and gearbox components, "
-        "Snowflake-shaped telemetry, SAP-shaped work orders, and SharePoint-shaped "
-        "manufacturer bulletin revisions. Each source category has an explicit "
-        "provenance reference. The graph can be exported as Turtle for inspection "
-        "or optional loading into an RDF store.",
+        "The demonstration service executes both the relational R2RML mapping and the "
+        "JSON telemetry RML mapping into an RDFLib graph. It connects turbines and "
+        "gearbox components with Snowflake-shaped telemetry, SAP-shaped work orders, "
+        "and SharePoint-shaped manufacturer bulletin revisions. Each source category "
+        "has explicit provenance, and the graph can be exported as Turtle or loaded "
+        "into the optional GraphDB serving copy.",
     ),
     Scene(
         "Return an Evidence-shaped Assessment",
@@ -99,21 +99,21 @@ SCENES = [
     Scene(
         "Validate Data and Enforce Tenant Boundaries",
         26,
-        "SHACL validates a deliberately incomplete observation and reports that it "
-        "does not conform. The FastAPI router exposes a small read-only surface: "
-        "questions, answers, RDF export, and validation. It requires read scope "
-        "and checks the energy-demo tenant. Other tenants receive no evidence. "
-        "This keeps the POC's retrieval surface deliberate and reviewable.",
+        "A candidate graph is staged behind a SHACL publication gate. Invalid records "
+        "are quarantined with their validation reasons, while the conformant graph is "
+        "published as a version that can be rolled back without rewriting history. "
+        "The API keeps tenant identity in the signed token, so other tenants receive "
+        "no evidence.",
     ),
     Scene(
-        "Run the Scenario and Define the Next Milestone",
+        "Run the Complete Governed Scenario",
         28,
-        "Five labelled cases verify the current maintenance result, work orders, "
-        "revision selection, historical bulletin selection, and insufficient "
-        "evidence. The next engineering milestone is to execute the version-"
-        "controlled SPARQL query against this graph or a verified RDF store, use "
-        "the results to produce the responses, and connect approved enterprise "
-        "sources end to end.",
+        "The current end-to-end scenario executes R2RML and RML, publishes the valid "
+        "RDF graph, runs the committed SPARQL advisory, proves the historical and "
+        "no-evidence boundaries, and creates the governed Neo4j read-model batch. "
+        "A separate scorecard records answer correctness, evidence accuracy, "
+        "abstention, tenant isolation, freshness, and local performance. Live "
+        "enterprise connectors remain deliberately outside this synthetic POC.",
     ),
 ]
 
@@ -238,7 +238,7 @@ def scene_3(draw: ImageDraw.ImageDraw) -> None:
         node(draw, position, label, sublabel, GOLD if label in ("96 °C", "R2") else CYAN)
     for start, end in (((239, 315), (346, 220)), ((239, 315), (346, 430)), ((494, 220), (626, 220)), ((774, 220), (896, 315))):
         arrow(draw, start, end, GOLD)
-    text(draw, (640, 543), "RDFLib graph with explicit types, links, dates, and provenance", 21, GREEN, True, "mm")
+    text(draw, (640, 543), "Executed R2RML + RML graph with explicit types, links, dates, and provenance", 19, GREEN, True, "mm")
     command_box(draw, "python scripts/run_energy_demo.py --export-turtle artifacts/energy-demo.ttl", ["Wrote RDF Turtle: artifacts/energy-demo.ttl"])
 
 
@@ -276,8 +276,8 @@ def scene_6(draw: ImageDraw.ImageDraw) -> None:
         text(draw, (110, 285 + index * 25), line, 16, WHITE if index < 3 else RED)
     text(draw, (110, 390), "conforms: false", 22, RED, True)
     panel(draw, (690, 160, 1210, 418), outline=CYAN)
-    text(draw, (725, 197), "FastAPI boundary", 18, GOLD, True)
-    for index, line in enumerate(("GET /energy-demo/questions", "GET /energy-demo/answer/{question_id}", "GET /energy-demo/rdf", "GET /energy-demo/validation")):
+    text(draw, (725, 197), "Governed API boundary", 18, GOLD, True)
+    for index, line in enumerate(("GET /energy-demo/publication", "GET /energy-demo/quarantine", "POST /energy-demo/rollback", "POST /work-orders/.../transition")):
         text(draw, (725, 250 + index * 32), line, 17, WHITE)
     text(draw, (725, 385), "read scope + energy-demo tenant", 18, GREEN, True)
     command_box(draw, "python scripts/run_energy_demo.py", ["Invalid-batch validation: { conforms: false, … }"])
@@ -289,8 +289,8 @@ def scene_7(draw: ImageDraw.ImageDraw) -> None:
     for index, item in enumerate(("maintenance_review", "open_work_orders", "revision_change", "historical_state", "insufficient_evidence")):
         text(draw, (120, 248 + index * 30), f"✓  {item}", 17, GREEN)
     panel(draw, (690, 160, 1205, 420), outline=CYAN)
-    text(draw, (725, 198), "Next query-backed milestone", 18, GOLD, True)
-    for index, item in enumerate(("Execute version-controlled SPARQL", "Use results to build evidence responses", "Verify GraphDB repository path", "Connect approved enterprise sources")):
+    text(draw, (725, 198), "Implemented extension surfaces", 18, GOLD, True)
+    for index, item in enumerate(("Published RDF → GraphDB serving copy", "Governed RDF → Neo4j read model", "Append-only maintenance lifecycle", "Measured local evaluation scorecard")):
         text(draw, (725, 248 + index * 35), item, 17, WHITE)
     command_box(draw, "python scripts/evaluate_energy_demo.py", ["dataset: energy-demo/v1", "passed: 5", "total: 5"])
 

@@ -211,6 +211,10 @@ class Entity(BaseModel):
     source_doc_id: str = ""           # first document to introduce this entity
     extraction_model: str = ""        # LLM model that extracted this entity
     prompt_version: str = "v1"        # prompt template version at extraction time
+    # Optional domain properties for a schema-compiled LPG projection. The
+    # shared GraphWriter validates these against an injected canonical model
+    # before Neo4j receives them; ordinary extraction paths leave this empty.
+    semantic_properties: dict[str, Any] = Field(default_factory=dict)
 
     @property
     def canonical_identity(self) -> tuple[str, str] | None:

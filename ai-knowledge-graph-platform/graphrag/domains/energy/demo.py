@@ -9,16 +9,20 @@ from __future__ import annotations
 
 import asyncio
 import tempfile
-from dataclasses import dataclass
-from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from rdflib import Graph, Literal, Namespace, URIRef
+from rdflib import Graph, Literal, URIRef
 from rdflib.namespace import RDF, RDFS, XSD
 
+from graphrag.domains.energy import answers as energy_answers
+from graphrag.domains.energy.answers import Evidence
 from graphrag.domains.energy.fixtures import create_sap_fixture_sqlite
+from graphrag.domains.energy.governance_store import GovernanceStore
 from graphrag.domains.energy.publication import DatasetPublisher, PublicationReport
+from graphrag.domains.energy.vocabulary import (
+    ASSET, DOC, ENERGY, PROV, REC, TENANT, parse_instant,
+)
 from graphrag.graph.shacl_validator import SHACLValidator
 from graphrag.graph.sparql_bridge import SPARQLBridge
 from graphrag.ingestion.r2rml_rdf import materialize_r2rml
@@ -28,46 +32,80 @@ from graphrag.ingestion.rml_rdf import materialize_rml
 ROOT = Path(__file__).resolve().parents[3]
 SHAPES_PATH = ROOT / "ontology" / "shapes" / "energy-asset-intelligence.shapes.ttl"
 
-ENERGY = Namespace("https://example.energy.demo/ontology#")
-ASSET = Namespace("https://example.energy.demo/asset/")
-DOC = Namespace("https://example.energy.demo/document/")
-REC = Namespace("https://example.energy.demo/record/")
-PROV = Namespace("http://www.w3.org/ns/prov#")
-TENANT = "energy-demo"
-_UTC = timezone.utc
+# Namespaces, TENANT and Evidence are re-exported (they now live in
+# vocabulary.py / answers.py) so existing importers -- workflow.py,
+# lpg_projection.py, scripts and tests doing
+# `from graphrag.domains.energy.demo import ENERGY, REC, TENANT` -- keep
+# working unchanged.
+_utc = parse_instant
 
-
-@dataclass(frozen=True)
-class Evidence:
-    source_id: str
-    source_type: str
-    field_or_span: str
-    observed_at: str
-    valid_from: str
-    valid_to: str | None
-    access_scope: str
-    value: str
-
-
-def _utc(value: str) -> datetime:
-    return datetime.fromisoformat(value.replace("Z", "+00:00")).astimezone(_UTC)
+__all__ = [
+    "ASSET", "DOC", "ENERGY", "Evidence", "EnergyDemoService", "PROV", "REC",
+    "SHAPES_PATH", "TENANT",
+]
 
 
 class EnergyDemoService:
-    """Render five fixed, reviewable business questions over an RDF graph."""
+    """Answer five fixed, reviewable business questions over an RDF graph.
 
-    questions = {
-        "maintenance_review": "Which assets need maintenance review, and why?",
-        "open_work_orders": "Which open work orders concern components mentioned in the latest bulletin?",
-        "revision_change": "What changed when the revised manufacturer bulletin became effective?",
-        "historical_state": "What would the answer have been at a specified earlier date?",
-        "insufficient_evidence": "Which assets cannot be assessed because required evidence is missing?",
-    }
+    The question *ids* are fixed; the answers are not. Every answer and every
+    citation is derived from the published graph by
+    ``graphrag/domains/energy/answers.py`` through version-controlled SPARQL.
+    """
+
+    questions = energy_answers.QUESTIONS
+    tenant = TENANT
 
     def __init__(self, source_db: Path | None = None) -> None:
+        # _build_graph() awaits materialize_r2rml()/materialize_rml() directly
+        # rather than each nesting its own asyncio.run() call. That makes this
+        # constructor the ONLY place that starts an event loop for the sync
+        # path -- safe as long as no loop is already running in this thread.
+        # If one is (an async caller: FastAPI startup under a loop, an async
+        # script, an async test under pytest-asyncio), asyncio.run() below
+        # would raise its own cryptic "cannot be called from a running event
+        # loop" RuntimeError; fail with a clear pointer to the real fix
+        # instead of leaving that to surface from deep inside construction.
+        try:
+            asyncio.get_running_loop()
+        except RuntimeError:
+            pass  # no loop running in this thread -- safe to construct synchronously
+        else:
+            raise RuntimeError(
+                "EnergyDemoService() cannot be constructed synchronously from "
+                "inside a running event loop. Use "
+                "`await EnergyDemoService.create(source_db=...)` instead."
+            )
         self.source_db = source_db
         self._publisher = DatasetPublisher(SHAPES_PATH)
-        candidate = self._build_graph()
+        self._governance_store = None
+        self._durable_report: PublicationReport | None = None
+        candidate = asyncio.run(self._build_graph())
+        self._publish(candidate)
+
+    @classmethod
+    async def create(
+        cls, source_db: Path | None = None, *, governance_store: GovernanceStore | None = None,
+    ) -> "EnergyDemoService":
+        """Async canonical constructor: awaits graph construction directly
+        instead of nesting asyncio.run(). Use this from any caller that
+        already owns a running event loop -- an async CLI entry point,
+        FastAPI startup, an async test -- and use the synchronous constructor
+        everywhere else."""
+        self = cls.__new__(cls)
+        self.source_db = source_db
+        self._publisher = DatasetPublisher(SHAPES_PATH)
+        self._governance_store = governance_store
+        candidate = await self._build_graph()
+        self._publish(candidate)
+        self._durable_report: PublicationReport | None = None
+        if governance_store is not None:
+            report = await governance_store.publish(self.tenant, self._publisher.current_report, self.graph)
+            _stored_report, self.graph = await governance_store.current(self.tenant)
+            self._durable_report = report
+        return self
+
+    def _publish(self, candidate: Graph) -> None:
         # SHACL as a publication gate: the candidate graph is staged,
         # validated, and only the conformant subset is published -- any
         # record that violates ontology/shapes/energy-asset-intelligence.shapes.ttl
@@ -77,14 +115,14 @@ class EnergyDemoService:
         self._publisher.stage_and_publish(candidate)
         self.graph = self._publisher.current
 
-    def _build_graph(self) -> Graph:
+    async def _build_graph(self) -> Graph:
         graph = Graph()
         graph.bind("energy", ENERGY)
         graph.bind("prov", PROV)
         site = ASSET["north-sea-wind-farm"]
         graph.add((site, RDF.type, ENERGY.Site))
         graph.add((site, RDFS.label, Literal("North Sea Demonstration Wind Farm")))
-        self._materialize_assets_and_work_orders(graph)
+        await self._materialize_assets_and_work_orders(graph)
         for index in range(1, 11):
             turbine = ASSET[f"WT-{index:02d}"]
             gearbox = ASSET[f"WT-{index:02d}-gearbox"]
@@ -92,14 +130,20 @@ class EnergyDemoService:
             graph.add((gearbox, RDF.type, ENERGY.Component))
             graph.add((gearbox, ENERGY.componentType, Literal("gearbox")))
             graph.add((turbine, ENERGY.hasComponent, gearbox))
-        graph += asyncio.run(materialize_rml(
+        graph += await materialize_rml(
             ROOT / "ontology/mappings/energy-observations.rml.ttl", ROOT,
-        ))
-        self._add_bulletin(graph, "MFG-GBX-17-R1", "2026-01-01T00:00:00Z", "2026-06-01T00:00:00Z", 90.0, None)
-        self._add_bulletin(graph, "MFG-GBX-17-R2", "2026-06-01T00:00:00Z", None, 85.0, "MFG-GBX-17-R1")
+        )
+        self._add_bulletin(
+            graph, "MFG-GBX-17-R1", "2026-01-01T00:00:00Z", "2026-06-01T00:00:00Z", 90.0, None,
+            recorded_at="2026-01-01T00:00:00Z",
+        )
+        self._add_bulletin(
+            graph, "MFG-GBX-17-R2", "2026-06-01T00:00:00Z", None, 85.0, "MFG-GBX-17-R1",
+            recorded_at="2026-06-01T00:00:00Z",
+        )
         return graph
 
-    def _materialize_assets_and_work_orders(self, graph: Graph) -> None:
+    async def _materialize_assets_and_work_orders(self, graph: Graph) -> None:
         """Execute the shipped energy R2RML mapping into this RDF graph, for
         real -- no hand-written SQL/triples duplicating what the mapping
         already declares.
@@ -113,15 +157,18 @@ class EnergyDemoService:
         """
         mapping_path = ROOT / "ontology/mappings/energy-assets.r2rml.ttl"
         if self.source_db is not None:
-            graph += asyncio.run(materialize_r2rml(mapping_path, SQLiteSourceConnector(self.source_db)))
+            graph += await materialize_r2rml(mapping_path, SQLiteSourceConnector(self.source_db))
             return
         with tempfile.TemporaryDirectory() as tmp_dir:
             ephemeral_db = Path(tmp_dir) / "energy-demo-sap.sqlite"
             create_sap_fixture_sqlite(ephemeral_db)
-            graph += asyncio.run(materialize_r2rml(mapping_path, SQLiteSourceConnector(ephemeral_db)))
+            graph += await materialize_r2rml(mapping_path, SQLiteSourceConnector(ephemeral_db))
 
     @staticmethod
-    def _add_bulletin(graph: Graph, bulletin: str, valid_from: str, valid_to: str | None, threshold: float, supersedes: str | None) -> None:
+    def _add_bulletin(
+        graph: Graph, bulletin: str, valid_from: str, valid_to: str | None, threshold: float,
+        supersedes: str | None, *, recorded_at: str,
+    ) -> None:
         node = DOC[bulletin]
         graph.add((node, RDF.type, ENERGY.DocumentRevision))
         graph.add((node, ENERGY.documentId, Literal(bulletin)))
@@ -136,6 +183,12 @@ class EnergyDemoService:
         graph.add((node, ENERGY.validFrom, Literal(valid_from, datatype=XSD.dateTime)))
         if valid_to:
             graph.add((node, ENERGY.validTo, Literal(valid_to, datatype=XSD.dateTime)))
+        # Bitemporal recorded-time axis: when the platform learned this
+        # revision existed, distinct from validFrom/validTo (valid-time: when
+        # its guidance applies). Equal to valid_from here -- no publication
+        # lag in this baseline; see the plan's Phase 4 for a genuine
+        # late-arriving bulletin scenario.
+        graph.add((node, ENERGY.recordedAt, Literal(recorded_at, datatype=XSD.dateTime)))
         if supersedes:
             graph.add((node, ENERGY.supersedes, DOC[supersedes]))
         graph.add((node, PROV.wasDerivedFrom, URIRef("urn:synthetic:sharepoint:technical-guidance")))
@@ -146,7 +199,7 @@ class EnergyDemoService:
     def publication_report(self) -> PublicationReport:
         """The current published version's report -- version id, publish
         timestamp, published/candidate counts, and any quarantined records."""
-        return self._publisher.current_report
+        return self._durable_report or self._publisher.current_report
 
     def publication_history(self) -> list[PublicationReport]:
         """Every version published so far for this service instance, oldest
@@ -159,6 +212,15 @@ class EnergyDemoService:
         subsequent query/export sees the restored content immediately."""
         report = self._publisher.rollback(version_id)
         self.graph = self._publisher.current
+        return report
+
+    async def rollback_durable(self, version_id: str | None = None) -> PublicationReport:
+        """Append a durable rollback version and refresh the serving graph."""
+        if self._governance_store is None:
+            return self.rollback(version_id)
+        report = await self._governance_store.rollback(self.tenant, version_id)
+        _stored_report, self.graph = await self._governance_store.current(self.tenant)
+        self._durable_report = report
         return report
 
     def validate_candidate(self) -> dict[str, Any]:
@@ -181,53 +243,78 @@ class EnergyDemoService:
             "violations": [r.message for r in report.results],
         }
 
-    def answer(self, question_id: str, *, tenant: str, as_of: str | None = None) -> dict[str, Any]:
-        if tenant != TENANT:
-            return {"status": "not_found", "answer": "No energy demonstration is available for this tenant.", "evidence": []}
-        if question_id not in self.questions:
-            raise ValueError("unknown energy demonstration question")
-        effective = _utc(as_of) if as_of else _utc("2026-08-28T12:00:00Z")
-        current = effective >= _utc("2026-06-01T00:00:00Z")
-        bulletin = "MFG-GBX-17-R2" if current else "MFG-GBX-17-R1"
-        threshold = 85.0 if current else 90.0
-        evidence = self._evidence(bulletin, threshold)
-        if question_id == "maintenance_review":
-            query = (Path(__file__).resolve().parents[3] / "evals/energy_demo/sparql/maintenance_review.rq").read_text(encoding="utf-8")
-            rows = SPARQLBridge(self.graph).query(query.replace("{{BULLETIN_ID}}", bulletin))
-            assets = sorted({row["asset"].rsplit("/", 1)[-1] for row in rows})
-            if not assets:
-                return self._result("No assets require advisory maintenance review from the available evidence.", evidence, effective, bulletin)
-            result = self._result(
-                f"Advisory review is required for {', '.join(assets)}. Its gearbox temperature is 96°C, above the {threshold:.0f}°C threshold in {bulletin}; WO-9001 is open.",
-                evidence, effective, bulletin,
-            )
-            result["query_rows"] = rows
-            result["answer_source"] = "version-controlled SPARQL query"
-            return result
-        if question_id == "open_work_orders":
-            return self._result("WO-9001 (WT-01 gearbox) and WO-9002 (WT-02 gearbox) are open and concern components covered by the latest bulletin.", evidence, effective, bulletin)
-        if question_id == "revision_change":
-            return self._result("MFG-GBX-17-R2 superseded R1 on 2026-06-01 and lowered the synthetic gearbox-temperature review threshold from 90°C to 85°C.", evidence, effective, bulletin)
-        if question_id == "historical_state":
-            return self._result(f"As of {effective.isoformat().replace('+00:00', 'Z')}, {bulletin} was authoritative and the review threshold was {threshold:.0f}°C.", evidence, effective, bulletin)
-        return self._result("WT-04 through WT-10 cannot be fully assessed because the synthetic export lacks a current gearbox observation or an open-work-order status. No maintenance conclusion is made for them.", evidence, effective, bulletin, status="insufficient_evidence")
+    def answer(
+        self, question_id: str, *, tenant: str,
+        as_of: str | None = None, known_as: str | None = None,
+    ) -> dict[str, Any]:
+        """Derive the answer and its citations from the published graph.
 
-    @staticmethod
-    def _result(answer: str, evidence: list[Evidence], effective: datetime, bulletin: str, status: str = "advisory") -> dict[str, Any]:
+        Every value in the rendered answer and in every evidence row comes
+        from a version-controlled SPARQL query over `self.graph` -- see
+        graphrag/domains/energy/answers.py for what this replaced and why.
+
+        `as_of` selects the valid-time instant and `known_as` the
+        recorded-time instant; omitting `known_as` alongside an `as_of`
+        answers "as we knew it then", which is what keeps a historical answer
+        from citing evidence recorded after the instant it asks about.
+        """
+        try:
+            return energy_answers.answer(
+                self.graph, question_id, tenant=tenant, dataset_tenant=self.tenant,
+                as_of=as_of, known_as=known_as,
+            )
+        except energy_answers.EnergyAnswerError as exc:
+            # Preserve the historical contract: an unknown question id is a
+            # plain ValueError, which api/routes/energy_demo.py turns into a
+            # 404. EnergyAnswerError already subclasses ValueError; this
+            # re-raise keeps the message stable for existing callers.
+            raise ValueError(str(exc)) from exc
+
+    def summary(self, *, tenant: str, as_of: str | None = None) -> dict[str, Any]:
+        """Derived headline counts for the operations dashboard.
+
+        Exists so the UI's summary tiles come from the same queries the
+        answers do, instead of the hard-coded "1 / 2 / 3 of 10 / Checked"
+        figures they used to display regardless of the data.
+        """
+        review = self.answer("maintenance_review", tenant=tenant, as_of=as_of)
+        work_orders = self.answer("open_work_orders", tenant=tenant, as_of=as_of)
+        incomplete = self.answer("insufficient_evidence", tenant=tenant, as_of=as_of)
+        assets = set(self.graph.subjects(RDF.type, ENERGY.WindTurbine))
+        observed = {
+            observation
+            for observation in self.graph.subjects(RDF.type, ENERGY.Observation)
+        }
+        assets_with_telemetry = {
+            self.graph.value(observation, ENERGY.observedAsset) for observation in observed
+        }
         return {
-            "status": status,
-            "answer": answer,
-            "current_as_of": effective.isoformat().replace("+00:00", "Z"),
-            "authoritative_bulletin": bulletin,
-            "evidence": [item.__dict__ for item in evidence],
-            "query_version": "energy-demo/v1",
-            "mapping_version": "energy-r2rml/1.0.0",
+            "assets_under_review": len(review.get("query_rows", [])),
+            "open_work_orders": len(work_orders.get("query_rows", [])),
+            "assets_with_telemetry": len(assets_with_telemetry - {None}),
+            "assets_total": len(assets),
+            "assets_blocked_on_evidence": len(incomplete.get("query_rows", [])),
+            "authoritative_bulletin": review.get("authoritative_bulletin", ""),
         }
 
-    @staticmethod
-    def _evidence(bulletin: str, threshold: float) -> list[Evidence]:
-        return [
-            Evidence("SAP-WO-9001", "synthetic_sap_export", "work_orders.status", "2026-08-28T08:15:00Z", "2026-08-28T08:15:00Z", None, "energy-demo", "open"),
-            Evidence("SNOW-OBS-WT-01", "synthetic_snowflake_export", "temperature_c=96", "2026-08-28T08:00:00Z", "2026-08-28T08:00:00Z", None, "energy-demo", "96 C"),
-            Evidence(bulletin, "synthetic_sharepoint_export", f"Gearbox review threshold: {threshold:.0f} C.", "2026-06-01T00:00:00Z", "2026-06-01T00:00:00Z", None, "energy-demo", f"{threshold:.0f} C"),
-        ]
+    def bulletin_history(self) -> list[dict[str, Any]]:
+        """Every guidance revision with its validity window and threshold.
+
+        Replaces the dashboard's hard-coded "Before 1 Jun: R1 threshold 90°C
+        / Current: R2 threshold 85°C" panel with the graph's own revisions.
+        """
+        rows = SPARQLBridge(self.graph).query(
+            """
+            PREFIX energy: <https://example.energy.demo/ontology#>
+            SELECT ?bulletinId ?threshold ?validFrom ?validTo ?componentType WHERE {
+              ?bulletin a energy:DocumentRevision ;
+                        energy:documentId ?bulletinId ;
+                        energy:temperatureReviewThreshold ?threshold ;
+                        energy:appliesToComponentType ?componentType ;
+                        energy:validFrom ?validFrom .
+              OPTIONAL { ?bulletin energy:validTo ?validTo }
+            }
+            ORDER BY ?validFrom
+            """
+        )
+        return rows

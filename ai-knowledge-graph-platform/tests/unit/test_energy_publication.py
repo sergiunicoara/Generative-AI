@@ -15,6 +15,7 @@ from graphrag.domains.energy.publication import (
     DatasetPublisher,
     PublicationRollbackError,
 )
+from graphrag.graph.shacl_validator import SHACLValidator
 
 ROOT = Path(__file__).resolve().parents[2]
 SHAPES = ROOT / "ontology" / "shapes" / "energy-asset-intelligence.shapes.ttl"
@@ -35,6 +36,11 @@ def _valid_candidate() -> Graph:
     g.add((REC["obs-1"], ENERGY.value, Literal(str(96.0), datatype=XSD.decimal)))
     g.add((REC["obs-1"], ENERGY.unit, Literal("C")))
     g.add((REC["obs-1"], ENERGY.observedAt, Literal("2026-08-28T08:00:00Z", datatype=XSD.dateTime)))
+    # energy:recordedAt is required on an Observation (the bitemporal
+    # recorded-time axis added alongside the valid-time observedAt): without
+    # it this "valid" candidate would itself be quarantined, and these tests
+    # would be asserting against the wrong baseline.
+    g.add((REC["obs-1"], ENERGY.recordedAt, Literal("2026-08-28T08:00:00Z", datatype=XSD.dateTime)))
     return g
 
 
@@ -46,8 +52,77 @@ def _candidate_with_one_invalid_observation() -> Graph:
     g.add((REC["obs-invalid"], RDF.type, ENERGY.Observation))
     g.add((REC["obs-invalid"], ENERGY.observedAsset, ASSET["WT-01"]))
     g.add((REC["obs-invalid"], ENERGY.observedAt, Literal("2026-08-28T08:00:00Z", datatype=XSD.dateTime)))
-    # Deliberately missing energy:value and energy:unit.
+    g.add((REC["obs-invalid"], ENERGY.recordedAt, Literal("2026-08-28T08:00:00Z", datatype=XSD.dateTime)))
+    # Deliberately missing energy:value and energy:unit -- and only those, so
+    # this record is invalid for exactly the reason the test names.
     return g
+
+
+def _candidate_with_a_dangling_reference() -> Graph:
+    """A perfectly valid WorkOrder pointing at an Asset that is not.
+
+    The Asset is missing its required energy:assetId, so it is quarantined.
+    The WorkOrder itself violates nothing -- until the Asset's rdf:type goes
+    with it, at which point the WorkOrder's own
+    `energy:concernsAsset sh:class energy:Asset` can no longer be satisfied.
+    A single validation pass never sees that second failure.
+    """
+    g = _valid_candidate()
+    g.add((ASSET["WT-99"], RDF.type, ENERGY.Asset))
+    # Deliberately no energy:assetId -- this is what makes WT-99 invalid.
+    g.add((REC["WO-DANGLING"], RDF.type, ENERGY.WorkOrder))
+    g.add((REC["WO-DANGLING"], ENERGY.workOrderId, Literal("WO-DANGLING")))
+    g.add((REC["WO-DANGLING"], ENERGY.status, Literal("open")))
+    g.add((REC["WO-DANGLING"], ENERGY.validFrom, Literal("2026-08-01T00:00:00Z", datatype=XSD.dateTime)))
+    g.add((REC["WO-DANGLING"], ENERGY.recordedAt, Literal("2026-08-01T00:00:00Z", datatype=XSD.dateTime)))
+    g.add((REC["WO-DANGLING"], ENERGY.concernsAsset, ASSET["WT-99"]))
+    return g
+
+
+class TestRevalidationFixpointClosesTheDanglingReferenceHole:
+    """The executable refutation of this module's former disclosed
+    limitation: quarantining a subject used to leave records referencing it
+    published and non-conformant. These fail against the single-pass
+    implementation this replaced."""
+
+    def test_the_published_graph_actually_conforms_after_quarantine(self):
+        publisher = DatasetPublisher(SHAPES)
+
+        report = publisher.stage_and_publish(_candidate_with_a_dangling_reference())
+
+        recheck = SHACLValidator(publisher.current, shapes_path=SHAPES).validate_report(target="energy")
+        assert recheck.conforms, [r.message for r in recheck.results]
+        assert report.conforms is True
+
+    def test_the_dangling_reference_is_pruned_and_its_record_survives(self):
+        publisher = DatasetPublisher(SHAPES)
+
+        report = publisher.stage_and_publish(_candidate_with_a_dangling_reference())
+
+        # The invalid asset is quarantined on the first pass...
+        assert {r.subject for r in report.quarantined_records} == {str(ASSET["WT-99"])}
+        # ...and the reference to it is pruned on a later one, rather than
+        # the whole (otherwise valid) work order being discarded.
+        assert report.revalidation_passes >= 2
+        pruned = [
+            reference for reference in report.pruned_references
+            if reference.predicate == str(ENERGY.concernsAsset)
+        ]
+        assert len(pruned) == 1
+        assert pruned[0].subject == str(REC["WO-DANGLING"])
+        assert pruned[0].iteration >= 1
+
+        assert (REC["WO-DANGLING"], RDF.type, ENERGY.WorkOrder) in publisher.current
+        assert (REC["WO-DANGLING"], ENERGY.concernsAsset, ASSET["WT-99"]) not in publisher.current
+
+    def test_a_clean_candidate_still_converges_in_one_pass(self):
+        publisher = DatasetPublisher(SHAPES)
+
+        report = publisher.stage_and_publish(_valid_candidate())
+
+        assert report.revalidation_passes == 1
+        assert report.quarantined_records == []
+        assert report.pruned_references == []
 
 
 class TestStageAndPublish:

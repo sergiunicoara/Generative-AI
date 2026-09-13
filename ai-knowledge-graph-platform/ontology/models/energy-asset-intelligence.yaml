@@ -1,0 +1,145 @@
+id: energy-asset-intelligence
+version: 1.0.0
+namespace: https://example.energy.demo/ontology#
+label: Synthetic Energy Asset Intelligence ontology
+unknown_property_policy: reject
+prefixes:
+  prov: http://www.w3.org/ns/prov#
+mixins:
+  Auditable:
+    label: Auditable
+    description: Shared lifecycle metadata without asserting an inheritance class.
+    properties:
+      createdAt:
+        datatype: dateTime
+      updatedAt:
+        datatype: dateTime
+types:
+  Asset:
+    label: Asset
+    lpg_label: ASSET
+    description: An operational asset with a stable source identifier.
+    mixins: [Auditable]
+    properties:
+      assetId:
+        datatype: string
+        required: true
+        key: true
+  WindTurbine:
+    label: Wind turbine
+    lpg_label: WIND_TURBINE
+    extends: Asset
+  Component:
+    label: Component
+    lpg_label: COMPONENT
+    mixins: [Auditable]
+    properties:
+      componentType:
+        datatype: string
+  Site:
+    label: Site
+    lpg_label: SITE
+  Observation:
+    label: Observation
+    lpg_label: OBSERVATION
+    extends: prov:Entity
+    mixins: [Auditable]
+    properties:
+      metric:
+        datatype: string
+      value:
+        datatype: decimal
+        required: true
+      unit:
+        datatype: string
+        required: true
+      observedAt:
+        datatype: dateTime
+        required: true
+      recordedAt:
+        datatype: dateTime
+        required: true
+        description: >-
+          Bitemporal recorded-time axis: when the platform learned this
+          reading, distinct from observedAt (the valid-time axis: when the
+          reading was actually taken). Equal to observedAt for an
+          immediately-ingested reading; later than observedAt for a
+          late-arriving correction to an earlier reading.
+  WorkOrder:
+    label: Work order
+    lpg_label: WORK_ORDER
+    extends: prov:Entity
+    mixins: [Auditable]
+    properties:
+      workOrderId:
+        datatype: string
+        key: true
+      status:
+        datatype: string
+      validFrom:
+        datatype: dateTime
+        required: true
+        description: Bitemporal valid-time axis -- when this status took effect.
+      recordedAt:
+        datatype: dateTime
+        required: true
+        description: Bitemporal recorded-time axis -- when SAP reported this status.
+  TechnicalDocument:
+    label: Technical document
+    lpg_label: TECHNICAL_DOCUMENT
+    extends: prov:Entity
+    abstract: true
+  DocumentRevision:
+    label: Document revision
+    lpg_label: DOCUMENT_REVISION
+    extends: TechnicalDocument
+    properties:
+      documentId:
+        datatype: string
+        required: true
+        key: true
+      appliesToComponentType:
+        datatype: string
+      temperatureReviewThreshold:
+        datatype: decimal
+      validFrom:
+        datatype: dateTime
+        required: true
+      validTo:
+        datatype: dateTime
+      recordedAt:
+        datatype: dateTime
+        required: true
+        description: >-
+          Bitemporal recorded-time axis -- when the platform learned this
+          bulletin revision existed, distinct from validFrom/validTo (the
+          valid-time axis: when the revision's guidance applies).
+  MaintenanceReviewFinding:
+    label: Maintenance review finding
+    lpg_label: MAINTENANCE_REVIEW_FINDING
+relations:
+  hasAsset:
+    source: Site
+    target: Asset
+    lpg_type: HAS_ASSET
+  hasComponent:
+    source: Asset
+    target: Component
+    lpg_type: HAS_COMPONENT
+  observedAsset:
+    source: Observation
+    target: Asset
+    lpg_type: OBSERVED_ASSET
+  concernsAsset:
+    source: WorkOrder
+    target: Asset
+    lpg_type: CONCERNS_ASSET
+  supersedes:
+    source: DocumentRevision
+    target: DocumentRevision
+    lpg_type: SUPERSEDES
+artifacts:
+  owl: ontology/energy/energy-asset-intelligence.ttl
+  shacl: ontology/shapes/energy-asset-intelligence.shapes.ttl
+  neo4j: ontology/generated/energy/neo4j-constraints.cypher
+  diagnostics: ontology/generated/energy/diagnostics.json

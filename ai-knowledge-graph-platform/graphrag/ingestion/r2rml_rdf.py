@@ -23,7 +23,9 @@ guessed at. Supported per ``rr:TriplesMap``:
 - ``rr:subjectMap`` with a single-column ``rr:template`` and one or more
   ``rr:class`` declarations (subject IRI + explicit ``rdf:type`` triples).
 - ``rr:predicateObjectMap`` with ``rr:objectMap/rr:column`` -- a literal
-  triple straight from the row.
+  triple straight from the row, with an optional ``rr:datatype`` (e.g.
+  ``xsd:dateTime`` for a bitemporal timestamp column). Without ``rr:datatype``
+  the literal is untyped, matching the source column's own Python type.
 - ``rr:predicateObjectMap`` with ``rr:objectMap/rr:parentTriplesMap`` +
   ``rr:joinCondition`` -- a triple whose object is the *parent* row's
   subject IRI. The parent ``rr:TriplesMap`` must already have been
@@ -34,9 +36,9 @@ guessed at. Supported per ``rr:TriplesMap``:
   value (typically an IRI, e.g. a provenance source tag) attached to every
   row unconditionally, independent of any column.
 
-Anything else -- a multi-column template, ``rr:datatype``, ``rr:language``,
-an object map that is not exactly one of ``rr:column``,
-``rr:parentTriplesMap``, or ``rr:constant`` -- raises ``R2RMLMappingError``.
+Anything else -- a multi-column template, ``rr:language``, an object map
+that is not exactly one of ``rr:column``, ``rr:parentTriplesMap``, or
+``rr:constant`` -- raises ``R2RMLMappingError``.
 """
 
 from __future__ import annotations
@@ -112,8 +114,9 @@ async def materialize_r2rml(
             column = mapping_graph.value(object_map, RR.column)
             parent_map = mapping_graph.value(object_map, RR.parentTriplesMap)
             constant = mapping_graph.value(object_map, RR.constant)
-            if mapping_graph.value(object_map, RR.datatype) is not None:
-                raise R2RMLMappingError("rr:datatype is not supported")
+            datatype = mapping_graph.value(object_map, RR.datatype)
+            if datatype is not None and column is None:
+                raise R2RMLMappingError("rr:datatype is only supported alongside rr:column")
             if mapping_graph.value(object_map, RR.language) is not None:
                 raise R2RMLMappingError("rr:language is not supported")
             shapes = [v for v in (column, parent_map, constant) if v is not None]
@@ -123,7 +126,7 @@ async def materialize_r2rml(
                     "rr:parentTriplesMap, or rr:constant"
                 )
             if column is not None:
-                resolved_poms.append((predicate, "column", str(column), None))
+                resolved_poms.append((predicate, "column", str(column), datatype))
             elif constant is not None:
                 # A fixed value attached to every row -- e.g. a provenance
                 # IRI naming the source system, not derived from any column.
@@ -164,7 +167,21 @@ async def materialize_r2rml(
                     value = row.get(key)
                     if value is None:
                         continue
-                    out.add((subject, predicate, Literal(value)))
+                    datatype = extra
+                    if datatype is not None:
+                        # str() first, not the raw column value: rdflib's
+                        # Literal(value, datatype=...) keeps the *passed*
+                        # value's own Python type for toPython() rather than
+                        # re-parsing it through the datatype's own converter
+                        # -- the identical ill-typed-literal fix already
+                        # applied in rml_rdf.py and demo.py's own bulletin
+                        # construction (Literal(96.0, datatype=XSD.decimal)
+                        # would stay a float, not a Decimal; the same
+                        # applies to a raw sqlite3 string being reused as-is
+                        # for an xsd:dateTime column).
+                        out.add((subject, predicate, Literal(str(value), datatype=datatype)))
+                    else:
+                        out.add((subject, predicate, Literal(value)))
                 elif kind == "constant":
                     out.add((subject, predicate, key))
                 else:

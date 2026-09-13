@@ -27,6 +27,14 @@ WORKFLOW = [
     ("run_demo", [sys.executable, "scripts/run_energy_demo.py", "--export-turtle", "artifacts/energy-demo.ttl"]),
     ("run_historical", [sys.executable, "scripts/run_energy_demo.py", "--as-of", "2026-05-01T00:00:00Z"]),
     ("evaluate", [sys.executable, "scripts/evaluate_energy_demo.py"]),
+    ("run_e2e", [sys.executable, "scripts/run_energy_demo_e2e.py"]),
+    (
+        "scorecard",
+        [
+            sys.executable, "scripts/build_energy_evaluation_report.py",
+            "--latency-iterations", "1", "--ingestion-iterations", "1",
+        ],
+    ),
     ("unit_tests", [sys.executable, "-m", "pytest", "tests/unit/test_energy_demo.py", "-q"]),
 ]
 

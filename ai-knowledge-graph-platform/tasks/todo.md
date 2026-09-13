@@ -570,3 +570,133 @@ valid; targeted Ruff checks passed.
 - [x] Update Graphify and document verified outcomes, limitations, and residual risks.
 
 **Verified:** 1,712 passed, 7 skipped, 0 failed; changed-file Ruff passed.
+
+---
+
+## Energy Asset Intelligence production hardening (2026-09-12)
+
+Full plan and defect evidence table: `~/.claude/plans/starry-weaving-beaver.md`.
+Decisions taken: graph-only retrieval (no vector claim for Energy); governance
+state in SQLAlchemy-async/SQLite, deliberately NOT Neo4j (a rebuildable
+projection must not own governance history); workflow states
+`review_required → {approved, rejected}`, `approved → {completed, cancelled}`;
+typed Neo4j edges dual-written alongside `RELATES_TO` for one release.
+
+### Phase 0 — Delivery baseline
+- [ ] Mirror the plan into this file as checkable items
+- [ ] Stage the untracked release dependencies (`graphrag/semantic_model/`,
+      `ontology/models/`, `ontology/generated/energy/`, `tests/unit/test_semantic_model.py`)
+- [ ] Declare the undeclared `gTTS` presentation dependency
+- [ ] Gate: `make semantic-model-check` passes; staged additions visible
+
+### Phase 1 — Async coherence (gap A) — DONE 2026-09-12
+- [x] `EnergyDemoService.create()` async classmethod; `_build_graph` async
+- [x] The two genuinely-broken async call sites fixed: `scripts/project_energy_rdf_to_neo4j.py`
+      and `tests/e2e/test_live_graphdb.py` (4 sites) now `await .create(...)`
+- [x] Sync construction inside a running loop raises a clear error naming `.create()`
+- [x] Gate: `async def` regression tests in `test_energy_demo.py` + live subprocess test
+      of `project_energy_rdf_to_neo4j.py` against real testcontainers Neo4j (new
+      `tests/e2e/test_live_energy_neo4j_projection.py`)
+- [x] Bonus: fixed a latent stale-assertion bug in `test_live_graphdb.py` ("96" vs "96.0")
+      that was masked by the async crash and never previously reached
+
+### Phase 2 — Bitemporal + provenance data foundation — DONE 2026-09-12
+- [x] YAML model gains `recordedAt` (Observation, DocumentRevision) and `validFrom`+`recordedAt`
+      (WorkOrder); artifacts recompiled and `--check`-verified
+- [x] R2RML mapping gains `validFrom`/`recordedAt` on WorkOrder; RML mapping gains `recordedAt`
+      on Observation; `_add_bulletin()` gains `recorded_at`
+- [x] `materialize_r2rml()` extended to support `rr:column` + `rr:datatype` (previously rejected
+      outright) -- needed to carry real typed `xsd:dateTime` through the SAP/R2RML path
+- [x] Gate: `--check` byte-stable; zero quarantined records; new test asserts every Observation/
+      WorkOrder/DocumentRevision instance in the real published graph carries both temporal axes
+- [ ] **Deferred to Phase 4, deliberately**: injecting the actual late-arriving-correction
+      duplicate observation record. Doing it now (before Phase 4's temporal-aware query exists to
+      resolve two records for the same reading) would just break every current
+      exactly-one-observation assertion for no benefit until Phase 4 anyway.
+
+### Phase 3 — Query-derived answers and evidence (gap B) — DONE 2026-09-13
+- [x] `answers.py` + `vocabulary.py`: one derivation per question id, each executing a
+      version-controlled `.rq`; `demo.py` delegates
+- [x] 4 new queries (`authoritative_bulletin`, `open_work_orders`, `revision_change`,
+      `insufficient_evidence`) + `maintenance_review` extended; zero literal
+      temperatures/work-orders/turbines/thresholds/dates in any template
+- [x] Evidence rows derived per question from the graph's own provenance triples;
+      `source_type` mechanically derived from `prov:wasDerivedFrom`
+- [x] Bulletin selection derived from stored `validFrom`/`validTo` (valid-time only;
+      recorded-time filtering and missing/conflicting/expired handling stay Phase 4)
+- [x] `insufficient_evidence` is a real query -- finds 8 assets, including WT-02, which the
+      old hard-coded "WT-04 through WT-10" text wrongly claimed was assessable
+- [x] Dashboard tiles + guidance panel derived (were hard-coded "1 / 2 / 3 of 10", "96°C")
+- [x] Gate: 15 mutation tests in `tests/unit/test_energy_answer_derivation.py`
+- [x] Found and fixed: committed `artifacts/energy-demo-sap.sqlite` was stale vs the Phase 2
+      schema, silently quarantining all 3 work orders; regenerated + pinned by a new test
+
+### Phase 4 — Temporal correctness (gap C) — DONE 2026-09-13
+- [x] Explicit `as_of` (valid time) and `known_as` (recorded time) axes through service + API.
+      Key rule: `as_of` alone defaults `known_as` to `as_of` ("as we knew it then"), which makes
+      citing a later-recorded fact structurally impossible
+- [x] Invariant enforced in `_assert_within_view` (raises `TemporalInvariantError`, fail-closed)
+      and asserted across every question at several views
+- [x] Bulletin selection returns `BulletinSelection` with explicit
+      `current` / `missing` / `expired` / `conflicting` outcomes; an overlapping supersession
+      resolves and records that it did
+- [x] Late-arriving correction added (WT-01 08:00 reading, 96.0 -> 91.5, recorded 5 days later)
+      with `FILTER NOT EXISTS` composite (observedAt, recordedAt) selection -- verified portable
+      against live GraphDB
+- [x] Gate: 14 tests in `tests/unit/test_energy_temporal_correctness.py`; correction invisible
+      before it was recorded, visible after, same valid-time instant either way
+
+### Phase 5 — Durable publication and workflow (gap D)
+#### Phase 5a — publication correctness — DONE 2026-09-13
+- [x] `graph_blobs.py`: content-addressed canonical N-Triples (sorted, sha256), atomic
+      `os.replace` write, no-op re-write for identical content
+- [x] `ShaclResult.value` added (additive) -- unblocks triple-granularity pruning
+- [x] SHACL prune→revalidate fixpoint (`DatasetPublisher.stage_and_publish`) closes the
+      disclosed dangling-reference hole: triple-level pruning when SHACL names a referential
+      IRI value, subject-level quarantine otherwise, fails closed on no-progress/max-passes
+- [x] Gate: confirmed the new test fails against the OLD single-pass logic (published graph
+      genuinely non-conformant: "Value does not have class energy:Asset"); 22 tests pass
+      (14 publication + 8 blob); E2E scenario + eval script still exit 0, 0 quarantined
+
+#### Phase 5b — durable store, workflow, concurrency — DONE 2026-09-13
+- [x] `governance_store.py` (SQLAlchemy async/SQLite WAL): publication versions, quarantine
+      records, active-version pointer, workflow state + transitions, command receipts
+- [x] `BEGIN IMMEDIATE` + CAS with exact rowcount; SHACL fixpoint and blob write run outside the write lock
+- [x] Idempotent command receipts; reused id with different args rejected
+- [x] `_KNOWN_WORK_ORDERS` deleted; existence derives from the active published graph
+- [x] API module globals → `Depends`; lifespan opens the store, lifecycle closes it
+- [x] Gate: two OS processes conflict (one wins, one receives a conflict); restart survives; log replay equals head
+
+**Phase 5b review:** `tests/unit/test_energy_governance_store.py`,
+`tests/unit/test_energy_operational_workflow.py`, and
+`tests/unit/test_energy_demo_routes.py` cover WAL restart persistence, a true
+two-process stale CAS conflict, idempotent byte-for-byte HTTP replay, transition-log
+replay, active-graph work-order lookup, and the API's 409 stale-write response.
+
+### Phase 6 — Governed projection (gap E)
+- [ ] `Neo4jClient.run_in_transaction` (additive)
+- [ ] Single-pass `TripleLedger`: projected / excluded-by-named-rule / rejected, summing to `len(graph)`
+- [ ] Fidelity: decimal lexical form, language tags, all rdf:types as labels, all provenance sources
+- [ ] Typed edges dual-written; `(tenant, relation)` index added
+- [ ] Versioned publication via CAS pointer flip; retire N−2 scoped by tenant + projection marker
+- [ ] Gate: ledger totals; written-side count assertion; tenant-leak tests
+
+### Phase 7 — Live Neo4j acceptance (gap F)
+- [ ] Live testcontainers projection, read-back, directed traversal, bounded impact query
+- [ ] Evidence bundle, tenant isolation, refresh, retry/restart
+- [ ] Measured traversal-vs-SPARQL comparison; graph-only retrieval stated explicitly
+
+### Phase 8 — E2E acceptance runner (gap G)
+- [ ] `--mode offline|live`, 15 checks, unique tenant per run, never wipes a user database
+- [ ] Machine-readable report: commit/worktree identity, versions, fingerprints, per-check evidence
+
+### Phase 9 — Reproducible delivery and CI (gap H)
+- [ ] Clean staged-snapshot verification in a fresh venv
+- [ ] CI separates deterministic checks from service-dependent acceptance
+- [ ] One final integrated regression with captured output
+
+### Phase 10 — Documentation and presentation (gap I)
+- [ ] Docs/diagram/README/interview material match the verified implementation
+- [ ] Demonstrated vs. not, offline vs. live, synthetic vs. customer, local vs. enterprise-scale
+- [ ] Teaser + walkthrough regenerated from the final run, with per-scene provenance recorded
+- [ ] Rendered output inspected for readable text, caption/narration alignment, audio, accurate claims

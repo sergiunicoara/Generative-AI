@@ -1,6 +1,7 @@
 """FastAPI application — AI Knowledge Graph & Ontology Platform API with OAuth 2.0."""
 
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 import structlog
 from fastapi import Depends, FastAPI
@@ -26,6 +27,24 @@ async def lifespan(app: FastAPI):
     """Run startup checks before accepting traffic, teardown on shutdown."""
     from graphrag.observability.tracing import configure_tracing
     configure_tracing("graphrag-api")
+    # The Energy POC has a small, real governance boundary rather than
+    # module-level in-memory state.  All workers share its SQLite/WAL store
+    # (or a configured async Postgres URL), while RDF itself lives in
+    # content-addressed blobs and can still be projected into Neo4j.
+    from graphrag.domains.energy.demo import EnergyDemoService
+    from graphrag.domains.energy.governance_store import GovernanceStore
+    from graphrag.domains.energy.workflow import MaintenanceWorkflow
+
+    energy_store = GovernanceStore()
+    await energy_store.open()
+    source_db = Path(__file__).resolve().parents[1] / "artifacts" / "energy-demo-sap.sqlite"
+    energy_service = await EnergyDemoService.create(
+        source_db=source_db if source_db.exists() else None,
+        governance_store=energy_store,
+    )
+    app.state.energy_governance_store = energy_store
+    app.state.energy_demo_service = energy_service
+    app.state.energy_demo_workflow = MaintenanceWorkflow(energy_store, tenant=energy_service.tenant)
     # ── Startup ───────────────────────────────────────────────────────────────
     # Resolve the OAuth resource identifiers once, here, so a malformed
     # GRAPHRAG_API_RESOURCE / GRAPHRAG_MCP_RESOURCE aborts startup instead of
@@ -72,6 +91,7 @@ async def lifespan(app: FastAPI):
         # ── Shutdown ──────────────────────────────────────────────────────────
         from graphrag.core.lifecycle import close_shared_resources
 
+        await energy_store.close()
         await close_shared_resources()
         log.info("shutdown.complete")
 

@@ -30,15 +30,26 @@ def create_sap_fixture_sqlite(path: Path) -> None:
             DROP TABLE IF EXISTS sap_assets;
             DROP TABLE IF EXISTS sap_work_orders;
             CREATE TABLE sap_assets (asset_id TEXT PRIMARY KEY, asset_name TEXT NOT NULL);
-            CREATE TABLE sap_work_orders (work_order_id TEXT PRIMARY KEY, asset_id TEXT NOT NULL, status TEXT NOT NULL);
+            CREATE TABLE sap_work_orders (
+                work_order_id TEXT PRIMARY KEY, asset_id TEXT NOT NULL, status TEXT NOT NULL,
+                valid_from TEXT NOT NULL, recorded_at TEXT NOT NULL
+            );
         """)
         conn.executemany(
             "INSERT INTO sap_assets VALUES (?, ?)",
             [(f"WT-{index:02d}", f"Wind turbine WT-{index:02d}") for index in range(1, 11)],
         )
+        # valid_from: when this status took effect (bitemporal valid-time
+        # axis). recorded_at: when SAP reported it (recorded-time axis) --
+        # equal to valid_from here since this synthetic export has no sync
+        # lag; a real SAP integration's recorded_at can differ.
         conn.executemany(
-            "INSERT INTO sap_work_orders VALUES (?, ?, ?)",
-            [("WO-9001", "WT-01", "open"), ("WO-9002", "WT-02", "open"), ("WO-9003", "WT-03", "closed")],
+            "INSERT INTO sap_work_orders VALUES (?, ?, ?, ?, ?)",
+            [
+                ("WO-9001", "WT-01", "open", "2026-08-15T09:00:00Z", "2026-08-15T09:00:00Z"),
+                ("WO-9002", "WT-02", "open", "2026-08-18T09:00:00Z", "2026-08-18T09:00:00Z"),
+                ("WO-9003", "WT-03", "closed", "2026-07-01T09:00:00Z", "2026-07-01T09:00:00Z"),
+            ],
         )
         conn.commit()
     finally:

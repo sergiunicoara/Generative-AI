@@ -2,6 +2,7 @@
 @prefix energy: <https://example.energy.demo/ontology#> .
 @prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
 @prefix prov: <http://www.w3.org/ns/prov#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
 
 energy:AssetMap a rr:TriplesMap;
   rr:logicalTable [ rr:tableName "sap_assets" ];
@@ -17,6 +18,12 @@ energy:WorkOrderMap a rr:TriplesMap;
   rr:predicateObjectMap [ rr:predicate rdfs:label; rr:objectMap [ rr:column "work_order_id" ] ];
   rr:predicateObjectMap [ rr:predicate energy:workOrderId; rr:objectMap [ rr:column "work_order_id" ] ];
   rr:predicateObjectMap [ rr:predicate energy:status; rr:objectMap [ rr:column "status" ] ];
+  # Bitemporal columns: validFrom (valid-time -- when this status took
+  # effect) and recordedAt (recorded-time -- when SAP reported it). rr:column
+  # + rr:datatype is a real, executed R2RML construct (materialize_r2rml()),
+  # not approximated.
+  rr:predicateObjectMap [ rr:predicate energy:validFrom; rr:objectMap [ rr:column "valid_from"; rr:datatype xsd:dateTime ] ];
+  rr:predicateObjectMap [ rr:predicate energy:recordedAt; rr:objectMap [ rr:column "recorded_at"; rr:datatype xsd:dateTime ] ];
   rr:predicateObjectMap [ rr:predicate prov:wasDerivedFrom; rr:objectMap [ rr:constant <urn:synthetic:sap:work-orders> ] ];
   rr:predicateObjectMap [
     rr:predicate energy:concernsAsset;

@@ -30,6 +30,7 @@ sys.path.insert(0, str(ROOT / "scripts"))
 # Matches tests/unit/test_r2rml_rdf_materialization.py's exact import
 # pattern for this script-shaped fixture builder.
 from create_energy_demo_sqlite import create as create_energy_demo_sqlite  # noqa: E402
+from graphrag.domains.energy.answers import render_query  # noqa: E402
 from graphrag.domains.energy.demo import EnergyDemoService  # noqa: E402
 from graphrag.graph.triplestore import TripleStoreTarget  # noqa: E402
 
@@ -59,13 +60,24 @@ pytestmark = pytest.mark.skipif(
 _IMAGE = "ontotext/graphdb:10.8.1"
 _CONTAINER_PORT = 7200
 
-_MAINTENANCE_QUERY_PATH = ROOT / "evals" / "energy_demo" / "sparql" / "maintenance_review.rq"
+# Pinned to an instant before the late-arriving WT-01 correction was recorded
+# (2026-09-02T10:00Z), so the fixed expectations below describe one known
+# state rather than drifting as the telemetry fixture grows. The same instant
+# is pinned in tests/unit/test_energy_demo.py's contract test.
+_AS_OF = "2026-08-28T12:00:00Z"
 
 
 def _maintenance_review_query() -> str:
-    """Match EnergyDemoService.answer()'s committed-query execution path."""
-    return _MAINTENANCE_QUERY_PATH.read_text(encoding="utf-8").replace(
-        "{{BULLETIN_ID}}", "MFG-GBX-17-R2",
+    """Match EnergyDemoService.answer()'s committed-query execution path.
+
+    Rendered through answers.render_query rather than a local string replace,
+    so this test executes byte-for-byte what production executes -- including
+    the bitemporal AS_OF/KNOWN_AS filters, which a local substitution would
+    have silently left as literal {{...}} and failed to parse.
+    """
+    return render_query(
+        "maintenance_review.rq",
+        BULLETIN_ID="MFG-GBX-17-R2", AS_OF=_AS_OF, KNOWN_AS=_AS_OF,
     )
 
 
@@ -74,7 +86,14 @@ def _assert_maintenance_result(rows: list[dict]) -> None:
     row = rows[0]
     assert row["asset"].endswith("/WT-01")
     assert row["workOrder"].endswith("/WO-9001")
-    assert row["temperature"] == "96"
+    # "96.0", not "96": matches the xsd:decimal literal's actual lexical form
+    # -- the same value tests/unit/test_energy_demo.py's in-memory SPARQL
+    # assertion and demo.py's own evidence already expect. This assertion
+    # was never previously reached: gap A's async-construction bug crashed
+    # EnergyDemoService(db_path) (an async test method calling the sync
+    # constructor) before execution ever got here, so this stale "96" typo
+    # was masked until this session's fix let the test run to completion.
+    assert row["temperature"] == "96.0"
     assert row["threshold"] == "85.0"
 
 
@@ -125,7 +144,7 @@ class TestLiveGraphDBEnergyRecovery:
     ) -> None:
         db_path = tmp_path / "energy-demo-sap.sqlite"
         create_energy_demo_sqlite(db_path)
-        ttl_bytes = EnergyDemoService(db_path).export_turtle().encode("utf-8")
+        ttl_bytes = (await EnergyDemoService.create(db_path)).export_turtle().encode("utf-8")
 
         target = TripleStoreTarget(
             "graphdb", _endpoint_url(graphdb_container), repository="kg_e2e",
@@ -144,7 +163,7 @@ class TestLiveGraphDBEnergyRecovery:
         tolerance check in TripleStoreTarget._ensure_graphdb_repository()."""
         db_path = tmp_path / "energy-demo-sap.sqlite"
         create_energy_demo_sqlite(db_path)
-        ttl_bytes = EnergyDemoService(db_path).export_turtle().encode("utf-8")
+        ttl_bytes = (await EnergyDemoService.create(db_path)).export_turtle().encode("utf-8")
         endpoint = _endpoint_url(graphdb_container)
 
         first = await TripleStoreTarget("graphdb", endpoint, repository="kg_idempotent").load(ttl_bytes)
@@ -161,7 +180,7 @@ class TestLiveGraphDBEnergyRecovery:
         in-memory session within one running container."""
         db_path = tmp_path / "energy-demo-sap.sqlite"
         create_energy_demo_sqlite(db_path)
-        ttl_bytes = EnergyDemoService(db_path).export_turtle().encode("utf-8")
+        ttl_bytes = (await EnergyDemoService.create(db_path)).export_turtle().encode("utf-8")
 
         target = TripleStoreTarget(
             "graphdb", _endpoint_url(graphdb_container), repository="kg_restart",
@@ -196,7 +215,7 @@ class TestLiveGraphDBEnergyRecovery:
         source = TripleStoreTarget(
             "graphdb", _endpoint_url(graphdb_container), repository="kg_recovery_source",
         )
-        await source.load(EnergyDemoService(db_path).export_turtle().encode("utf-8"))
+        await source.load((await EnergyDemoService.create(db_path)).export_turtle().encode("utf-8"))
         before = await source.query(_maintenance_review_query())
         _assert_maintenance_result(before)
 

@@ -36,6 +36,7 @@ def _build_writer():
         writer._cycle_detector = AsyncMock()
         writer._quarantine = AsyncMock()
         writer._contradiction = AsyncMock()
+        writer._semantic_validator = None
         writer._changed_by = "test"
         writer._registry_loaded_tenants = set()
         writer._ontology_loaded = True

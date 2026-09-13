@@ -73,6 +73,8 @@ COMMANDS: dict[str, dict[str, object]] = TRACE["commands"]
 RUN = str(COMMANDS["run_demo"]["stdout"])
 HISTORICAL = str(COMMANDS["run_historical"]["stdout"])
 EVALUATION = str(COMMANDS["evaluate"]["stdout"])
+E2E = str(COMMANDS["run_e2e"]["stdout"])
+SCORECARD = str(COMMANDS["scorecard"]["stdout"])
 TESTS = str(COMMANDS["unit_tests"]["stdout"])
 
 SCENES = [
@@ -80,7 +82,7 @@ SCENES = [
         "run_summary", "Real workflow capture", 18,
         "This is a recorded run of the Energy Asset Intelligence proof of concept. "
         "The film is rendered from actual command stdout, exit codes, and timestamps "
-        "captured in this repository. All six commands in this trace completed with "
+        "captured in this repository. All eight commands in this trace completed with "
         "exit code zero.",
     ),
     Scene(
@@ -99,7 +101,7 @@ SCENES = [
     ),
     Scene(
         "run_demo", "Run the RDF evidence demo", 28,
-        "The deterministic service then creates and exports an RDF Turtle graph. "
+        "The deterministic service executes the committed mappings and exports an RDF Turtle graph. "
         "The captured maintenance assessment identifies WT-01, its 96 degree "
         "temperature, the 85 degree threshold from bulletin R2, and open work "
         "order WO-9001. The returned evidence includes the SAP, Snowflake, and "
@@ -115,15 +117,32 @@ SCENES = [
         "shacl", "Reject an invalid observation", 20,
         "The same demo run invokes SHACL validation against a deliberately "
         "incomplete observation. The captured result says conforms false and lists "
-        "the missing value and unit requirements. This proves that the semantic "
-        "validation code executed during the run.",
+        "the missing value and unit requirements. In the main path, that same check "
+        "is a publication gate: invalid records are quarantined and the conformant "
+        "graph is versioned for serving and rollback.",
     ),
     Scene(
         "verification", "Evaluate and test the implementation", 25,
         "The recorded evaluator passes all five labelled scenarios. The targeted "
-        "unit suite also passes all four tests, covering answers, tenant isolation, "
-        "RDF serialization, SHACL validation, and the R2RML mapping contract. "
-        "This is the real, repeatable workflow demonstrated by the film.",
+        "unit suite covers answers, tenant isolation, RDF serialization, SHACL "
+        "validation, and the mapping contract. The next two recorded commands expand "
+        "that proof to the full RDF-to-Neo4j projection and measured scorecard.",
+    ),
+    Scene(
+        "e2e", "Run the complete governed path", 26,
+        "The updated end-to-end command executes R2RML and RML, checks SHACL "
+        "publication, runs the version-controlled SPARQL advisory, verifies the "
+        "historical and abstention boundaries, exports reparsable Turtle, and builds "
+        "the tenant-scoped Neo4j read-model batches. RDF remains authoritative; the "
+        "property graph is a rebuildable GraphRAG projection.",
+    ),
+    Scene(
+        "scorecard", "Measure the implementation", 24,
+        "The scorecard turns the working scenario into reviewable local evidence. "
+        "It records answer correctness, maintenance-evidence accuracy, abstention, "
+        "tenant isolation, publication freshness, local answer latency, and RDF "
+        "materialisation throughput. These are synthetic-fixture measurements, not "
+        "enterprise-scale claims.",
     ),
     Scene(
         "ui_current", "Present the operational answer", 20,
@@ -157,9 +176,10 @@ def base(index: int) -> tuple[Image.Image, ImageDraw.ImageDraw]:
     text(draw, (1225, 35), f"CAPTURED {TRACE['captured_at']}", 12, GOLD, True, "ra")
     text(draw, (52, 76), f"{index + 1:02d}", 16, GOLD, True)
     text(draw, (88, 70), SCENES[index].title, 30, WHITE, True)
+    step = 1120 / len(SCENES)
     for item in range(len(SCENES)):
-        x = 52 + item * 161
-        draw.line((x, 118, x + 141, 118), fill=GOLD if item <= index else (36, 68, 86), width=4)
+        x = 52 + item * step
+        draw.line((x, 118, x + step - 16, 118), fill=GOLD if item <= index else (36, 68, 86), width=4)
     return image, draw
 
 
@@ -179,13 +199,13 @@ def console(draw: ImageDraw.ImageDraw, command: str, output: list[str], status: 
 def draw_scene(index: int, image: Image.Image, draw: ImageDraw.ImageDraw) -> None:
     scene = SCENES[index]
     if scene.key == "run_summary":
-        panel(draw, (85, 160, 1195, 385), outline=GOLD)
+        panel(draw, (85, 150, 1195, 520), outline=GOLD)
         text(draw, (640, 215), "RECORDED COMMAND TRACE", 20, GOLD, True, "mm")
-        for item, y in (("create synthetic source", 270), ("validate R2RML", 310), ("export and run RDF demo", 350), ("run historical scenario", 390), ("evaluate labelled cases", 430), ("run targeted unit tests", 470)):
+        for item, y in (("create synthetic source", 255), ("validate R2RML", 292), ("export and run RDF demo", 329), ("run historical scenario", 366), ("evaluate labelled cases", 403), ("run complete E2E scenario", 440), ("build local scorecard", 477), ("run targeted unit tests", 514)):
             text(draw, (260, y), "✓", 23, GREEN, True, "mm")
             text(draw, (300, y), item, 20, WHITE)
-        panel(draw, (220, 525, 1060, 615), outline=GREEN)
-        text(draw, (640, 560), "6 commands completed · 6 exit codes were zero", 24, GREEN, True, "mm")
+        panel(draw, (220, 565, 1060, 655), outline=GREEN)
+        text(draw, (640, 600), "8 commands completed · 8 exit codes were zero", 24, GREEN, True, "mm")
     elif scene.key == "create_source":
         console(draw, str(COMMANDS["create_source"]["command"]), clean(str(COMMANDS["create_source"]["stdout"])).splitlines())
     elif scene.key == "validate_r2rml":
@@ -203,6 +223,19 @@ def draw_scene(index: int, image: Image.Image, draw: ImageDraw.ImageDraw) -> Non
     elif scene.key == "verification":
         output = clean(EVALUATION).splitlines()[-7:] + [""] + clean(TESTS).splitlines()[-3:]
         console(draw, str(COMMANDS["evaluate"]["command"]), output)
+    elif scene.key == "e2e":
+        output = lines_containing(E2E, (
+            '"scenario"', '"status": "passed"', 'R2RML relational-to-RDF',
+            'RML telemetry-to-RDF', 'governed RDF-to-Neo4j', '"rebuildable_read_model"',
+        ), 10)
+        console(draw, str(COMMANDS["run_e2e"]["command"]), output)
+    elif scene.key == "scorecard":
+        output = lines_containing(SCORECARD, (
+            '"report_schema_version"', '"answer_correctness"', '"evidence_accuracy"',
+            '"abstention"', '"tenant_isolation"', '"freshness"', '"latency"',
+            '"ingestion_throughput"',
+        ), 10)
+        console(draw, str(COMMANDS["scorecard"]["command"]), output)
     else:
         screenshot_name = {
             "ui_current": "dashboard_current.png",

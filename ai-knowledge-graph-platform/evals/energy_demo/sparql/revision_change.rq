@@ -1,0 +1,32 @@
+# What changed when this bulletin revision became effective?
+#
+# Replaces a hard-coded sentence that restated the revision ids, the cutover
+# date and both thresholds as prose. Every one of those now comes from the
+# supersedes edge and the two revisions' own triples.
+#
+# Zero rows is a meaningful result, not a failure: it means the revision
+# authoritative at the requested instant supersedes nothing (it is the
+# earliest one in evidence). The caller renders that case explicitly.
+PREFIX energy: <https://example.energy.demo/ontology#>
+PREFIX xsd: <http://www.w3.org/2001/XMLSchema#>
+SELECT ?bulletin ?bulletinId ?threshold ?validFrom ?recordedAt ?componentType
+       ?supersededBulletin ?supersededId ?supersededThreshold ?supersededValidFrom
+       ?supersededValidTo ?supersededRecordedAt
+WHERE {
+  VALUES ?bulletinId { "{{BULLETIN_ID}}" }
+  ?bulletin a energy:DocumentRevision ;
+            energy:documentId ?bulletinId ;
+            energy:temperatureReviewThreshold ?threshold ;
+            energy:appliesToComponentType ?componentType ;
+            energy:validFrom ?validFrom ;
+            energy:recordedAt ?recordedAt ;
+            energy:supersedes ?supersededBulletin .
+  ?supersededBulletin energy:documentId ?supersededId ;
+                      energy:temperatureReviewThreshold ?supersededThreshold ;
+                      energy:validFrom ?supersededValidFrom ;
+                      energy:recordedAt ?supersededRecordedAt .
+  OPTIONAL { ?supersededBulletin energy:validTo ?supersededValidTo }
+  # The superseded revision is only citable if the asking view already knew
+  # about it -- the same recorded-time rule every other citation obeys.
+  FILTER(?supersededRecordedAt <= "{{KNOWN_AS}}"^^xsd:dateTime)
+}

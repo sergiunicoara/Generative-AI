@@ -1,12 +1,49 @@
+# DO NOT EDIT — generated from energy-asset-intelligence.yaml.
 @prefix energy: <https://example.energy.demo/ontology#> .
+@prefix prov: <http://www.w3.org/ns/prov#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
 @prefix sh: <http://www.w3.org/ns/shacl#> .
 @prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
 
 energy:AssetShape a sh:NodeShape ; sh:targetClass energy:Asset ;
-  sh:property [ sh:path energy:assetId ; sh:minCount 1 ; sh:datatype xsd:string ] .
+  sh:property [ sh:path energy:assetId ; sh:datatype xsd:string ; sh:minCount 1 ] ;
+  sh:property [ sh:path energy:createdAt ; sh:datatype xsd:dateTime ] ;
+  sh:property [ sh:path energy:updatedAt ; sh:datatype xsd:dateTime ] ;
+  sh:property [ sh:path energy:hasComponent ; sh:nodeKind sh:IRI ; sh:class energy:Component ] .
+energy:ComponentShape a sh:NodeShape ; sh:targetClass energy:Component ;
+  sh:property [ sh:path energy:componentType ; sh:datatype xsd:string ] ;
+  sh:property [ sh:path energy:createdAt ; sh:datatype xsd:dateTime ] ;
+  sh:property [ sh:path energy:updatedAt ; sh:datatype xsd:dateTime ] .
+energy:DocumentRevisionShape a sh:NodeShape ; sh:targetClass energy:DocumentRevision ;
+  sh:property [ sh:path energy:appliesToComponentType ; sh:datatype xsd:string ] ;
+  sh:property [ sh:path energy:documentId ; sh:datatype xsd:string ; sh:minCount 1 ] ;
+  sh:property [ sh:path energy:recordedAt ; sh:datatype xsd:dateTime ; sh:minCount 1 ] ;
+  sh:property [ sh:path energy:temperatureReviewThreshold ; sh:datatype xsd:decimal ] ;
+  sh:property [ sh:path energy:validFrom ; sh:datatype xsd:dateTime ; sh:minCount 1 ] ;
+  sh:property [ sh:path energy:validTo ; sh:datatype xsd:dateTime ] ;
+  sh:property [ sh:path energy:supersedes ; sh:nodeKind sh:IRI ; sh:class energy:DocumentRevision ] .
 energy:ObservationShape a sh:NodeShape ; sh:targetClass energy:Observation ;
-  sh:property [ sh:path energy:value ; sh:minCount 1 ; sh:datatype xsd:decimal ] ;
-  sh:property [ sh:path energy:unit ; sh:minCount 1 ; sh:datatype xsd:string ] ;
-  sh:property [ sh:path energy:observedAt ; sh:minCount 1 ; sh:datatype xsd:dateTime ] .
-energy:RevisionShape a sh:NodeShape ; sh:targetClass energy:DocumentRevision ;
-  sh:property [ sh:path energy:validFrom ; sh:minCount 1 ; sh:datatype xsd:dateTime ] .
+  sh:property [ sh:path energy:createdAt ; sh:datatype xsd:dateTime ] ;
+  sh:property [ sh:path energy:metric ; sh:datatype xsd:string ] ;
+  sh:property [ sh:path energy:observedAt ; sh:datatype xsd:dateTime ; sh:minCount 1 ] ;
+  sh:property [ sh:path energy:recordedAt ; sh:datatype xsd:dateTime ; sh:minCount 1 ] ;
+  sh:property [ sh:path energy:unit ; sh:datatype xsd:string ; sh:minCount 1 ] ;
+  sh:property [ sh:path energy:updatedAt ; sh:datatype xsd:dateTime ] ;
+  sh:property [ sh:path energy:value ; sh:datatype xsd:decimal ; sh:minCount 1 ] ;
+  sh:property [ sh:path energy:observedAsset ; sh:nodeKind sh:IRI ; sh:class energy:Asset ] .
+energy:SiteShape a sh:NodeShape ; sh:targetClass energy:Site ;
+  sh:property [ sh:path energy:hasAsset ; sh:nodeKind sh:IRI ; sh:class energy:Asset ] .
+energy:WindTurbineShape a sh:NodeShape ; sh:targetClass energy:WindTurbine ;
+  sh:property [ sh:path energy:assetId ; sh:datatype xsd:string ; sh:minCount 1 ] ;
+  sh:property [ sh:path energy:createdAt ; sh:datatype xsd:dateTime ] ;
+  sh:property [ sh:path energy:updatedAt ; sh:datatype xsd:dateTime ] ;
+  sh:property [ sh:path energy:hasComponent ; sh:nodeKind sh:IRI ; sh:class energy:Component ] .
+energy:WorkOrderShape a sh:NodeShape ; sh:targetClass energy:WorkOrder ;
+  sh:property [ sh:path energy:createdAt ; sh:datatype xsd:dateTime ] ;
+  sh:property [ sh:path energy:recordedAt ; sh:datatype xsd:dateTime ; sh:minCount 1 ] ;
+  sh:property [ sh:path energy:status ; sh:datatype xsd:string ] ;
+  sh:property [ sh:path energy:updatedAt ; sh:datatype xsd:dateTime ] ;
+  sh:property [ sh:path energy:validFrom ; sh:datatype xsd:dateTime ; sh:minCount 1 ] ;
+  sh:property [ sh:path energy:workOrderId ; sh:datatype xsd:string ] ;
+  sh:property [ sh:path energy:concernsAsset ; sh:nodeKind sh:IRI ; sh:class energy:Asset ] .

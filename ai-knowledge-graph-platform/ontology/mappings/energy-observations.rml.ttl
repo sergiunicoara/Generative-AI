@@ -19,4 +19,7 @@ energy:ObservationMap a rr:TriplesMap;
   rr:predicateObjectMap [ rr:predicate energy:value; rr:objectMap [ rml:reference "value"; rr:datatype xsd:decimal ] ];
   rr:predicateObjectMap [ rr:predicate energy:unit; rr:objectMap [ rml:reference "unit" ] ];
   rr:predicateObjectMap [ rr:predicate energy:observedAt; rr:objectMap [ rml:reference "observed_at"; rr:datatype xsd:dateTime ] ];
+  # Bitemporal recorded-time axis: when the platform learned this reading,
+  # distinct from observedAt (valid-time: when it was actually taken).
+  rr:predicateObjectMap [ rr:predicate energy:recordedAt; rr:objectMap [ rml:reference "recorded_at"; rr:datatype xsd:dateTime ] ];
   rr:predicateObjectMap [ rr:predicate prov:wasDerivedFrom; rr:objectMap [ rr:constant <urn:synthetic:snowflake:telemetry> ] ].

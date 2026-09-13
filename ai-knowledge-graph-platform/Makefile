@@ -7,7 +7,7 @@ PYTEST    ?= $(PYTHON) scripts/run_pytest.py
 UVICORN   ?= $(PYTHON) -m uvicorn
 PIP       ?= $(PYTHON) -m pip
 
-.PHONY: help install install-dev lock test test-collect test-integration test-load test-all test-fuzz mutation lint \
+.PHONY: help install install-dev lock test test-collect test-integration test-load test-all test-fuzz mutation lint semantic-model-check \
 	typecheck ci \
 	terraform-fmt terraform-validate terraform-test terraform-security \
         api dashboard backup services-up services-down \
@@ -89,8 +89,12 @@ typecheck:     ## Type-check with mypy (advisory: 108 pre-existing errors remain
 # ── CI ─────────────────────────────────────────────────────────────────────────
 
 ci:            ## The one command CI runs: lint + unit tests (no live services, no Docker)
+	$(MAKE) semantic-model-check
 	$(MAKE) lint
 	$(MAKE) test
+
+semantic-model-check: ## Fail when generated Energy semantic artifacts drift from canonical YAML
+	$(PYTHON) -m graphrag.semantic_model compile ontology/models/energy-asset-intelligence.yaml --check
 
 # ── Services ───────────────────────────────────────────────────────────────────
 

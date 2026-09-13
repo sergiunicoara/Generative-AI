@@ -1,0 +1,123 @@
+{
+  "report_schema_version": "energy-evaluation/v1",
+  "generated_at": "2026-09-12T16:55:38.730415+00:00",
+  "dataset": "energy-demo/v1",
+  "synthetic": true,
+  "claim_policy": "This report is reproducible local evidence over a small synthetic Energy dataset. It demonstrates workflow correctness and implementation behavior only; it does not establish enterprise-scale throughput, production latency, availability, or customer outcomes.",
+  "answer_correctness": {
+    "available": true,
+    "passed": 5,
+    "total": 5,
+    "pass_rate": 1.0,
+    "cases": [
+      {
+        "id": "maintenance_review",
+        "expected_answer_values": [
+          "WT-01",
+          "MFG-GBX-17-R2"
+        ],
+        "expected_status": null,
+        "status": "advisory",
+        "passed": true
+      },
+      {
+        "id": "open_work_orders",
+        "expected_answer_values": [
+          "WO-9001",
+          "WO-9002"
+        ],
+        "expected_status": null,
+        "status": "advisory",
+        "passed": true
+      },
+      {
+        "id": "revision_change",
+        "expected_answer_values": [
+          "MFG-GBX-17-R2"
+        ],
+        "expected_status": null,
+        "status": "advisory",
+        "passed": true
+      },
+      {
+        "id": "historical_state",
+        "expected_answer_values": [
+          "MFG-GBX-17-R1"
+        ],
+        "expected_status": null,
+        "status": "advisory",
+        "passed": true
+      },
+      {
+        "id": "insufficient_evidence",
+        "expected_answer_values": [],
+        "expected_status": "insufficient_evidence",
+        "status": "insufficient_evidence",
+        "passed": true
+      }
+    ]
+  },
+  "evidence_accuracy": {
+    "available": true,
+    "passed": true,
+    "expected_source_ids": [
+      "MFG-GBX-17-R2",
+      "SAP-WO-9001",
+      "SNOW-OBS-WT-01"
+    ],
+    "observed_source_ids": [
+      "MFG-GBX-17-R2",
+      "SAP-WO-9001",
+      "SNOW-OBS-WT-01"
+    ],
+    "query_row_count": 1,
+    "query_row_matches": true,
+    "answer_source": "version-controlled SPARQL query"
+  },
+  "abstention": {
+    "available": true,
+    "passed": true,
+    "status": "insufficient_evidence"
+  },
+  "tenant_isolation": {
+    "available": true,
+    "passed": true,
+    "wrong_tenant_status": "not_found",
+    "evidence_count": 0
+  },
+  "freshness": {
+    "available": true,
+    "published_at": "2026-09-12T16:55:38.519239+00:00",
+    "publication_age_ms_at_report": 288.725,
+    "version_id": "b53f78a67d834343b1fb106a5846fcef",
+    "published_triple_count": 135,
+    "candidate_record_count": 29,
+    "quarantined_count": 0,
+    "synthetic_source_observed_at": [
+      "2026-06-01T00:00:00Z",
+      "2026-08-28T08:00:00Z",
+      "2026-08-28T08:15:00Z"
+    ],
+    "claim_policy": "published_at measures local in-process publication time. Source timestamps are synthetic fixture metadata, not an SLA or live-source freshness measurement."
+  },
+  "latency": {
+    "available": true,
+    "sample_count": 5,
+    "p50_latency_ms": 0.029,
+    "p95_latency_ms": 103.998,
+    "p99_latency_ms": 103.998,
+    "throughput_rps": 47.858,
+    "failed": 0,
+    "claim_policy": "Measured locally against a synthetic, in-process RDF graph; not a service latency SLA."
+  },
+  "ingestion_throughput": {
+    "available": true,
+    "iterations": 1,
+    "elapsed_seconds": 0.101793,
+    "candidate_records": 29,
+    "published_triples": 135,
+    "candidate_records_per_second": 284.892,
+    "published_triples_per_second": 1326.223,
+    "claim_policy": "Measured locally while materialising the tiny synthetic Energy fixture; it is a repeatable implementation check, not an enterprise ingestion-capacity benchmark."
+  }
+}

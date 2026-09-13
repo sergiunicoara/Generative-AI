@@ -37,6 +37,7 @@ The graph is not a RAG index. It is a formally modeled knowledge base:
 **Further reading:**
 - [`docs/demos/energy_asset_intelligence.md`](docs/demos/energy_asset_intelligence.md) — Energy Asset Intelligence POC: R2RML/RML → RDF → SHACL publication → SPARQL evidence → optional Neo4j GraphRAG read model
 - [`docs/demos/energy_demo_presentation_script.md`](docs/demos/energy_demo_presentation_script.md) — client-facing and technical script for the repeatable Energy E2E scenario
+- [`docs/presentation/energy-demo-evidence-manifest.md`](docs/presentation/energy-demo-evidence-manifest.md) — scene-to-command provenance and demo claim boundaries
 - [`docs/energy-production-readiness-preflight.md`](docs/energy-production-readiness-preflight.md) — repository controls versus client-environment deployment evidence
 - [`docs/roadmap.md`](docs/roadmap.md) — current implementation status, Context Graph evaluation gate, and scaling path
 - [`docs/archive/audits/audit-2026-08-21.md`](docs/archive/audits/audit-2026-08-21.md) — historical architecture, security, dependency, scalability, and state-of-the-art audit

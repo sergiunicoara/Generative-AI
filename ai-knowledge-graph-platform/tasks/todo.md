@@ -719,7 +719,14 @@ and runs Ruff plus deterministic Energy gates. Existing repository CI keeps
 unit/lint/clean-install separate from Docker-backed E2E and release evidence.
 
 ### Phase 10 — Documentation and presentation (gap I)
-- [ ] Docs/diagram/README/interview material match the verified implementation
-- [ ] Demonstrated vs. not, offline vs. live, synthetic vs. customer, local vs. enterprise-scale
-- [ ] Teaser + walkthrough regenerated from the final run, with per-scene provenance recorded
+- [x] Docs/diagram/README/interview material match the verified implementation
+- [x] Demonstrated vs. not, offline vs. live, synthetic vs. customer, local vs. enterprise-scale
+- [x] Teaser + walkthrough have a captured run and per-scene provenance manifest
 - [ ] Rendered output inspected for readable text, caption/narration alignment, audio, accurate claims
+
+**Phase 10 review:** `docs/presentation/energy-demo-evidence-manifest.md` maps
+the seven presentation scenes to the E2E report, mappings, ontology, SHACL,
+SPARQL, tests, and optional Neo4j projection. It explicitly labels synthetic
+fixture evidence and separates demonstrated repository behavior from client
+environment work. Final visual/audio inspection remains a manual media-QA
+step.

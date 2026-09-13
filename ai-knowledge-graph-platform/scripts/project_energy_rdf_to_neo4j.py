@@ -32,7 +32,9 @@ from graphrag.graph.neo4j_client import close_neo4j, get_neo4j  # noqa: E402
 async def _run(source_sqlite: Path | None, tenant: str) -> None:
     service = await EnergyDemoService.create(source_db=source_sqlite)
     try:
-        report = await project_to_neo4j(service.graph, get_neo4j(), tenant=tenant)
+        client = get_neo4j()
+        await client.init_schema()
+        report = await project_to_neo4j(service.graph, client, tenant=tenant)
     finally:
         await close_neo4j()
     print(

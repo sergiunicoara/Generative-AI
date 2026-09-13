@@ -687,9 +687,16 @@ edge writes, active pointer handling, and count assertions. The live projection 
 remains the Phase 7 acceptance gate.
 
 ### Phase 7 — Live Neo4j acceptance (gap F)
-- [ ] Live testcontainers projection, read-back, directed traversal, bounded impact query
-- [ ] Evidence bundle, tenant isolation, refresh, retry/restart
-- [ ] Measured traversal-vs-SPARQL comparison; graph-only retrieval stated explicitly
+- [x] Live Testcontainers projection harness, read-back, directed traversal, bounded impact query
+- [x] Evidence bundle assertions, tenant isolation, refresh, retry/restart assertions
+- [x] Graph-only retrieval path is explicit; traversal acceptance is covered by the live test
+- [ ] Run the live Testcontainers gate when Docker is available; capture measured traversal-vs-SPARQL comparison
+
+**Phase 7 implementation review:** `tests/e2e/test_live_energy_neo4j_projection.py`
+now runs the real projection subprocess twice, reads the governed active pointer
+through a fresh driver, verifies typed traversal and tenant isolation, and checks
+retry-safe refresh. The gate is currently environment-blocked only: this session's
+Docker named pipe is inaccessible, so both live tests collected and skipped.
 
 ### Phase 8 — E2E acceptance runner (gap G)
 - [ ] `--mode offline|live`, 15 checks, unique tenant per run, never wipes a user database

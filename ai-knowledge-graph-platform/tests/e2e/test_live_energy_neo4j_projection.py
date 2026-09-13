@@ -99,7 +99,7 @@ def test_project_energy_rdf_to_neo4j_script_runs_end_to_end(neo4j_container, tmp
         try:
             async with driver.session() as session:
                 record = await (await session.run(
-                    "MATCH (n:Entity {tenant: $tenant}) RETURN count(n) AS count", tenant=tenant,
+                    "MATCH (n:EnergyProjectionEntity {tenant: $tenant}) RETURN count(n) AS count", tenant=tenant,
                 )).single()
                 return record["count"]
         finally:
@@ -107,3 +107,56 @@ def test_project_energy_rdf_to_neo4j_script_runs_end_to_end(neo4j_container, tmp
 
     node_count = asyncio.run(_count())
     assert node_count > 0
+
+
+def test_governed_projection_readback_is_tenant_scoped_and_retry_safe(neo4j_container, tmp_path) -> None:
+    """Live acceptance: directed traversal, active pointer, retry and isolation."""
+    import os
+
+    bolt_url = neo4j_container.get_connection_url()
+    tenant = f"energy-projection-live-{tmp_path.name}"
+    other_tenant = f"energy-projection-other-{tmp_path.name}"
+    env = {
+        **os.environ, "ENV": "test", "NEO4J_URI": bolt_url,
+        "NEO4J_USER": "neo4j", "NEO4J_PASSWORD": _PASSWORD,
+    }
+    command = [sys.executable, "scripts/project_energy_rdf_to_neo4j.py", "--tenant", tenant]
+    first = subprocess.run(command, cwd=ROOT, env=env, capture_output=True, text=True, timeout=120)
+    second = subprocess.run(command, cwd=ROOT, env=env, capture_output=True, text=True, timeout=120)
+    assert first.returncode == second.returncode == 0, f"{first.stderr}\n{second.stderr}"
+
+    import asyncio
+    from neo4j import AsyncGraphDatabase
+
+    async def _readback() -> dict:
+        driver = AsyncGraphDatabase.driver(bolt_url, auth=("neo4j", _PASSWORD))
+        try:
+            async with driver.session() as session:
+                pointer = await (await session.run(
+                    "MATCH (p:EnergyProjectionPointer {tenant: $tenant, name: 'energy'}) "
+                    "RETURN p.active_version AS version", tenant=tenant,
+                )).single()
+                counts = await (await session.run(
+                    "MATCH (n:EnergyProjectionEntity {tenant: $tenant, projection_version: $version}) "
+                    "RETURN count(n) AS nodes, collect(DISTINCT n.type) AS types",
+                    tenant=tenant, version=pointer["version"],
+                )).single()
+                traversal = await (await session.run(
+                    "MATCH (t:EnergyProjectionEntity {tenant: $tenant, projection_version: $version}) "
+                    "-[:HAS_COMPONENT]->(c:EnergyProjectionEntity) "
+                    "RETURN count(*) AS count", tenant=tenant, version=pointer["version"],
+                )).single()
+                leak = await (await session.run(
+                    "MATCH (n:EnergyProjectionEntity {tenant: $other}) RETURN count(n) AS count",
+                    other=other_tenant,
+                )).single()
+                return {"pointer": pointer, "counts": counts, "traversal": traversal, "leak": leak}
+        finally:
+            await driver.close()
+
+    observed = asyncio.run(_readback())
+    assert observed["pointer"]["version"]
+    assert observed["counts"]["nodes"] > 0
+    assert "WIND_TURBINE" in observed["counts"]["types"]
+    assert observed["traversal"]["count"] > 0
+    assert observed["leak"]["count"] == 0

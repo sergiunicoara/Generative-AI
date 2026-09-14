@@ -1,8 +1,7 @@
 """Render an implementation-led Energy Asset Intelligence POC movie.
 
 The video presents the repository's implemented data and application paths.
-It intentionally distinguishes the current deterministic demo service from
-future query-backed RDF-store integration.
+It distinguishes the local synthetic workflow from customer deployment.
 """
 
 from __future__ import annotations
@@ -18,10 +17,13 @@ from pathlib import Path
 from gtts import gTTS
 from PIL import Image, ImageDraw, ImageFont
 
+from energy_movie_evidence import DISCLAIMER, mapping_counts
+
 W, H, FPS = 1280, 720, 24
 ROOT = Path(__file__).resolve().parent
 BUILD = ROOT / "energy_demo_movie_build"
 OUT = ROOT / "energy_asset_intelligence_implementation_demo.mp4"
+ENTITY_ROWS, RELATION_ROWS = mapping_counts()
 
 BG = (6, 17, 29)
 PANEL = (11, 33, 49)
@@ -173,6 +175,7 @@ def base(index: int) -> tuple[Image.Image, ImageDraw.ImageDraw]:
     text(draw, (1225, 36), "SYNTHETIC DATA · ADVISORY POC", 13, GOLD, True, "ra")
     text(draw, (54, 76), f"{index + 1:02d}", 16, GOLD, True)
     text(draw, (90, 70), SCENES[index].title, 30, WHITE, True)
+    text(draw, (640, 697), DISCLAIMER, 15, GOLD, anchor="mm")
     for item in range(len(SCENES)):
         x = 54 + item * 143
         draw.line((x, 118, x + 125, 118), fill=GOLD if item <= index else (37, 70, 87), width=4)
@@ -223,7 +226,7 @@ def scene_2(draw: ImageDraw.ImageDraw) -> None:
     text(draw, (730, 190), "Validation boundary", 18, GOLD, True)
     for index, line in enumerate(("1. Parse R2RML Turtle", "2. Read synthetic source rows", "3. Validate entity contracts", "4. Exit before graph write")):
         text(draw, (730, 245 + index * 36), line, 18, WHITE, index == 3)
-    command_box(draw, "python scripts/ingest_r2rml.py … --validate-only", ["ingest_r2rml.validated  tenant=energy-demo", "entity_rows=13  relation_rows=0"])
+    command_box(draw, "python scripts/ingest_r2rml.py … --validate-only", ["ingest_r2rml.validated  tenant=energy-demo", f"entity_rows={ENTITY_ROWS}  relation_rows={RELATION_ROWS}"])
 
 
 def scene_3(draw: ImageDraw.ImageDraw) -> None:
@@ -238,8 +241,7 @@ def scene_3(draw: ImageDraw.ImageDraw) -> None:
         node(draw, position, label, sublabel, GOLD if label in ("91.5 °C", "R2") else CYAN)
     for start, end in (((239, 315), (346, 220)), ((239, 315), (346, 380)), ((494, 220), (626, 220)), ((774, 220), (896, 315))):
         arrow(draw, start, end, GOLD)
-    text(draw, (640, 543), "Executed R2RML + RML graph with explicit types, links, dates, and provenance", 19, GREEN, True, "mm")
-    command_box(draw, "python scripts/run_energy_demo.py --export-turtle artifacts/energy-demo.ttl", ["Wrote RDF Turtle: artifacts/energy-demo.ttl"])
+    command_box(draw, "python scripts/run_energy_demo.py --export-turtle artifacts/energy-demo.ttl", ["Wrote RDF Turtle: artifacts/energy-demo.ttl", "Schematic evidence view above; explicit types, dates and provenance are in the RDF."])
 
 
 def scene_4(draw: ImageDraw.ImageDraw) -> None:
@@ -256,11 +258,11 @@ def scene_4(draw: ImageDraw.ImageDraw) -> None:
 def scene_5(draw: ImageDraw.ImageDraw) -> None:
     panel(draw, (80, 160, 570, 420), outline=GOLD)
     text(draw, (115, 200), "Manufacturer bulletin revisions", 18, GOLD, True)
-    text(draw, (135, 280), "R1", 28, WHITE, True)
-    text(draw, (135, 325), "90 °C · valid from 2026-01-01", 17, MUTED)
-    arrow(draw, (310, 305), (460, 305), GOLD)
-    text(draw, (480, 280), "R2", 28, GREEN, True)
-    text(draw, (480, 325), "85 °C · valid from 2026-06-01", 17, MUTED)
+    text(draw, (120, 270), "R1 · 90 °C", 23, WHITE, True)
+    text(draw, (120, 325), "From 2026-01-01", 17, MUTED)
+    arrow(draw, (290, 286), (330, 286), GOLD)
+    text(draw, (355, 270), "R2 · 85 °C", 23, GREEN, True)
+    text(draw, (355, 325), "From 2026-06-01", 17, MUTED)
     panel(draw, (700, 160, 1200, 420), outline=RED)
     text(draw, (735, 200), "Insufficient evidence", 18, GOLD, True)
     wrapped(draw, (735, 260), "WT-02 and WT-04 through WT-10: missing current gearbox observation or open-work-order state.", 39, 21, WHITE)
@@ -274,12 +276,12 @@ def scene_6(draw: ImageDraw.ImageDraw) -> None:
     text(draw, (110, 250), "Candidate observation", 16, MUTED)
     for index, line in enumerate(("type: Observation", "observedAsset: WT-10", "observedAt: 2026-08-28T08:00:00Z", "unit: missing", "value: missing")):
         text(draw, (110, 285 + index * 25), line, 16, WHITE if index < 3 else RED)
-    text(draw, (110, 390), "conforms: false", 22, RED, True)
+    text(draw, (350, 390), "conforms: false", 19, RED, True)
     panel(draw, (690, 160, 1210, 418), outline=CYAN)
     text(draw, (725, 197), "Governed API boundary", 18, GOLD, True)
-    for index, line in enumerate(("GET /energy-demo/publication", "GET /energy-demo/quarantine", "POST /energy-demo/rollback", "POST /work-orders/.../transition")):
-        text(draw, (725, 250 + index * 32), line, 17, WHITE)
-    text(draw, (725, 385), "read scope + energy-demo tenant", 18, GREEN, True)
+    for index, line in enumerate(("GET /energy-demo/publication", "GET /energy-demo/quarantine", "POST /energy-demo/rollback", "POST /energy-demo/work-orders/.../transition")):
+        text(draw, (725, 250 + index * 32), line, 16, WHITE)
+    text(draw, (725, 385), "Tenant + read; POST also needs write", 17, GREEN, True)
     command_box(draw, "python scripts/run_energy_demo.py", ["Invalid-batch validation: { conforms: false, … }"])
 
 
@@ -287,7 +289,7 @@ def scene_7(draw: ImageDraw.ImageDraw) -> None:
     panel(draw, (80, 160, 555, 420), outline=GREEN)
     text(draw, (115, 198), "Labelled evaluation cases", 18, GOLD, True)
     for index, item in enumerate(("maintenance_review", "open_work_orders", "revision_change", "historical_state", "insufficient_evidence")):
-        text(draw, (120, 248 + index * 30), f"✓  {item}", 17, GREEN)
+        text(draw, (120, 248 + index * 30), f"PASS  {item}", 17, GREEN)
     panel(draw, (690, 160, 1205, 420), outline=CYAN)
     text(draw, (725, 198), "Implemented extension surfaces", 18, GOLD, True)
     for index, item in enumerate(("Published RDF → GraphDB serving copy", "Governed RDF → Neo4j read model", "Append-only maintenance lifecycle", "Measured local evaluation scorecard")):

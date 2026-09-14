@@ -117,6 +117,54 @@ types:
   MaintenanceReviewFinding:
     label: Maintenance review finding
     lpg_label: MAINTENANCE_REVIEW_FINDING
+  EvidenceRequest:
+    label: Evidence request
+    lpg_label: EVIDENCE_REQUEST
+    description: >-
+      A governed follow-up task tracking a request for missing operational
+      evidence from its owning source system. Governance metadata only --
+      never a source of asset facts, and never itself a maintenance
+      conclusion.
+    extends: prov:Entity
+    mixins: [Auditable]
+    properties:
+      requestId:
+        datatype: string
+        required: true
+        key: true
+      missingField:
+        datatype: string
+        required: true
+      targetSourceSystem:
+        datatype: string
+        required: true
+      assignedTo:
+        datatype: string
+        required: true
+      priority:
+        datatype: string
+        required: true
+      state:
+        datatype: string
+        required: true
+      reason:
+        datatype: string
+        required: true
+  EvidenceRequestTransition:
+    label: Evidence request transition
+    lpg_label: EVIDENCE_REQUEST_TRANSITION
+    extends: prov:Entity
+    properties:
+      fromState:
+        datatype: string
+      toState:
+        datatype: string
+      changedAt:
+        datatype: dateTime
+      changedBy:
+        datatype: string
+      transitionReason:
+        datatype: string
 relations:
   hasAsset:
     source: Site
@@ -138,6 +186,14 @@ relations:
     source: DocumentRevision
     target: DocumentRevision
     lpg_type: SUPERSEDES
+  forAsset:
+    source: EvidenceRequest
+    target: Asset
+    lpg_type: FOR_ASSET
+  changesRequest:
+    source: EvidenceRequestTransition
+    target: EvidenceRequest
+    lpg_type: CHANGES_REQUEST
 artifacts:
   owl: ontology/energy/energy-asset-intelligence.ttl
   shacl: ontology/shapes/energy-asset-intelligence.shapes.ttl

@@ -23,6 +23,24 @@ energy:DocumentRevisionShape a sh:NodeShape ; sh:targetClass energy:DocumentRevi
   sh:property [ sh:path energy:validFrom ; sh:datatype xsd:dateTime ; sh:minCount 1 ] ;
   sh:property [ sh:path energy:validTo ; sh:datatype xsd:dateTime ] ;
   sh:property [ sh:path energy:supersedes ; sh:nodeKind sh:IRI ; sh:class energy:DocumentRevision ] .
+energy:EvidenceRequestShape a sh:NodeShape ; sh:targetClass energy:EvidenceRequest ;
+  sh:property [ sh:path energy:assignedTo ; sh:datatype xsd:string ; sh:minCount 1 ] ;
+  sh:property [ sh:path energy:createdAt ; sh:datatype xsd:dateTime ] ;
+  sh:property [ sh:path energy:missingField ; sh:datatype xsd:string ; sh:minCount 1 ] ;
+  sh:property [ sh:path energy:priority ; sh:datatype xsd:string ; sh:minCount 1 ] ;
+  sh:property [ sh:path energy:reason ; sh:datatype xsd:string ; sh:minCount 1 ] ;
+  sh:property [ sh:path energy:requestId ; sh:datatype xsd:string ; sh:minCount 1 ] ;
+  sh:property [ sh:path energy:state ; sh:datatype xsd:string ; sh:minCount 1 ] ;
+  sh:property [ sh:path energy:targetSourceSystem ; sh:datatype xsd:string ; sh:minCount 1 ] ;
+  sh:property [ sh:path energy:updatedAt ; sh:datatype xsd:dateTime ] ;
+  sh:property [ sh:path energy:forAsset ; sh:nodeKind sh:IRI ; sh:class energy:Asset ] .
+energy:EvidenceRequestTransitionShape a sh:NodeShape ; sh:targetClass energy:EvidenceRequestTransition ;
+  sh:property [ sh:path energy:changedAt ; sh:datatype xsd:dateTime ] ;
+  sh:property [ sh:path energy:changedBy ; sh:datatype xsd:string ] ;
+  sh:property [ sh:path energy:fromState ; sh:datatype xsd:string ] ;
+  sh:property [ sh:path energy:toState ; sh:datatype xsd:string ] ;
+  sh:property [ sh:path energy:transitionReason ; sh:datatype xsd:string ] ;
+  sh:property [ sh:path energy:changesRequest ; sh:nodeKind sh:IRI ; sh:class energy:EvidenceRequest ] .
 energy:ObservationShape a sh:NodeShape ; sh:targetClass energy:Observation ;
   sh:property [ sh:path energy:createdAt ; sh:datatype xsd:dateTime ] ;
   sh:property [ sh:path energy:metric ; sh:datatype xsd:string ] ;

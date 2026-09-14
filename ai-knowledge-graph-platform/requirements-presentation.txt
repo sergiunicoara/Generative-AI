@@ -20,3 +20,6 @@
 # present in this environment: /c/ffmpeg/bin).
 
 gTTS>=2.5.0
+# Also needed when rendering without installing the full application runtime.
+Pillow>=12.3.0
+# Optional local audio QA: faster-whisper==1.2.1 (use an isolated environment).

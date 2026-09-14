@@ -179,6 +179,19 @@ async def dev_login(
         max_age=ACCESS_TOKEN_EXPIRE_MINUTES * 60,
         secure=secure,
     )
+    # The real OAuth callback below also issues this double-submit CSRF
+    # cookie; without it here, every write endpoint 403s for a dev-login
+    # session -- silently, since GETs never touch validate_cookie_csrf. Same
+    # cookie shape as the OAuth callback's, so both entry points satisfy one
+    # CSRF contract.
+    r.set_cookie(
+        key="csrf_token",
+        value=secrets.token_urlsafe(32),
+        httponly=False,
+        samesite="lax",
+        max_age=ACCESS_TOKEN_EXPIRE_MINUTES * 60,
+        secure=secure,
+    )
     return r
 
 

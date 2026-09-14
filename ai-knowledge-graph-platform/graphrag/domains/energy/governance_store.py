@@ -50,6 +50,21 @@ ALLOWED_TRANSITIONS = {
     CANCELLED: frozenset(),
 }
 
+# Evidence-request lifecycle: a governed follow-up task tracking a request for
+# missing operational evidence. Distinct state space from the work-order
+# review lifecycle above -- an evidence request is never itself a maintenance
+# conclusion and never mutates published RDF.
+EVIDENCE_OPEN = "open"
+EVIDENCE_IN_PROGRESS = "in_progress"
+EVIDENCE_FULFILLED = "fulfilled"
+EVIDENCE_CANCELLED = "cancelled"
+EVIDENCE_ALLOWED_TRANSITIONS = {
+    EVIDENCE_OPEN: frozenset({EVIDENCE_IN_PROGRESS, EVIDENCE_CANCELLED}),
+    EVIDENCE_IN_PROGRESS: frozenset({EVIDENCE_FULFILLED, EVIDENCE_CANCELLED}),
+    EVIDENCE_FULFILLED: frozenset(),
+    EVIDENCE_CANCELLED: frozenset(),
+}
+
 ROOT = Path(__file__).resolve().parents[3]
 
 
@@ -67,6 +82,14 @@ class WorkflowConflictError(GovernanceStoreError):
 
 class CommandReuseError(GovernanceStoreError):
     """A command id was reused for a materially different request."""
+
+
+class UnknownEvidenceRequestError(GovernanceStoreError):
+    pass
+
+
+class EvidenceRequestConflictError(GovernanceStoreError):
+    """A stale object version or invalid state transition was rejected."""
 
 
 class GovernanceStore:
@@ -292,7 +315,10 @@ class GovernanceStore:
             raise WorkflowConflictError("reason is required")
         if not command_id.strip():
             raise WorkflowConflictError("command_id is required")
-        fingerprint = _fingerprint(work_order_id, to_state, changed_by, reason, expected_version)
+        fingerprint = _fingerprint({
+            "work_order_id": work_order_id, "to_state": to_state, "changed_by": changed_by,
+            "reason": reason, "expected_version": expected_version,
+        })
         async with self._write_transaction() as connection:
             receipt = (await connection.execute(text("""
                 SELECT fingerprint, response_json FROM energy_command_receipts
@@ -349,6 +375,173 @@ class GovernanceStore:
             })
         return transition, response_json, False
 
+    async def create_evidence_request(
+        self, tenant: str, *, asset_id: str, missing_field: str, target_source_system: str,
+        owner: str, priority: str, reason: str, created_by: str, command_id: str,
+    ) -> tuple[dict[str, object], str, bool]:
+        """Create a governed evidence-request record.
+
+        This never touches published RDF, source-system fixtures, or the
+        active-version pointer -- it is purely a tracked follow-up task.
+        Returns ``(record, response_json, replayed)`` with the same
+        idempotent-replay contract as :meth:`transition`.
+        """
+        if not owner.strip():
+            raise EvidenceRequestConflictError("owner is required")
+        if not reason.strip():
+            raise EvidenceRequestConflictError("reason is required")
+        if not command_id.strip():
+            raise EvidenceRequestConflictError("command_id is required")
+        fingerprint = _fingerprint({
+            "asset_id": asset_id, "missing_field": missing_field,
+            "target_source_system": target_source_system, "owner": owner,
+            "priority": priority, "reason": reason,
+        })
+        async with self._write_transaction() as connection:
+            receipt = (await connection.execute(text("""
+                SELECT fingerprint, response_json FROM energy_command_receipts
+                WHERE tenant = :tenant AND command_id = :command_id
+            """), {"tenant": tenant, "command_id": command_id})).mappings().one_or_none()
+            if receipt is not None:
+                if receipt["fingerprint"] != fingerprint:
+                    raise CommandReuseError("command_id was already used with different arguments")
+                response_json = str(receipt["response_json"])
+                return json.loads(response_json), response_json, True
+
+            created_at = _now_iso()
+            record = {
+                "request_id": uuid4().hex, "tenant": tenant, "asset_id": asset_id,
+                "missing_field": missing_field, "target_source_system": target_source_system,
+                "owner": owner, "priority": priority, "state": EVIDENCE_OPEN, "reason": reason,
+                "created_at": created_at, "updated_at": created_at, "created_by": created_by,
+                "object_version": 0,
+            }
+            await connection.execute(text("""
+                INSERT INTO energy_evidence_requests
+                (request_id, tenant, asset_id, missing_field, target_source_system, owner,
+                 priority, state, reason, created_at, updated_at, created_by, object_version)
+                VALUES (:request_id, :tenant, :asset_id, :missing_field, :target_source_system,
+                        :owner, :priority, :state, :reason, :created_at, :updated_at, :created_by, :object_version)
+            """), record)
+            response_json = json.dumps(record, sort_keys=True, separators=(",", ":"))
+            await connection.execute(text("""
+                INSERT INTO energy_command_receipts (tenant, command_id, fingerprint, response_json, created_at)
+                VALUES (:tenant, :command_id, :fingerprint, :response_json, :created_at)
+            """), {
+                "tenant": tenant, "command_id": command_id, "fingerprint": fingerprint,
+                "response_json": response_json, "created_at": created_at,
+            })
+        return record, response_json, False
+
+    async def evidence_requests(self, tenant: str) -> list[dict[str, object]]:
+        async with self._engine.connect() as connection:
+            rows = (await connection.execute(text("""
+                SELECT request_id, tenant, asset_id, missing_field, target_source_system, owner,
+                       priority, state, reason, created_at, updated_at, created_by, object_version
+                FROM energy_evidence_requests WHERE tenant = :tenant ORDER BY created_at, request_id
+            """), {"tenant": tenant})).mappings().all()
+        return [dict(row) for row in rows]
+
+    async def evidence_request(self, tenant: str, request_id: str) -> dict[str, object]:
+        async with self._engine.connect() as connection:
+            row = await self._require_evidence_request(connection, tenant, request_id)
+        return dict(row)
+
+    async def evidence_request_transition_history(self, tenant: str, request_id: str) -> list[dict[str, object]]:
+        async with self._engine.connect() as connection:
+            await self._require_evidence_request(connection, tenant, request_id)
+            rows = (await connection.execute(text("""
+                SELECT transition_id, request_id, from_state, to_state, changed_at, changed_by, reason, object_version
+                FROM energy_evidence_request_transitions
+                WHERE tenant = :tenant AND request_id = :request_id
+                ORDER BY changed_at, transition_id
+            """), {"tenant": tenant, "request_id": request_id})).mappings().all()
+        return [dict(row) for row in rows]
+
+    async def transition_evidence_request(
+        self, tenant: str, request_id: str, *, to_state: str, changed_by: str,
+        reason: str, expected_version: int, command_id: str,
+    ) -> tuple[dict[str, object], str, bool]:
+        """Append one evidence-request transition guarded by CAS + idempotency.
+
+        Completing or cancelling a request only updates this governance
+        record -- it never writes to the published RDF graph, so it cannot by
+        construction change an ``insufficient_evidence`` answer.
+        """
+        if not changed_by.strip():
+            raise EvidenceRequestConflictError("changed_by is required")
+        if not reason.strip():
+            raise EvidenceRequestConflictError("reason is required")
+        if not command_id.strip():
+            raise EvidenceRequestConflictError("command_id is required")
+        fingerprint = _fingerprint({
+            "request_id": request_id, "to_state": to_state, "changed_by": changed_by,
+            "reason": reason, "expected_version": expected_version,
+        })
+        async with self._write_transaction() as connection:
+            receipt = (await connection.execute(text("""
+                SELECT fingerprint, response_json FROM energy_command_receipts
+                WHERE tenant = :tenant AND command_id = :command_id
+            """), {"tenant": tenant, "command_id": command_id})).mappings().one_or_none()
+            if receipt is not None:
+                if receipt["fingerprint"] != fingerprint:
+                    raise CommandReuseError("command_id was already used with different arguments")
+                response_json = str(receipt["response_json"])
+                return json.loads(response_json), response_json, True
+
+            current = await self._require_evidence_request(connection, tenant, request_id)
+            from_state, actual_version = str(current["state"]), int(current["object_version"])
+            if actual_version != expected_version:
+                raise EvidenceRequestConflictError(
+                    f"expected object_version {expected_version}, but stored version is {actual_version}"
+                )
+            if to_state not in EVIDENCE_ALLOWED_TRANSITIONS.get(from_state, frozenset()):
+                raise EvidenceRequestConflictError(
+                    f"cannot transition {request_id} from {from_state!r} to {to_state!r}"
+                )
+            to_version = actual_version + 1
+            changed_at = _now_iso()
+            updated = await connection.execute(text("""
+                UPDATE energy_evidence_requests SET state = :to_state, object_version = :to_version, updated_at = :changed_at
+                WHERE tenant = :tenant AND request_id = :request_id AND object_version = :expected_version
+            """), {
+                "tenant": tenant, "request_id": request_id, "to_state": to_state,
+                "to_version": to_version, "changed_at": changed_at, "expected_version": expected_version,
+            })
+            if updated.rowcount != 1:
+                raise EvidenceRequestConflictError("evidence request changed concurrently; reload and retry")
+            transition = {
+                "transition_id": uuid4().hex, "request_id": request_id,
+                "from_state": from_state, "to_state": to_state, "changed_at": changed_at,
+                "changed_by": changed_by, "reason": reason, "object_version": to_version,
+            }
+            await connection.execute(text("""
+                INSERT INTO energy_evidence_request_transitions
+                (transition_id, tenant, request_id, from_state, to_state, changed_at, changed_by, reason, object_version)
+                VALUES (:transition_id, :tenant, :request_id, :from_state, :to_state, :changed_at, :changed_by, :reason, :object_version)
+            """), {"tenant": tenant, **transition})
+            response_json = json.dumps(transition, sort_keys=True, separators=(",", ":"))
+            await connection.execute(text("""
+                INSERT INTO energy_command_receipts (tenant, command_id, fingerprint, response_json, created_at)
+                VALUES (:tenant, :command_id, :fingerprint, :response_json, :created_at)
+            """), {
+                "tenant": tenant, "command_id": command_id, "fingerprint": fingerprint,
+                "response_json": response_json, "created_at": changed_at,
+            })
+        return transition, response_json, False
+
+    async def _require_evidence_request(
+        self, connection: AsyncConnection, tenant: str, request_id: str,
+    ) -> dict[str, object]:
+        row = (await connection.execute(text("""
+            SELECT request_id, tenant, asset_id, missing_field, target_source_system, owner,
+                   priority, state, reason, created_at, updated_at, created_by, object_version
+            FROM energy_evidence_requests WHERE tenant = :tenant AND request_id = :request_id
+        """), {"tenant": tenant, "request_id": request_id})).mappings().one_or_none()
+        if row is None:
+            raise UnknownEvidenceRequestError(f"unknown evidence request {request_id!r}")
+        return dict(row)
+
     async def _set_active_version(self, connection: AsyncConnection, tenant: str, version_id: str) -> None:
         updated = await connection.execute(text("""
             UPDATE energy_active_versions SET version_id = :version_id WHERE tenant = :tenant
@@ -374,12 +567,9 @@ def _now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
-def _fingerprint(work_order_id: str, to_state: str, changed_by: str, reason: str, expected_version: int) -> str:
-    payload = json.dumps({
-        "work_order_id": work_order_id, "to_state": to_state, "changed_by": changed_by,
-        "reason": reason, "expected_version": expected_version,
-    }, sort_keys=True, separators=(",", ":")).encode("utf-8")
-    return hashlib.sha256(payload).hexdigest()
+def _fingerprint(payload: dict[str, object]) -> str:
+    encoded = json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    return hashlib.sha256(encoded).hexdigest()
 
 
 def _report_to_json(report: PublicationReport) -> str:
@@ -426,11 +616,27 @@ _DDL = (
         response_json TEXT NOT NULL, created_at TEXT NOT NULL,
         PRIMARY KEY (tenant, command_id)
     )""",
+    """CREATE TABLE IF NOT EXISTS energy_evidence_requests (
+        request_id TEXT PRIMARY KEY, tenant TEXT NOT NULL, asset_id TEXT NOT NULL,
+        missing_field TEXT NOT NULL, target_source_system TEXT NOT NULL,
+        owner TEXT NOT NULL, priority TEXT NOT NULL, state TEXT NOT NULL, reason TEXT NOT NULL,
+        created_at TEXT NOT NULL, updated_at TEXT NOT NULL, created_by TEXT NOT NULL,
+        object_version INTEGER NOT NULL
+    )""",
+    """CREATE INDEX IF NOT EXISTS idx_energy_evidence_requests_tenant
+        ON energy_evidence_requests (tenant, created_at)""",
+    """CREATE TABLE IF NOT EXISTS energy_evidence_request_transitions (
+        transition_id TEXT PRIMARY KEY, tenant TEXT NOT NULL, request_id TEXT NOT NULL,
+        from_state TEXT NOT NULL, to_state TEXT NOT NULL, changed_at TEXT NOT NULL,
+        changed_by TEXT NOT NULL, reason TEXT NOT NULL, object_version INTEGER NOT NULL
+    )""",
 )
 
 
 __all__ = [
     "ALLOWED_TRANSITIONS", "APPROVED", "CANCELLED", "COMPLETED", "CommandReuseError",
+    "EVIDENCE_ALLOWED_TRANSITIONS", "EVIDENCE_CANCELLED", "EVIDENCE_FULFILLED",
+    "EVIDENCE_IN_PROGRESS", "EVIDENCE_OPEN", "EvidenceRequestConflictError",
     "GovernanceStore", "GovernanceStoreError", "REJECTED", "REVIEW_REQUIRED",
-    "UnknownWorkOrderError", "WorkflowConflictError",
+    "UnknownEvidenceRequestError", "UnknownWorkOrderError", "WorkflowConflictError",
 ]

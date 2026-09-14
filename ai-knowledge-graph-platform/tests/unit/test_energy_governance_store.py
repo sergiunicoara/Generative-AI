@@ -9,6 +9,7 @@ from pathlib import Path
 import pytest
 
 from graphrag.domains.energy.demo import EnergyDemoService
+from graphrag.domains.energy.evidence_requests import EvidenceRequestError, EvidenceRequestService
 from graphrag.domains.energy.governance_store import GovernanceStore, WorkflowConflictError
 from graphrag.domains.energy.workflow import (
     APPROVED, CANCELLED, COMPLETED, MaintenanceWorkflow, REVIEW_REQUIRED,
@@ -139,3 +140,134 @@ def test_two_os_processes_conflict_and_exactly_one_cas_transition_wins(tmp_path:
         assert process.exitcode == 0
 
     assert sorted(outcomes) == ["conflict", "ok"]
+
+
+async def _evidence_runtime(tmp_path: Path):
+    store, service, _workflow = await _runtime(tmp_path)
+    return store, service, EvidenceRequestService(store, tenant=service.tenant)
+
+
+def _blocked_rows(service: EnergyDemoService) -> list[dict[str, str]]:
+    return service.answer("insufficient_evidence", tenant=service.tenant)["query_rows"]
+
+
+async def test_evidence_request_survives_a_store_restart(tmp_path: Path):
+    store, service, evidence = await _evidence_runtime(tmp_path)
+    created, _wire, _replayed = await evidence.create(
+        asset_id="WT-02", missing_field="temperature_c", source_system="Snowflake",
+        owner="ops-team", priority="high", reason="Confirm gearbox temperature",
+        created_by="operator-1", command_id="restart-evidence", graph=service.graph,
+        query_rows=_blocked_rows(service),
+    )
+    await store.close()
+
+    restarted = GovernanceStore(store.db_url, blob_root=store.blob_root)
+    await restarted.open()
+    restored = EvidenceRequestService(restarted, tenant="energy-demo")
+    record, history = await restored.get(created.request_id)
+
+    assert record.asset_id == "WT-02"
+    assert record.state == "open"
+    assert history == []
+    await restarted.close()
+
+
+async def test_evidence_request_idempotency_replays_original_response_and_rejects_argument_reuse(tmp_path: Path):
+    store, service, evidence = await _evidence_runtime(tmp_path)
+    rows = _blocked_rows(service)
+    first, first_wire, first_replayed = await evidence.create(
+        asset_id="WT-02", missing_field="temperature_c", source_system="Snowflake",
+        owner="ops-team", priority="high", reason="Confirm gearbox temperature",
+        created_by="operator-1", command_id="same-evidence-command", graph=service.graph, query_rows=rows,
+    )
+    replay, replay_wire, replayed = await evidence.create(
+        asset_id="WT-02", missing_field="temperature_c", source_system="Snowflake",
+        owner="ops-team", priority="high", reason="Confirm gearbox temperature",
+        created_by="operator-1", command_id="same-evidence-command", graph=service.graph, query_rows=rows,
+    )
+
+    assert first_replayed is False
+    assert replayed is True
+    assert replay == first
+    assert replay_wire == first_wire
+    with pytest.raises(EvidenceRequestError, match="different arguments"):
+        await evidence.create(
+            asset_id="WT-02", missing_field="temperature_c", source_system="Snowflake",
+            owner="ops-team", priority="low", reason="different priority this time",
+            created_by="operator-1", command_id="same-evidence-command", graph=service.graph, query_rows=rows,
+        )
+    await store.close()
+
+
+async def test_evidence_request_transition_log_and_terminal_states_block_writes(tmp_path: Path):
+    store, service, evidence = await _evidence_runtime(tmp_path)
+    created, _wire, _replayed = await evidence.create(
+        asset_id="WT-02", missing_field="temperature_c", source_system="Snowflake",
+        owner="ops-team", priority="high", reason="Confirm gearbox temperature",
+        created_by="operator-1", command_id="evidence-lifecycle", graph=service.graph,
+        query_rows=_blocked_rows(service),
+    )
+    in_progress, _wire, _replayed = await evidence.transition(
+        created.request_id, to_state="in_progress", changed_by="snowflake-liaison",
+        reason="Export requested from Snowflake", expected_version=created.object_version,
+        command_id="evidence-in-progress",
+    )
+    fulfilled, _wire, _replayed = await evidence.transition(
+        created.request_id, to_state="fulfilled", changed_by="snowflake-liaison",
+        reason="Telemetry backfilled", expected_version=in_progress.object_version,
+        command_id="evidence-fulfilled",
+    )
+    record, history = await evidence.get(created.request_id)
+
+    assert record.state == "fulfilled"
+    assert [item.to_state for item in history] == ["in_progress", "fulfilled"]
+    with pytest.raises(EvidenceRequestError, match="cannot transition"):
+        await evidence.transition(
+            created.request_id, to_state="cancelled", changed_by="operator-1",
+            reason="too late", expected_version=fulfilled.object_version,
+            command_id="evidence-cancel-after-fulfilled",
+        )
+    await store.close()
+
+
+async def test_evidence_requests_are_tenant_isolated(tmp_path: Path):
+    """The API always gates on the single demo tenant, so this exercises the
+    store's own `(tenant, request_id)` scoping directly -- the mechanism that
+    actually enforces isolation, rather than only the coarser API-level gate."""
+    store, service, evidence = await _evidence_runtime(tmp_path)
+    created, _wire, _replayed = await evidence.create(
+        asset_id="WT-02", missing_field="temperature_c", source_system="Snowflake",
+        owner="ops-team", priority="high", reason="Confirm gearbox temperature",
+        created_by="operator-1", command_id="evidence-tenant-a", graph=service.graph,
+        query_rows=_blocked_rows(service),
+    )
+    other_tenant = EvidenceRequestService(store, tenant="other-tenant")
+
+    with pytest.raises(EvidenceRequestError, match="unknown evidence request"):
+        await other_tenant.get(created.request_id)
+    assert await other_tenant.list() == []
+    same_tenant_list = await evidence.list()
+    assert [item.request_id for item in same_tenant_list] == [created.request_id]
+    await store.close()
+
+
+async def test_evidence_request_stale_object_version_conflict(tmp_path: Path):
+    store, service, evidence = await _evidence_runtime(tmp_path)
+    created, _wire, _replayed = await evidence.create(
+        asset_id="WT-02", missing_field="temperature_c", source_system="Snowflake",
+        owner="ops-team", priority="high", reason="Confirm gearbox temperature",
+        created_by="operator-1", command_id="evidence-cas", graph=service.graph,
+        query_rows=_blocked_rows(service),
+    )
+    await evidence.transition(
+        created.request_id, to_state="in_progress", changed_by="snowflake-liaison",
+        reason="Export requested", expected_version=created.object_version,
+        command_id="evidence-cas-advance",
+    )
+    with pytest.raises(EvidenceRequestError, match="expected object_version"):
+        await evidence.transition(
+            created.request_id, to_state="in_progress", changed_by="operator-1",
+            reason="stale retry", expected_version=created.object_version,
+            command_id="evidence-cas-stale",
+        )
+    await store.close()

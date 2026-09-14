@@ -32,6 +32,7 @@ async def lifespan(app: FastAPI):
     # (or a configured async Postgres URL), while RDF itself lives in
     # content-addressed blobs and can still be projected into Neo4j.
     from graphrag.domains.energy.demo import EnergyDemoService
+    from graphrag.domains.energy.evidence_requests import EvidenceRequestService
     from graphrag.domains.energy.governance_store import GovernanceStore
     from graphrag.domains.energy.workflow import MaintenanceWorkflow
 
@@ -45,6 +46,7 @@ async def lifespan(app: FastAPI):
     app.state.energy_governance_store = energy_store
     app.state.energy_demo_service = energy_service
     app.state.energy_demo_workflow = MaintenanceWorkflow(energy_store, tenant=energy_service.tenant)
+    app.state.energy_demo_evidence_requests = EvidenceRequestService(energy_store, tenant=energy_service.tenant)
     # ── Startup ───────────────────────────────────────────────────────────────
     # Resolve the OAuth resource identifiers once, here, so a malformed
     # GRAPHRAG_API_RESOURCE / GRAPHRAG_MCP_RESOURCE aborts startup instead of

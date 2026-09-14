@@ -44,6 +44,10 @@ GET /energy-demo/validation
 GET /energy-demo/publication
 GET /energy-demo/quarantine
 POST /energy-demo/rollback?version_id=<id>   (requires scope `write`)
+GET /energy-demo/evidence-requests
+POST /energy-demo/evidence-requests                       (requires scope `write`)
+GET /energy-demo/evidence-requests/<id>
+POST /energy-demo/evidence-requests/<id>/transition        (requires scope `write`)
 ```
 
 Use only the five fixed question IDs. This POC does not expose arbitrary client
@@ -173,7 +177,11 @@ or using as a regression artifact.
    to 85 C.
 4. Query 2026-05-01 to recover R1 as the authoritative historical guidance.
 5. Ask for incomplete assessments and show that WT-02 and WT-04 through WT-10
-   receive no maintenance conclusion.
+   receive no maintenance conclusion. From that state, open a governed
+   evidence request for WT-02's missing telemetry ("Request telemetry from
+   Snowflake") and show that the `insufficient_evidence` answer is unchanged
+   afterward -- the request tracks a follow-up task, it does not supply the
+   missing evidence itself.
 6. Use a different tenant token and show that the POC returns no evidence.
 
 ## Governed maintenance workflow
@@ -189,6 +197,46 @@ through `POST /energy-demo/work-orders/WO-9001/transition`.
 This is a local demonstration with durable publication and workflow state in
 the configured governance store (SQLite/WAL by default, with a configurable
 Postgres URL). It does not update SAP or control equipment.
+
+## Evidence remediation workflow
+
+When `insufficient_evidence` reports an asset blocked on a missing
+`temperature_c` observation or work-order status, the dashboard's "Evidence
+remediation" panel lets an authorised operator open a governed follow-up
+task tracking a request for that evidence from its owning source system --
+`temperature_c` from Snowflake, `work_order_status` from SAP. This is a new
+pair of tables (`energy_evidence_requests`,
+`energy_evidence_request_transitions`) in the same `GovernanceStore` used by
+the maintenance workflow above, with the same tenant scoping, optimistic
+`object_version` concurrency control, and `command_id` idempotent-replay
+protection.
+
+The safety boundary is structural, not a runtime check that could be
+bypassed: creating or transitioning a request never writes to published RDF,
+the source-system fixtures, or the active-version pointer, so it cannot by
+construction change an `insufficient_evidence` answer into a maintenance
+recommendation. Creation is also re-validated entirely server-side -- the
+asset must exist in the active published dataset, the missing field must map
+to its correct owning system, and the field must currently appear as missing
+in a fresh `insufficient_evidence` derivation -- rather than trusting the
+request body. The request lifecycle is `open → in_progress → fulfilled`, or
+`→ cancelled` from either non-terminal state; each transition is an
+append-only record, mirroring the maintenance workflow's own transition log.
+
+A request's governance metadata is also available as RDF (`energy:EvidenceRequest`,
+`energy:EvidenceRequestTransition`, declared in
+`ontology/models/energy-asset-intelligence.yaml` and compiled the same way as
+every other Energy type), built on demand and returned alongside the JSON
+record -- kept separate from, and never merged into, the authoritative
+published source RDF, the same way the maintenance workflow's own
+`rdf_projection()` already works.
+
+No live SAP or Snowflake connector is invoked by this POC: opening a request
+records that evidence was asked for, not that it was retrieved. Marking a
+request `fulfilled` is an operator action recording that the evidence has
+been obtained through some other channel; it still never writes to RDF, so a
+new, real, mapped observation or work order remains the only way an
+`insufficient_evidence` answer changes.
 
 ## Limitations
 

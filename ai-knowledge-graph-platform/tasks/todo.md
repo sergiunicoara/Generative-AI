@@ -583,11 +583,11 @@ projection must not own governance history); workflow states
 typed Neo4j edges dual-written alongside `RELATES_TO` for one release.
 
 ### Phase 0 — Delivery baseline
-- [ ] Mirror the plan into this file as checkable items
-- [ ] Stage the untracked release dependencies (`graphrag/semantic_model/`,
+- [x] Mirror the plan into this file as checkable items
+- [x] Commit the release dependencies (`graphrag/semantic_model/`,
       `ontology/models/`, `ontology/generated/energy/`, `tests/unit/test_semantic_model.py`)
-- [ ] Declare the undeclared `gTTS` presentation dependency
-- [ ] Gate: `make semantic-model-check` passes; staged additions visible
+- [x] Declare `gTTS` in `requirements-presentation.txt` (already committed)
+- [x] Gate: semantic-model compile `--check` passes; additions tracked at HEAD
 
 ### Phase 1 — Async coherence (gap A) — DONE 2026-09-12
 - [x] `EnergyDemoService.create()` async classmethod; `_build_graph` async
@@ -609,10 +609,8 @@ typed Neo4j edges dual-written alongside `RELATES_TO` for one release.
       outright) -- needed to carry real typed `xsd:dateTime` through the SAP/R2RML path
 - [x] Gate: `--check` byte-stable; zero quarantined records; new test asserts every Observation/
       WorkOrder/DocumentRevision instance in the real published graph carries both temporal axes
-- [ ] **Deferred to Phase 4, deliberately**: injecting the actual late-arriving-correction
-      duplicate observation record. Doing it now (before Phase 4's temporal-aware query exists to
-      resolve two records for the same reading) would just break every current
-      exactly-one-observation assertion for no benefit until Phase 4 anyway.
+- [x] Late-arriving-correction observation was deferred here and delivered in Phase 4;
+      temporal selection resolves the original 96.0°C and corrected 91.5°C records.
 
 ### Phase 3 — Query-derived answers and evidence (gap B) — DONE 2026-09-13
 - [x] `answers.py` + `vocabulary.py`: one derivation per question id, each executing a
@@ -724,20 +722,77 @@ Docker-backed E2E and release evidence.
 - [x] Docs/diagram/README/interview material match the verified implementation
 - [x] Demonstrated vs. not, offline vs. live, synthetic vs. customer, local vs. enterprise-scale
 - [x] Teaser + walkthrough have a captured run and per-scene provenance manifest
-- [x] Rendered output's codec/resolution verified (`ffprobe`: 1280x720 H.264 + AAC,
-      all three files) and representative frames inspected for readable text/clipped
-      elements; two layout issues found and fixed before the final render
-- [ ] **Full movie content QA is not complete.** Narration audio content, word-for-word
-      caption accuracy, and scene-to-scene timing across the entire runtime have NOT
-      been exhaustively verified -- that needs someone to watch each video start to
-      finish. Do not report this as done; see the evidence manifest's explicit "QA
-      scope" paragraph, which states the same boundary.
+- [x] All 24 static scenes reviewed; mapping counts, scope labels, revision layout,
+      technical screenshot readability, scorecard values and disclaimers corrected
+- [x] Full MP4 decode, H.264/AAC streams, per-scene frame comparison and narration
+      timing verified by `scripts/verify_energy_movies.py`
+- [x] Local ASR of all final narration reviewed against the scripts; results and
+      movie fingerprints captured in `docs/presentation/energy_movie_qa.json`
+- [ ] Human final listening/playback sign-off before external release: naturalness,
+      acronym pronunciation and device playback. Automated ASR is not human listening.
 
 **Phase 10 review:** `docs/presentation/energy-demo-evidence-manifest.md` maps
 the seven presentation scenes to the E2E report, mappings, ontology, SHACL,
 SPARQL, tests, and optional Neo4j projection. It explicitly labels synthetic
 fixture evidence and separates demonstrated repository behavior from client
 environment work. The movies were regenerated from the current run and UI
-captures; their H.264/AAC streams and representative frames were inspected,
-with two layout issues fixed before the final render -- full narration/caption
-QA across the entire runtime remains open, consistent with the manifest.
+captures. All 24 static scenes and local ASR transcripts were reviewed, with
+automated whole-file decode and per-scene timing/frame evidence. Human final
+listening sign-off remains open, consistent with the manifest. The follow-up
+regression run passed all 106 Energy/semantic-model unit tests; semantic-model
+compile `--check` verified four artifacts. This does not claim a fresh full
+platform or live-service acceptance run.
+
+## Evidence remediation workflow (2026-09-14)
+
+- [x] Durable `energy_evidence_requests` / `energy_evidence_request_transitions`
+      tables in `GovernanceStore`, reusing its CAS/idempotency/tenant-isolation
+      machinery (`graphrag/domains/energy/governance_store.py`)
+- [x] `EvidenceRequestService` facade (new `graphrag/domains/energy/evidence_requests.py`):
+      server-side re-validation against a fresh `insufficient_evidence` answer,
+      asset-existence check, missing-field↔source-system mapping, RDF projection
+- [x] 4 new `/energy-demo/evidence-requests*` routes, write-scoped, wired in
+      `api/main.py`
+- [x] Dashboard "Evidence remediation" panel: inline form (no `prompt()`),
+      plain-language actions, verbatim no-inference disclaimer, existing-requests
+      list with history
+- [x] `EvidenceRequest`/`EvidenceRequestTransition` added to
+      `ontology/models/energy-asset-intelligence.yaml`; recompiled;
+      `make semantic-model-check` passes
+- [x] 26 targeted/focused tests added across `test_energy_governance_store.py`,
+      `test_energy_evidence_requests.py` (new), `test_energy_demo_routes.py`,
+      including the safety-boundary test (answer byte-identical before/after a
+      request) — all pass; `ruff check` clean
+- [x] Live-verified via a real browser session (not just `TestClient`): found and
+      fixed a genuine pre-existing gap — `/auth/dev-login` never issued the
+      `csrf_token` cookie its own double-submit CSRF check requires, so every
+      write endpoint 403'd through a real cookie session (masked because tests
+      override `get_current_user` and bypass auth entirely). Fixed in
+      `api/routes/auth.py`; confirmed live end-to-end (create → transition →
+      answer unchanged) after the fix.
+- [x] `docs/demos/energy_asset_intelligence.md` updated: new endpoints, new
+      "Evidence remediation workflow" section, demo-narrative step extended
+- [x] `scripts/capture_energy_demo_ui.py` and
+      `docs/presentation/render_energy_demo_client_teaser.py` updated (new
+      capture step + new scene), code-complete and lint-clean
+- [ ] **Screenshot capture and teaser rebuild not completed.** Two independent
+      environment blockers in this session: the standalone Playwright/Chromium
+      process could not open a TCP connection to the local server at all (even
+      `--no-sandbox`, even to `commit`), while a plain PowerShell
+      `Test-NetConnection` to the same port succeeded — consistent with
+      Chromium's own process being silently blocked (e.g. Windows Firewall),
+      which needs a one-time interactive allow and isn't fixable from here; and
+      the visual browser pane used for live verification could not screenshot
+      because it was hidden/backgrounded on the user's desktop. Not reported as
+      done. Rerun `python scripts/capture_energy_demo_ui.py` (against a running
+      local server) once Chromium can reach it, then
+      `python docs/presentation/render_energy_demo_client_teaser.py &&
+      python scripts/verify_energy_movies.py`.
+
+**Review:** feature is durable, tenant-scoped, CAS/idempotency-protected, and
+structurally incapable of turning an `insufficient_evidence` answer into a
+maintenance conclusion (creating/transitioning a request never writes to RDF).
+Live-verified end-to-end through a real authenticated browser session, not
+only through `TestClient`. Presentation-asset regeneration (screenshots,
+teaser video) is the one explicitly incomplete item, blocked by this session's
+environment rather than by the code.

@@ -12,6 +12,8 @@ from pathlib import Path
 from gtts import gTTS
 from PIL import Image, ImageDraw, ImageFont
 
+from energy_movie_evidence import DISCLAIMER, why_trace_excerpt
+
 W, H, FPS = 1280, 720, 24
 ROOT = Path(__file__).resolve().parent
 CAPTURES = ROOT / "energy_demo_ui_capture"
@@ -36,7 +38,7 @@ SCENES = [
     Scene(
         "Offshore wind maintenance, explained", 18,
         "This is an explainable maintenance-intelligence workspace for offshore wind "
-        "turbines. It helps operations teams identify which turbine needs review, and why, "
+        "turbines, demonstrated with synthetic data. It helps operations teams identify which turbine needs review, and why, "
         "without relying on another disconnected dashboard.",
     ),
     Scene(
@@ -47,6 +49,13 @@ SCENES = [
         "dashboard_current.png",
     ),
     Scene(
+        "Interrogate the RDF graph", 20,
+        "The same evidence can be interrogated directly in GraphDB. A simple "
+        "SPARQL question follows the turbine to its telemetry, the current bulletin, "
+        "and the open work order. The result is the same explainable chain that "
+        "powers the operations view, rather than a separate hard-coded answer.",
+    ),
+    Scene(
         "Confidence where evidence exists", 18,
         "The system also makes uncertainty visible. Where evidence is incomplete, it "
         "does not invent a maintenance conclusion. That is how an advisory tool earns "
@@ -54,7 +63,16 @@ SCENES = [
         "dashboard_insufficient_evidence.png",
     ),
     Scene(
-        "Built for trust and scale", 22,
+        "Requesting the missing evidence", 20,
+        "When evidence is missing, an operator can open a governed follow-up task asking "
+        "the owning source system for it -- telemetry from Snowflake, or work-order status "
+        "from SAP. That request is tracked and auditable, but it does not supply the "
+        "missing evidence itself: the advisory answer only changes once real source data "
+        "is published.",
+        "dashboard_evidence_remediation.png",
+    ),
+    Scene(
+        "Built for review and traceability", 22,
         "Behind the business view, source data is mapped into RDF, checked through a "
         "SHACL publication gate, and evaluated by version-controlled SPARQL. A governed "
         "maintenance lifecycle keeps human review explicit, while the technical trace "
@@ -102,6 +120,7 @@ def base(scene: Scene, index: int) -> tuple[Image.Image, ImageDraw.ImageDraw]:
     write(draw, (1228, 35), "CLIENT OVERVIEW", 13, GOLD, True, "ra")
     write(draw, (52, 85), f"0{index + 1}", 16, GOLD, True)
     write(draw, (90, 78), scene.title, 31, WHITE, True)
+    write(draw, (640, 697), DISCLAIMER, 15, GOLD, anchor="mm")
     return image, draw
 
 
@@ -110,6 +129,21 @@ def add_capture(image: Image.Image, draw: ImageDraw.ImageDraw, filename: str) ->
     if not source.exists():
         raise RuntimeError(f"Missing capture {source}; run scripts/capture_energy_demo_ui.py")
     capture = Image.open(source).convert("RGB")
+    if filename == "dashboard_technical_trace.png":
+        capture = why_trace_excerpt(capture)
+        capture.thumbnail((710, 460), Image.Resampling.LANCZOS)
+        x, y = 510, 175
+        draw.rounded_rectangle((x - 10, y - 10, x + capture.width + 10, y + capture.height + 10),
+                               radius=12, fill=PANEL, outline=CYAN, width=2)
+        image.paste(capture, (x, y))
+        write(draw, (70, 195), "Expand the explanation", 27, GOLD, True)
+        wrap(draw, '“Why am I seeing this?” opens the proof behind the advisory.',
+             70, 260, 390, 23)
+        wrap(draw, "The actual UI then exposes source identifiers, RDF and SPARQL evidence, and validation status.",
+             70, 380, 390, 20, MUTED)
+        draw.line((445, 355, 500, 355), fill=GOLD, width=4)
+        draw.polygon([(500, 355), (486, 347), (486, 363)], fill=GOLD)
+        return
     capture.thumbnail((1080, 510), Image.Resampling.LANCZOS)
     x, y = (W - capture.width) // 2, 164 + (500 - capture.height) // 2
     draw.rounded_rectangle((x - 10, y - 10, x + capture.width + 10, y + capture.height + 10),
@@ -120,13 +154,23 @@ def add_capture(image: Image.Image, draw: ImageDraw.ImageDraw, filename: str) ->
 def draw_scene(image: Image.Image, draw: ImageDraw.ImageDraw, scene: Scene, index: int) -> None:
     if scene.capture:
         add_capture(image, draw, scene.capture)
-        if index == 2:
-            write(draw, (640, 680), "Grounded recommendation · evidence in view · advisory only", 16, MUTED, anchor="mm")
+        return
+    if scene.title == "Interrogate the RDF graph":
+        source = CAPTURES / "graphdb_sparql_wt01.png"
+        if not source.exists():
+            raise RuntimeError(f"Missing live GraphDB capture {source}; run scripts/capture_energy_graphdb_sparql.py")
+        capture = Image.open(source).convert("RGB")
+        capture.thumbnail((1030, 485), Image.Resampling.LANCZOS)
+        x, y = (W - capture.width) // 2, 165
+        draw.rounded_rectangle((x - 10, y - 10, x + capture.width + 10, y + capture.height + 10),
+                               radius=12, fill=PANEL, outline=CYAN, width=2)
+        image.paste(capture, (x, y))
+        write(draw, (640, 675), "Live GraphDB Workbench · 1 SPARQL result · WT-01 → gearbox → WO-9001", 16, GREEN, True, "mm")
         return
     draw.rounded_rectangle((90, 165, 1190, 610), radius=18, fill=PANEL, outline=(46, 98, 121), width=2)
     write(draw, (640, 235), "OFFSHORE WIND ASSET INTELLIGENCE", 22, GOLD, True, "mm")
     write(draw, (640, 315), "Which turbine needs maintenance review?", 38, WHITE, True, "mm")
-    wrap(draw, "From SAP, telemetry and engineering bulletins to explainable turbine-maintenance decisions.",
+    wrap(draw, "From synthetic SAP-shaped records, telemetry and engineering bulletins to explainable maintenance recommendations.",
          210, 405, 860, 23, MUTED)
     for x, label in ((280, "Operations"), (640, "Evidence"), (1000, "Action")):
         draw.ellipse((x - 20, 550, x + 20, 590), fill=GREEN)

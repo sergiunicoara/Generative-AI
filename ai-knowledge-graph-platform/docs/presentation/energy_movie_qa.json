@@ -1,0 +1,321 @@
+{
+  "verified_at": "2026-09-14T03:15:55.683090+00:00",
+  "scope": "Full decode; every static scene/frame; narration cache and timing; optional local ASR.",
+  "human_listening_completed": false,
+  "asr_completed": false,
+  "trace_sha256": "4152bf61570a7970858fe458a4808cb24269a48b0af1a6c8c8e0de9fb1ecf950",
+  "shared_evidence_code_sha256": "30c76f6b63d3444311b35ae9599ca55291aed5563e0fc2313bef889e837344ce",
+  "ui_capture_sha256": {
+    "dashboard_current.png": "7938dd02f718476d2c9dd813512d31e94621fd01851e30aa799ef2dd08b6f50a",
+    "dashboard_insufficient_evidence.png": "71611724c05ac805daab7e913513961af793e75fe74aefea9df6645158133860",
+    "dashboard_technical_trace.png": "a4fc8aec5f006c2691045f775409a597278c736769e1828d421774f9b1d60fdc",
+    "graphdb_sparql_wt01.png": "24ad4ed76a26ae1e8bb186d0041bc4fcc3f58ea563535fb3c9a91141dae4a21d"
+  },
+  "movies": [
+    {
+      "movie": "energy_asset_intelligence_client_teaser.mp4",
+      "sha256": "ea480d2ed38cb8212714d63e8fb527d5fda0951959ef0184e1fc51a1e2509f9e",
+      "renderer_sha256": "22dd35d6a2e3ab216954d08a07d1ec42f9a1eef3602baeba5a5371e80b5ae40c",
+      "duration_seconds": 114.069333,
+      "full_decode_passed": true,
+      "streams": "1280x720 H.264 / AAC",
+      "scenes": [
+        {
+          "scene": 1,
+          "title": "Offshore wind maintenance, explained",
+          "start_seconds": 0.0,
+          "duration_seconds": 21.0,
+          "narration_seconds": 19.344,
+          "expected_voiceover": "This is an explainable maintenance-intelligence workspace for offshore wind turbines, demonstrated with synthetic data. It helps operations teams identify which turbine needs review, and why, without relying on another disconnected dashboard.",
+          "frame_rms_error": 4.197,
+          "frame": "energy_movie_qa_build\\energy_asset_intelligence_client_teaser_scene_01.png",
+          "narration_stamp_matches": true
+        },
+        {
+          "scene": 2,
+          "title": "One clear, explainable priority",
+          "start_seconds": 21.0,
+          "duration_seconds": 25.0,
+          "narration_seconds": 18.792,
+          "expected_voiceover": "Here, WT-zero-one is prioritised for maintenance review. The workspace brings together the temperature observation, the current manufacturer threshold, and the open work order, so the recommendation is concrete and actionable.",
+          "frame_rms_error": 5.237,
+          "frame": "energy_movie_qa_build\\energy_asset_intelligence_client_teaser_scene_02.png",
+          "narration_stamp_matches": true
+        },
+        {
+          "scene": 3,
+          "title": "Interrogate the RDF graph",
+          "start_seconds": 46.0,
+          "duration_seconds": 24.0,
+          "narration_seconds": 22.704,
+          "expected_voiceover": "The same evidence can be interrogated directly in GraphDB. A simple SPARQL question follows the turbine to its telemetry, the current bulletin, and the open work order. The result is the same explainable chain that powers the operations view, rather than a separate hard-coded answer.",
+          "frame_rms_error": 5.772,
+          "frame": "energy_movie_qa_build\\energy_asset_intelligence_client_teaser_scene_03.png",
+          "narration_stamp_matches": true
+        },
+        {
+          "scene": 4,
+          "title": "Confidence where evidence exists",
+          "start_seconds": 70.0,
+          "duration_seconds": 18.0,
+          "narration_seconds": 14.424,
+          "expected_voiceover": "The system also makes uncertainty visible. Where evidence is incomplete, it does not invent a maintenance conclusion. That is how an advisory tool earns the confidence of operations teams.",
+          "frame_rms_error": 5.62,
+          "frame": "energy_movie_qa_build\\energy_asset_intelligence_client_teaser_scene_04.png",
+          "narration_stamp_matches": true
+        },
+        {
+          "scene": 5,
+          "title": "Built for review and traceability",
+          "start_seconds": 88.0,
+          "duration_seconds": 26.0,
+          "narration_seconds": 24.384,
+          "expected_voiceover": "Behind the business view, source data is mapped into RDF, checked through a SHACL publication gate, and evaluated by version-controlled SPARQL. A governed maintenance lifecycle keeps human review explicit, while the technical trace remains available whenever an engineer or auditor needs it.",
+          "frame_rms_error": 7.203,
+          "frame": "energy_movie_qa_build\\energy_asset_intelligence_client_teaser_scene_05.png",
+          "narration_stamp_matches": true
+        }
+      ]
+    },
+    {
+      "movie": "energy_asset_intelligence_implementation_demo.mp4",
+      "sha256": "6ba20e27d1bf7cf67c6370576bc2a64d6908d195b3be4803ead4daa741c88270",
+      "renderer_sha256": "735119165891528165de52c1e30166e727832a16f6be1a4a03c4ca3222a45fa1",
+      "duration_seconds": 258.045333,
+      "full_decode_passed": true,
+      "streams": "1280x720 H.264 / AAC",
+      "scenes": [
+        {
+          "scene": 1,
+          "title": "A Reproducible Energy Knowledge Graph POC",
+          "start_seconds": 0.0,
+          "duration_seconds": 27.0,
+          "narration_seconds": 25.128,
+          "expected_voiceover": "This walkthrough follows the implementation of an Energy Asset and Maintenance Intelligence proof of concept. It uses synthetic wind-farm data, so every step can be run locally. The goal is to show how source contracts, semantic modelling, governed publication, and an evidence response fit together in working code.",
+          "frame_rms_error": 6.321,
+          "frame": "energy_movie_qa_build\\energy_asset_intelligence_implementation_demo_scene_01.png",
+          "narration_stamp_matches": true
+        },
+        {
+          "scene": 2,
+          "title": "Create the SAP-shaped Source Contract",
+          "start_seconds": 27.0,
+          "duration_seconds": 27.0,
+          "narration_seconds": 25.944,
+          "expected_voiceover": "The workflow starts with a reproducible SQLite export. The create script makes ten turbine assets and three work orders. Each work order has an identifier, an asset identifier, and a status. This is a safe stand-in for an operational SAP extract and gives the mapping layer a concrete source contract to validate.",
+          "frame_rms_error": 5.229,
+          "frame": "energy_movie_qa_build\\energy_asset_intelligence_implementation_demo_scene_02.png",
+          "narration_stamp_matches": true
+        },
+        {
+          "scene": 3,
+          "title": "Parse and Validate the R2RML Mapping",
+          "start_seconds": 54.0,
+          "duration_seconds": 28.0,
+          "narration_seconds": 27.0,
+          "expected_voiceover": "The energy assets mapping is written in R2RML Turtle. The ingestion command parses that mapping, reads the SQLite rows, and validates the contract for the energy-demo tenant. The presentation uses validate-only, which proves the mapping and source fit without writing data. The existing graph writer is called only when that flag is removed.",
+          "frame_rms_error": 5.936,
+          "frame": "energy_movie_qa_build\\energy_asset_intelligence_implementation_demo_scene_03.png",
+          "narration_stamp_matches": true
+        },
+        {
+          "scene": 4,
+          "title": "Build the RDF Evidence Graph",
+          "start_seconds": 82.0,
+          "duration_seconds": 36.0,
+          "narration_seconds": 34.08,
+          "expected_voiceover": "The demonstration service executes both the relational R2RML mapping and the JSON telemetry RML mapping into an RDFLib graph. It connects turbines and gearbox components with Snowflake-shaped telemetry, SAP-shaped work orders, and SharePoint-shaped manufacturer bulletin revisions. Each source category has explicit provenance, and the graph can be exported as Turtle or loaded into the optional GraphDB serving copy.",
+          "frame_rms_error": 5.809,
+          "frame": "energy_movie_qa_build\\energy_asset_intelligence_implementation_demo_scene_04.png",
+          "narration_stamp_matches": true
+        },
+        {
+          "scene": 5,
+          "title": "Return an Evidence-shaped Assessment",
+          "start_seconds": 118.0,
+          "duration_seconds": 38.0,
+          "narration_seconds": 36.816,
+          "expected_voiceover": "The maintenance-review path brings the relevant records together. WT-01 has a latest-known corrected gearbox temperature of 91 point 5 degrees Celsius. Bulletin MFG-GBX-17-R2 sets an 85-degree review threshold, and work order WO-9001 is open. The response returns the advisory assessment together with the source IDs, fields, timestamps, access scope, mapping version, and query version.",
+          "frame_rms_error": 5.455,
+          "frame": "energy_movie_qa_build\\energy_asset_intelligence_implementation_demo_scene_05.png",
+          "narration_stamp_matches": true
+        },
+        {
+          "scene": 6,
+          "title": "Handle Revisions and Missing Evidence",
+          "start_seconds": 156.0,
+          "duration_seconds": 34.0,
+          "narration_seconds": 32.784,
+          "expected_voiceover": "The model also records that bulletin R2 supersedes R1 and lowers the threshold from 90 to 85 degrees. Supplying a May 2026 date selects R1 as the authoritative bulletin, while known-as time keeps later corrections out of earlier views. Separate fixed questions identify assets with insufficient evidence. They return no maintenance conclusion when the required synthetic observations or work-order state are absent.",
+          "frame_rms_error": 6.892,
+          "frame": "energy_movie_qa_build\\energy_asset_intelligence_implementation_demo_scene_06.png",
+          "narration_stamp_matches": true
+        },
+        {
+          "scene": 7,
+          "title": "Validate Data and Enforce Tenant Boundaries",
+          "start_seconds": 190.0,
+          "duration_seconds": 27.0,
+          "narration_seconds": 25.656,
+          "expected_voiceover": "A candidate graph is staged behind a SHACL publication gate. Invalid records are quarantined with their validation reasons, while the conformant graph is published as a version that can be rolled back without rewriting history. The API keeps tenant identity in the signed token, so other tenants receive no evidence.",
+          "frame_rms_error": 6.433,
+          "frame": "energy_movie_qa_build\\energy_asset_intelligence_implementation_demo_scene_07.png",
+          "narration_stamp_matches": true
+        },
+        {
+          "scene": 8,
+          "title": "Run the Complete Governed Scenario",
+          "start_seconds": 217.0,
+          "duration_seconds": 41.0,
+          "narration_seconds": 39.24,
+          "expected_voiceover": "The current end-to-end scenario executes R2RML and RML, publishes the valid RDF graph, runs the committed SPARQL advisory, proves the historical and no-evidence boundaries, and creates the governed Neo4j read-model batch. A separate scorecard records answer correctness, evidence accuracy, abstention, tenant isolation, freshness, and local performance. Live enterprise connectors remain deliberately outside this synthetic POC.",
+          "frame_rms_error": 6.184,
+          "frame": "energy_movie_qa_build\\energy_asset_intelligence_implementation_demo_scene_08.png",
+          "narration_stamp_matches": true
+        }
+      ]
+    },
+    {
+      "movie": "energy_asset_intelligence_real_run_demo.mp4",
+      "sha256": "cdc0e2cc2b281638149725fb1115b45196aaa4ea91be0b2c1ea2bd5bf40b8cac",
+      "renderer_sha256": "95ac77ca171cbac4844751f1149fb695e6cd512d9758833d431d9407eba578e8",
+      "duration_seconds": 301.053333,
+      "full_decode_passed": true,
+      "streams": "1280x720 H.264 / AAC",
+      "scenes": [
+        {
+          "scene": 1,
+          "title": "Real workflow capture",
+          "start_seconds": 0.0,
+          "duration_seconds": 21.0,
+          "narration_seconds": 19.2,
+          "expected_voiceover": "This is a recorded run of the Energy Asset Intelligence proof of concept. The film is rendered from actual command stdout, exit codes, and timestamps captured in this repository. All eight commands in this trace completed with exit code zero.",
+          "frame_rms_error": 6.08,
+          "frame": "energy_movie_qa_build\\energy_asset_intelligence_real_run_demo_scene_01.png",
+          "narration_stamp_matches": true
+        },
+        {
+          "scene": 2,
+          "title": "Create the source export",
+          "start_seconds": 21.0,
+          "duration_seconds": 19.0,
+          "narration_seconds": 17.016,
+          "expected_voiceover": "The run starts by generating the synthetic SAP-shaped SQLite export. The captured stdout confirms that the file was created under artifacts. This is the reproducible relational source used by the mapping validation.",
+          "frame_rms_error": 4.773,
+          "frame": "energy_movie_qa_build\\energy_asset_intelligence_real_run_demo_scene_02.png",
+          "narration_stamp_matches": true
+        },
+        {
+          "scene": 3,
+          "title": "Validate R2RML against the source",
+          "start_seconds": 40.0,
+          "duration_seconds": 27.0,
+          "narration_seconds": 25.44,
+          "expected_voiceover": "Next, the repository parses the energy R2RML mapping and validates it against the generated SQLite source. The captured result reports the energy-demo tenant, 13 entity rows, and 3 relation rows. The command uses validate-only, so it proves the source and mapping contract without issuing a graph write.",
+          "frame_rms_error": 4.957,
+          "frame": "energy_movie_qa_build\\energy_asset_intelligence_real_run_demo_scene_03.png",
+          "narration_stamp_matches": true
+        },
+        {
+          "scene": 4,
+          "title": "Run the RDF evidence demo",
+          "start_seconds": 67.0,
+          "duration_seconds": 34.0,
+          "narration_seconds": 32.352,
+          "expected_voiceover": "The deterministic service executes the committed mappings and exports an RDF Turtle graph. The captured maintenance assessment identifies WT-01, its latest known 91 point 5 degree temperature, the 85 degree threshold from bulletin R2, and open work order WO-9001. The returned evidence includes the SAP, Snowflake, and SharePoint-shaped source identifiers.",
+          "frame_rms_error": 4.849,
+          "frame": "energy_movie_qa_build\\energy_asset_intelligence_real_run_demo_scene_04.png",
+          "narration_stamp_matches": true
+        },
+        {
+          "scene": 5,
+          "title": "Run the historical bulletin scenario",
+          "start_seconds": 101.0,
+          "duration_seconds": 24.0,
+          "narration_seconds": 18.816,
+          "expected_voiceover": "A second real run supplies the first of May 2026. The captured historical answer selects bulletin R1 and its 90 degree threshold. The service applies both valid time and recorded time, so it cannot cite a correction before it was known.",
+          "frame_rms_error": 5.143,
+          "frame": "energy_movie_qa_build\\energy_asset_intelligence_real_run_demo_scene_05.png",
+          "narration_stamp_matches": true
+        },
+        {
+          "scene": 6,
+          "title": "Reject an invalid observation",
+          "start_seconds": 125.0,
+          "duration_seconds": 26.0,
+          "narration_seconds": 24.96,
+          "expected_voiceover": "The same demo run invokes SHACL validation against a deliberately incomplete observation. The captured result says conforms false and lists the missing value and unit requirements. In the main path, that same check is a publication gate: invalid records are quarantined and the conformant graph is versioned for serving and rollback.",
+          "frame_rms_error": 5.28,
+          "frame": "energy_movie_qa_build\\energy_asset_intelligence_real_run_demo_scene_06.png",
+          "narration_stamp_matches": true
+        },
+        {
+          "scene": 7,
+          "title": "Evaluate and test the implementation",
+          "start_seconds": 151.0,
+          "duration_seconds": 28.0,
+          "narration_seconds": 26.928,
+          "expected_voiceover": "The recorded evaluator passes all five labelled scenarios. The targeted unit suite covers answers, tenant isolation, RDF serialization, SHACL validation, and the mapping contract. The next two recorded commands expand that proof to the full RDF-to-Neo4j projection and measured scorecard.",
+          "frame_rms_error": 5.244,
+          "frame": "energy_movie_qa_build\\energy_asset_intelligence_real_run_demo_scene_07.png",
+          "narration_stamp_matches": true
+        },
+        {
+          "scene": 8,
+          "title": "Run the complete governed path",
+          "start_seconds": 179.0,
+          "duration_seconds": 34.0,
+          "narration_seconds": 32.568,
+          "expected_voiceover": "The updated end-to-end command executes R2RML and RML, checks SHACL publication, runs the version-controlled SPARQL advisory, verifies the historical and abstention boundaries, exports reparsable Turtle, and builds the tenant-scoped Neo4j read-model batches. RDF remains authoritative; the property graph is a rebuildable GraphRAG projection.",
+          "frame_rms_error": 5.298,
+          "frame": "energy_movie_qa_build\\energy_asset_intelligence_real_run_demo_scene_08.png",
+          "narration_stamp_matches": true
+        },
+        {
+          "scene": 9,
+          "title": "Measure the implementation",
+          "start_seconds": 213.0,
+          "duration_seconds": 30.0,
+          "narration_seconds": 28.008,
+          "expected_voiceover": "The scorecard turns the working scenario into reviewable local evidence. It records answer correctness, maintenance-evidence accuracy, abstention, tenant isolation, publication freshness, local answer latency, and RDF materialisation throughput. These are synthetic-fixture measurements, not enterprise-scale claims.",
+          "frame_rms_error": 5.559,
+          "frame": "energy_movie_qa_build\\energy_asset_intelligence_real_run_demo_scene_09.png",
+          "narration_stamp_matches": true
+        },
+        {
+          "scene": 10,
+          "title": "Present the operational answer",
+          "start_seconds": 243.0,
+          "duration_seconds": 20.0,
+          "narration_seconds": 17.52,
+          "expected_voiceover": "The same implementation is presented through a client-facing workspace. An operations user sees the affected asset, the review priority, and the evidence-backed recommendation without needing to read RDF or SPARQL.",
+          "frame_rms_error": 6.297,
+          "frame": "energy_movie_qa_build\\energy_asset_intelligence_real_run_demo_scene_10.png",
+          "narration_stamp_matches": true
+        },
+        {
+          "scene": 11,
+          "title": "Show evidence coverage",
+          "start_seconds": 263.0,
+          "duration_seconds": 18.0,
+          "narration_seconds": 14.544,
+          "expected_voiceover": "The interface also makes uncertainty visible. Assets without enough evidence are not given a confident maintenance conclusion. This is the safety boundary between a useful advisory system and an ungrounded answer.",
+          "frame_rms_error": 6.715,
+          "frame": "energy_movie_qa_build\\energy_asset_intelligence_real_run_demo_scene_11.png",
+          "narration_stamp_matches": true
+        },
+        {
+          "scene": 12,
+          "title": "Reveal the technical trace",
+          "start_seconds": 281.0,
+          "duration_seconds": 20.0,
+          "narration_seconds": 17.064,
+          "expected_voiceover": "For technical stakeholders, the same screen expands to show the RDF evidence, the version-controlled SPARQL query result, the authoritative bulletin, and the validation status behind the business answer.",
+          "frame_rms_error": 8.264,
+          "frame": "energy_movie_qa_build\\energy_asset_intelligence_real_run_demo_scene_12.png",
+          "narration_stamp_matches": true
+        }
+      ]
+    }
+  ]
+}

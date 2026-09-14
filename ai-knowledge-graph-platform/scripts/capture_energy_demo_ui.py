@@ -27,6 +27,18 @@ def main() -> None:
         page.locator("summary").click()
         page.wait_for_timeout(150)
         page.screenshot(path=str(OUT / "dashboard_technical_trace.png"), full_page=True)
+
+        # Text-based selectors here (not `.nth()`): the remediation panel's
+        # own buttons come after everything the two captures above rely on,
+        # but stay off positional indices for its own markup too, so future
+        # panel changes don't silently shift what gets captured.
+        page.get_by_role("button", name="Request telemetry from Snowflake").first.click()
+        page.wait_for_timeout(150)
+        page.get_by_label("Owner").fill("ops-team")
+        page.get_by_label("Reason").fill("Confirm gearbox temperature via Snowflake export")
+        page.get_by_role("button", name="Submit request").click()
+        page.wait_for_timeout(400)
+        page.screenshot(path=str(OUT / "dashboard_evidence_remediation.png"), full_page=True)
         browser.close()
 
     print(f"Captured Energy UI screenshots in {OUT}")

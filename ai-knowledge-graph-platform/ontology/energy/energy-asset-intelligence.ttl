@@ -17,6 +17,13 @@ energy:Component a owl:Class ;
 energy:DocumentRevision a owl:Class ;
   rdfs:label "Document revision" ;
   rdfs:subClassOf energy:TechnicalDocument .
+energy:EvidenceRequest a owl:Class ;
+  rdfs:label "Evidence request" ;
+  rdfs:comment "A governed follow-up task tracking a request for missing operational evidence from its owning source system. Governance metadata only -- never a source of asset facts, and never itself a maintenance conclusion." ;
+  rdfs:subClassOf prov:Entity .
+energy:EvidenceRequestTransition a owl:Class ;
+  rdfs:label "Evidence request transition" ;
+  rdfs:subClassOf prov:Entity .
 energy:MaintenanceReviewFinding a owl:Class ;
   rdfs:label "Maintenance review finding" .
 energy:Observation a owl:Class ;
@@ -36,21 +43,35 @@ energy:WorkOrder a owl:Class ;
 
 energy:appliesToComponentType a owl:DatatypeProperty ; rdfs:domain energy:DocumentRevision ; rdfs:range xsd:string .
 energy:assetId a owl:DatatypeProperty ; rdfs:domain energy:Asset ; rdfs:range xsd:string .
+energy:assignedTo a owl:DatatypeProperty ; rdfs:domain energy:EvidenceRequest ; rdfs:range xsd:string .
+energy:changedAt a owl:DatatypeProperty ; rdfs:domain energy:EvidenceRequestTransition ; rdfs:range xsd:dateTime .
+energy:changedBy a owl:DatatypeProperty ; rdfs:domain energy:EvidenceRequestTransition ; rdfs:range xsd:string .
 energy:componentType a owl:DatatypeProperty ; rdfs:domain energy:Component ; rdfs:range xsd:string .
 energy:createdAt a owl:DatatypeProperty ; rdfs:domain owl:Thing ; rdfs:range xsd:dateTime .
 energy:documentId a owl:DatatypeProperty ; rdfs:domain energy:DocumentRevision ; rdfs:range xsd:string .
+energy:fromState a owl:DatatypeProperty ; rdfs:domain energy:EvidenceRequestTransition ; rdfs:range xsd:string .
 energy:metric a owl:DatatypeProperty ; rdfs:domain energy:Observation ; rdfs:range xsd:string .
+energy:missingField a owl:DatatypeProperty ; rdfs:domain energy:EvidenceRequest ; rdfs:range xsd:string .
 energy:observedAt a owl:DatatypeProperty ; rdfs:domain energy:Observation ; rdfs:range xsd:dateTime .
+energy:priority a owl:DatatypeProperty ; rdfs:domain energy:EvidenceRequest ; rdfs:range xsd:string .
+energy:reason a owl:DatatypeProperty ; rdfs:domain energy:EvidenceRequest ; rdfs:range xsd:string .
 energy:recordedAt a owl:DatatypeProperty ; rdfs:domain energy:Observation ; rdfs:range xsd:dateTime ; rdfs:comment "Bitemporal recorded-time axis: when the platform learned this reading, distinct from observedAt (the valid-time axis: when the reading was actually taken). Equal to observedAt for an immediately-ingested reading; later than observedAt for a late-arriving correction to an earlier reading." .
+energy:requestId a owl:DatatypeProperty ; rdfs:domain energy:EvidenceRequest ; rdfs:range xsd:string .
+energy:state a owl:DatatypeProperty ; rdfs:domain energy:EvidenceRequest ; rdfs:range xsd:string .
 energy:status a owl:DatatypeProperty ; rdfs:domain energy:WorkOrder ; rdfs:range xsd:string .
+energy:targetSourceSystem a owl:DatatypeProperty ; rdfs:domain energy:EvidenceRequest ; rdfs:range xsd:string .
 energy:temperatureReviewThreshold a owl:DatatypeProperty ; rdfs:domain energy:DocumentRevision ; rdfs:range xsd:decimal .
+energy:toState a owl:DatatypeProperty ; rdfs:domain energy:EvidenceRequestTransition ; rdfs:range xsd:string .
+energy:transitionReason a owl:DatatypeProperty ; rdfs:domain energy:EvidenceRequestTransition ; rdfs:range xsd:string .
 energy:unit a owl:DatatypeProperty ; rdfs:domain energy:Observation ; rdfs:range xsd:string .
 energy:updatedAt a owl:DatatypeProperty ; rdfs:domain owl:Thing ; rdfs:range xsd:dateTime .
 energy:validFrom a owl:DatatypeProperty ; rdfs:domain energy:WorkOrder ; rdfs:range xsd:dateTime ; rdfs:comment "Bitemporal valid-time axis -- when this status took effect." .
 energy:validTo a owl:DatatypeProperty ; rdfs:domain energy:DocumentRevision ; rdfs:range xsd:dateTime .
 energy:value a owl:DatatypeProperty ; rdfs:domain energy:Observation ; rdfs:range xsd:decimal .
 energy:workOrderId a owl:DatatypeProperty ; rdfs:domain energy:WorkOrder ; rdfs:range xsd:string .
+energy:changesRequest a owl:ObjectProperty ; rdfs:domain energy:EvidenceRequestTransition ; rdfs:range energy:EvidenceRequest .
 energy:concernsAsset a owl:ObjectProperty ; rdfs:domain energy:WorkOrder ; rdfs:range energy:Asset .
+energy:forAsset a owl:ObjectProperty ; rdfs:domain energy:EvidenceRequest ; rdfs:range energy:Asset .
 energy:hasAsset a owl:ObjectProperty ; rdfs:domain energy:Site ; rdfs:range energy:Asset .
 energy:hasComponent a owl:ObjectProperty ; rdfs:domain energy:Asset ; rdfs:range energy:Component .
 energy:observedAsset a owl:ObjectProperty ; rdfs:domain energy:Observation ; rdfs:range energy:Asset .
@@ -62,6 +83,14 @@ energy:DocumentRevision owl:hasKey ( energy:documentId ) .
 energy:DocumentRevision rdfs:subClassOf [ a owl:Restriction ; owl:onProperty energy:documentId ; owl:minCardinality "1"^^xsd:nonNegativeInteger ] .
 energy:DocumentRevision rdfs:subClassOf [ a owl:Restriction ; owl:onProperty energy:recordedAt ; owl:minCardinality "1"^^xsd:nonNegativeInteger ] .
 energy:DocumentRevision rdfs:subClassOf [ a owl:Restriction ; owl:onProperty energy:validFrom ; owl:minCardinality "1"^^xsd:nonNegativeInteger ] .
+energy:EvidenceRequest owl:hasKey ( energy:requestId ) .
+energy:EvidenceRequest rdfs:subClassOf [ a owl:Restriction ; owl:onProperty energy:assignedTo ; owl:minCardinality "1"^^xsd:nonNegativeInteger ] .
+energy:EvidenceRequest rdfs:subClassOf [ a owl:Restriction ; owl:onProperty energy:missingField ; owl:minCardinality "1"^^xsd:nonNegativeInteger ] .
+energy:EvidenceRequest rdfs:subClassOf [ a owl:Restriction ; owl:onProperty energy:priority ; owl:minCardinality "1"^^xsd:nonNegativeInteger ] .
+energy:EvidenceRequest rdfs:subClassOf [ a owl:Restriction ; owl:onProperty energy:reason ; owl:minCardinality "1"^^xsd:nonNegativeInteger ] .
+energy:EvidenceRequest rdfs:subClassOf [ a owl:Restriction ; owl:onProperty energy:requestId ; owl:minCardinality "1"^^xsd:nonNegativeInteger ] .
+energy:EvidenceRequest rdfs:subClassOf [ a owl:Restriction ; owl:onProperty energy:state ; owl:minCardinality "1"^^xsd:nonNegativeInteger ] .
+energy:EvidenceRequest rdfs:subClassOf [ a owl:Restriction ; owl:onProperty energy:targetSourceSystem ; owl:minCardinality "1"^^xsd:nonNegativeInteger ] .
 energy:Observation rdfs:subClassOf [ a owl:Restriction ; owl:onProperty energy:observedAt ; owl:minCardinality "1"^^xsd:nonNegativeInteger ] .
 energy:Observation rdfs:subClassOf [ a owl:Restriction ; owl:onProperty energy:recordedAt ; owl:minCardinality "1"^^xsd:nonNegativeInteger ] .
 energy:Observation rdfs:subClassOf [ a owl:Restriction ; owl:onProperty energy:unit ; owl:minCardinality "1"^^xsd:nonNegativeInteger ] .

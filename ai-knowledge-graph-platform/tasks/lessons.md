@@ -6202,3 +6202,25 @@ picker selection actually verified by Codex. A recommendation such as
 unless the runtime has reported that exact active selection. If picker state is
 not exposed, give the recommendation and say that the active setting is
 unverified; do not convert a recommendation into an assertion about state.
+
+## A173 - `TestClient` + `dependency_overrides[get_current_user]` verifies the route, not the auth path in front of it
+
+Building the Energy evidence-remediation write endpoints, every unit test
+passed (CAS, idempotency, tenant scoping, scope enforcement) because
+`tests/unit/test_energy_demo_routes.py`'s fixture overrides `get_current_user`
+directly, which skips `RequireAuthMiddleware` and `validate_cookie_csrf`
+entirely. A real browser session through `/auth/dev-login` then 403'd on
+every write with "Invalid CSRF token" -- `dev_login()` set the `access_token`
+cookie but never the `csrf_token` cookie its own double-submit check requires,
+so no cookie-authenticated write request could ever succeed through that
+route. This is an old, pre-existing gap (it silently broke the *existing*
+work-order "Approve review" button too, not just the new feature) that 26
+passing unit tests gave zero signal about, because the tests never exercise
+the auth middleware layer at all. Any dependency-override-based test fixture
+that bypasses auth for convenience must be paired with at least one real,
+unmocked pass through the actual login flow before a write feature is called
+verified -- "all tests pass" and "works through a real session" are different
+claims, and only the second is what a user clicking a button experiences.
+Caught here only because the verification step included a live browser
+click-through instead of stopping at the test suite; see the standing
+"Verification Before Done" rule this confirms rather than introduces.

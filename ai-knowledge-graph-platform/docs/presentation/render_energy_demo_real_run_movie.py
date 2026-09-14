@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 import math
+import re
 import shutil
 import subprocess
 import textwrap
@@ -13,6 +14,8 @@ from pathlib import Path
 
 from gtts import gTTS
 from PIL import Image, ImageDraw, ImageFont
+
+from energy_movie_evidence import DISCLAIMER, mapping_counts, why_trace_excerpt
 
 W, H, FPS = 1280, 720, 24
 ROOT = Path(__file__).resolve().parent
@@ -76,6 +79,7 @@ EVALUATION = str(COMMANDS["evaluate"]["stdout"])
 E2E = str(COMMANDS["run_e2e"]["stdout"])
 SCORECARD = str(COMMANDS["scorecard"]["stdout"])
 TESTS = str(COMMANDS["unit_tests"]["stdout"])
+ENTITY_ROWS, RELATION_ROWS = mapping_counts()
 
 SCENES = [
     Scene(
@@ -95,7 +99,7 @@ SCENES = [
         "validate_r2rml", "Validate R2RML against the source", 22,
         "Next, the repository parses the energy R2RML mapping and validates it "
         "against the generated SQLite source. The captured result reports the "
-        "energy-demo tenant, thirteen entity rows, and zero relation rows. The "
+        f"energy-demo tenant, {ENTITY_ROWS} entity rows, and {RELATION_ROWS} relation rows. The "
         "command uses validate-only, so it proves the source and mapping contract "
         "without issuing a graph write.",
     ),
@@ -176,6 +180,7 @@ def base(index: int) -> tuple[Image.Image, ImageDraw.ImageDraw]:
     text(draw, (1225, 35), f"CAPTURED {TRACE['captured_at']}", 12, GOLD, True, "ra")
     text(draw, (52, 76), f"{index + 1:02d}", 16, GOLD, True)
     text(draw, (88, 70), SCENES[index].title, 30, WHITE, True)
+    text(draw, (640, 697), DISCLAIMER, 15, GOLD, anchor="mm")
     step = 1120 / len(SCENES)
     for item in range(len(SCENES)):
         x = 52 + item * step
@@ -185,15 +190,18 @@ def base(index: int) -> tuple[Image.Image, ImageDraw.ImageDraw]:
 
 def console(draw: ImageDraw.ImageDraw, command: str, output: list[str], status: str = "EXIT CODE 0") -> None:
     panel(draw, (65, 152, 1215, 652), outline=GREEN)
-    text(draw, (98, 185), "CAPTURED COMMAND", 13, GOLD, True)
+    text(draw, (98, 185), "CAPTURED COMMAND · interpreter path shortened", 13, GOLD, True)
     text(draw, (1180, 185), status, 13, GREEN, True, "ra")
-    wrapped = textwrap.wrap(command, 108)
+    wrapped = textwrap.wrap(re.sub(r"^.*?python\.exe\s+", "python ", command), 108)
     for index, line in enumerate(wrapped[:2]):
         text(draw, (98, 220 + index * 27), f"> {line}" if index == 0 else f"  {line}", 15, CYAN)
     start_y = 293
-    for index, line in enumerate(output[:13]):
+    visible_lines = [part for line in output for part in (textwrap.wrap(line, 118) or [""])]
+    if len(visible_lines) > 13:
+        visible_lines = visible_lines[:12] + ["[excerpt; full output in energy_demo_real_run.json]"]
+    for index, line in enumerate(visible_lines):
         color = GREEN if any(mark in line.lower() for mark in ("validated", "passed", "created", '"conforms": false')) else WHITE
-        text(draw, (98, start_y + index * 26), line[:122], 15, color)
+        text(draw, (98, start_y + index * 26), line, 15, color)
 
 
 def draw_scene(index: int, image: Image.Image, draw: ImageDraw.ImageDraw) -> None:
@@ -230,11 +238,16 @@ def draw_scene(index: int, image: Image.Image, draw: ImageDraw.ImageDraw) -> Non
         ), 10)
         console(draw, str(COMMANDS["run_e2e"]["command"]), output)
     elif scene.key == "scorecard":
-        output = lines_containing(SCORECARD, (
-            '"report_schema_version"', '"answer_correctness"', '"evidence_accuracy"',
-            '"abstention"', '"tenant_isolation"', '"freshness"', '"latency"',
-            '"ingestion_throughput"',
-        ), 10)
+        score, _ = json.JSONDecoder().raw_decode(SCORECARD[SCORECARD.index("{\n"):])
+        output = [
+            "Summary of captured scorecard (full JSON in the command trace):",
+            f"Answer correctness: {score['answer_correctness']['passed']}/{score['answer_correctness']['total']}",
+            *[f"{key}: passed={score[key]['passed']}" for key in ("evidence_accuracy", "abstention", "tenant_isolation")],
+            f"Published triples: {score['freshness']['published_triple_count']}; quarantined: {score['freshness']['quarantined_count']}",
+            f"Local answer p50: {score['latency']['p50_latency_ms']} ms; samples: {score['latency']['sample_count']}",
+            f"Local materialisation: {score['ingestion_throughput']['candidate_records_per_second']} records/s",
+            "Tiny synthetic fixture; not production SLAs or capacity benchmarks.",
+        ]
         console(draw, str(COMMANDS["scorecard"]["command"]), output)
     else:
         screenshot_name = {
@@ -246,6 +259,20 @@ def draw_scene(index: int, image: Image.Image, draw: ImageDraw.ImageDraw) -> Non
         if not screenshot_path.exists():
             raise RuntimeError(f"Missing UI capture: {screenshot_path}. Run scripts/capture_energy_demo_ui.py first.")
         screenshot = Image.open(screenshot_path).convert("RGB")
+        if scene.key == "ui_technical":
+            screenshot = why_trace_excerpt(screenshot)
+            screenshot.thumbnail((710, 460), Image.Resampling.LANCZOS)
+            x, y = 510, 175
+            panel(draw, (x - 10, y - 10, x + screenshot.width + 10, y + screenshot.height + 10), outline=CYAN)
+            image.paste(screenshot, (x, y))
+            text(draw, (80, 215), "Expand the explanation", 24, GOLD, True)
+            text(draw, (80, 275), '“Why am I seeing this?” reveals the proof', 18, WHITE, True)
+            text(draw, (80, 305), "behind the advisory.", 20, WHITE, True)
+            text(draw, (80, 390), "The actual UI then exposes source identifiers,", 19, MUTED)
+            text(draw, (80, 420), "RDF and SPARQL evidence, and validation status.", 19, MUTED)
+            draw.line((445, 355, 500, 355), fill=GOLD, width=4)
+            draw.polygon([(500, 355), (486, 347), (486, 363)], fill=GOLD)
+            return
         screenshot.thumbnail((1060, 515), Image.Resampling.LANCZOS)
         x = (W - screenshot.width) // 2
         y = 150 + (515 - screenshot.height) // 2

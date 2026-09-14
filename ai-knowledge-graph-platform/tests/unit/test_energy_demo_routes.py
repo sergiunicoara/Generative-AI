@@ -7,6 +7,7 @@ from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 from pathlib import Path
 
+import pytest
 from fastapi import FastAPI
 from rdflib import RDF, Graph, URIRef
 from starlette.testclient import TestClient
@@ -58,6 +59,50 @@ def test_publication_and_quarantine_read_the_lifespan_published_version(tmp_path
     assert publication.status_code == 200
     assert publication.json()["published_triple_count"] > 0
     assert quarantine.json()["quarantined_records"] == []
+
+
+def test_capability_diagnostics_is_authenticated_tenant_scoped_and_read_only(tmp_path: Path):
+    with _client(tmp_path, scope="read") as client:
+        before = client.get("/energy-demo/publication").json()
+        response = client.get("/energy-demo/capability-diagnostics")
+        after = client.get("/energy-demo/publication").json()
+    assert response.status_code == 200
+    assert response.json()["status"] == "ok"
+    assert response.json()["diagnostics"]
+    assert before == after
+
+    with _client(tmp_path / "other", scope="read", tenant="other-tenant") as client:
+        assert client.get("/energy-demo/capability-diagnostics").status_code == 404
+    with _client(tmp_path / "unauthorized", scope="") as client:
+        assert client.get("/energy-demo/capability-diagnostics").status_code == 403
+
+
+@pytest.mark.parametrize("payload", ["", "{}", '{"diagnostics": []}', '{not-json'])
+def test_capability_diagnostics_handles_bad_artifact_safely(tmp_path: Path, monkeypatch, payload: str):
+    from api.routes import energy_demo as routes
+    artifact = tmp_path / "diagnostics.json"
+    artifact.write_text(payload, encoding="utf-8")
+    monkeypatch.setattr(routes, "DIAGNOSTICS_PATH", artifact)
+    with _client(tmp_path / "bad-artifact", scope="read") as client:
+        response = client.get("/energy-demo/capability-diagnostics")
+    assert response.status_code == 200
+    assert response.json()["status"] == "unavailable"
+    assert response.json()["diagnostics"] == []
+    assert "filesystem" not in response.text.lower()
+
+
+def test_capability_diagnostics_escapes_values_and_exposes_mitigation(tmp_path: Path, monkeypatch):
+    from api.routes import energy_demo as routes
+    artifact = tmp_path / "diagnostics.json"
+    artifact.write_text('{"version":"test","diagnostics":[{"element":"<rule>","target":"neo4j","fidelity":"unenforceable","severity":"warning","message":"<script>alert(1)</script>","runtime_control":"Use SHACL & application validation"}]}', encoding="utf-8")
+    monkeypatch.setattr(routes, "DIAGNOSTICS_PATH", artifact)
+    with _client(tmp_path / "escape", scope="read") as client:
+        api_response = client.get("/energy-demo/capability-diagnostics")
+        html_response = client.get("/energy-demo")
+    assert api_response.json()["diagnostics"][0]["status"] == "Unsupported"
+    assert "<script>alert(1)</script>" not in html_response.text
+    assert "esc(d.message)" in html_response.text
+    assert "esc(d.mitigation)" in html_response.text
 
 
 def test_dashboard_html_closes_its_style_block_before_the_workspace_markup(tmp_path: Path):

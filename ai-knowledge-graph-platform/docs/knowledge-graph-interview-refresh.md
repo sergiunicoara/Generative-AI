@@ -374,6 +374,16 @@ non-negotiable?”
 
 ## The Energy POC flow
 
+### Capability gaps
+
+`ontology/generated/energy/diagnostics.json` is generated from the canonical
+semantic model during compilation. It is surfaced read-only at
+`GET /energy-demo/capability-diagnostics` and in the dashboard's collapsed
+Schema capability gaps panel. It makes constraint loss explicit: RDF/SHACL is
+the authoritative governed layer, while Neo4j/LPG is a rebuildable projection
+whose native constraints may require shared runtime validation or controlled
+loading to preserve the intended semantics.
+
 ```text
 SAP-shaped assets/work orders
         + Snowflake-shaped telemetry

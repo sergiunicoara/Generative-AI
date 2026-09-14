@@ -50,6 +50,11 @@ tenant isolation, and retry-safe refresh.
 
 ## Claim boundaries to keep on screen
 
+The dashboard also includes a collapsed, read-only **Schema capability gaps**
+panel backed by `GET /energy-demo/capability-diagnostics`. It displays the
+compiler-generated report, including target, status, impact and mitigation;
+the UI never regenerates or edits the artifact.
+
 Use the caption **Synthetic data · Advisory POC · No equipment control**.
 
 - “SAP/Snowflake/SharePoint” means deterministic source-shaped fixtures, not

@@ -28,6 +28,13 @@ def main() -> None:
         page.wait_for_timeout(150)
         page.screenshot(path=str(OUT / "dashboard_technical_trace.png"), full_page=True)
 
+        # Keep the generated capability-loss report read-only and unobtrusive
+        # in the normal dashboard, but capture its expanded state for the
+        # technical walkthrough and evidence manifest.
+        page.locator("#capability-gaps summary").click()
+        page.wait_for_timeout(250)
+        page.screenshot(path=str(OUT / "dashboard_capability_gaps.png"), full_page=True)
+
         # Text-based selectors here (not `.nth()`): the remediation panel's
         # own buttons come after everything the two captures above rely on,
         # but stay off positional indices for its own markup too, so future

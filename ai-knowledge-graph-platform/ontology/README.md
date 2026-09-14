@@ -2,6 +2,14 @@
 
 ## Canonical Energy semantic model
 
+The compiler also emits `generated/energy/diagnostics.json`, a read-only
+capability-loss report. It records which canonical rules are enforced,
+approximated or unenforceable by OWL/RDFS, SHACL and Neo4j targets, together
+with the mitigation required. The report is generated during compilation and
+must not be edited from the dashboard. RDF/SHACL remains the authoritative
+governed semantic layer; Neo4j/LPG is a rebuildable projection with different
+native constraint capabilities.
+
 The Energy domain now has one storage-independent, reviewable source of truth:
 [`models/energy-asset-intelligence.yaml`](models/energy-asset-intelligence.yaml).
 It declares classes, single inheritance, reusable mixins, properties,

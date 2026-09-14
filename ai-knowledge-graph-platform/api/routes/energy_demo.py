@@ -2,6 +2,7 @@
 
 from dataclasses import asdict
 import json
+from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import HTMLResponse, Response
@@ -16,6 +17,33 @@ from graphrag.domains.energy.publication import PublicationRollbackError
 from graphrag.domains.energy.workflow import MaintenanceWorkflow, WorkflowTransitionError
 
 router = APIRouter()
+DIAGNOSTICS_PATH = Path(__file__).resolve().parents[2] / "ontology" / "generated" / "energy" / "diagnostics.json"
+
+
+def _capability_diagnostics() -> dict:
+    metadata = {"artifact": "ontology/generated/energy/diagnostics.json", "model": "energy-asset-intelligence.yaml"}
+    try:
+        payload = json.loads(DIAGNOSTICS_PATH.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return {"status": "unavailable", "message": "Capability diagnostics are currently unavailable.", **metadata, "diagnostics": []}
+    if not isinstance(payload, dict) or not isinstance(payload.get("diagnostics"), list) or not payload["diagnostics"]:
+        return {"status": "unavailable", "message": "Capability diagnostics are currently unavailable.", **metadata, "diagnostics": []}
+    diagnostics = []
+    for item in payload["diagnostics"]:
+        if not isinstance(item, dict):
+            continue
+        fidelity = item.get("fidelity")
+        status = "Enforced" if fidelity == "preserved" and item.get("severity") == "info" else "Unsupported" if fidelity == "unenforceable" else "Partially enforced"
+        diagnostics.append({
+            "canonical_rule": str(item.get("element", "Unknown rule")), "target": str(item.get("target", "Unknown target")),
+            "status": status, "message": str(item.get("message", "No further detail available.")),
+            "impact": "The target cannot guarantee this rule natively." if status != "Enforced" else "The target preserves this semantic rule.",
+            "mitigation": str(item.get("runtime_control") or "Use controlled loading and application-level validation."),
+            "source": metadata["artifact"], "version": str(payload.get("version", "generated")),
+        })
+    if not diagnostics:
+        return {"status": "unavailable", "message": "Capability diagnostics are currently unavailable.", **metadata, "diagnostics": []}
+    return {"status": "ok", "message": "Generated capability diagnostics loaded.", **metadata, "version": str(payload.get("version", "generated")), "diagnostics": diagnostics}
 
 
 def get_energy_service(request: Request) -> EnergyDemoService:
@@ -251,7 +279,7 @@ def _dashboard_html(service: EnergyDemoService) -> str:
     return f"""<!doctype html><html><head><title>Energy Asset Intelligence</title><style>
 body{{margin:0;background:#f4f7fa;color:#102235;font:15px Segoe UI,system-ui,sans-serif}}header{{background:linear-gradient(115deg,#0b2035,#155ba4);color:#fff;padding:28px 7%;display:flex;justify-content:space-between}}h1{{margin:0;font-size:28px}}main{{max-width:1180px;margin:26px auto;padding:0 22px}}.grid{{display:grid;grid-template-columns:repeat(4,1fr);gap:14px}}.layout{{display:grid;grid-template-columns:1fr 2fr;gap:18px;margin-top:18px}}.card,.panel{{background:#fff;border:1px solid #d5e1ec;border-radius:12px;padding:18px;box-shadow:0 3px 12px #1c34470d}}.label{{font-size:12px;color:#5e7285;text-transform:uppercase}}.metric{{font-size:28px;font-weight:700;margin:8px 0}}.red{{color:#c7352c}}.green{{color:#137a53}}button{{width:100%;text-align:left;margin:8px 0;padding:13px;border:1px solid #d5e1ec;border-radius:9px;background:#fff;font:inherit;cursor:pointer}}button.active,button:hover{{border-color:#4a91dc;background:#edf6ff}}.pill{{float:right;padding:4px 8px;border-radius:12px;font-size:11px;font-weight:700}}.critical{{background:#fce9e7;color:#a5211d}}.unknown{{background:#edf1f5;color:#607385}}.answer{{margin-top:14px;padding:16px;border-left:4px solid #1069c7;background:#f1f7fc;line-height:1.5}}.evidence{{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-top:14px}}.evidence div{{border:1px solid #d5e1ec;border-radius:8px;padding:11px}}.evidence b{{display:block;font-size:12px;color:#476175}}.workflow{{margin-top:18px;padding:18px;border:1px solid #b7d4e7;border-radius:12px;background:#f8fcff}}.workflow-head{{display:flex;justify-content:space-between;align-items:flex-start;gap:16px}}.state-badge{{padding:6px 10px;border-radius:14px;background:#fff1d6;color:#8b5b00;font-weight:700;font-size:12px;white-space:nowrap}}.state-approved{{background:#e4f7ed;color:#137a53}}.state-rejected{{background:#fce9e7;color:#a5211d}}.workflow-actions{{display:flex;gap:10px;margin-top:12px}}.workflow-actions button{{width:auto;flex:0 0 auto;margin:0;text-align:center}}.action.approve{{background:#137a53;color:#fff;border-color:#137a53}}.action.reject{{background:#fff;color:#a5211d;border-color:#d98b87}}.workflow-success{{margin-top:10px;color:#137a53;font-weight:700}}.workflow-error{{margin-top:10px;color:#a5211d;font-weight:700}}.history-label{{margin-top:16px;font-weight:700}}#workflow-history{{margin:8px 0 0;padding-left:24px}}#workflow-history li{{margin:8px 0}}details{{margin-top:18px}}pre{{white-space:pre-wrap;word-break:break-word;background:#102235;color:#e7f1fb;padding:14px;border-radius:8px;font-size:12px}}small{{color:#5e7285}}.disclaimer{{margin:6px 0 14px;color:#476175;font-size:13px}}.remediation-asset{{padding:10px 0;border-bottom:1px solid #e3ecf3}}.remediation-asset button{{width:auto;display:inline-block;margin:4px 8px 4px 0;padding:8px 12px}}.remediation-form{{margin-top:8px;padding:12px;border:1px solid #d5e1ec;border-radius:8px;background:#f8fcff}}.remediation-form label{{display:block;margin:8px 0;font-size:13px;color:#345}}.remediation-form input,.remediation-form select,.remediation-form textarea{{width:100%;margin-top:4px;padding:8px;border:1px solid #cfe0ee;border-radius:6px;font:inherit;box-sizing:border-box}}.remediation-request{{padding:10px 0;border-bottom:1px solid #e3ecf3}}#publication-summary div{{padding:2px 0}}.quarantine-record{{padding:10px 0;border-bottom:1px solid #e3ecf3}}.quarantine-record details{{margin-top:6px}}.quarantine-record ul{{margin:4px 0;padding-left:20px}}#publication-history ol{{margin:8px 0 0;padding-left:20px}}#publication-history li{{margin:8px 0}}@media(max-width:800px){{.grid{{grid-template-columns:repeat(2,1fr)}}.layout,.evidence{{grid-template-columns:1fr}}.workflow-actions{{flex-direction:column}}}}
 </style><header><div><h1>Energy Asset Intelligence</h1><div>Maintenance review workspace · North Sea Demonstration Wind Farm</div></div><div>Synthetic advisory demo</div></header><main>
-<section class="grid" id="tiles"></section>
+<section class="grid" id="tiles"></section><details id="capability-gaps"><summary>Schema capability gaps</summary><p class="disclaimer">The canonical semantic model remains authoritative. This report identifies where a target system cannot enforce a rule directly and where validation or governance controls must compensate.</p><div id="capability-gaps-status"><small>Loading generated diagnostics…</small></div><div id="capability-gaps-list"></div></details>
 <section class="layout"><aside class="panel"><div class="label">Asset overview</div><h2>Maintenance priorities</h2><div id="priorities"></div><hr><b>Guidance history</b><div id="guidance"></div></aside>
 <section class="panel"><div class="label">Operations question</div><h2 id="question">Which assets need maintenance review?</h2><div id="answer" class="answer"></div><div id="evidence" class="evidence"></div><section id="workflow" class="workflow" hidden><div class="workflow-head"><div><div class="label">Governed review workflow</div><b id="workflow-title">WO-9001 · review required</b><div id="workflow-meta"><small>Loading current state…</small></div></div><div id="workflow-state" class="state-badge">REVIEW REQUIRED</div></div><div class="workflow-actions"><button id="approve" class="action approve" onclick="transitionState('approved')">Approve review</button><button id="reject" class="action reject" onclick="transitionState('rejected')">Reject review</button></div><div id="workflow-status" role="status"></div><div class="label history-label">Transition history</div><ol id="workflow-history"><li><small>No transitions recorded yet.</small></li></ol></section><details><summary>Why am I seeing this?</summary><p>The recommendation is built from mapped work orders, RDF evidence, and a version-controlled SPARQL query. This is the technical trail behind the operational answer.</p><pre id="technical"></pre></details>{remediation_section}</section></section>{publication_audit_section}<p><small>All records are synthetic. This workspace is advisory and does not control equipment.</small></p></main>
 <script>const data={data};
@@ -272,6 +300,8 @@ function renderWorkflow(lifecycle){{const box=document.getElementById('workflow'
 async function loadWorkflow(){{try{{const response=await fetch('/energy-demo/work-orders/'+encodeURIComponent(workflowOrder)+'/lifecycle');if(!response.ok)throw new Error('Unable to load workflow state');renderWorkflow(await response.json())}}catch(error){{document.getElementById('workflow').hidden=false;document.getElementById('workflow-status').textContent=error.message;document.getElementById('workflow-status').className='workflow-error'}}}}
 async function transitionState(toState){{const response0=await fetch('/energy-demo/work-orders/'+encodeURIComponent(workflowOrder)+'/lifecycle');if(!response0.ok){{document.getElementById('workflow-status').textContent='Could not load the latest workflow version.';return}}const lifecycle=await response0.json();const reason=window.prompt('Reason for '+toState+' this review:');if(!reason||!reason.trim())return;const response=await fetch('/energy-demo/work-orders/'+encodeURIComponent(workflowOrder)+'/transition',{{method:'POST',headers:{{'Content-Type':'application/json'}},body:JSON.stringify({{to_state:toState,reason:reason.trim(),expected_version:lifecycle.object_version,command_id:'ui-'+Date.now()+'-'+Math.random().toString(36).slice(2)}})}});if(!response.ok){{let message='Transition failed';try{{message=(await response.json()).detail||message}}catch(_){{}}document.getElementById('workflow-status').textContent=message;document.getElementById('workflow-status').className='workflow-error';return}}renderWorkflow(await response.json());document.getElementById('workflow-status').textContent='Transition recorded successfully.';document.getElementById('workflow-status').className='workflow-success'}}
 function show(key,button){{let d=key==='current'?data.current:data.incomplete;document.querySelectorAll('#priorities button').forEach(x=>x.classList.remove('active'));button.classList.add('active');document.getElementById('question').textContent=key==='current'?'Which assets need maintenance review?':'Where is further evidence required?';document.getElementById('answer').textContent=d.answer;document.getElementById('evidence').innerHTML=(d.evidence||[]).map(e=>'<div><b>'+esc(e.source_type.replaceAll('_',' '))+'</b>'+esc(e.value)+'<br><small>'+esc(e.field_or_span)+'</small></div>').join('');document.getElementById('technical').textContent=JSON.stringify({{bulletin:d.authoritative_bulletin,query_rows:d.query_rows||'Not required',answer_source:d.answer_source||'Evidence contract',validation:data.validation}},null,2);document.getElementById('workflow').hidden=key!=='current';if(key==='current')loadWorkflow();document.getElementById('evidence-remediation').hidden=key!=='incomplete';if(key==='incomplete'){{renderRemediationAssets();loadRemediationRequests()}}}}
+async function loadCapabilityGaps(){{const status=document.getElementById('capability-gaps-status'),list=document.getElementById('capability-gaps-list');try{{const response=await fetch('/energy-demo/capability-diagnostics');const payload=await response.json();if(!response.ok||payload.status!=='ok')throw new Error(payload.message||'Capability diagnostics unavailable');status.textContent=payload.diagnostics.length+' generated diagnostics';list.innerHTML=payload.diagnostics.map(d=>'<article class="card"><b>'+esc(d.canonical_rule)+'</b><span class="pill '+(d.status==='Unsupported'?'critical':d.status==='Partially enforced'?'unknown':'state-approved')+'">'+esc(d.status)+'</span><p><b>Target:</b> '+esc(d.target)+'</p><p>'+esc(d.message)+'</p><p><b>Impact:</b> '+esc(d.impact)+'</p><p><b>Mitigation:</b> '+esc(d.mitigation)+'</p><small>'+esc(d.source)+' · version '+esc(d.version)+'</small></article>').join('')}}catch(error){{status.textContent=error.message;status.className='workflow-error'}}}}
+loadCapabilityGaps();
 {remediation_script}
 {publication_audit_script}
 show('current',document.querySelector('#priorities button'));
@@ -318,6 +348,14 @@ async def validation(tenant: str = Depends(get_tenant), service: EnergyDemoServi
     if tenant != "energy-demo":
         raise HTTPException(status_code=404, detail="Energy demonstration not found")
     return service.validate_candidate()
+
+
+@router.get("/capability-diagnostics", dependencies=[Depends(require_scope("read"))])
+async def capability_diagnostics(tenant: str = Depends(get_tenant)):
+    """Read the compiler-generated report; never regenerates or mutates it."""
+    if tenant != "energy-demo":
+        raise HTTPException(status_code=404, detail="Energy demonstration not found")
+    return _capability_diagnostics()
 
 
 @router.get("/publication")

@@ -231,6 +231,17 @@ class EnergyDemoService:
         first (in-memory only -- does not persist across processes)."""
         return self._publisher.history()
 
+    async def publication_history_durable(self) -> list[PublicationReport]:
+        """Durable, cross-restart publication/rollback timeline for this
+        tenant, oldest first -- read from the governance store's append-only
+        `energy_publications` log (see `GovernanceStore.history()`). Falls
+        back to the in-memory history when no governance store is wired,
+        mirroring `publication_report()`'s own durable-vs-in-memory
+        fallback. Read-only: never mutates the active-version pointer."""
+        if self._governance_store is None:
+            return self.publication_history()
+        return await self._governance_store.history(self.tenant)
+
     def rollback(self, version_id: str | None = None) -> PublicationReport:
         """Roll back to `version_id`, or the version immediately before the
         current one when omitted. Refreshes `self.graph` to match -- every

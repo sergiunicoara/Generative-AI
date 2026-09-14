@@ -152,3 +152,24 @@ store before writing this note.
 
 **Operators can inspect why a record was excluded. They cannot silently
 release invalid RDF from the dashboard.**
+
+## Publication history / rollback timeline (2026-09-14)
+
+The same "Publication and quarantine audit" panel now also renders a
+"Publication history" timeline, fetched client-side from a new read-only,
+tenant-scoped route, `GET /energy-demo/publication/history`. It lists every
+version ever published for the tenant, oldest first, each with its version
+id, publish timestamp, SHACL conformance, published-triple and quarantined
+counts, and `rolled_back_from` when the entry is itself a rollback --
+exposing no filesystem path, blob hash, or secret. The dashboard marks
+which entry is currently active and which are rollbacks and what they
+restored from. This is the same durable, append-only
+`GovernanceStore.history()` log `POST /rollback` (an authorised, `write`
+-scoped API/admin operation, not something the dashboard can invoke) writes
+to -- the panel adds visibility into that history, not a way to act on it.
+
+By default the demo fixture has never been rolled back, so the captured
+`dashboard_publication_audit.png` shows a single-entry timeline (the
+original publication, active, no `rolled_back_from`). **Operators can
+inspect why a record was excluded and which RDF publication is active. They
+cannot silently release invalid RDF from the dashboard.**

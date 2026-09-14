@@ -77,9 +77,29 @@ def main() -> None:
             "document.getElementById('publication-summary')?.textContent"
             ".indexOf('Loading') === -1"
         )
+        # Publication history (the rollback timeline) loads independently
+        # via its own fetch -- wait for it too, so the same panel capture
+        # below never catches it mid-"Loading…".
+        page.wait_for_function(
+            "document.getElementById('publication-history')?.textContent"
+            ".indexOf('Loading') === -1"
+        )
         page.locator("#publication-audit").screenshot(
             path=str(OUT / "dashboard_publication_audit.png")
         )
+        # The demo UI has no rollback control (rollback stays an
+        # authorised API/admin operation) -- so by default the timeline
+        # shows a single, non-rollback entry. Note that rather than
+        # silently capturing a one-line timeline as if it were the full
+        # feature.
+        if page.locator("#publication-history li").count() < 2:
+            print(
+                "Publication history has no rollback entry in this run -- "
+                "captured the single-publication timeline only. Seed a "
+                "durable rollback (GovernanceStore.rollback(), an "
+                "authorised admin operation) against the running server's "
+                "store for a populated timeline example."
+            )
         if page.locator(".quarantine-record").count() > 0:
             page.locator(".quarantine-record").first.locator("summary").click()
             page.wait_for_timeout(150)

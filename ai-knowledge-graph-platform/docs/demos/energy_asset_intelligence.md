@@ -42,6 +42,7 @@ GET /energy-demo/answer/historical_state?as_of=2026-05-01T00:00:00Z
 GET /energy-demo/rdf
 GET /energy-demo/validation
 GET /energy-demo/publication
+GET /energy-demo/publication/history
 GET /energy-demo/quarantine
 POST /energy-demo/rollback?version_id=<id>   (requires scope `write`)
 GET /energy-demo/evidence-requests
@@ -104,7 +105,28 @@ release invalid RDF from the dashboard** — correcting and republishing a
 record remains a governed ingestion/publication operation, not a UI action.
 `POST /rollback` restores an earlier version (the one just before current,
 or a named `version_id`) as a new version — history is append-only and is
-never rewritten or deleted.
+never rewritten or deleted. Rollback changes only the tenant's
+active-version pointer; it creates a new, append-only publication record
+(with `rolled_back_from` set to the version it restores) rather than
+rewriting or deleting anything. It never repairs the invalid data itself —
+repairing a quarantined record still requires correcting it at its owning
+source system and republishing, exactly as `GET /publication` and
+`GET /quarantine` already did before it.
+
+`GET /publication/history` exposes that same append-only timeline: every
+version ever published for the tenant, oldest first, with just enough per
+entry to audit *which* version is active and *whether* it was reached
+through a rollback — version id, publish timestamp, SHACL conformance,
+published triple count, quarantined-record count, and `rolled_back_from`.
+It never returns a filesystem path, a blob hash, or a secret, and it never
+returns the quarantined records themselves (`GET /quarantine` already does
+that for the active version). The dashboard's audit panel renders this as a
+compact "Publication history" timeline underneath the quarantine list,
+fetched client-side like the rest of the panel, marking which entry is
+currently active and which entries are rollbacks and what they were
+restored from. **Operators can inspect why a record was excluded and which
+RDF publication is active. They cannot silently release invalid RDF from
+the dashboard.**
 
 `GET /validation` is a separate, older capability probe: it demonstrates
 SHACL rejection against one fixed synthetic invalid record, not the live

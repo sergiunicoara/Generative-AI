@@ -2,10 +2,13 @@
 
 from __future__ import annotations
 
+import asyncio
 from contextlib import asynccontextmanager
+from datetime import datetime, timezone
 from pathlib import Path
 
 from fastapi import FastAPI
+from rdflib import RDF, Graph, URIRef
 from starlette.testclient import TestClient
 
 from api.auth.dependencies import get_current_user
@@ -13,6 +16,7 @@ from api.routes import energy_demo as energy_demo_routes
 from graphrag.domains.energy.demo import EnergyDemoService
 from graphrag.domains.energy.evidence_requests import EvidenceRequestService
 from graphrag.domains.energy.governance_store import GovernanceStore
+from graphrag.domains.energy.publication import PublicationReport
 from graphrag.domains.energy.workflow import MaintenanceWorkflow
 
 
@@ -298,10 +302,12 @@ def test_read_scope_can_view_publication_and_quarantine(tmp_path: Path):
         publication = client.get("/energy-demo/publication")
         quarantine = client.get("/energy-demo/quarantine")
         validation = client.get("/energy-demo/validation")
+        history = client.get("/energy-demo/publication/history")
 
     assert publication.status_code == 200
     assert quarantine.status_code == 200
     assert validation.status_code == 200
+    assert history.status_code == 200
 
 
 def test_publication_quarantine_validation_404_for_wrong_tenant(tmp_path: Path):
@@ -309,10 +315,12 @@ def test_publication_quarantine_validation_404_for_wrong_tenant(tmp_path: Path):
         publication = client.get("/energy-demo/publication")
         quarantine = client.get("/energy-demo/quarantine")
         validation = client.get("/energy-demo/validation")
+        history = client.get("/energy-demo/publication/history")
 
     assert publication.status_code == 404
     assert quarantine.status_code == 404
     assert validation.status_code == 404
+    assert history.status_code == 404
 
 
 def test_energy_demo_routes_expose_no_new_mutation_endpoints():
@@ -331,3 +339,115 @@ def test_energy_demo_routes_expose_no_new_mutation_endpoints():
         "/evidence-requests",
         "/evidence-requests/{request_id}/transition",
     }
+
+
+def test_publication_history_endpoint_is_read_only():
+    """The new history route must never accept a mutating method -- a
+    narrower, path-specific companion to the router-wide regression guard
+    above."""
+    (route,) = [r for r in energy_demo_routes.router.routes if r.path == "/publication/history"]
+    assert route.methods == {"GET"}
+
+
+def test_publication_history_reports_the_lone_lifespan_published_version(tmp_path: Path):
+    """With no rollback, history has exactly the one version the lifespan
+    published, it is the active version, and it carries no rollback
+    provenance."""
+    with _client(tmp_path) as client:
+        history = client.get("/energy-demo/publication/history")
+        publication = client.get("/energy-demo/publication")
+
+    assert history.status_code == 200
+    body = history.json()
+    assert body["active_version_id"] == publication.json()["version_id"]
+    assert [p["version_id"] for p in body["publications"]] == [body["active_version_id"]]
+    entry = body["publications"][0]
+    assert entry["rolled_back_from"] is None
+    assert entry["conforms"] is True
+    assert entry["published_triple_count"] > 0
+    # No filesystem paths or blob hashes -- PublicationReport carries none of
+    # that, but assert it directly so a future field addition can't regress
+    # the "no filesystem paths, no secrets" contract.
+    assert set(entry) == {
+        "version_id", "published_at", "conforms",
+        "published_triple_count", "quarantined_count", "rolled_back_from",
+    }
+
+
+async def _seed_a_rollback(tmp_path: Path, *, tenant: str = "energy-demo") -> None:
+    """Seed a durable governance store at `tmp_path` with two distinct
+    published versions and one rollback to the first -- directly through
+    `GovernanceStore`, since `EnergyDemoService` publishes deterministic,
+    content-identical graphs on every construction (idempotent by content
+    hash) and so cannot produce a second version on its own. `_client()`'s
+    own lifespan then republishes the identical first-version content,
+    which `GovernanceStore.publish()` recognises as already-active and
+    returns unchanged -- so the three seeded rows here are exactly what the
+    history endpoint later sees."""
+    store = GovernanceStore(
+        f"sqlite+aiosqlite:///{(tmp_path / 'governance.sqlite').as_posix()}",
+        blob_root=tmp_path / "published",
+    )
+    await store.open()
+    try:
+        service = await EnergyDemoService.create(governance_store=store)
+        first_version_id = service.publication_report().version_id
+
+        second_graph = Graph()
+        second_graph += service.graph
+        second_graph.add((URIRef("urn:test:marker"), RDF.type, URIRef("urn:test:Marker")))
+        await store.publish(
+            tenant,
+            PublicationReport(
+                version_id="seed-second-version",
+                # A real, later wall-clock timestamp -- not a hardcoded
+                # literal -- so this sorts after the original publish (real
+                # "now" at service-creation time) regardless of when the
+                # test runs, matching the same `_now_iso()`-style format
+                # the store itself uses.
+                published_at=datetime.now(timezone.utc).isoformat(),
+                published_triple_count=len(second_graph),
+                candidate_record_count=len(second_graph),
+            ),
+            second_graph,
+        )
+        restored = await store.rollback(tenant)
+        assert restored.rolled_back_from == first_version_id
+    finally:
+        await store.close()
+
+
+def test_publication_history_orders_versions_chronologically_and_marks_a_rollback(tmp_path: Path):
+    asyncio.run(_seed_a_rollback(tmp_path))
+
+    with _client(tmp_path) as client:
+        response = client.get("/energy-demo/publication/history")
+
+    assert response.status_code == 200
+    body = response.json()
+    publications = body["publications"]
+    assert len(publications) == 3
+    # Chronological (oldest first) -- the seeded second version sits between
+    # the original publish and the rollback that restores the original.
+    assert publications[1]["version_id"] == "seed-second-version"
+    first_version_id = publications[0]["version_id"]
+    rollback_entry = publications[2]
+    assert publications[0]["rolled_back_from"] is None
+    assert publications[1]["rolled_back_from"] is None
+    assert rollback_entry["rolled_back_from"] == first_version_id
+    # The rollback is what's actually serving now.
+    assert body["active_version_id"] == rollback_entry["version_id"]
+    assert rollback_entry["version_id"] != first_version_id
+
+
+def test_dashboard_html_includes_publication_history_section_fetched_client_side(tmp_path: Path):
+    with _client(tmp_path) as client:
+        response = client.get("/energy-demo")
+
+    assert response.status_code == 200
+    assert 'id="publication-history"' in response.text
+    assert "fetch('/energy-demo/publication/history')" in response.text
+    data_start = response.text.index("const data=")
+    data_end = response.text.index(";\n", data_start)
+    embedded_data = response.text[data_start:data_end]
+    assert '"publications"' not in embedded_data

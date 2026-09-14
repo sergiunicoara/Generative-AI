@@ -1,15 +1,15 @@
 {
   "scenario": "energy-asset-intelligence/e2e-v2",
   "status": "passed",
-  "run_id": "energy-e2e-e2fcf9256ac2",
+  "run_id": "energy-e2e-d5ea02872b72",
   "mode": "offline",
   "identity": {
-    "commit": "b2d642dac6bb97ba386fcf7853d9f94a4e08885a",
+    "commit": "22c3dacdde79fc9edf6dd779bf6a93bf9a39369f",
     "worktree_dirty": true,
     "python": "3.11.9",
     "platform": "Windows-10-10.0.26200-SP0",
     "artifacts": {
-      "artifacts\\energy-demo-e2e-sap.sqlite": "45b36db50b973dfabf132808d2c65d640e70c7e4d409b4ca47c334598dcfc9ac",
+      "artifacts\\energy-demo-e2e-sap.sqlite": "56725915cf8c95a6a40ca4cf88e1eb627c966af329444e754ce21c5ff1860268",
       "artifacts\\energy-demo-e2e.ttl": "16a3488fdd478b0cabdaea00e5f271cf4741d94aa220b89dc2676f7707001ab7"
     }
   },
@@ -32,7 +32,7 @@
     {
       "id": "shacl_publication",
       "passed": true,
-      "evidence": "a5014f56823b4315995aa2e9efd4136d"
+      "evidence": "8c132ed9a98345ffb7d26cb1b1d7e7c1"
     },
     {
       "id": "turtle_round_trip",
@@ -82,7 +82,7 @@
     {
       "id": "unique_run_identity",
       "passed": true,
-      "evidence": "energy-e2e-e2fcf9256ac2"
+      "evidence": "energy-e2e-d5ea02872b72"
     },
     {
       "id": "mode_explicit",
@@ -97,7 +97,7 @@
     "rml_mapping": "ontology/mappings/energy-observations.rml.ttl"
   },
   "publication": {
-    "version_id": "a5014f56823b4315995aa2e9efd4136d",
+    "version_id": "8c132ed9a98345ffb7d26cb1b1d7e7c1",
     "candidate_records": 30,
     "published_triples": 154,
     "quarantined_records": 0,
@@ -323,7 +323,7 @@
   },
   "neo4j_projection": {
     "mode": "dry-run",
-    "tenant": "energy-e2e-e2fcf9256ac2",
+    "tenant": "energy-e2e-d5ea02872b72",
     "rdf_is_authoritative": true,
     "rebuildable_read_model": true,
     "nodes": 30,

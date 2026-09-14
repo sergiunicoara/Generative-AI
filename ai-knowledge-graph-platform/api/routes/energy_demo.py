@@ -143,6 +143,8 @@ def _publication_audit_html() -> str:
         '<div id="publication-summary"><small>Loading publication status…</small></div>'
         '<div class="label history-label">Quarantined records</div>'
         '<div id="quarantine-list"><small>Loading…</small></div>'
+        '<div class="label history-label">Publication history</div>'
+        '<div id="publication-history"><small>Loading publication history…</small></div>'
         "</section>"
     )
 
@@ -198,6 +200,30 @@ def _publication_audit_script() -> str:
         "'<div><b>Publication version</b> '+esc(quarantine.version_id)+'</div>'+"
         "'</details></div>'"
         ").join('')"
+        "}\n"
+        "async function loadPublicationHistory(){"
+        "const box=document.getElementById('publication-history');"
+        "try{"
+        "const response=await fetch('/energy-demo/publication/history');"
+        "if(!response.ok)throw new Error('Unable to load publication history');"
+        "renderPublicationHistory(await response.json())"
+        "}catch(error){"
+        "box.textContent=error.message;"
+        "box.className='workflow-error'"
+        "}}\n"
+        "function renderPublicationHistory(history){"
+        "const box=document.getElementById('publication-history');"
+        "const items=history.publications||[];"
+        "if(!items.length){box.innerHTML='<small>No publication history is available.</small>';return}"
+        "box.innerHTML='<ol>'+items.slice().reverse().map(p=>{"
+        "const active=p.version_id===history.active_version_id;"
+        "const kind=p.rolled_back_from?'Rollback':'Publication';"
+        "return '<li><b>'+esc(kind)+'</b> '+(active?'<span class=\"pill unknown\">Active</span>':'')+"
+        "'<br><small>'+esc(p.published_at)+' · version '+esc(p.version_id)+"
+        "(p.rolled_back_from?' · restored from '+esc(p.rolled_back_from):'')+"
+        "' · '+esc(p.quarantined_count)+' quarantined · '+(p.conforms?'conforms':'non-conforming')+"
+        "'</small></li>'"
+        "}).join('')+'</ol>'"
         "}"
     )
 
@@ -223,7 +249,7 @@ def _dashboard_html(service: EnergyDemoService) -> str:
     publication_audit_section = _publication_audit_html()
     publication_audit_script = _publication_audit_script()
     return f"""<!doctype html><html><head><title>Energy Asset Intelligence</title><style>
-body{{margin:0;background:#f4f7fa;color:#102235;font:15px Segoe UI,system-ui,sans-serif}}header{{background:linear-gradient(115deg,#0b2035,#155ba4);color:#fff;padding:28px 7%;display:flex;justify-content:space-between}}h1{{margin:0;font-size:28px}}main{{max-width:1180px;margin:26px auto;padding:0 22px}}.grid{{display:grid;grid-template-columns:repeat(4,1fr);gap:14px}}.layout{{display:grid;grid-template-columns:1fr 2fr;gap:18px;margin-top:18px}}.card,.panel{{background:#fff;border:1px solid #d5e1ec;border-radius:12px;padding:18px;box-shadow:0 3px 12px #1c34470d}}.label{{font-size:12px;color:#5e7285;text-transform:uppercase}}.metric{{font-size:28px;font-weight:700;margin:8px 0}}.red{{color:#c7352c}}.green{{color:#137a53}}button{{width:100%;text-align:left;margin:8px 0;padding:13px;border:1px solid #d5e1ec;border-radius:9px;background:#fff;font:inherit;cursor:pointer}}button.active,button:hover{{border-color:#4a91dc;background:#edf6ff}}.pill{{float:right;padding:4px 8px;border-radius:12px;font-size:11px;font-weight:700}}.critical{{background:#fce9e7;color:#a5211d}}.unknown{{background:#edf1f5;color:#607385}}.answer{{margin-top:14px;padding:16px;border-left:4px solid #1069c7;background:#f1f7fc;line-height:1.5}}.evidence{{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-top:14px}}.evidence div{{border:1px solid #d5e1ec;border-radius:8px;padding:11px}}.evidence b{{display:block;font-size:12px;color:#476175}}.workflow{{margin-top:18px;padding:18px;border:1px solid #b7d4e7;border-radius:12px;background:#f8fcff}}.workflow-head{{display:flex;justify-content:space-between;align-items:flex-start;gap:16px}}.state-badge{{padding:6px 10px;border-radius:14px;background:#fff1d6;color:#8b5b00;font-weight:700;font-size:12px;white-space:nowrap}}.state-approved{{background:#e4f7ed;color:#137a53}}.state-rejected{{background:#fce9e7;color:#a5211d}}.workflow-actions{{display:flex;gap:10px;margin-top:12px}}.workflow-actions button{{width:auto;flex:0 0 auto;margin:0;text-align:center}}.action.approve{{background:#137a53;color:#fff;border-color:#137a53}}.action.reject{{background:#fff;color:#a5211d;border-color:#d98b87}}.workflow-success{{margin-top:10px;color:#137a53;font-weight:700}}.workflow-error{{margin-top:10px;color:#a5211d;font-weight:700}}.history-label{{margin-top:16px;font-weight:700}}#workflow-history{{margin:8px 0 0;padding-left:24px}}#workflow-history li{{margin:8px 0}}details{{margin-top:18px}}pre{{white-space:pre-wrap;word-break:break-word;background:#102235;color:#e7f1fb;padding:14px;border-radius:8px;font-size:12px}}small{{color:#5e7285}}.disclaimer{{margin:6px 0 14px;color:#476175;font-size:13px}}.remediation-asset{{padding:10px 0;border-bottom:1px solid #e3ecf3}}.remediation-asset button{{width:auto;display:inline-block;margin:4px 8px 4px 0;padding:8px 12px}}.remediation-form{{margin-top:8px;padding:12px;border:1px solid #d5e1ec;border-radius:8px;background:#f8fcff}}.remediation-form label{{display:block;margin:8px 0;font-size:13px;color:#345}}.remediation-form input,.remediation-form select,.remediation-form textarea{{width:100%;margin-top:4px;padding:8px;border:1px solid #cfe0ee;border-radius:6px;font:inherit;box-sizing:border-box}}.remediation-request{{padding:10px 0;border-bottom:1px solid #e3ecf3}}#publication-summary div{{padding:2px 0}}.quarantine-record{{padding:10px 0;border-bottom:1px solid #e3ecf3}}.quarantine-record details{{margin-top:6px}}.quarantine-record ul{{margin:4px 0;padding-left:20px}}@media(max-width:800px){{.grid{{grid-template-columns:repeat(2,1fr)}}.layout,.evidence{{grid-template-columns:1fr}}.workflow-actions{{flex-direction:column}}}}
+body{{margin:0;background:#f4f7fa;color:#102235;font:15px Segoe UI,system-ui,sans-serif}}header{{background:linear-gradient(115deg,#0b2035,#155ba4);color:#fff;padding:28px 7%;display:flex;justify-content:space-between}}h1{{margin:0;font-size:28px}}main{{max-width:1180px;margin:26px auto;padding:0 22px}}.grid{{display:grid;grid-template-columns:repeat(4,1fr);gap:14px}}.layout{{display:grid;grid-template-columns:1fr 2fr;gap:18px;margin-top:18px}}.card,.panel{{background:#fff;border:1px solid #d5e1ec;border-radius:12px;padding:18px;box-shadow:0 3px 12px #1c34470d}}.label{{font-size:12px;color:#5e7285;text-transform:uppercase}}.metric{{font-size:28px;font-weight:700;margin:8px 0}}.red{{color:#c7352c}}.green{{color:#137a53}}button{{width:100%;text-align:left;margin:8px 0;padding:13px;border:1px solid #d5e1ec;border-radius:9px;background:#fff;font:inherit;cursor:pointer}}button.active,button:hover{{border-color:#4a91dc;background:#edf6ff}}.pill{{float:right;padding:4px 8px;border-radius:12px;font-size:11px;font-weight:700}}.critical{{background:#fce9e7;color:#a5211d}}.unknown{{background:#edf1f5;color:#607385}}.answer{{margin-top:14px;padding:16px;border-left:4px solid #1069c7;background:#f1f7fc;line-height:1.5}}.evidence{{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-top:14px}}.evidence div{{border:1px solid #d5e1ec;border-radius:8px;padding:11px}}.evidence b{{display:block;font-size:12px;color:#476175}}.workflow{{margin-top:18px;padding:18px;border:1px solid #b7d4e7;border-radius:12px;background:#f8fcff}}.workflow-head{{display:flex;justify-content:space-between;align-items:flex-start;gap:16px}}.state-badge{{padding:6px 10px;border-radius:14px;background:#fff1d6;color:#8b5b00;font-weight:700;font-size:12px;white-space:nowrap}}.state-approved{{background:#e4f7ed;color:#137a53}}.state-rejected{{background:#fce9e7;color:#a5211d}}.workflow-actions{{display:flex;gap:10px;margin-top:12px}}.workflow-actions button{{width:auto;flex:0 0 auto;margin:0;text-align:center}}.action.approve{{background:#137a53;color:#fff;border-color:#137a53}}.action.reject{{background:#fff;color:#a5211d;border-color:#d98b87}}.workflow-success{{margin-top:10px;color:#137a53;font-weight:700}}.workflow-error{{margin-top:10px;color:#a5211d;font-weight:700}}.history-label{{margin-top:16px;font-weight:700}}#workflow-history{{margin:8px 0 0;padding-left:24px}}#workflow-history li{{margin:8px 0}}details{{margin-top:18px}}pre{{white-space:pre-wrap;word-break:break-word;background:#102235;color:#e7f1fb;padding:14px;border-radius:8px;font-size:12px}}small{{color:#5e7285}}.disclaimer{{margin:6px 0 14px;color:#476175;font-size:13px}}.remediation-asset{{padding:10px 0;border-bottom:1px solid #e3ecf3}}.remediation-asset button{{width:auto;display:inline-block;margin:4px 8px 4px 0;padding:8px 12px}}.remediation-form{{margin-top:8px;padding:12px;border:1px solid #d5e1ec;border-radius:8px;background:#f8fcff}}.remediation-form label{{display:block;margin:8px 0;font-size:13px;color:#345}}.remediation-form input,.remediation-form select,.remediation-form textarea{{width:100%;margin-top:4px;padding:8px;border:1px solid #cfe0ee;border-radius:6px;font:inherit;box-sizing:border-box}}.remediation-request{{padding:10px 0;border-bottom:1px solid #e3ecf3}}#publication-summary div{{padding:2px 0}}.quarantine-record{{padding:10px 0;border-bottom:1px solid #e3ecf3}}.quarantine-record details{{margin-top:6px}}.quarantine-record ul{{margin:4px 0;padding-left:20px}}#publication-history ol{{margin:8px 0 0;padding-left:20px}}#publication-history li{{margin:8px 0}}@media(max-width:800px){{.grid{{grid-template-columns:repeat(2,1fr)}}.layout,.evidence{{grid-template-columns:1fr}}.workflow-actions{{flex-direction:column}}}}
 </style><header><div><h1>Energy Asset Intelligence</h1><div>Maintenance review workspace · North Sea Demonstration Wind Farm</div></div><div>Synthetic advisory demo</div></header><main>
 <section class="grid" id="tiles"></section>
 <section class="layout"><aside class="panel"><div class="label">Asset overview</div><h2>Maintenance priorities</h2><div id="priorities"></div><hr><b>Guidance history</b><div id="guidance"></div></aside>
@@ -249,7 +275,8 @@ function show(key,button){{let d=key==='current'?data.current:data.incomplete;do
 {remediation_script}
 {publication_audit_script}
 show('current',document.querySelector('#priorities button'));
-loadPublicationAudit();</script></body></html>"""
+loadPublicationAudit();
+loadPublicationHistory();</script></body></html>"""
 
 @router.get("", response_class=HTMLResponse)
 async def demo_page(tenant: str = Depends(get_tenant), service: EnergyDemoService = Depends(get_energy_service)):
@@ -310,6 +337,35 @@ async def quarantine(tenant: str = Depends(get_tenant), service: EnergyDemoServi
         raise HTTPException(status_code=404, detail="Energy demonstration not found")
     report = service.publication_report()
     return {"version_id": report.version_id, "quarantined_records": [asdict(r) for r in report.quarantined_records]}
+
+
+@router.get("/publication/history")
+async def publication_history(tenant: str = Depends(get_tenant), service: EnergyDemoService = Depends(get_energy_service)):
+    """The durable publication/rollback timeline: every version ever
+    published for this tenant, oldest first -- for auditing *which* version
+    is active and *whether* it was reached through a rollback, not for
+    inspecting quarantined-record detail (see GET /quarantine for that).
+    Read-only: never touches the active-version pointer. Deliberately
+    exposes only version id, timestamp, conformance, counts, and
+    `rolled_back_from` -- no blob hash, no filesystem path, no secrets.
+    """
+    if tenant != "energy-demo":
+        raise HTTPException(status_code=404, detail="Energy demonstration not found")
+    history = await service.publication_history_durable()
+    return {
+        "active_version_id": service.publication_report().version_id,
+        "publications": [
+            {
+                "version_id": report.version_id,
+                "published_at": report.published_at,
+                "conforms": report.conforms,
+                "published_triple_count": report.published_triple_count,
+                "quarantined_count": report.quarantined_count,
+                "rolled_back_from": report.rolled_back_from,
+            }
+            for report in history
+        ],
+    }
 
 
 @router.get("/work-orders/{work_order_id}/lifecycle")

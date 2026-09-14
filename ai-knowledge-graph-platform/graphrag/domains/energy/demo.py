@@ -56,7 +56,7 @@ class EnergyDemoService:
     questions = energy_answers.QUESTIONS
     tenant = TENANT
 
-    def __init__(self, source_db: Path | None = None) -> None:
+    def __init__(self, source_db: Path | None = None, *, include_invalid_fixture: bool = False) -> None:
         # _build_graph() awaits materialize_r2rml()/materialize_rml() directly
         # rather than each nesting its own asyncio.run() call. That makes this
         # constructor the ONLY place that starts an event loop for the sync
@@ -79,6 +79,7 @@ class EnergyDemoService:
         self.source_db = source_db
         self._publisher = DatasetPublisher(SHAPES_PATH)
         self._governance_store = None
+        self._include_invalid_fixture = include_invalid_fixture
         self._durable_report: PublicationReport | None = None
         candidate = asyncio.run(self._build_graph())
         self._publish(candidate)
@@ -86,6 +87,7 @@ class EnergyDemoService:
     @classmethod
     async def create(
         cls, source_db: Path | None = None, *, governance_store: GovernanceStore | None = None,
+        include_invalid_fixture: bool = False,
     ) -> "EnergyDemoService":
         """Async canonical constructor: awaits graph construction directly
         instead of nesting asyncio.run(). Use this from any caller that
@@ -96,6 +98,7 @@ class EnergyDemoService:
         self.source_db = source_db
         self._publisher = DatasetPublisher(SHAPES_PATH)
         self._governance_store = governance_store
+        self._include_invalid_fixture = include_invalid_fixture
         candidate = await self._build_graph()
         self._publish(candidate)
         self._durable_report: PublicationReport | None = None
@@ -141,7 +144,29 @@ class EnergyDemoService:
             graph, "MFG-GBX-17-R2", "2026-06-01T00:00:00Z", None, 85.0, "MFG-GBX-17-R1",
             recorded_at="2026-06-01T00:00:00Z",
         )
+        if self._include_invalid_fixture:
+            self._add_invalid_observation(graph)
         return graph
+
+    @staticmethod
+    def _add_invalid_observation(graph: Graph) -> None:
+        """One deliberately-invalid Observation -- opt-in only, never part of
+        the default candidate graph.
+
+        Same shape `validate_candidate()` already uses as its fixed SHACL
+        capability probe (missing `energy:value`/`energy:unit`, a known-safe,
+        non-cascading violation), but fed through the *real* publication
+        pipeline this time, plus a `prov:wasDerivedFrom` triple. Exists so the
+        quarantine audit UI and its tests have one genuine quarantined record
+        to render, without changing what the standard (flag-off) demo
+        publishes -- every existing zero-quarantine assertion elsewhere
+        keeps holding because nothing calls this by default.
+        """
+        subject = REC["obs-WT-10-temperature_c-invalid"]
+        graph.add((subject, RDF.type, ENERGY.Observation))
+        graph.add((subject, ENERGY.observedAsset, ASSET["WT-10"]))
+        graph.add((subject, ENERGY.observedAt, Literal("2026-08-28T08:00:00Z", datatype=XSD.dateTime)))
+        graph.add((subject, PROV.wasDerivedFrom, URIRef("urn:synthetic:snowflake:telemetry-invalid-sample")))
 
     async def _materialize_assets_and_work_orders(self, graph: Graph) -> None:
         """Execute the shipped energy R2RML mapping into this RDF graph, for

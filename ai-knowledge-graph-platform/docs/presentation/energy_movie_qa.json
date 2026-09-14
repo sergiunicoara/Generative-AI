@@ -1,22 +1,23 @@
 {
-  "verified_at": "2026-09-14T03:15:55.683090+00:00",
+  "verified_at": "2026-09-14T07:34:42.297143+00:00",
   "scope": "Full decode; every static scene/frame; narration cache and timing; optional local ASR.",
   "human_listening_completed": false,
   "asr_completed": false,
   "trace_sha256": "4152bf61570a7970858fe458a4808cb24269a48b0af1a6c8c8e0de9fb1ecf950",
   "shared_evidence_code_sha256": "30c76f6b63d3444311b35ae9599ca55291aed5563e0fc2313bef889e837344ce",
   "ui_capture_sha256": {
-    "dashboard_current.png": "7938dd02f718476d2c9dd813512d31e94621fd01851e30aa799ef2dd08b6f50a",
-    "dashboard_insufficient_evidence.png": "71611724c05ac805daab7e913513961af793e75fe74aefea9df6645158133860",
-    "dashboard_technical_trace.png": "a4fc8aec5f006c2691045f775409a597278c736769e1828d421774f9b1d60fdc",
+    "dashboard_current.png": "95acfa7055e9da7e38f809069cfedda21d171f597f5f625012b17ae3d86b03ad",
+    "dashboard_evidence_remediation.png": "7e7bbb3d43b931b382b1a4b0c04ed8d00d5c8a1973d47c4c2f06ce1ea5bf85d0",
+    "dashboard_insufficient_evidence.png": "0378d6c321981b1c8beb610e9829191922f188f4669ae4769f1de486449f079e",
+    "dashboard_technical_trace.png": "d8e3e6af695f76e1353be7e35fe253f23e2ca8b9694c788c5119576e4acae12a",
     "graphdb_sparql_wt01.png": "24ad4ed76a26ae1e8bb186d0041bc4fcc3f58ea563535fb3c9a91141dae4a21d"
   },
   "movies": [
     {
       "movie": "energy_asset_intelligence_client_teaser.mp4",
-      "sha256": "ea480d2ed38cb8212714d63e8fb527d5fda0951959ef0184e1fc51a1e2509f9e",
-      "renderer_sha256": "22dd35d6a2e3ab216954d08a07d1ec42f9a1eef3602baeba5a5371e80b5ae40c",
-      "duration_seconds": 114.069333,
+      "sha256": "9d7e87db6a4c048a102a3e1dc10e64b6c49b0dc9cad582d6d3b92f705851b344",
+      "renderer_sha256": "ba433efa6cedae14519de5a21852130797c6cec03e0c1335ae2a76dfc9431377",
+      "duration_seconds": 141.069333,
       "full_decode_passed": true,
       "streams": "1280x720 H.264 / AAC",
       "scenes": [
@@ -38,7 +39,7 @@
           "duration_seconds": 25.0,
           "narration_seconds": 18.792,
           "expected_voiceover": "Here, WT-zero-one is prioritised for maintenance review. The workspace brings together the temperature observation, the current manufacturer threshold, and the open work order, so the recommendation is concrete and actionable.",
-          "frame_rms_error": 5.237,
+          "frame_rms_error": 5.142,
           "frame": "energy_movie_qa_build\\energy_asset_intelligence_client_teaser_scene_02.png",
           "narration_stamp_matches": true
         },
@@ -60,19 +61,30 @@
           "duration_seconds": 18.0,
           "narration_seconds": 14.424,
           "expected_voiceover": "The system also makes uncertainty visible. Where evidence is incomplete, it does not invent a maintenance conclusion. That is how an advisory tool earns the confidence of operations teams.",
-          "frame_rms_error": 5.62,
+          "frame_rms_error": 4.019,
           "frame": "energy_movie_qa_build\\energy_asset_intelligence_client_teaser_scene_04.png",
           "narration_stamp_matches": true
         },
         {
           "scene": 5,
-          "title": "Built for review and traceability",
+          "title": "Requesting the missing evidence",
           "start_seconds": 88.0,
+          "duration_seconds": 27.0,
+          "narration_seconds": 25.68,
+          "expected_voiceover": "When evidence is missing, an operator can open a governed follow-up task asking the owning source system for it -- telemetry from Snowflake, or work-order status from SAP. That request is tracked and auditable, but it does not supply the missing evidence itself: the advisory answer only changes once real source data is published.",
+          "frame_rms_error": 5.308,
+          "frame": "energy_movie_qa_build\\energy_asset_intelligence_client_teaser_scene_05.png",
+          "narration_stamp_matches": true
+        },
+        {
+          "scene": 6,
+          "title": "Built for review and traceability",
+          "start_seconds": 115.0,
           "duration_seconds": 26.0,
           "narration_seconds": 24.384,
           "expected_voiceover": "Behind the business view, source data is mapped into RDF, checked through a SHACL publication gate, and evaluated by version-controlled SPARQL. A governed maintenance lifecycle keeps human review explicit, while the technical trace remains available whenever an engineer or auditor needs it.",
-          "frame_rms_error": 7.203,
-          "frame": "energy_movie_qa_build\\energy_asset_intelligence_client_teaser_scene_05.png",
+          "frame_rms_error": 7.204,
+          "frame": "energy_movie_qa_build\\energy_asset_intelligence_client_teaser_scene_06.png",
           "narration_stamp_matches": true
         }
       ]
@@ -177,7 +189,7 @@
     },
     {
       "movie": "energy_asset_intelligence_real_run_demo.mp4",
-      "sha256": "cdc0e2cc2b281638149725fb1115b45196aaa4ea91be0b2c1ea2bd5bf40b8cac",
+      "sha256": "3c6eab5bb3cb7b9167a598272608788794a359d30c0ed9771b54f70cfbc5ebe4",
       "renderer_sha256": "95ac77ca171cbac4844751f1149fb695e6cd512d9758833d431d9407eba578e8",
       "duration_seconds": 301.053333,
       "full_decode_passed": true,
@@ -289,7 +301,7 @@
           "duration_seconds": 20.0,
           "narration_seconds": 17.52,
           "expected_voiceover": "The same implementation is presented through a client-facing workspace. An operations user sees the affected asset, the review priority, and the evidence-backed recommendation without needing to read RDF or SPARQL.",
-          "frame_rms_error": 6.297,
+          "frame_rms_error": 6.286,
           "frame": "energy_movie_qa_build\\energy_asset_intelligence_real_run_demo_scene_10.png",
           "narration_stamp_matches": true
         },
@@ -300,7 +312,7 @@
           "duration_seconds": 18.0,
           "narration_seconds": 14.544,
           "expected_voiceover": "The interface also makes uncertainty visible. Assets without enough evidence are not given a confident maintenance conclusion. This is the safety boundary between a useful advisory system and an ungrounded answer.",
-          "frame_rms_error": 6.715,
+          "frame_rms_error": 5.605,
           "frame": "energy_movie_qa_build\\energy_asset_intelligence_real_run_demo_scene_11.png",
           "narration_stamp_matches": true
         },

@@ -97,19 +97,58 @@ human sign-off before external release. There are no word-synchronised
 subtitles; on-screen slide text is a summary, not a verbatim caption track.
 See [movie QA and rebuild instructions](energy-movie-qa.md).
 
-## Evidence remediation scene (2026-09-14) — not yet captured
+## Evidence remediation scene (2026-09-14)
 
-`render_energy_demo_client_teaser.py` now defines a sixth scene,
-"Requesting the missing evidence," referencing a new
-`dashboard_evidence_remediation.png` capture that
-`scripts/capture_energy_demo_ui.py` was extended to produce. Neither the
-screenshot nor a rebuilt teaser exists yet: two independent local-environment
-blockers (a standalone headless-Chromium process unable to open a TCP
-connection to the local API even though plain TCP connectivity to the same
-port succeeded, and the interactive verification browser pane being hidden)
-stopped the capture in this session. The underlying feature was verified live
-through a real authenticated browser session regardless (see
-`tasks/todo.md`'s "Evidence remediation workflow" entry). Do not treat the
-current `energy_asset_intelligence_client_teaser.mp4` as showing this scene
-until `scripts/capture_energy_demo_ui.py` and this renderer have actually been
-rerun.
+The sixth client-teaser scene, **Requesting the missing evidence**, is captured
+from the live Energy workspace at
+`dashboard_evidence_remediation.png` and included in
+`energy_asset_intelligence_client_teaser.mp4`. It shows WT-02's missing
+temperature evidence, the **Request telemetry from Snowflake** action, and a
+persisted open request owned by `ops-team`.
+
+The scene explicitly states the safety boundary: a request is governed
+follow-up metadata, not operational evidence. The advisory remains
+`insufficient_evidence` until valid source data has been mapped, validated,
+and published. Recreate the captures with
+`python scripts/capture_energy_demo_ui.py`, then rebuild the teaser with
+`python docs/presentation/render_energy_demo_client_teaser.py`.
+
+## Publication and quarantine audit panel (2026-09-14)
+
+The dashboard now includes a read-only "Publication and quarantine audit"
+panel (`#publication-audit`), fetched client-side from the existing
+`GET /publication` and `GET /quarantine` routes -- never re-derived
+server-side into the page's embedded JSON, and never given any control that
+could release, edit, or republish a record. It shows the active publication
+version, publish timestamp, published/candidate/quarantined counts, whether
+the published version conforms, and, for each quarantined record, its
+resource identifier (the SHACL focus node), every validation reason, source
+provenance when available, and the publication version -- behind a
+`<details>` disclosure so the default view stays business-readable.
+
+By default the demo fixture is fully conformant, so the panel's captured
+screenshot (`dashboard_publication_audit.png`) shows the empty state:
+**"No records are currently quarantined in the active publication."** A
+populated example is available by starting the server with
+`ENERGY_DEMO_INCLUDE_INVALID_FIXTURE=1` (see `graphrag/domains/energy/demo.py`'s
+opt-in `include_invalid_fixture` parameter) before recapturing -- this never
+changes what the standard demo publishes; every existing zero-quarantine
+assertion (`tests/unit/test_energy_demo.py`,
+`scripts/run_energy_demo_e2e.py`'s acceptance gate) keeps holding because
+nothing enables the flag by default.
+
+**Operational note, confirmed live:** the durable governance store dedupes a
+publish by the *published* RDF's own content hash
+(`GovernanceStore.publish()`), and the invalid fixture's record never reaches
+the published graph -- it's quarantined before publication, so the published
+bytes are identical with or without the flag. Against an `artifacts/energy/`
+store that already has a prior publish for this tenant, the flag alone will
+silently keep showing the old (empty) quarantine report rather than the new
+one. Capturing the populated example needs a fresh store, e.g.
+`ENERGY_GOVERNANCE_DB_URL=sqlite+aiosqlite:///<scratch-path>/governance.sqlite`
+alongside the flag, or a first-ever run against a clean `artifacts/energy/`.
+Confirmed via a direct API check against both a pre-existing and a fresh
+store before writing this note.
+
+**Operators can inspect why a record was excluded. They cannot silently
+release invalid RDF from the dashboard.**

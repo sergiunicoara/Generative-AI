@@ -1,5 +1,6 @@
 """FastAPI application — AI Knowledge Graph & Ontology Platform API with OAuth 2.0."""
 
+import os
 from contextlib import asynccontextmanager
 from pathlib import Path
 
@@ -39,9 +40,18 @@ async def lifespan(app: FastAPI):
     energy_store = GovernanceStore()
     await energy_store.open()
     source_db = Path(__file__).resolve().parents[1] / "artifacts" / "energy-demo-sap.sqlite"
+    # Opt-in only, off by default: lets the presentation-capture flow show a
+    # real quarantined-record example in the publication-audit panel without
+    # changing the default demo (which stays fully conformant, matching the
+    # zero-quarantine invariant `scripts/run_energy_demo_e2e.py` and several
+    # unit tests assert for the standard fixture).
+    include_invalid_fixture = os.environ.get(
+        "ENERGY_DEMO_INCLUDE_INVALID_FIXTURE", ""
+    ).strip().lower() in {"1", "true", "yes"}
     energy_service = await EnergyDemoService.create(
         source_db=source_db if source_db.exists() else None,
         governance_store=energy_store,
+        include_invalid_fixture=include_invalid_fixture,
     )
     app.state.energy_governance_store = energy_store
     app.state.energy_demo_service = energy_service

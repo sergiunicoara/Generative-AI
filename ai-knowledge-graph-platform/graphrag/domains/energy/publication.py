@@ -61,12 +61,14 @@ whose content matches the target version.
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
 from uuid import uuid4
 
 from rdflib import Graph, URIRef
+from rdflib.namespace import PROV
 
 from graphrag.graph.shacl_validator import SHACLValidator, ShaclResult
 
@@ -93,6 +95,26 @@ def _referential_triple(graph: Graph, result: ShaclResult) -> tuple | None:
     return triple if triple in graph else None
 
 
+def _source_type(provenance_iri: str) -> str:
+    """Derive a readable source label from a record's own provenance IRI.
+
+    A mechanical transform (e.g. ``urn:synthetic:sap:work-orders`` ->
+    ``sap_work_orders``), not a lookup table -- so a new synthetic source
+    shows up correctly without anything here being edited. Duplicated from
+    ``graphrag/domains/energy/answers.py``'s private helper rather than
+    imported: this module is domain-agnostic (works on any RDF graph + shapes
+    path) and stays that way by not depending on the Energy-specific answers
+    module, matching how ``workflow.py`` already duplicates ``_local_name``
+    rather than importing an underscore-prefixed name across modules.
+    """
+    text = provenance_iri
+    for prefix in ("urn:synthetic:", "urn:"):
+        if text.startswith(prefix):
+            text = text[len(prefix):]
+            break
+    return re.sub(r"[^A-Za-z0-9]+", "_", text).strip("_").lower() or "unknown_source"
+
+
 class PublicationRollbackError(RuntimeError):
     """Raised when `rollback()`'s target version does not exist -- including
     the case where only one version exists and no explicit target was given
@@ -117,6 +139,14 @@ class QuarantinedRecord:
     # because "my WorkOrder was valid, why was it dropped?" is otherwise an
     # unanswerable question.
     iteration: int = 0
+    # Captured from the candidate graph's own prov:wasDerivedFrom, read just
+    # before this subject's triples are removed -- the only moment that
+    # triple is still present. Additive/optional: None for a subject with no
+    # provenance triple (or, harmlessly, for any report serialized before
+    # this field existed -- governance_store.py's report_json round-trips it
+    # via QuarantinedRecord(**item), where a missing key falls back here).
+    provenance: str | None = None
+    source_type: str | None = None
 
 
 @dataclass(frozen=True)
@@ -214,9 +244,19 @@ class DatasetPublisher:
                 existing = quarantined.get(result.focus_node)
                 reasons = list(existing.reasons) if existing else []
                 reasons.append(result.message)
+                if existing is None:
+                    # Read provenance now -- this is the last moment the
+                    # subject's own triples (removed just below) are still
+                    # present in `working` to read it from.
+                    provenance_value = working.value(subject, PROV.wasDerivedFrom)
+                    provenance = str(provenance_value) if provenance_value else None
+                    source_type = _source_type(provenance) if provenance else None
+                else:
+                    provenance, source_type = existing.provenance, existing.source_type
                 quarantined[result.focus_node] = QuarantinedRecord(
                     subject=result.focus_node, reasons=reasons,
                     iteration=existing.iteration if existing else iteration,
+                    provenance=provenance, source_type=source_type,
                 )
                 for owned in list(working.triples((subject, None, None))):
                     working.remove(owned)

@@ -94,7 +94,14 @@ as a new version. `GET /rdf` and every `/answer/*` question only ever see
 that published graph. `GET /publication` reports the current version;
 `GET /quarantine` lists whatever is currently quarantined (normally
 empty — item 2's mapping-completion work, plus a decimal-literal-typing
-fix this gate found live, made the real pipeline fully conformant).
+fix this gate found live, made the real pipeline fully conformant). The
+dashboard's "Publication and quarantine audit" panel surfaces this same data
+read-only: active version, publish timestamp, published/candidate/quarantined
+counts, and each quarantined record's reason, provenance (when available),
+and publication version, fetched client-side from these same routes.
+**Operators can inspect why a record was excluded. They cannot silently
+release invalid RDF from the dashboard** — correcting and republishing a
+record remains a governed ingestion/publication operation, not a UI action.
 `POST /rollback` restores an earlier version (the one just before current,
 or a named `version_id`) as a new version — history is append-only and is
 never rewritten or deleted.

@@ -1,6 +1,95 @@
 {
   "scenario": "energy-asset-intelligence/e2e-v2",
   "status": "passed",
+  "run_id": "energy-e2e-e2fcf9256ac2",
+  "mode": "offline",
+  "identity": {
+    "commit": "b2d642dac6bb97ba386fcf7853d9f94a4e08885a",
+    "worktree_dirty": true,
+    "python": "3.11.9",
+    "platform": "Windows-10-10.0.26200-SP0",
+    "artifacts": {
+      "artifacts\\energy-demo-e2e-sap.sqlite": "45b36db50b973dfabf132808d2c65d640e70c7e4d409b4ca47c334598dcfc9ac",
+      "artifacts\\energy-demo-e2e.ttl": "16a3488fdd478b0cabdaea00e5f271cf4741d94aa220b89dc2676f7707001ab7"
+    }
+  },
+  "checks": [
+    {
+      "id": "source_sqlite_created",
+      "passed": true,
+      "evidence": "artifacts\\energy-demo-e2e-sap.sqlite"
+    },
+    {
+      "id": "r2rml_materialization",
+      "passed": true,
+      "evidence": "WT-01 typed Asset"
+    },
+    {
+      "id": "rml_materialization",
+      "passed": true,
+      "evidence": "typed observation predicates present"
+    },
+    {
+      "id": "shacl_publication",
+      "passed": true,
+      "evidence": "a5014f56823b4315995aa2e9efd4136d"
+    },
+    {
+      "id": "turtle_round_trip",
+      "passed": true,
+      "evidence": "artifacts\\energy-demo-e2e.ttl"
+    },
+    {
+      "id": "explicit_wind_turbine_type",
+      "passed": true,
+      "evidence": "WT-01"
+    },
+    {
+      "id": "current_sparql_advisory",
+      "passed": true,
+      "evidence": "version-controlled SPARQL query"
+    },
+    {
+      "id": "historical_revision",
+      "passed": true,
+      "evidence": "MFG-GBX-17-R1"
+    },
+    {
+      "id": "abstention_boundary",
+      "passed": true,
+      "evidence": "insufficient_evidence"
+    },
+    {
+      "id": "tenant_isolation",
+      "passed": true,
+      "evidence": "not_found"
+    },
+    {
+      "id": "invalid_rdf_rejected",
+      "passed": true,
+      "evidence": 4
+    },
+    {
+      "id": "projection_ledger",
+      "passed": true,
+      "evidence": 154
+    },
+    {
+      "id": "projection_topology",
+      "passed": true,
+      "evidence": 28
+    },
+    {
+      "id": "unique_run_identity",
+      "passed": true,
+      "evidence": "energy-e2e-e2fcf9256ac2"
+    },
+    {
+      "id": "mode_explicit",
+      "passed": true,
+      "evidence": "offline"
+    }
+  ],
   "source": {
     "kind": "synthetic SAP-shaped SQLite",
     "path": "artifacts\\energy-demo-e2e-sap.sqlite",
@@ -8,7 +97,7 @@
     "rml_mapping": "ontology/mappings/energy-observations.rml.ttl"
   },
   "publication": {
-    "version_id": "f0b1409417c744b398dbf5205dcd3e69",
+    "version_id": "a5014f56823b4315995aa2e9efd4136d",
     "candidate_records": 30,
     "published_triples": 154,
     "quarantined_records": 0,
@@ -234,6 +323,7 @@
   },
   "neo4j_projection": {
     "mode": "dry-run",
+    "tenant": "energy-e2e-e2fcf9256ac2",
     "rdf_is_authoritative": true,
     "rebuildable_read_model": true,
     "nodes": 30,

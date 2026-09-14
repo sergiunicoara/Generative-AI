@@ -72,6 +72,13 @@ SCENES = [
         "dashboard_evidence_remediation.png",
     ),
     Scene(
+        "Nothing invalid ships silently", 18,
+        "Invalid source records are visible, traceable, and excluded before publication. "
+        "An operator can see exactly why a record was quarantined -- but cannot release it "
+        "from this dashboard. Correcting it stays a governed data operation.",
+        "dashboard_publication_audit.png",
+    ),
+    Scene(
         "Built for review and traceability", 22,
         "Behind the business view, source data is mapped into RDF, checked through a "
         "SHACL publication gate, and evaluated by version-controlled SPARQL. A governed "

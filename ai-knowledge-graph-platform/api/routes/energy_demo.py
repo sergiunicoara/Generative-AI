@@ -134,6 +134,74 @@ def _evidence_remediation_script() -> str:
     )
 
 
+def _publication_audit_html() -> str:
+    return (
+        '<section id="publication-audit" class="workflow">'
+        '<div class="label">Publication and quarantine audit</div>'
+        '<p class="disclaimer">Operators can inspect why a record was excluded. '
+        "They cannot silently release invalid RDF from the dashboard.</p>"
+        '<div id="publication-summary"><small>Loading publication status…</small></div>'
+        '<div class="label history-label">Quarantined records</div>'
+        '<div id="quarantine-list"><small>Loading…</small></div>'
+        "</section>"
+    )
+
+
+def _publication_audit_script() -> str:
+    # A plain (non-f) string, spliced into `_dashboard_html`'s f-string as a
+    # single `{publication_audit_script}` substitution -- see
+    # `_evidence_remediation_script()`'s docstring for why this avoids
+    # hand-doubling braces in a large new JS block.
+    #
+    # Fetches client-side from the existing GET /publication and
+    # GET /quarantine routes on page load -- never re-derives publication
+    # state server-side into the initial `data` blob, so this panel cannot
+    # silently drift from what those routes actually return. Read-only: no
+    # control here can mutate published RDF, quarantine, or the active
+    # version pointer.
+    return (
+        "async function loadPublicationAudit(){"
+        "const summaryBox=document.getElementById('publication-summary');"
+        "try{"
+        "const [publicationResponse,quarantineResponse]=await Promise.all(["
+        "fetch('/energy-demo/publication'),fetch('/energy-demo/quarantine')"
+        "]);"
+        "if(!publicationResponse.ok||!quarantineResponse.ok)throw new Error('Unable to load publication status');"
+        "const publication=await publicationResponse.json();"
+        "const quarantine=await quarantineResponse.json();"
+        "renderPublicationAudit(publication,quarantine)"
+        "}catch(error){"
+        "summaryBox.textContent=error.message;"
+        "summaryBox.className='workflow-error'"
+        "}}\n"
+        "function renderPublicationAudit(publication,quarantine){"
+        "const records=quarantine.quarantined_records||[];"
+        "document.getElementById('publication-summary').innerHTML="
+        "'<div><b>Version</b> '+esc(publication.version_id)+'</div>'+"
+        "'<div><b>Published at</b> '+esc(publication.published_at)+'</div>'+"
+        "'<div><b>Published triples</b> '+esc(publication.published_triple_count)+'</div>'+"
+        "'<div><b>Candidate records</b> '+esc(publication.candidate_record_count)+'</div>'+"
+        "'<div><b>Quarantined records</b> '+esc(records.length)+'</div>'+"
+        "'<div><b>Conforms</b> '+(publication.conforms?'Yes':'No')+'</div>';"
+        "const listBox=document.getElementById('quarantine-list');"
+        "if(!records.length){"
+        "listBox.innerHTML='<small>No records are currently quarantined in the active publication.</small>';"
+        "return}"
+        "listBox.innerHTML=records.map(r=>"
+        "'<div class=\"quarantine-record\"><b>'+esc(String(r.subject).split('/').pop())+'</b> "
+        "— excluded from publication"
+        "<details><summary>Technical detail</summary>'+"
+        "'<div><b>Resource / focus node</b> '+esc(r.subject)+'</div>'+"
+        "'<div><b>Reasons</b><ul>'+(r.reasons||[]).map(reason=>'<li>'+esc(reason)+'</li>').join('')+'</ul></div>'+"
+        "'<div><b>Source</b> '+(r.source_type?esc(String(r.source_type).replaceAll('_',' ')):'Not available')+'</div>'+"
+        "'<div><b>Provenance</b> '+(r.provenance?esc(r.provenance):'Not available')+'</div>'+"
+        "'<div><b>Publication version</b> '+esc(quarantine.version_id)+'</div>'+"
+        "'</details></div>'"
+        ").join('')"
+        "}"
+    )
+
+
 def _dashboard_html(service: EnergyDemoService) -> str:
     current = service.answer("maintenance_review", tenant="energy-demo")
     incomplete = service.answer("insufficient_evidence", tenant="energy-demo")
@@ -152,12 +220,14 @@ def _dashboard_html(service: EnergyDemoService) -> str:
     }).replace("</", "<\\/")
     remediation_section = _evidence_remediation_html()
     remediation_script = _evidence_remediation_script()
+    publication_audit_section = _publication_audit_html()
+    publication_audit_script = _publication_audit_script()
     return f"""<!doctype html><html><head><title>Energy Asset Intelligence</title><style>
-body{{margin:0;background:#f4f7fa;color:#102235;font:15px Segoe UI,system-ui,sans-serif}}header{{background:linear-gradient(115deg,#0b2035,#155ba4);color:#fff;padding:28px 7%;display:flex;justify-content:space-between}}h1{{margin:0;font-size:28px}}main{{max-width:1180px;margin:26px auto;padding:0 22px}}.grid{{display:grid;grid-template-columns:repeat(4,1fr);gap:14px}}.layout{{display:grid;grid-template-columns:1fr 2fr;gap:18px;margin-top:18px}}.card,.panel{{background:#fff;border:1px solid #d5e1ec;border-radius:12px;padding:18px;box-shadow:0 3px 12px #1c34470d}}.label{{font-size:12px;color:#5e7285;text-transform:uppercase}}.metric{{font-size:28px;font-weight:700;margin:8px 0}}.red{{color:#c7352c}}.green{{color:#137a53}}button{{width:100%;text-align:left;margin:8px 0;padding:13px;border:1px solid #d5e1ec;border-radius:9px;background:#fff;font:inherit;cursor:pointer}}button.active,button:hover{{border-color:#4a91dc;background:#edf6ff}}.pill{{float:right;padding:4px 8px;border-radius:12px;font-size:11px;font-weight:700}}.critical{{background:#fce9e7;color:#a5211d}}.unknown{{background:#edf1f5;color:#607385}}.answer{{margin-top:14px;padding:16px;border-left:4px solid #1069c7;background:#f1f7fc;line-height:1.5}}.evidence{{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-top:14px}}.evidence div{{border:1px solid #d5e1ec;border-radius:8px;padding:11px}}.evidence b{{display:block;font-size:12px;color:#476175}}.workflow{{margin-top:18px;padding:18px;border:1px solid #b7d4e7;border-radius:12px;background:#f8fcff}}.workflow-head{{display:flex;justify-content:space-between;align-items:flex-start;gap:16px}}.state-badge{{padding:6px 10px;border-radius:14px;background:#fff1d6;color:#8b5b00;font-weight:700;font-size:12px;white-space:nowrap}}.state-approved{{background:#e4f7ed;color:#137a53}}.state-rejected{{background:#fce9e7;color:#a5211d}}.workflow-actions{{display:flex;gap:10px;margin-top:12px}}.workflow-actions button{{width:auto;flex:0 0 auto;margin:0;text-align:center}}.action.approve{{background:#137a53;color:#fff;border-color:#137a53}}.action.reject{{background:#fff;color:#a5211d;border-color:#d98b87}}.workflow-success{{margin-top:10px;color:#137a53;font-weight:700}}.workflow-error{{margin-top:10px;color:#a5211d;font-weight:700}}.history-label{{margin-top:16px;font-weight:700}}#workflow-history{{margin:8px 0 0;padding-left:24px}}#workflow-history li{{margin:8px 0}}details{{margin-top:18px}}pre{{white-space:pre-wrap;word-break:break-word;background:#102235;color:#e7f1fb;padding:14px;border-radius:8px;font-size:12px}}small{{color:#5e7285}}.disclaimer{{margin:6px 0 14px;color:#476175;font-size:13px}}.remediation-asset{{padding:10px 0;border-bottom:1px solid #e3ecf3}}.remediation-asset button{{width:auto;display:inline-block;margin:4px 8px 4px 0;padding:8px 12px}}.remediation-form{{margin-top:8px;padding:12px;border:1px solid #d5e1ec;border-radius:8px;background:#f8fcff}}.remediation-form label{{display:block;margin:8px 0;font-size:13px;color:#345}}.remediation-form input,.remediation-form select,.remediation-form textarea{{width:100%;margin-top:4px;padding:8px;border:1px solid #cfe0ee;border-radius:6px;font:inherit;box-sizing:border-box}}.remediation-request{{padding:10px 0;border-bottom:1px solid #e3ecf3}}@media(max-width:800px){{.grid{{grid-template-columns:repeat(2,1fr)}}.layout,.evidence{{grid-template-columns:1fr}}.workflow-actions{{flex-direction:column}}}}
+body{{margin:0;background:#f4f7fa;color:#102235;font:15px Segoe UI,system-ui,sans-serif}}header{{background:linear-gradient(115deg,#0b2035,#155ba4);color:#fff;padding:28px 7%;display:flex;justify-content:space-between}}h1{{margin:0;font-size:28px}}main{{max-width:1180px;margin:26px auto;padding:0 22px}}.grid{{display:grid;grid-template-columns:repeat(4,1fr);gap:14px}}.layout{{display:grid;grid-template-columns:1fr 2fr;gap:18px;margin-top:18px}}.card,.panel{{background:#fff;border:1px solid #d5e1ec;border-radius:12px;padding:18px;box-shadow:0 3px 12px #1c34470d}}.label{{font-size:12px;color:#5e7285;text-transform:uppercase}}.metric{{font-size:28px;font-weight:700;margin:8px 0}}.red{{color:#c7352c}}.green{{color:#137a53}}button{{width:100%;text-align:left;margin:8px 0;padding:13px;border:1px solid #d5e1ec;border-radius:9px;background:#fff;font:inherit;cursor:pointer}}button.active,button:hover{{border-color:#4a91dc;background:#edf6ff}}.pill{{float:right;padding:4px 8px;border-radius:12px;font-size:11px;font-weight:700}}.critical{{background:#fce9e7;color:#a5211d}}.unknown{{background:#edf1f5;color:#607385}}.answer{{margin-top:14px;padding:16px;border-left:4px solid #1069c7;background:#f1f7fc;line-height:1.5}}.evidence{{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-top:14px}}.evidence div{{border:1px solid #d5e1ec;border-radius:8px;padding:11px}}.evidence b{{display:block;font-size:12px;color:#476175}}.workflow{{margin-top:18px;padding:18px;border:1px solid #b7d4e7;border-radius:12px;background:#f8fcff}}.workflow-head{{display:flex;justify-content:space-between;align-items:flex-start;gap:16px}}.state-badge{{padding:6px 10px;border-radius:14px;background:#fff1d6;color:#8b5b00;font-weight:700;font-size:12px;white-space:nowrap}}.state-approved{{background:#e4f7ed;color:#137a53}}.state-rejected{{background:#fce9e7;color:#a5211d}}.workflow-actions{{display:flex;gap:10px;margin-top:12px}}.workflow-actions button{{width:auto;flex:0 0 auto;margin:0;text-align:center}}.action.approve{{background:#137a53;color:#fff;border-color:#137a53}}.action.reject{{background:#fff;color:#a5211d;border-color:#d98b87}}.workflow-success{{margin-top:10px;color:#137a53;font-weight:700}}.workflow-error{{margin-top:10px;color:#a5211d;font-weight:700}}.history-label{{margin-top:16px;font-weight:700}}#workflow-history{{margin:8px 0 0;padding-left:24px}}#workflow-history li{{margin:8px 0}}details{{margin-top:18px}}pre{{white-space:pre-wrap;word-break:break-word;background:#102235;color:#e7f1fb;padding:14px;border-radius:8px;font-size:12px}}small{{color:#5e7285}}.disclaimer{{margin:6px 0 14px;color:#476175;font-size:13px}}.remediation-asset{{padding:10px 0;border-bottom:1px solid #e3ecf3}}.remediation-asset button{{width:auto;display:inline-block;margin:4px 8px 4px 0;padding:8px 12px}}.remediation-form{{margin-top:8px;padding:12px;border:1px solid #d5e1ec;border-radius:8px;background:#f8fcff}}.remediation-form label{{display:block;margin:8px 0;font-size:13px;color:#345}}.remediation-form input,.remediation-form select,.remediation-form textarea{{width:100%;margin-top:4px;padding:8px;border:1px solid #cfe0ee;border-radius:6px;font:inherit;box-sizing:border-box}}.remediation-request{{padding:10px 0;border-bottom:1px solid #e3ecf3}}#publication-summary div{{padding:2px 0}}.quarantine-record{{padding:10px 0;border-bottom:1px solid #e3ecf3}}.quarantine-record details{{margin-top:6px}}.quarantine-record ul{{margin:4px 0;padding-left:20px}}@media(max-width:800px){{.grid{{grid-template-columns:repeat(2,1fr)}}.layout,.evidence{{grid-template-columns:1fr}}.workflow-actions{{flex-direction:column}}}}
 </style><header><div><h1>Energy Asset Intelligence</h1><div>Maintenance review workspace · North Sea Demonstration Wind Farm</div></div><div>Synthetic advisory demo</div></header><main>
 <section class="grid" id="tiles"></section>
 <section class="layout"><aside class="panel"><div class="label">Asset overview</div><h2>Maintenance priorities</h2><div id="priorities"></div><hr><b>Guidance history</b><div id="guidance"></div></aside>
-<section class="panel"><div class="label">Operations question</div><h2 id="question">Which assets need maintenance review?</h2><div id="answer" class="answer"></div><div id="evidence" class="evidence"></div><section id="workflow" class="workflow" hidden><div class="workflow-head"><div><div class="label">Governed review workflow</div><b id="workflow-title">WO-9001 · review required</b><div id="workflow-meta"><small>Loading current state…</small></div></div><div id="workflow-state" class="state-badge">REVIEW REQUIRED</div></div><div class="workflow-actions"><button id="approve" class="action approve" onclick="transitionState('approved')">Approve review</button><button id="reject" class="action reject" onclick="transitionState('rejected')">Reject review</button></div><div id="workflow-status" role="status"></div><div class="label history-label">Transition history</div><ol id="workflow-history"><li><small>No transitions recorded yet.</small></li></ol></section><details><summary>Why am I seeing this?</summary><p>The recommendation is built from mapped work orders, RDF evidence, and a version-controlled SPARQL query. This is the technical trail behind the operational answer.</p><pre id="technical"></pre></details>{remediation_section}</section></section><p><small>All records are synthetic. This workspace is advisory and does not control equipment.</small></p></main>
+<section class="panel"><div class="label">Operations question</div><h2 id="question">Which assets need maintenance review?</h2><div id="answer" class="answer"></div><div id="evidence" class="evidence"></div><section id="workflow" class="workflow" hidden><div class="workflow-head"><div><div class="label">Governed review workflow</div><b id="workflow-title">WO-9001 · review required</b><div id="workflow-meta"><small>Loading current state…</small></div></div><div id="workflow-state" class="state-badge">REVIEW REQUIRED</div></div><div class="workflow-actions"><button id="approve" class="action approve" onclick="transitionState('approved')">Approve review</button><button id="reject" class="action reject" onclick="transitionState('rejected')">Reject review</button></div><div id="workflow-status" role="status"></div><div class="label history-label">Transition history</div><ol id="workflow-history"><li><small>No transitions recorded yet.</small></li></ol></section><details><summary>Why am I seeing this?</summary><p>The recommendation is built from mapped work orders, RDF evidence, and a version-controlled SPARQL query. This is the technical trail behind the operational answer.</p><pre id="technical"></pre></details>{remediation_section}</section></section>{publication_audit_section}<p><small>All records are synthetic. This workspace is advisory and does not control equipment.</small></p></main>
 <script>const data={data};
 const s=data.summary,esc=t=>String(t).replace(/[&<>"]/g,c=>({{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}}[c]));
 const reviewed=(data.current.query_rows||[]).map(r=>String(r.asset).split('/').pop());
@@ -177,7 +247,9 @@ async function loadWorkflow(){{try{{const response=await fetch('/energy-demo/wor
 async function transitionState(toState){{const response0=await fetch('/energy-demo/work-orders/'+encodeURIComponent(workflowOrder)+'/lifecycle');if(!response0.ok){{document.getElementById('workflow-status').textContent='Could not load the latest workflow version.';return}}const lifecycle=await response0.json();const reason=window.prompt('Reason for '+toState+' this review:');if(!reason||!reason.trim())return;const response=await fetch('/energy-demo/work-orders/'+encodeURIComponent(workflowOrder)+'/transition',{{method:'POST',headers:{{'Content-Type':'application/json'}},body:JSON.stringify({{to_state:toState,reason:reason.trim(),expected_version:lifecycle.object_version,command_id:'ui-'+Date.now()+'-'+Math.random().toString(36).slice(2)}})}});if(!response.ok){{let message='Transition failed';try{{message=(await response.json()).detail||message}}catch(_){{}}document.getElementById('workflow-status').textContent=message;document.getElementById('workflow-status').className='workflow-error';return}}renderWorkflow(await response.json());document.getElementById('workflow-status').textContent='Transition recorded successfully.';document.getElementById('workflow-status').className='workflow-success'}}
 function show(key,button){{let d=key==='current'?data.current:data.incomplete;document.querySelectorAll('#priorities button').forEach(x=>x.classList.remove('active'));button.classList.add('active');document.getElementById('question').textContent=key==='current'?'Which assets need maintenance review?':'Where is further evidence required?';document.getElementById('answer').textContent=d.answer;document.getElementById('evidence').innerHTML=(d.evidence||[]).map(e=>'<div><b>'+esc(e.source_type.replaceAll('_',' '))+'</b>'+esc(e.value)+'<br><small>'+esc(e.field_or_span)+'</small></div>').join('');document.getElementById('technical').textContent=JSON.stringify({{bulletin:d.authoritative_bulletin,query_rows:d.query_rows||'Not required',answer_source:d.answer_source||'Evidence contract',validation:data.validation}},null,2);document.getElementById('workflow').hidden=key!=='current';if(key==='current')loadWorkflow();document.getElementById('evidence-remediation').hidden=key!=='incomplete';if(key==='incomplete'){{renderRemediationAssets();loadRemediationRequests()}}}}
 {remediation_script}
-show('current',document.querySelector('#priorities button'));</script></body></html>"""
+{publication_audit_script}
+show('current',document.querySelector('#priorities button'));
+loadPublicationAudit();</script></body></html>"""
 
 @router.get("", response_class=HTMLResponse)
 async def demo_page(tenant: str = Depends(get_tenant), service: EnergyDemoService = Depends(get_energy_service)):

@@ -133,6 +133,28 @@
       "target": "neo4j"
     },
     {
+      "code": "SHACL_INHERITANCE_FLATTENED",
+      "element": "DocumentRevision",
+      "fidelity": "approximated",
+      "line": 92,
+      "message": "The generated SHACL shape has no shape-inheritance link to the parent type; inherited properties are present but the is-a relationship itself is not represented.",
+      "model_path": "energy-asset-intelligence.yaml",
+      "runtime_control": "Preserve the type hierarchy through the canonical OWL export for lineage checks.",
+      "severity": "info",
+      "target": "shacl"
+    },
+    {
+      "code": "NEO4J_INHERITANCE_FLATTENED",
+      "element": "DocumentRevision",
+      "fidelity": "approximated",
+      "line": 92,
+      "message": "Neo4j has no native label-hierarchy constraint; inherited properties are expanded onto the concrete label with no structural link back to the parent type.",
+      "model_path": "energy-asset-intelligence.yaml",
+      "runtime_control": "Preserve the type hierarchy through the canonical OWL export for lineage checks.",
+      "severity": "info",
+      "target": "neo4j"
+    },
+    {
       "code": "NEO4J_DATATYPE_RUNTIME",
       "element": "DocumentRevision.appliesToComponentType",
       "fidelity": "unenforceable",
@@ -272,6 +294,28 @@
       "message": "Mixin properties are expanded onto the concrete label; mixin identity is not native Neo4j schema.",
       "model_path": "energy-asset-intelligence.yaml",
       "runtime_control": null,
+      "severity": "info",
+      "target": "neo4j"
+    },
+    {
+      "code": "SHACL_INHERITANCE_FLATTENED",
+      "element": "EvidenceRequest",
+      "fidelity": "approximated",
+      "line": 120,
+      "message": "The generated SHACL shape has no shape-inheritance link to the parent type; inherited properties are present but the is-a relationship itself is not represented.",
+      "model_path": "energy-asset-intelligence.yaml",
+      "runtime_control": "Preserve the type hierarchy through the canonical OWL export for lineage checks.",
+      "severity": "info",
+      "target": "shacl"
+    },
+    {
+      "code": "NEO4J_INHERITANCE_FLATTENED",
+      "element": "EvidenceRequest",
+      "fidelity": "approximated",
+      "line": 120,
+      "message": "Neo4j has no native label-hierarchy constraint; inherited properties are expanded onto the concrete label with no structural link back to the parent type.",
+      "model_path": "energy-asset-intelligence.yaml",
+      "runtime_control": "Preserve the type hierarchy through the canonical OWL export for lineage checks.",
       "severity": "info",
       "target": "neo4j"
     },
@@ -529,6 +573,28 @@
       "target": "neo4j"
     },
     {
+      "code": "SHACL_INHERITANCE_FLATTENED",
+      "element": "EvidenceRequestTransition",
+      "fidelity": "approximated",
+      "line": 153,
+      "message": "The generated SHACL shape has no shape-inheritance link to the parent type; inherited properties are present but the is-a relationship itself is not represented.",
+      "model_path": "energy-asset-intelligence.yaml",
+      "runtime_control": "Preserve the type hierarchy through the canonical OWL export for lineage checks.",
+      "severity": "info",
+      "target": "shacl"
+    },
+    {
+      "code": "NEO4J_INHERITANCE_FLATTENED",
+      "element": "EvidenceRequestTransition",
+      "fidelity": "approximated",
+      "line": 153,
+      "message": "Neo4j has no native label-hierarchy constraint; inherited properties are expanded onto the concrete label with no structural link back to the parent type.",
+      "model_path": "energy-asset-intelligence.yaml",
+      "runtime_control": "Preserve the type hierarchy through the canonical OWL export for lineage checks.",
+      "severity": "info",
+      "target": "neo4j"
+    },
+    {
       "code": "NEO4J_DATATYPE_RUNTIME",
       "element": "EvidenceRequestTransition.changedAt",
       "fidelity": "unenforceable",
@@ -591,6 +657,28 @@
       "message": "Mixin properties are expanded onto the concrete label; mixin identity is not native Neo4j schema.",
       "model_path": "energy-asset-intelligence.yaml",
       "runtime_control": null,
+      "severity": "info",
+      "target": "neo4j"
+    },
+    {
+      "code": "SHACL_INHERITANCE_FLATTENED",
+      "element": "Observation",
+      "fidelity": "approximated",
+      "line": 42,
+      "message": "The generated SHACL shape has no shape-inheritance link to the parent type; inherited properties are present but the is-a relationship itself is not represented.",
+      "model_path": "energy-asset-intelligence.yaml",
+      "runtime_control": "Preserve the type hierarchy through the canonical OWL export for lineage checks.",
+      "severity": "info",
+      "target": "shacl"
+    },
+    {
+      "code": "NEO4J_INHERITANCE_FLATTENED",
+      "element": "Observation",
+      "fidelity": "approximated",
+      "line": 42,
+      "message": "Neo4j has no native label-hierarchy constraint; inherited properties are expanded onto the concrete label with no structural link back to the parent type.",
+      "model_path": "energy-asset-intelligence.yaml",
+      "runtime_control": "Preserve the type hierarchy through the canonical OWL export for lineage checks.",
       "severity": "info",
       "target": "neo4j"
     },
@@ -793,6 +881,50 @@
       "target": "neo4j"
     },
     {
+      "code": "SHACL_INHERITANCE_FLATTENED",
+      "element": "TechnicalDocument",
+      "fidelity": "approximated",
+      "line": 87,
+      "message": "The generated SHACL shape has no shape-inheritance link to the parent type; inherited properties are present but the is-a relationship itself is not represented.",
+      "model_path": "energy-asset-intelligence.yaml",
+      "runtime_control": "Preserve the type hierarchy through the canonical OWL export for lineage checks.",
+      "severity": "info",
+      "target": "shacl"
+    },
+    {
+      "code": "NEO4J_INHERITANCE_FLATTENED",
+      "element": "TechnicalDocument",
+      "fidelity": "approximated",
+      "line": 87,
+      "message": "Neo4j has no native label-hierarchy constraint; inherited properties are expanded onto the concrete label with no structural link back to the parent type.",
+      "model_path": "energy-asset-intelligence.yaml",
+      "runtime_control": "Preserve the type hierarchy through the canonical OWL export for lineage checks.",
+      "severity": "info",
+      "target": "neo4j"
+    },
+    {
+      "code": "SHACL_INHERITANCE_FLATTENED",
+      "element": "WindTurbine",
+      "fidelity": "approximated",
+      "line": 28,
+      "message": "The generated SHACL shape has no shape-inheritance link to the parent type; inherited properties are present but the is-a relationship itself is not represented.",
+      "model_path": "energy-asset-intelligence.yaml",
+      "runtime_control": "Preserve the type hierarchy through the canonical OWL export for lineage checks.",
+      "severity": "info",
+      "target": "shacl"
+    },
+    {
+      "code": "NEO4J_INHERITANCE_FLATTENED",
+      "element": "WindTurbine",
+      "fidelity": "approximated",
+      "line": 28,
+      "message": "Neo4j has no native label-hierarchy constraint; inherited properties are expanded onto the concrete label with no structural link back to the parent type.",
+      "model_path": "energy-asset-intelligence.yaml",
+      "runtime_control": "Preserve the type hierarchy through the canonical OWL export for lineage checks.",
+      "severity": "info",
+      "target": "neo4j"
+    },
+    {
       "code": "OWL_OPEN_WORLD_MINIMUM",
       "element": "WindTurbine.assetId",
       "fidelity": "preserved",
@@ -855,6 +987,28 @@
       "message": "Mixin properties are expanded onto the concrete label; mixin identity is not native Neo4j schema.",
       "model_path": "energy-asset-intelligence.yaml",
       "runtime_control": null,
+      "severity": "info",
+      "target": "neo4j"
+    },
+    {
+      "code": "SHACL_INHERITANCE_FLATTENED",
+      "element": "WorkOrder",
+      "fidelity": "approximated",
+      "line": 68,
+      "message": "The generated SHACL shape has no shape-inheritance link to the parent type; inherited properties are present but the is-a relationship itself is not represented.",
+      "model_path": "energy-asset-intelligence.yaml",
+      "runtime_control": "Preserve the type hierarchy through the canonical OWL export for lineage checks.",
+      "severity": "info",
+      "target": "shacl"
+    },
+    {
+      "code": "NEO4J_INHERITANCE_FLATTENED",
+      "element": "WorkOrder",
+      "fidelity": "approximated",
+      "line": 68,
+      "message": "Neo4j has no native label-hierarchy constraint; inherited properties are expanded onto the concrete label with no structural link back to the parent type.",
+      "model_path": "energy-asset-intelligence.yaml",
+      "runtime_control": "Preserve the type hierarchy through the canonical OWL export for lineage checks.",
       "severity": "info",
       "target": "neo4j"
     },
@@ -1066,6 +1220,17 @@
       "runtime_control": "Reject unknown LPG properties in the shared mutation validator; use curated closed SHACL shapes where required.",
       "severity": "warning",
       "target": "shacl"
+    },
+    {
+      "code": "NEO4J_UNKNOWN_PROPERTY_RUNTIME",
+      "element": "unknown_property_policy",
+      "fidelity": "unenforceable",
+      "line": null,
+      "message": "Neo4j has no schema-level closed-world constraint; nothing rejects an undeclared property written onto a node.",
+      "model_path": "energy-asset-intelligence.yaml",
+      "runtime_control": "Reject unknown LPG properties in the shared mutation validator.",
+      "severity": "warning",
+      "target": "neo4j"
     }
   ],
   "model": "energy-asset-intelligence",

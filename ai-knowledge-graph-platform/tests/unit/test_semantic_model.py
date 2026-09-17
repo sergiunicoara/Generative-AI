@@ -142,6 +142,77 @@ def test_diagnostics_are_machine_readable_located_and_explicit_about_loss():
     assert any(item.code == "OWL_OPEN_WORLD_MINIMUM" for item in diagnostics)
 
 
+def _capability_matrix_model() -> SemanticModel:
+    """A small synthetic model deliberately exercising every rule category
+    bullet 2 of the roadmap's "P0 — target capability matrix and loss
+    diagnostics" item names: abstract types, mixins, plain inheritance,
+    required/key/datatype/cardinality (min and max) properties, relation
+    endpoints and cardinality, and the closed-world (`unknown_property_policy`)
+    setting -- so `test_no_rule_disappears_silently_across_targets` below can
+    assert none of them compiles to silence."""
+    return SemanticModel.model_validate({
+        "id": "matrix", "version": "1.0.0", "namespace": "https://example.matrix/#",
+        "label": "Matrix", "prefixes": {}, "unknown_property_policy": "reject",
+        "mixins": {"Audited": {"properties": {"auditedAt": {"datatype": "dateTime"}}}},
+        "types": {
+            "Base": {"abstract": True, "properties": {"id": {"datatype": "string", "required": True, "key": True}}},
+            "Leaf": {
+                "extends": "Base", "mixins": ["Audited"],
+                "properties": {
+                    "name": {"datatype": "string", "cardinality": {"max": 3}},
+                    "status": {"datatype": "string", "required": True},
+                },
+            },
+        },
+        "relations": {
+            "linksTo": {"source": "Leaf", "target": "Leaf", "cardinality": {"min": 1, "max": 5}},
+        },
+        "artifacts": {"owl": "owl.ttl", "shacl": "shacl.ttl", "neo4j": "neo4j.cypher", "diagnostics": "diagnostics.json"},
+    })
+
+
+def test_no_rule_disappears_silently_across_targets():
+    """Cross-target completeness: every rule category the compiler tracks --
+    abstractness, mixins, plain inheritance, key/required/datatype/cardinality
+    (both a `min` and a `max`) properties, relation endpoints and cardinality,
+    and the closed-world policy -- must produce a diagnostic for every target
+    that can't enforce it, for both entries this fixture exercises (its own
+    declared rule and one it inherits). A future compiler change that
+    silently drops one of these code paths, or narrows an existing one so it
+    stops firing for this fixture, fails this test rather than silently
+    shipping a schema whose actual enforcement is weaker than what the
+    generated diagnostics claim."""
+    diagnostics = compile_model(_capability_matrix_model()).diagnostics
+    codes = {item.code for item in diagnostics}
+
+    assert codes == {
+        # Abstractness: no target accepts a direct instance of `Base`.
+        "OWL_ABSTRACT_RUNTIME", "SHACL_ABSTRACT_RUNTIME", "NEO4J_ABSTRACT_RUNTIME",
+        # Mixin identity and plain single inheritance are both structurally
+        # flattened outside OWL (which needs no diagnostic for either --
+        # rdfs:subClassOf and property expansion both preserve it natively).
+        "NEO4J_MIXIN_EXPANDED", "SHACL_INHERITANCE_FLATTENED", "NEO4J_INHERITANCE_FLATTENED",
+        # Property rules: open-world minimum (OWL), datatype (Neo4j), graph-
+        # wide key uniqueness (SHACL), a value-count maximum (Neo4j), and a
+        # required-but-not-key property (Neo4j).
+        "OWL_OPEN_WORLD_MINIMUM", "NEO4J_DATATYPE_RUNTIME", "SHACL_KEY_RUNTIME",
+        "NEO4J_PROPERTY_CARDINALITY_RUNTIME", "NEO4J_REQUIRED_PROPERTY_RUNTIME",
+        # Relation rules: endpoint typing and cardinality (Neo4j), and the
+        # same open-world minimum caveat OWL has for properties.
+        "NEO4J_RELATION_ENDPOINT_RUNTIME", "NEO4J_RELATION_CARDINALITY_RUNTIME",
+        "OWL_OPEN_WORLD_MINIMUM_RELATION",
+        # Closed-world validation: SHACL and Neo4j both stay schema-open.
+        "SHACL_UNKNOWN_PROPERTY_RUNTIME", "NEO4J_UNKNOWN_PROPERTY_RUNTIME",
+    }
+    # Every one of those codes must also carry a human-readable explanation --
+    # a silent diagnostic is as unhelpful as no diagnostic at all. (Location
+    # attribution itself is already covered against the real, file-backed
+    # model by test_diagnostics_are_machine_readable_located_and_explicit_about_loss;
+    # this fixture has no source file to attribute to.)
+    for item in diagnostics:
+        assert item.message
+
+
 def test_compile_check_detects_drift_and_invalid_model_leaves_output_untouched(tmp_path):
     output = tmp_path / "generated"
     compile_to_disk(MODEL_PATH, output_dir=output)

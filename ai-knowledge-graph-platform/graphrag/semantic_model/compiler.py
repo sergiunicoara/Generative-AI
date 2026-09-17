@@ -222,6 +222,22 @@ def _diagnostics(model: SemanticModel) -> tuple[Diagnostic, ...]:
         if spec.mixins:
             result.append(Diagnostic("info", "NEO4J_MIXIN_EXPANDED", Target.NEO4J, path, line, name,
                 "Mixin properties are expanded onto the concrete label; mixin identity is not native Neo4j schema.", "approximated"))
+        if spec.extends:
+            # Distinct from the abstract-runtime and mixin diagnostics above:
+            # this is plain single inheritance. OWL preserves it natively via
+            # rdfs:subClassOf (no diagnostic needed there); SHACL builds one
+            # flat NodeShape per type from its own effective properties with
+            # no sh:node shape chaining, and Neo4j has no label-hierarchy
+            # enforcement -- both lose the is-a relationship itself, even
+            # though the inherited properties are still individually present.
+            result.append(Diagnostic("info", "SHACL_INHERITANCE_FLATTENED", Target.SHACL, path, line, name,
+                "The generated SHACL shape has no shape-inheritance link to the parent type; "
+                "inherited properties are present but the is-a relationship itself is not represented.",
+                "approximated", "Preserve the type hierarchy through the canonical OWL export for lineage checks."))
+            result.append(Diagnostic("info", "NEO4J_INHERITANCE_FLATTENED", Target.NEO4J, path, line, name,
+                "Neo4j has no native label-hierarchy constraint; inherited properties are expanded onto "
+                "the concrete label with no structural link back to the parent type.",
+                "approximated", "Preserve the type hierarchy through the canonical OWL export for lineage checks."))
         for prop_name, prop in sorted(model.effective_properties(name).items()):
             if prop.cardinality.minimum:
                 result.append(Diagnostic("warning", "OWL_OPEN_WORLD_MINIMUM", Target.OWL, path, model.source_lines.get(prop_name), f"{name}.{prop_name}",
@@ -235,6 +251,12 @@ def _diagnostics(model: SemanticModel) -> tuple[Diagnostic, ...]:
                 model.source_lines.get(prop_name), f"{name}.{prop_name}",
                 f"Neo4j schema does not enforce the canonical {prop.datatype} datatype for this property.",
                 "unenforceable", "Validate values in the shared mutation validator."))
+            if prop.cardinality.maximum is not None:
+                result.append(Diagnostic("warning", "NEO4J_PROPERTY_CARDINALITY_RUNTIME", Target.NEO4J, path,
+                    model.source_lines.get(prop_name), f"{name}.{prop_name}",
+                    "Neo4j property schema has no native value-count limit; a maximum-cardinality "
+                    "property can silently accept more values than the model allows.",
+                    "unenforceable", "Validate value count in the shared mutation validator."))
             if prop.key:
                 result.append(Diagnostic("warning", "SHACL_KEY_RUNTIME", Target.SHACL, path,
                     model.source_lines.get(prop_name), f"{name}.{prop_name}",
@@ -249,11 +271,23 @@ def _diagnostics(model: SemanticModel) -> tuple[Diagnostic, ...]:
             result.append(Diagnostic("warning", "NEO4J_RELATION_CARDINALITY_RUNTIME", Target.NEO4J, path, model.source_lines.get(name), name,
                 "Neo4j schema constraints do not enforce relationship cardinality.", "unenforceable",
                 "Check inside the same write transaction; application-only check-then-write can race."))
+        if relation.cardinality.minimum:
+            # Same open-world caveat OWL_OPEN_WORLD_MINIMUM already reports
+            # for property cardinality: a minimum on a *relation* is equally
+            # descriptive, not enforcing, under OWL's open-world assumption.
+            result.append(Diagnostic("warning", "OWL_OPEN_WORLD_MINIMUM_RELATION", Target.OWL, path,
+                model.source_lines.get(name), name,
+                "OWL cardinality describes semantics under the open-world assumption; it does not reject a relation with too few instances.",
+                "preserved", "Use the generated SHACL shape as the closed-world publication gate."))
     if model.unknown_property_policy == "reject":
         result.append(Diagnostic("warning", "SHACL_UNKNOWN_PROPERTY_RUNTIME", Target.SHACL, path, None,
             "unknown_property_policy",
             "Generated shapes remain open to preserve existing Energy RDF metadata and do not reject every undeclared predicate.",
             "approximated", "Reject unknown LPG properties in the shared mutation validator; use curated closed SHACL shapes where required."))
+        result.append(Diagnostic("warning", "NEO4J_UNKNOWN_PROPERTY_RUNTIME", Target.NEO4J, path, None,
+            "unknown_property_policy",
+            "Neo4j has no schema-level closed-world constraint; nothing rejects an undeclared property written onto a node.",
+            "unenforceable", "Reject unknown LPG properties in the shared mutation validator."))
     return tuple(result)
 
 
@@ -261,18 +295,58 @@ def compile_model(model: SemanticModel) -> Compilation:
     return Compilation(_compile_owl(model), _compile_shacl(model), _compile_neo4j(model), _diagnostics(model))
 
 
+def _render_diagnostics_report(model: SemanticModel, compiled: Compilation) -> str:
+    """Human-readable counterpart to the machine-readable `diagnostics.json`
+    (roadmap "P0 — target capability matrix and loss diagnostics"): the same
+    capability matrix and per-rule loss diagnostics, rendered as Markdown for
+    a reviewer who isn't going to parse JSON by eye."""
+    source = model.source_path.name if model.source_path else "semantic model"
+    lines = [
+        f"<!-- DO NOT EDIT — generated from {source}. -->",
+        f"# {model.label} ({model.id} v{model.version}) — schema capability diagnostics",
+        "",
+        "For each canonical rule, whether OWL, SHACL, and Neo4j enforce it natively, "
+        "how it degrades where they don't, and what compensates. The canonical "
+        "semantic model remains authoritative; this report makes constraint loss "
+        "visible rather than silently weakening governance.",
+        "",
+        "## Target capabilities",
+        "",
+        "| Target | Supported capabilities |",
+        "| --- | --- |",
+    ]
+    for target, capabilities in TARGET_CAPABILITIES.items():
+        lines.append(f"| {target.value} | {', '.join(sorted(c.value for c in capabilities))} |")
+    lines += [
+        "",
+        f"## Diagnostics ({len(compiled.diagnostics)})",
+        "",
+        "| Severity | Target | Code | Element | Fidelity | Message | Mitigation | Location |",
+        "| --- | --- | --- | --- | --- | --- | --- | --- |",
+    ]
+    for item in sorted(compiled.diagnostics, key=lambda d: (d.target.value, d.code, d.element)):
+        location = f"{item.model_path}:{item.line}" if item.line else item.model_path
+        mitigation = item.runtime_control or "—"
+        lines.append(
+            f"| {item.severity} | {item.target.value} | {item.code} | {item.element} | "
+            f"{item.fidelity} | {item.message} | {mitigation} | {location} |"
+        )
+    return "\n".join(lines).rstrip() + "\n"
+
+
 def _outputs(model: SemanticModel, output_dir: Path | None) -> dict[str, Path]:
     if output_dir is not None:
         return {"owl": output_dir / "ontology.ttl", "shacl": output_dir / "shapes.ttl",
-                "neo4j": output_dir / "neo4j.cypher", "diagnostics": output_dir / "diagnostics.json"}
+                "neo4j": output_dir / "neo4j.cypher", "diagnostics": output_dir / "diagnostics.json",
+                "diagnostics_report": output_dir / "diagnostics.md"}
     assert model.source_path is not None
     root = model.source_path.parents[2]
-    return {name: root / value for name, value in model.artifacts.model_dump().items()}
+    return {name: root / value for name, value in model.artifacts.model_dump().items() if value is not None}
 
 
 def compile_to_disk(
     model_path: str | Path, *, output_dir: str | Path | None = None,
-    check: bool = False, fail_on_unenforceable: bool = False,
+    check: bool = False, fail_on_unenforceable: bool = False, fail_on_error: bool = False,
 ) -> dict[str, Path]:
     model = load_model(model_path)
     compiled = compile_model(model)
@@ -281,6 +355,18 @@ def compile_to_disk(
         if forbidden:
             codes = ", ".join(sorted({item.code for item in forbidden}))
             raise SemanticModelError(f"forbidden unenforceable semantics: {codes}")
+    if fail_on_error:
+        # The CI-facing gate roadmap bullet 3 asks for: "fail on errors, but
+        # allow reviewed warnings and informational downgrades". `severity`
+        # (independent of `fidelity`) is the axis meant for exactly this —
+        # no diagnostic emits "error" today, so this is a currently-dormant,
+        # non-breaking gate that starts working the moment a future rule
+        # needs to hard-fail compilation rather than just warn.
+        errors = [item for item in compiled.diagnostics if item.severity == "error"]
+        if errors:
+            codes = ", ".join(sorted({item.code for item in errors}))
+            raise SemanticModelError(f"error-severity diagnostics: {codes}")
+    paths = _outputs(model, Path(output_dir) if output_dir else None)
     contents = {"owl": compiled.owl, "shacl": compiled.shacl, "neo4j": compiled.neo4j,
                 "diagnostics": json.dumps({"model": model.id, "version": model.version,
                     "capabilities": {
@@ -288,7 +374,8 @@ def compile_to_disk(
                         for target, capabilities in TARGET_CAPABILITIES.items()
                     },
                     "diagnostics": [asdict(item) for item in compiled.diagnostics]}, indent=2, sort_keys=True) + "\n"}
-    paths = _outputs(model, Path(output_dir) if output_dir else None)
+    if "diagnostics_report" in paths:
+        contents["diagnostics_report"] = _render_diagnostics_report(model, compiled)
     drift = [name for name, path in paths.items() if not path.exists() or path.read_text(encoding="utf-8") != contents[name]]
     if check:
         if drift:

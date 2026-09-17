@@ -90,6 +90,13 @@ class ArtifactPaths(StrictModel):
     shacl: str
     neo4j: str
     diagnostics: str
+    # Optional: a human-readable Markdown rendering of the same diagnostics
+    # (roadmap "P0 — target capability matrix and loss diagnostics": a
+    # machine-readable report already existed via `diagnostics`; this is the
+    # human-readable counterpart). Optional so existing/test models that
+    # don't declare it keep loading unchanged; `compile_to_disk` only writes
+    # it when a model configures a path.
+    diagnostics_report: str | None = None
 
 
 class SemanticModel(StrictModel):

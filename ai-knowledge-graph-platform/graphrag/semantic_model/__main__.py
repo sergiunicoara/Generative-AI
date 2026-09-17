@@ -21,11 +21,16 @@ def main(argv: list[str] | None = None) -> int:
         "--fail-on-unenforceable", action="store_true",
         help="fail before writing if any target rule requires runtime enforcement",
     )
+    compile_parser.add_argument(
+        "--fail-on-error", action="store_true",
+        help="fail before writing if any diagnostic has error severity (reviewed warnings and "
+             "informational downgrades still pass)",
+    )
     args = parser.parse_args(argv)
     try:
         paths = compile_to_disk(
             args.model, output_dir=args.output_dir, check=args.check,
-            fail_on_unenforceable=args.fail_on_unenforceable,
+            fail_on_unenforceable=args.fail_on_unenforceable, fail_on_error=args.fail_on_error,
         )
         diagnostics = compile_model(load_model(args.model)).diagnostics
     except SemanticModelError as exc:

@@ -2,13 +2,20 @@
 
 ## Canonical Energy semantic model
 
-The compiler also emits `generated/energy/diagnostics.json`, a read-only
-capability-loss report. It records which canonical rules are enforced,
-approximated or unenforceable by OWL/RDFS, SHACL and Neo4j targets, together
-with the mitigation required. The report is generated during compilation and
-must not be edited from the dashboard. RDF/SHACL remains the authoritative
-governed semantic layer; Neo4j/LPG is a rebuildable projection with different
-native constraint capabilities.
+The compiler also emits `generated/energy/diagnostics.json`, a read-only,
+machine-readable capability-loss report, and `generated/energy/diagnostics.md`,
+the same report rendered as a human-readable Markdown table — one row per
+canonical rule × target, its fidelity (`preserved`/`approximated`/
+`unenforceable`), the runtime control that compensates, and its source-model
+location. Both are generated during compilation and must not be edited from
+the dashboard or by hand. RDF/SHACL remains the authoritative governed
+semantic layer; Neo4j/LPG is a rebuildable projection with different native
+constraint capabilities. `tests/unit/test_semantic_model.py::
+test_no_rule_disappears_silently_across_targets` cross-checks a synthetic
+model exercising every tracked rule category (abstractness, mixins, plain
+inheritance, key/required/datatype/cardinality properties, relation endpoints
+and cardinality, closed-world validation) against every target lacking that
+capability, so a future compiler change can't silently stop reporting one.
 
 The Energy domain now has one storage-independent, reviewable source of truth:
 [`models/energy-asset-intelligence.yaml`](models/energy-asset-intelligence.yaml).
@@ -21,7 +28,9 @@ directly:
 - `shapes/energy-asset-intelligence.shapes.ttl` — closed-world SHACL checks;
 - `generated/energy/neo4j-constraints.cypher` — Neo4j-enforceable keys;
 - `generated/energy/diagnostics.json` — explicit target capability losses and
-  their runtime controls.
+  their runtime controls (machine-readable);
+- `generated/energy/diagnostics.md` — the same capability losses, rendered as
+  a human-readable table.
 
 Regenerate them with:
 
@@ -36,9 +45,14 @@ files remain separate source-to-model mapping contracts; they consume this
 vocabulary rather than competing with it.
 
 The normal compiler succeeds when a target has a known limitation, but prints
-the corresponding diagnostic and writes it to JSON. Deployments that permit no
-runtime-only rules can add `--fail-on-unenforceable`; this fails before writing
-any artifact. The migration is parity-gated by `tests/unit/test_semantic_model.py`,
+the corresponding diagnostic and writes it to JSON and Markdown. Deployments
+that permit no runtime-only rules can add `--fail-on-unenforceable`; this
+fails before writing any artifact. `--fail-on-error` is the equally strict,
+independent gate on `severity` rather than `fidelity` — it fails before
+writing if any diagnostic is `error`-severity, while still allowing reviewed
+`warning`s and `info`-level downgrades through; no diagnostic is `error`-
+severity today, so this gate is currently dormant, not currently enforced.
+The migration is parity-gated by `tests/unit/test_semantic_model.py`,
 which parses both generated Turtle targets, exercises the real SHACL validator,
 checks established Energy vocabulary, verifies deterministic output and drift,
 and proves shared-write rejection. Existing Energy publication tests continue

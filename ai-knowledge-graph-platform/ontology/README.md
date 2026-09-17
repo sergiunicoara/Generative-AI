@@ -30,7 +30,11 @@ directly:
 - `generated/energy/diagnostics.json` — explicit target capability losses and
   their runtime controls (machine-readable);
 - `generated/energy/diagnostics.md` — the same capability losses, rendered as
-  a human-readable table.
+  a human-readable table;
+- `generated/energy/erd.mmd` — a reviewable ERD/frame view (entities,
+  properties, inheritance, mixins, typed relations, cardinality) rendered as
+  a Mermaid `classDiagram`, viewable natively in GitHub/GitLab Markdown with
+  no separate tool.
 
 Regenerate them with:
 
@@ -221,9 +225,37 @@ implementation ships today —
 `energy_maintenance_review_competency_questions()`, reusing `evals/
 energy_demo/sparql/maintenance_review.rq` against the Energy tenant's RDF
 graph — since it's the one competency question in this repo that needs no
-LLM or live service to run deterministically. Wiring the aerospace/
-automotive/marketing questions above into the same gate (Cypher against a
-live Neo4j graph) is documented follow-up, not built here.
+LLM or live service to run deterministically.
+
+The aerospace/automotive/marketing questions above are now wired too, as
+real executable Cypher (`aerospace_regulatory_competency_questions()`,
+`automotive_iatf_competency_questions()`,
+`marketing_adtech_competency_questions()` — query text lives in
+`evals/<domain>/cypher/*.cypher`, one file per question, mirroring the
+Energy/SPARQL layout). Be precise about the evidence level: unlike the
+Energy question, these have **not been run against a live Neo4j graph** —
+there is no Neo4j instance in this development environment. What *is* true
+and checked on every `make ci` (`competency-questions-check` /
+`scripts/check_competency_questions.py`): every relation/type name each
+question's Cypher references is verified to still exist in that domain's
+current `config/ontologies/*.yml` — a static regression gate that catches a
+renamed/removed type or relation immediately, without needing Neo4j, even
+though it can't prove the query returns real rows. `run_competency_suite_async`
+plus `neo4j_cypher_query_fn` (`graphrag/graph/competency_gate.py`) is the
+real execution path once a live Neo4j instance is available; running it and
+confirming a pass is the step that would move these from "unit-tested" to
+"live-validated" in this doc's own evidence-level convention.
+
+`graphrag/graph/ontology_migration.py`'s `find_affected_competency_questions()`
+is the complementary "model-change impact analysis" direction: given a
+`MigrationReport`'s added/removed/renamed names and a domain id, it reports
+which of that domain's competency questions reference a name the migration
+removes or renames away from — so a reviewer can see *which specific
+question* a breaking change affects, not just that the class/property diff
+is structurally unmapped. Honestly scoped: it only inspects competency-
+question query text, not R2RML/RML mappings, SHACL shapes, generated Neo4j
+constraints, or API contracts — a real but partial answer to "what does this
+ontology change affect."
 
 ## SHACL shapes (`ontology/shapes/`)
 

@@ -200,3 +200,4 @@ artifacts:
   neo4j: ontology/generated/energy/neo4j-constraints.cypher
   diagnostics: ontology/generated/energy/diagnostics.json
   diagnostics_report: ontology/generated/energy/diagnostics.md
+  erd: ontology/generated/energy/erd.mmd

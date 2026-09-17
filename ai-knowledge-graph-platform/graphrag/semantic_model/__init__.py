@@ -7,6 +7,7 @@ from graphrag.semantic_model.compiler import (
     compile_model,
     compile_to_disk,
 )
+from graphrag.semantic_model.erd import render_erd_mermaid
 from graphrag.semantic_model.models import SemanticModel, SemanticModelError, load_model
 from graphrag.semantic_model.runtime import MutationValidationError, SemanticMutationValidator
 
@@ -21,4 +22,5 @@ __all__ = [
     "compile_model",
     "compile_to_disk",
     "load_model",
+    "render_erd_mermaid",
 ]

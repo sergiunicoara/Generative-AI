@@ -1,0 +1,77 @@
+classDiagram
+    class Auditable {
+        <<mixin>>
+        +dateTime createdAt
+        +dateTime updatedAt
+    }
+    class Asset {
+        +string assetId*
+    }
+    Asset ..|> Auditable : mixin
+    class Component {
+        +string componentType
+    }
+    Component ..|> Auditable : mixin
+    class DocumentRevision {
+        +string appliesToComponentType
+        +string documentId*
+        +dateTime recordedAt!
+        +decimal temperatureReviewThreshold
+        +dateTime validFrom!
+        +dateTime validTo
+    }
+    TechnicalDocument <|-- DocumentRevision
+    class EvidenceRequest {
+        +string assignedTo!
+        +string missingField!
+        +string priority!
+        +string reason!
+        +string requestId*
+        +string state!
+        +string targetSourceSystem!
+    }
+    %% EvidenceRequest extends external type prov:Entity
+    EvidenceRequest ..|> Auditable : mixin
+    class EvidenceRequestTransition {
+        +dateTime changedAt
+        +string changedBy
+        +string fromState
+        +string toState
+        +string transitionReason
+    }
+    %% EvidenceRequestTransition extends external type prov:Entity
+    class MaintenanceReviewFinding {
+    }
+    class Observation {
+        +string metric
+        +dateTime observedAt!
+        +dateTime recordedAt!
+        +string unit!
+        +decimal value!
+    }
+    %% Observation extends external type prov:Entity
+    Observation ..|> Auditable : mixin
+    class Site {
+    }
+    class TechnicalDocument {
+        <<abstract>>
+    }
+    %% TechnicalDocument extends external type prov:Entity
+    class WindTurbine {
+    }
+    Asset <|-- WindTurbine
+    class WorkOrder {
+        +dateTime recordedAt!
+        +string status
+        +dateTime validFrom!
+        +string workOrderId*
+    }
+    %% WorkOrder extends external type prov:Entity
+    WorkOrder ..|> Auditable : mixin
+    EvidenceRequestTransition "1" --> "0..*" EvidenceRequest : changesRequest
+    WorkOrder "1" --> "0..*" Asset : concernsAsset
+    EvidenceRequest "1" --> "0..*" Asset : forAsset
+    Site "1" --> "0..*" Asset : hasAsset
+    Asset "1" --> "0..*" Component : hasComponent
+    Observation "1" --> "0..*" Asset : observedAsset
+    DocumentRevision "1" --> "0..*" DocumentRevision : supersedes

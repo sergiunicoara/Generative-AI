@@ -10,6 +10,7 @@ from enum import Enum
 from pathlib import Path
 from typing import Literal
 
+from graphrag.semantic_model.erd import render_erd_mermaid
 from graphrag.semantic_model.models import PropertySpec, SemanticModel, SemanticModelError, load_model
 
 _XSD = {
@@ -338,7 +339,7 @@ def _outputs(model: SemanticModel, output_dir: Path | None) -> dict[str, Path]:
     if output_dir is not None:
         return {"owl": output_dir / "ontology.ttl", "shacl": output_dir / "shapes.ttl",
                 "neo4j": output_dir / "neo4j.cypher", "diagnostics": output_dir / "diagnostics.json",
-                "diagnostics_report": output_dir / "diagnostics.md"}
+                "diagnostics_report": output_dir / "diagnostics.md", "erd": output_dir / "erd.mmd"}
     assert model.source_path is not None
     root = model.source_path.parents[2]
     return {name: root / value for name, value in model.artifacts.model_dump().items() if value is not None}
@@ -376,6 +377,8 @@ def compile_to_disk(
                     "diagnostics": [asdict(item) for item in compiled.diagnostics]}, indent=2, sort_keys=True) + "\n"}
     if "diagnostics_report" in paths:
         contents["diagnostics_report"] = _render_diagnostics_report(model, compiled)
+    if "erd" in paths:
+        contents["erd"] = render_erd_mermaid(model)
     drift = [name for name, path in paths.items() if not path.exists() or path.read_text(encoding="utf-8") != contents[name]]
     if check:
         if drift:

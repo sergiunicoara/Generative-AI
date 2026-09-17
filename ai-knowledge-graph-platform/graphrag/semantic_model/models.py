@@ -97,6 +97,10 @@ class ArtifactPaths(StrictModel):
     # don't declare it keep loading unchanged; `compile_to_disk` only writes
     # it when a model configures a path.
     diagnostics_report: str | None = None
+    # Optional: a Mermaid classDiagram ERD/frame view (roadmap "P1 — visual
+    # and tool-friendly semantic modelling"). Same optionality rationale as
+    # `diagnostics_report` above.
+    erd: str | None = None
 
 
 class SemanticModel(StrictModel):

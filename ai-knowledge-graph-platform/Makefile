@@ -7,7 +7,7 @@ PYTEST    ?= $(PYTHON) scripts/run_pytest.py
 UVICORN   ?= $(PYTHON) -m uvicorn
 PIP       ?= $(PYTHON) -m pip
 
-.PHONY: help install install-dev lock test test-collect test-integration test-load test-all test-fuzz mutation lint semantic-model-check clean-snapshot-check \
+.PHONY: help install install-dev lock test test-collect test-integration test-load test-all test-fuzz mutation lint semantic-model-check competency-questions-check clean-snapshot-check \
 	typecheck ci \
 	terraform-fmt terraform-validate terraform-test terraform-security \
         api dashboard backup services-up services-down \
@@ -90,6 +90,7 @@ typecheck:     ## Type-check with mypy (advisory: 108 pre-existing errors remain
 
 ci:            ## The one command CI runs: lint + unit tests (no live services, no Docker)
 	$(MAKE) semantic-model-check
+	$(MAKE) competency-questions-check
 	$(MAKE) lint
 	$(MAKE) test
 
@@ -98,6 +99,9 @@ clean-snapshot-check: ## Archive the staged/HEAD tree and verify it in a fresh v
 
 semantic-model-check: ## Fail when generated Energy semantic artifacts drift, or any diagnostic is error-severity
 	$(PYTHON) -m graphrag.semantic_model compile ontology/models/energy-asset-intelligence.yaml --check --fail-on-error
+
+competency-questions-check: ## Fail when a domain's competency-question Cypher references a type/relation no longer in its ontology YAML
+	$(PYTHON) scripts/check_competency_questions.py
 
 # ── Services ───────────────────────────────────────────────────────────────────
 

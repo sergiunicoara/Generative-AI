@@ -21,6 +21,7 @@ from graphrag.semantic_model import (
     compile_model,
     compile_to_disk,
     load_model,
+    render_erd_mermaid,
 )
 from graphrag.semantic_model.models import SemanticModel
 
@@ -114,6 +115,119 @@ def test_generated_energy_owl_preserves_existing_core_vocabulary():
     assert (ENERGY.DocumentRevision, RDFS.subClassOf, ENERGY.TechnicalDocument) in graph
     assert (ENERGY.value, RDFS.range, XSD.decimal) in graph
     assert (ENERGY.observedAsset, RDF.type, OWL.ObjectProperty) in graph
+
+
+def test_generated_owl_round_trips_through_rdflib_without_losing_identifiers_or_annotations(tmp_path):
+    """Roadmap "P1 -- visual and tool-friendly semantic modelling", bullet 2:
+    "Export OWL in a Protégé-compatible form and validate that the generated
+    ontology opens and round-trips without losing identifiers or
+    annotations."
+
+    Evidence-level caveat, stated plainly: this environment has no Protégé
+    (a desktop Java application) to actually open the file in -- this
+    validates the closest available proxy, an rdflib parse -> serialize ->
+    reparse round trip, which exercises the same RDF/OWL/Turtle parsing
+    rules Protégé's own OWL API is built on, but is not proof Protégé
+    itself opens the file cleanly. That remains a manual verification step
+    for whoever has Protégé installed.
+    """
+    from rdflib.compare import isomorphic
+
+    compiled = compile_model(load_model(MODEL_PATH))
+    first = Graph().parse(data=compiled.owl, format="turtle")
+
+    reserialized = first.serialize(format="turtle")
+    second = Graph().parse(data=reserialized, format="turtle")
+
+    assert len(first) == len(second)
+    # Graph *isomorphism*, not raw triple-set equality: blank-node identifiers
+    # (owl:Restriction cardinality nodes, owl:hasKey's RDF list) are not
+    # stable across a serialize -> reparse round trip -- that's normal RDF
+    # semantics, not data loss. `isomorphic` compares graph structure
+    # up to blank-node relabeling, which is the actually-meaningful check.
+    assert isomorphic(first, second)
+
+    classes = set(first.subjects(RDF.type, OWL.Class))
+    assert classes, "no owl:Class declared -- round trip would be vacuous"
+    for cls in classes:
+        assert (cls, RDF.type, OWL.Class) in second, f"lost class identifier: {cls}"
+    labels = set(first.subjects(RDFS.label, None))
+    assert labels, "no rdfs:label declared -- round trip would be vacuous"
+    for subject in labels:
+        assert set(first.objects(subject, RDFS.label)) == set(second.objects(subject, RDFS.label)), \
+            f"lost or changed rdfs:label annotation on {subject}"
+
+
+class TestErdGeneration:
+    """Roadmap "P1 -- visual and tool-friendly semantic modelling", bullet 1:
+    "Generate a reviewable ERD/frame view from the canonical YAML, including
+    entities, slots/properties, inheritance, mixins, typed relations and
+    cardinality." """
+
+    def test_every_type_and_mixin_becomes_a_class_block(self):
+        model = _small_model()
+        erd = render_erd_mermaid(model)
+        assert erd.startswith("classDiagram\n")
+        assert "class Parent" in erd
+        assert "class Child" in erd
+
+    def test_abstract_types_are_stamped(self):
+        erd = render_erd_mermaid(_small_model())
+        assert "<<abstract>>" in erd
+
+    def test_local_inheritance_is_a_uml_arrow(self):
+        erd = render_erd_mermaid(_small_model())
+        assert "Parent <|-- Child" in erd
+
+    def test_external_namespaced_parents_become_a_comment_not_a_broken_arrow(self):
+        """A colon in a Mermaid class name is invalid syntax; an `extends`
+        value with a colon (e.g. `prov:Entity`) is a foreign/external type
+        this model doesn't declare, not a local class to box."""
+        model = _small_model(types={
+            "Parent": {"abstract": True, "properties": {"id": {"datatype": "string", "required": True, "key": True}}},
+            "Child": {"extends": "prov:ExternalThing", "properties": {}},
+        })
+        erd = render_erd_mermaid(model)
+        assert "prov:ExternalThing <|--" not in erd
+        assert "%% Child extends external type prov:ExternalThing" in erd
+
+    def test_mixin_usage_is_a_realization_arrow(self):
+        model = _small_model(
+            mixins={"Audited": {"properties": {"auditedAt": {"datatype": "dateTime"}}}},
+            types={
+                "Parent": {"abstract": True, "properties": {"id": {"datatype": "string", "required": True, "key": True}}},
+                "Child": {"extends": "Parent", "mixins": ["Audited"], "properties": {}},
+            },
+        )
+        erd = render_erd_mermaid(model)
+        assert "class Audited" in erd
+        assert "<<mixin>>" in erd
+        assert "Child ..|> Audited : mixin" in erd
+
+    def test_relations_carry_name_and_cardinality(self):
+        erd = render_erd_mermaid(_small_model())  # hasParent: exact 2
+        assert 'Child "1" --> "2" Parent : hasParent' in erd
+
+    def test_open_ended_cardinality_renders_as_min_dot_dot_star(self):
+        model = _small_model(relations={
+            "hasParent": {"source": "Child", "target": "Parent", "cardinality": {"min": 1}},
+        })
+        erd = render_erd_mermaid(model)
+        assert '"1..*"' in erd
+
+    def test_key_and_required_properties_are_marked(self):
+        erd = render_erd_mermaid(_small_model())
+        assert "+string id*" in erd  # key marker
+
+    def test_erd_is_generated_for_the_real_energy_model_and_is_syntactically_plausible(self):
+        erd = render_erd_mermaid(load_model(MODEL_PATH))
+        assert erd.startswith("classDiagram\n")
+        for line in erd.splitlines():
+            stripped = line.strip()
+            if stripped.startswith("class "):
+                class_name = stripped[len("class "):].split(" ", 1)[0].rstrip("{").strip()
+                assert ":" not in class_name, f"invalid Mermaid class name: {class_name!r}"
+        assert erd.count("{") == erd.count("}")
 
 
 def test_generated_shacl_is_executed_by_the_real_validator(tmp_path):

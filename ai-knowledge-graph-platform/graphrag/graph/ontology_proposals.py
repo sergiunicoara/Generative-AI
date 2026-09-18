@@ -44,6 +44,7 @@ def build_ontology_proposals(
             "source_type": "",
             "target_type": "",
             "reason": "unknown_entity_type",
+            "confidence": entity.confidence,
         })
 
     entities_by_id = {entity.id: entity for entity in entities}
@@ -67,6 +68,7 @@ def build_ontology_proposals(
             "source_type": source_type[:100],
             "target_type": target_type[:100],
             "reason": reason,
+            "confidence": relation.confidence,
         })
 
     unique: dict[tuple[str, str, str, str], dict] = {}
@@ -76,7 +78,20 @@ def build_ontology_proposals(
             proposal["source_type"], proposal["target_type"],
         )
         unique.setdefault(identity, proposal)
-    return list(unique.values())[:max(0, limit)]
+    deduped = list(unique.values())[:max(0, limit)]
+
+    # A proposed name is flagged as conflicting with itself when the batch
+    # proposes the same value under more than one kind (e.g. "VENDOR" seen
+    # both as an entity_type and inside a relation_pair) -- a real,
+    # cheaply-computed collision, not a heuristic guess.
+    value_kinds: dict[str, set[str]] = {}
+    for proposal in deduped:
+        value_kinds.setdefault(proposal["proposed_value"], set()).add(proposal["kind"])
+    for proposal in deduped:
+        siblings = value_kinds[proposal["proposed_value"]] - {proposal["kind"]}
+        proposal["conflicts"] = sorted(siblings)
+
+    return deduped
 
 
 class OntologyProposalService:
@@ -117,6 +132,15 @@ class OntologyProposalService:
                               p.target_type = $target_type,
                               p.entity_name = $entity_name,
                               p.reason = $reason,
+                              p.confidence = $confidence,
+                              p.conflicts = $conflicts,
+                              p.affected_use_cases = $affected_use_cases,
+                              p.business_impact = $business_impact,
+                              p.urgency = $urgency,
+                              p.effort = $effort,
+                              p.risk = $risk,
+                              p.dependencies = $dependencies,
+                              p.requesting_team = $requesting_team,
                               p.status = 'pending',
                               p.seen_count = 0,
                               p.created_at = datetime()
@@ -147,6 +171,15 @@ class OntologyProposalService:
                 target_type=proposal.get("target_type", ""),
                 entity_name=proposal.get("entity_name", ""),
                 reason=proposal.get("reason", ""),
+                confidence=proposal.get("confidence", 1.0),
+                conflicts=proposal.get("conflicts", []),
+                affected_use_cases=proposal.get("affected_use_cases", []),
+                business_impact=proposal.get("business_impact", ""),
+                urgency=proposal.get("urgency", ""),
+                effort=proposal.get("effort", ""),
+                risk=proposal.get("risk", ""),
+                dependencies=proposal.get("dependencies", []),
+                requesting_team=proposal.get("requesting_team", ""),
                 document_id=chunk.document_id,
                 chunk_id=chunk.id,
                 ontology_version_id=ontology_version_id,
@@ -163,9 +196,16 @@ class OntologyProposalService:
             RETURN p.id AS id, p.kind AS kind, p.proposed_value AS proposed_value,
                    p.source_type AS source_type, p.target_type AS target_type,
                    p.entity_name AS entity_name, p.reason AS reason, p.status AS status,
+                   p.confidence AS confidence, p.conflicts AS conflicts,
+                   p.affected_use_cases AS affected_use_cases,
+                   p.business_impact AS business_impact, p.urgency AS urgency,
+                   p.effort AS effort, p.risk AS risk, p.dependencies AS dependencies,
+                   p.requesting_team AS requesting_team,
                    p.seen_count AS seen_count, p.created_at AS created_at,
                    p.last_seen_at AS last_seen_at, p.reviewed_by AS reviewed_by,
-                   p.reviewed_at AS reviewed_at
+                   p.reviewed_at AS reviewed_at, p.decision_reason AS decision_reason,
+                   p.decision_model_version AS decision_model_version,
+                   p.merge_target AS merge_target
             ORDER BY p.last_seen_at DESC
             LIMIT $limit
             """,
@@ -174,22 +214,79 @@ class OntologyProposalService:
             limit=limit,
         )
 
-    async def decide(self, proposal_id: str, *, approve: bool, reviewed_by: str, tenant: str) -> dict:
-        """Record a human decision without mutating the active ontology."""
-        status = "approved" if approve else "rejected"
+    # Roadmap "P1 -- ontology curation and human-in-the-loop workbench",
+    # bullet 2: "approve, edit, reject, merge, defer and quarantine
+    # decisions, each with actor, reason, timestamp and model/version
+    # evidence." `approve`/`reject` are unchanged for existing callers;
+    # `action` is the general form.
+    _ACTION_STATUS = {
+        "approve": "approved",
+        "reject": "rejected",
+        "edit": "edited",
+        "merge": "merged",
+        "defer": "deferred",
+        "quarantine": "quarantined",
+    }
+
+    async def decide(
+        self,
+        proposal_id: str,
+        *,
+        approve: bool | None = None,
+        action: str | None = None,
+        reviewed_by: str,
+        tenant: str,
+        reason: str = "",
+        model_version: str = "",
+        edited_value: str | None = None,
+        merge_target: str | None = None,
+    ) -> dict:
+        """Record a human decision without mutating the active ontology.
+
+        Either `action` (one of `approve`/`reject`/`edit`/`merge`/`defer`/
+        `quarantine`) or the legacy `approve` boolean must be given; `action`
+        wins if both are passed.
+        """
+        if action is None:
+            if approve is None:
+                return {"error": "Either 'action' or 'approve' must be given"}
+            action = "approve" if approve else "reject"
+        if action not in self._ACTION_STATUS:
+            return {"error": f"Unknown action '{action}'"}
+        status = self._ACTION_STATUS[action]
+
+        set_clauses = [
+            "p.status = $status",
+            "p.reviewed_by = $reviewed_by",
+            "p.reviewed_at = datetime()",
+            "p.decision_reason = $reason",
+            "p.decision_model_version = $model_version",
+        ]
+        params: dict = {
+            "proposal_id": proposal_id,
+            "tenant": tenant,
+            "status": status,
+            "reviewed_by": reviewed_by,
+            "reason": reason,
+            "model_version": model_version,
+        }
+        if action == "edit" and edited_value:
+            set_clauses.append("p.proposed_value = $edited_value")
+            params["edited_value"] = edited_value
+        if action == "merge" and merge_target:
+            set_clauses.append("p.merge_target = $merge_target")
+            params["merge_target"] = merge_target
+
         rows = await self._neo4j.run(
-            """
-            MATCH (p:OntologyProposal {id: $proposal_id, tenant: $tenant, status: 'pending'})
-            SET p.status = $status, p.reviewed_by = $reviewed_by, p.reviewed_at = datetime()
+            f"""
+            MATCH (p:OntologyProposal {{id: $proposal_id, tenant: $tenant, status: 'pending'}})
+            SET {', '.join(set_clauses)}
             RETURN p.id AS id, p.kind AS kind, p.proposed_value AS proposed_value, p.status AS status
             """,
-            proposal_id=proposal_id,
-            tenant=tenant,
-            status=status,
-            reviewed_by=reviewed_by,
+            **params,
         )
         if not rows:
             return {"error": f"Proposal {proposal_id} not found or already resolved"}
         result = dict(rows[0])
-        log.info("ontology_proposal.decided", proposal_id=proposal_id, tenant=tenant, status=status)
+        log.info("ontology_proposal.decided", proposal_id=proposal_id, tenant=tenant, status=status, action=action)
         return result

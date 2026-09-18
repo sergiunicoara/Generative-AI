@@ -153,6 +153,36 @@ not an invented governance board. Follow it in this order:
    upserts a new `OntologyVersion` node (per-tenant since F13) the next time
    the tenant's registry loads — there is no separate "publish" step.
 
+## Onboarding a new domain
+
+Roadmap "P1 — reusable domain onboarding and governance pack": before
+writing a new `config/ontologies/<tenant>_*.yml` from scratch, fill in
+these templates (`docs/templates/domain-onboarding-*.md`,
+`docs/templates/domain-profile-template.md`) — they turn stakeholder
+discovery into reviewable artifacts instead of decisions that only ever
+existed in a meeting:
+
+- `domain-onboarding-business-glossary-template.md` — the business
+  vocabulary the ontology's type/relation names will be derived from.
+- `domain-onboarding-sme-workshop-notes-template.md` — one file per SME
+  session.
+- `domain-onboarding-entity-relationship-decisions-template.md` — the
+  append-only decision log explaining *why* the YAML looks the way it does.
+- `domain-onboarding-unresolved-questions-template.md` — tracks an open
+  question from raised to closed.
+- `domain-onboarding-ownership-and-deprecation-template.md` — who owns the
+  domain and this domain's deprecation SLA, on top of the platform's
+  already-enforced `migration_map` requirement.
+- `domain-profile-template.md` — identifiers, naming, provenance, retention,
+  access, temporal semantics, validation and publication rules, each
+  marked as platform-enforced (with the enforcing code cited) or
+  policy-only (not currently checked by anything).
+
+These are templates, not automation — nothing currently validates that a
+domain filled them in. Roadmap bullets 3–4 of the same item (a full
+regulated-domain example demonstrating this pack end to end, and the
+curation-queue integration) remain open.
+
 ## Competency questions
 
 A competency question is a question the ontology must be able to answer —

@@ -146,7 +146,7 @@ jobs:
           cache: pip
       - run: pip install ruff
       - name: Ruff check
-        run: ruff check graphrag/ api/ scripts/ --select E,W,F --ignore E501
+        run: ruff check .
 
   infrastructure:
     name: Validate deployment definitions

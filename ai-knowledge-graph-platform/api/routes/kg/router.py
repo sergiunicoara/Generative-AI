@@ -9,6 +9,7 @@ from api.routes.kg import (
     confidence,
     community,
     compliance,
+    curation_review,
     embeddings,
     health,
     inference,
@@ -26,6 +27,7 @@ router.include_router(calibration.router)
 router.include_router(confidence.router)
 router.include_router(community.router)
 router.include_router(compliance.router)
+router.include_router(curation_review.router)
 router.include_router(embeddings.router)
 router.include_router(health.router)
 router.include_router(inference.router)

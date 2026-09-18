@@ -22,6 +22,24 @@ async def list_ontology_proposals(
     return {"items": await OntologyProposalService(get_neo4j()).list(tenant, status=status, limit=limit)}
 
 
+@router.get(
+    "/ontology/proposals/export",
+    dependencies=[Depends(require_scope("read"))],
+    summary="Export decided ontology proposals as golden-set/training records",
+)
+async def export_ontology_proposals(tenant: str = Depends(get_tenant), limit: int = 500):
+    return {"items": await OntologyProposalService(get_neo4j()).export_golden_set(tenant, limit=limit)}
+
+
+@router.get(
+    "/ontology/proposals/status-report",
+    dependencies=[Depends(require_scope("read"))],
+    summary="Ontology proposal counts by status and kind, for partner-team reporting",
+)
+async def ontology_proposal_status_report(tenant: str = Depends(get_tenant)):
+    return await OntologyProposalService(get_neo4j()).status_report(tenant)
+
+
 @router.post(
     "/ontology/proposals/{proposal_id}/approve",
     dependencies=[Depends(require_scope("write"))],

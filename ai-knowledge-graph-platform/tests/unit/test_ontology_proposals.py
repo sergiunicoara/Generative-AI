@@ -212,3 +212,64 @@ async def test_decide_defer_and_quarantine_set_matching_status():
 
     assert deferred["status"] == "deferred"
     assert quarantined["status"] == "quarantined"
+
+
+@pytest.mark.asyncio
+async def test_export_golden_set_shapes_decided_proposals_as_input_label_pairs():
+    neo4j = AsyncMock()
+    neo4j.run = AsyncMock(return_value=[
+        {
+            "id": "p1", "kind": "entity_type", "proposed_value": "SUPPLIER",
+            "entity_name": "Beta", "source_type": "", "target_type": "",
+            "reason": "unknown_entity_type", "confidence": 0.8, "status": "edited",
+            "reviewed_by": "architect", "reviewed_at": "2026-09-18T00:00:00Z",
+            "decision_reason": "typo", "decision_model_version": "groq-llama-4",
+            "merge_target": None,
+        },
+        {
+            "id": "p2", "kind": "relation", "proposed_value": "SUPPLIES",
+            "entity_name": "", "source_type": "ORG", "target_type": "SUPPLIER",
+            "reason": "unknown_relation", "confidence": 1.0, "status": "merged",
+            "reviewed_by": "architect", "reviewed_at": "2026-09-18T00:01:00Z",
+            "decision_reason": "", "decision_model_version": "",
+            "merge_target": "SUPPLIER_OF",
+        },
+    ])
+    service = OntologyProposalService(neo4j)
+
+    records = await service.export_golden_set("acme")
+
+    assert len(records) == 2
+    edited = next(r for r in records if r["id"] == "p1")
+    assert edited["label"] == "edited"
+    assert edited["corrected_value"] == "SUPPLIER"
+    assert edited["merge_target"] is None
+    assert edited["input"]["extraction_confidence"] == 0.8
+
+    merged = next(r for r in records if r["id"] == "p2")
+    assert merged["label"] == "merged"
+    assert merged["corrected_value"] is None
+    assert merged["merge_target"] == "SUPPLIER_OF"
+
+    kwargs = neo4j.run.await_args.kwargs
+    assert kwargs["tenant"] == "acme"
+    assert set(kwargs["statuses"]) == {"approved", "rejected", "edited", "merged", "deferred", "quarantined"}
+
+
+@pytest.mark.asyncio
+async def test_status_report_aggregates_by_status_and_kind():
+    neo4j = AsyncMock()
+    neo4j.run = AsyncMock(return_value=[
+        {"status": "pending", "kind": "entity_type", "count": 3},
+        {"status": "approved", "kind": "entity_type", "count": 5},
+        {"status": "approved", "kind": "relation", "count": 2},
+    ])
+    service = OntologyProposalService(neo4j)
+
+    report = await service.status_report("acme")
+
+    assert report["tenant"] == "acme"
+    assert report["total"] == 10
+    assert report["by_status"] == {"pending": 3, "approved": 7}
+    assert report["by_kind"] == {"entity_type": 8, "relation": 2}
+    assert report["pending"] == 3

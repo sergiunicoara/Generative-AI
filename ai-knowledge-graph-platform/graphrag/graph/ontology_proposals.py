@@ -290,3 +290,91 @@ class OntologyProposalService:
         result = dict(rows[0])
         log.info("ontology_proposal.decided", proposal_id=proposal_id, tenant=tenant, status=status, action=action)
         return result
+
+    # Statuses that represent a completed human decision -- the useful
+    # signal for golden-set/training export. "pending" is deliberately
+    # excluded: an undecided proposal is not yet evidence of anything.
+    _DECIDED_STATUSES = ("approved", "rejected", "edited", "merged", "deferred", "quarantined")
+
+    async def export_golden_set(
+        self, tenant: str, *, statuses: tuple[str, ...] | None = None, limit: int = 500,
+    ) -> list[dict]:
+        """Roadmap "P1 -- ontology curation and human-in-the-loop workbench",
+        bullet 5: "Export review decisions as golden-set/training data."
+
+        Returns one record per decided proposal, shaped as an (input, label)
+        pair plus the human's corrective evidence -- suitable for a
+        supervised extraction-triage classifier or a reviewer-agreement
+        golden set. Does not attempt to infer a reward signal or ranking;
+        that is a modeling decision for whoever consumes the export.
+        """
+        rows = await self._neo4j.run(
+            """
+            MATCH (p:OntologyProposal {tenant: $tenant})
+            WHERE p.status IN $statuses
+            RETURN p.id AS id, p.kind AS kind, p.proposed_value AS proposed_value,
+                   p.entity_name AS entity_name, p.source_type AS source_type,
+                   p.target_type AS target_type, p.reason AS reason,
+                   p.confidence AS confidence, p.status AS status,
+                   p.reviewed_by AS reviewed_by, p.reviewed_at AS reviewed_at,
+                   p.decision_reason AS decision_reason,
+                   p.decision_model_version AS decision_model_version,
+                   p.merge_target AS merge_target
+            ORDER BY p.reviewed_at DESC
+            LIMIT $limit
+            """,
+            tenant=tenant,
+            statuses=list(statuses) if statuses else list(self._DECIDED_STATUSES),
+            limit=limit,
+        )
+        return [
+            {
+                "id": row["id"],
+                "input": {
+                    "kind": row["kind"],
+                    "proposed_value": row["proposed_value"],
+                    "entity_name": row["entity_name"],
+                    "source_type": row["source_type"],
+                    "target_type": row["target_type"],
+                    "extraction_reason": row["reason"],
+                    "extraction_confidence": row["confidence"],
+                },
+                "label": row["status"],
+                "corrected_value": row["proposed_value"] if row["status"] == "edited" else None,
+                "merge_target": row["merge_target"] if row["status"] == "merged" else None,
+                "decision_reason": row["decision_reason"],
+                "decision_model_version": row["decision_model_version"],
+                "reviewed_by": row["reviewed_by"],
+                "reviewed_at": row["reviewed_at"],
+            }
+            for row in rows
+        ]
+
+    async def status_report(self, tenant: str) -> dict:
+        """Roadmap bullet 5, second half: "expose status reporting for
+        partner teams." A plain count-by-status/kind breakdown -- no
+        derived SLA or throughput metric, since this repository has no
+        agreed SLA for curator turnaround to measure against.
+        """
+        rows = await self._neo4j.run(
+            """
+            MATCH (p:OntologyProposal {tenant: $tenant})
+            RETURN p.status AS status, p.kind AS kind, count(p) AS count
+            """,
+            tenant=tenant,
+        )
+        by_status: dict[str, int] = {}
+        by_kind: dict[str, int] = {}
+        total = 0
+        for row in rows:
+            count = row["count"]
+            by_status[row["status"]] = by_status.get(row["status"], 0) + count
+            by_kind[row["kind"]] = by_kind.get(row["kind"], 0) + count
+            total += count
+        return {
+            "tenant": tenant,
+            "total": total,
+            "by_status": by_status,
+            "by_kind": by_kind,
+            "pending": by_status.get("pending", 0),
+        }

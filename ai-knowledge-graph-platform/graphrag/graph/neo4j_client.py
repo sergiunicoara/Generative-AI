@@ -34,6 +34,21 @@ from graphrag.enterprise.models import AccessContext, DocumentLink, normalise_do
 log = structlog.get_logger(__name__)
 _TransactionResult = TypeVar("_TransactionResult")
 
+# Lucene's classic query parser treats these as syntax, not literal text --
+# e.g. a bare "/" opens a regex term, so "LEAP-1B/CFM56" in a raw question
+# crashes db.index.fulltext.queryNodes with a lexical error instead of
+# searching for it. Escape set matches Lucene's own QueryParserBase.escape().
+_LUCENE_SPECIAL_CHARS = set('\\+-!(){}[]:^"~*?|&/')
+
+
+def _escape_lucene_query(text: str) -> str:
+    """Backslash-escape Lucene query-syntax characters in free-text BM25
+    input so an ordinary question (a slash, colon, parenthesis, etc. that
+    means nothing special to a human) can't be interpreted as Lucene query
+    syntax or crash `db.index.fulltext.queryNodes` with a parser error.
+    """
+    return "".join(f"\\{c}" if c in _LUCENE_SPECIAL_CHARS else c for c in text)
+
 
 class Neo4jClient:
     """Thin wrapper around the Neo4j async driver with retry logic."""
@@ -2000,6 +2015,7 @@ class Neo4jClient:
         """BM25 fulltext search over Chunk.text using Neo4j fulltext index.
         Filters by tenant and excludes quarantined entity chunks.
         """
+        query = _escape_lucene_query(query)
         return await self.run(
             """
             CALL db.index.fulltext.queryNodes('chunk_fulltext', $query)
@@ -2046,6 +2062,7 @@ class Neo4jClient:
         """BM25 fulltext search over Entity name + description.
         Excludes quarantined entities.
         """
+        query = _escape_lucene_query(query)
         return await self.run(
             f"""
             CALL db.index.fulltext.queryNodes('entity_fulltext', $query)

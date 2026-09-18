@@ -14,7 +14,7 @@ from __future__ import annotations
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-from openai import APIStatusError, APITimeoutError
+from openai import APIStatusError
 
 from graphrag.core import provider_health as ph
 from graphrag.core.llm_client import CerebrasLLM, DeepSeekLLM, FallbackLLM, GroqLLM, OpenRouterLLM, get_llm
@@ -33,6 +33,21 @@ def _api_status_error() -> APIStatusError:
     response = MagicMock()
     response.status_code = 400
     return APIStatusError("bad request", response=response, body=None)
+
+
+def _groq_api_status_error(status_code: int = 413):
+    """Build a real groq-SDK APIStatusError — the exact shape of the
+    2026-09-18 incident: a 413 'tokens per minute' response whose body says
+    {"code": "rate_limit_exceeded"} but is not a groq.RateLimitError
+    instance. groq.APIStatusError is a distinct class hierarchy from
+    openai.APIStatusError (not isinstance-compatible either direction), so
+    a groq-primary code path must be tested against groq's own exception
+    classes, not openai's — see TestGroqFailFast's docstring below.
+    """
+    from groq import APIStatusError as GroqAPIStatusError
+    response = MagicMock()
+    response.status_code = status_code
+    return GroqAPIStatusError("tokens per minute limit", response=response, body=None)
 
 
 class TestDeepSeekFailFast:
@@ -124,20 +139,51 @@ class TestCerebrasFailFast:
 
 
 class TestGroqFailFast:
+    """Regression note: this class's one original test constructed its
+    exception from `openai.APITimeoutError`, not `groq`'s own — the two are
+    separate class hierarchies (`isinstance(openai.APITimeoutError(...),
+    groq.APITimeoutError)` is False), so the mocked exception was never
+    actually caught by GroqLLM.generate()'s except clause at all; it
+    propagated immediately regardless of retry budget, which is why the
+    assertion (call_count == 1) passed for the wrong reason and would have
+    passed identically whether or not the fail-fast logic worked. Fixed to
+    use groq's own exception classes so this class exercises what it claims
+    to.
+    """
+
     async def test_unhealthy_provider_drops_to_one_attempt(self):
+        from groq import APITimeoutError as GroqAPITimeoutError
+
         ph.record_result("groq", False)
         ph.record_result("groq", False)
         ph.record_result("groq", False)
 
         llm = GroqLLM(api_key="test-key", default_model="test-model")
-        timeout_exc = APITimeoutError(request=MagicMock())
+        timeout_exc = GroqAPITimeoutError(request=MagicMock())
         llm._client.chat.completions.create = MagicMock(side_effect=timeout_exc)
 
         with patch("graphrag.core.llm_client.asyncio.sleep", return_value=None):
-            with pytest.raises(APITimeoutError):
+            with pytest.raises(GroqAPITimeoutError):
                 await llm.generate("prompt")
 
         assert llm._client.chat.completions.create.call_count == 1
+
+    async def test_healthy_provider_uses_full_retry_budget_on_api_status_error(self):
+        """The 2026-09-18 incident: Groq raised a plain APIStatusError (413,
+        'tokens per minute') that GroqLLM.generate() didn't catch at all,
+        crashing the caller instead of retrying/failing over. Mirrors
+        TestDeepSeekFailFast.test_healthy_provider_uses_full_retry_budget.
+        """
+        from groq import APIStatusError as GroqAPIStatusError
+
+        llm = GroqLLM(api_key="test-key", default_model="test-model")
+        llm._client.chat.completions.create = MagicMock(side_effect=_groq_api_status_error())
+
+        with patch("graphrag.core.llm_client.asyncio.sleep", return_value=None):
+            with pytest.raises(GroqAPIStatusError):
+                await llm.generate("prompt")
+
+        assert llm._client.chat.completions.create.call_count == llm._max_retries
 
 
 class TestMaxTokens:
@@ -255,6 +301,27 @@ class TestFallbackLLMClassmethods:
         result = await fb.generate("prompt")
 
         assert result == "answer from groq"
+
+    async def test_groq_primary_falls_over_to_deepseek_on_api_status_error(self):
+        """The 2026-09-18 incident: a live DRIFT-search benchmark hit a real
+        Groq 413 'tokens per minute' response, raised as groq.APIStatusError
+        (not groq.RateLimitError) — previously absent from groq_primary()'s
+        fallback_exceptions tuple, so it crashed the caller instead of
+        failing over to DeepSeek the same way a 429 does. Mirrors
+        test_deepseek_primary_falls_over_to_groq_on_api_status_error.
+        """
+        cfg = MagicMock(
+            deepseek_api_key="ds-key", groq_api_key="groq-key", groq_model="groq-model",
+            openrouter_api_key="",
+        )
+        fb = FallbackLLM.groq_primary(cfg)
+
+        fb._primary.generate = AsyncMock(side_effect=_groq_api_status_error())
+        fb._secondary.generate = AsyncMock(return_value="answer from deepseek")
+
+        result = await fb.generate("prompt")
+
+        assert result == "answer from deepseek"
 
     def test_cerebras_primary_uses_cerebras_first_with_deepseek_groq_chain(self):
         """cerebras_primary() must be Cerebras -> (DeepSeek -> Groq), built by

@@ -145,7 +145,7 @@ class GroqLLM(BaseLLM):
         temperature: float = 0.0,
         max_tokens: int | None = None,
     ) -> str:
-        from groq import RateLimitError, APITimeoutError, APIConnectionError
+        from groq import RateLimitError, APIStatusError, APITimeoutError, APIConnectionError
 
         model = model or self._default_model
         kwargs: dict[str, Any] = {
@@ -179,7 +179,15 @@ class GroqLLM(BaseLLM):
                 _report_openai_compatible_usage(response)
                 return response.choices[0].message.content or ""
 
-            except RateLimitError as exc:
+            except (RateLimitError, APIStatusError) as exc:
+                # APIStatusError alongside RateLimitError: Groq raises the
+                # generic APIStatusError (not the RateLimitError subclass)
+                # for some rate/capacity-shaped errors -- e.g. a 413
+                # "tokens per minute" request-too-large response has
+                # {"code": "rate_limit_exceeded"} in its body but is not a
+                # RateLimitError instance. Uncaught here it also skipped
+                # FallbackLLM's fallback_exceptions tuple entirely and
+                # crashed the caller instead of failing over to DeepSeek.
                 record_result(self._PROVIDER_NAME, False)
                 wait = _parse_retry_after(str(exc))
                 log.warning(
@@ -678,7 +686,7 @@ class FallbackLLM(BaseLLM):
         OpenRouter's ``:free`` tier instead of terminating — see
         ``OpenRouterLLM`` for slug/limit caveats.
         """
-        from groq import RateLimitError, APITimeoutError, APIConnectionError
+        from groq import RateLimitError, APIStatusError, APITimeoutError, APIConnectionError
 
         deepseek = DeepSeekLLM(api_key=cfg.deepseek_api_key)
         secondary: BaseLLM = deepseek
@@ -705,7 +713,7 @@ class FallbackLLM(BaseLLM):
             ),
             primary_name="groq",
             secondary=secondary,
-            fallback_exceptions=(RateLimitError, APITimeoutError, APIConnectionError),
+            fallback_exceptions=(RateLimitError, APIStatusError, APITimeoutError, APIConnectionError),
         )
 
     @classmethod

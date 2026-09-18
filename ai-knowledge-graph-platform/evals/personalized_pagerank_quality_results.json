@@ -1,0 +1,591 @@
+{
+  "run_at": "2026-09-18T10:13:04.397990+00:00",
+  "tenant": "aerospace",
+  "n_questions": 33,
+  "candidate_pool_k": 50,
+  "final_top_k": 10,
+  "seed_from_top_n_chunks": 5,
+  "blend_alpha": 0.5,
+  "current": {
+    "hit_rate": 0.9696969696969697,
+    "mean_coverage": 0.904040404040404,
+    "mrr": 0.743939393939394
+  },
+  "personalized_pagerank": {
+    "hit_rate": 0.9393939393939394,
+    "mean_coverage": 0.8838383838383839,
+    "mrr": 0.708080808080808
+  },
+  "mrr_improved": 5,
+  "mrr_regressed": 7,
+  "mrr_tied": 21,
+  "ppr_latency_ms": {
+    "mean_ms": 164.08773333333474,
+    "p50_ms": 141.85780000002524,
+    "p95_ms": 349.3788000000677,
+    "max_ms": 372.535599999992
+  },
+  "per_question": [
+    {
+      "id": "SH-01",
+      "candidate_pool_size": 50,
+      "seed_entity_count": 29,
+      "entities_scored": 504,
+      "ppr_latency_ms": 100.2154000000246,
+      "current": {
+        "hit": true,
+        "coverage": 1.0,
+        "mrr": 0.3333333333333333
+      },
+      "personalized_pagerank": {
+        "hit": true,
+        "coverage": 1.0,
+        "mrr": 0.5
+      }
+    },
+    {
+      "id": "SH-02",
+      "candidate_pool_size": 50,
+      "seed_entity_count": 26,
+      "entities_scored": 504,
+      "ppr_latency_ms": 196.18729999979223,
+      "current": {
+        "hit": true,
+        "coverage": 1.0,
+        "mrr": 1.0
+      },
+      "personalized_pagerank": {
+        "hit": true,
+        "coverage": 1.0,
+        "mrr": 1.0
+      }
+    },
+    {
+      "id": "SH-03",
+      "candidate_pool_size": 50,
+      "seed_entity_count": 33,
+      "entities_scored": 504,
+      "ppr_latency_ms": 95.35510000000613,
+      "current": {
+        "hit": false,
+        "coverage": 0.0,
+        "mrr": 0.0
+      },
+      "personalized_pagerank": {
+        "hit": false,
+        "coverage": 0.0,
+        "mrr": 0.0
+      }
+    },
+    {
+      "id": "SH-04",
+      "candidate_pool_size": 50,
+      "seed_entity_count": 28,
+      "entities_scored": 504,
+      "ppr_latency_ms": 130.4704000001493,
+      "current": {
+        "hit": true,
+        "coverage": 1.0,
+        "mrr": 1.0
+      },
+      "personalized_pagerank": {
+        "hit": true,
+        "coverage": 1.0,
+        "mrr": 1.0
+      }
+    },
+    {
+      "id": "SH-05",
+      "candidate_pool_size": 50,
+      "seed_entity_count": 41,
+      "entities_scored": 504,
+      "ppr_latency_ms": 145.7133999999769,
+      "current": {
+        "hit": true,
+        "coverage": 1.0,
+        "mrr": 0.3333333333333333
+      },
+      "personalized_pagerank": {
+        "hit": true,
+        "coverage": 1.0,
+        "mrr": 0.5
+      }
+    },
+    {
+      "id": "SH-06",
+      "candidate_pool_size": 50,
+      "seed_entity_count": 67,
+      "entities_scored": 504,
+      "ppr_latency_ms": 149.27979999993113,
+      "current": {
+        "hit": true,
+        "coverage": 1.0,
+        "mrr": 1.0
+      },
+      "personalized_pagerank": {
+        "hit": true,
+        "coverage": 1.0,
+        "mrr": 1.0
+      }
+    },
+    {
+      "id": "SH-07",
+      "candidate_pool_size": 50,
+      "seed_entity_count": 48,
+      "entities_scored": 504,
+      "ppr_latency_ms": 142.16460000011466,
+      "current": {
+        "hit": true,
+        "coverage": 1.0,
+        "mrr": 1.0
+      },
+      "personalized_pagerank": {
+        "hit": true,
+        "coverage": 1.0,
+        "mrr": 1.0
+      }
+    },
+    {
+      "id": "SH-08",
+      "candidate_pool_size": 50,
+      "seed_entity_count": 63,
+      "entities_scored": 504,
+      "ppr_latency_ms": 152.78710000006868,
+      "current": {
+        "hit": true,
+        "coverage": 1.0,
+        "mrr": 0.5
+      },
+      "personalized_pagerank": {
+        "hit": true,
+        "coverage": 1.0,
+        "mrr": 0.2
+      }
+    },
+    {
+      "id": "MH-01",
+      "candidate_pool_size": 50,
+      "seed_entity_count": 30,
+      "entities_scored": 504,
+      "ppr_latency_ms": 168.2768999999098,
+      "current": {
+        "hit": true,
+        "coverage": 1.0,
+        "mrr": 1.0
+      },
+      "personalized_pagerank": {
+        "hit": true,
+        "coverage": 1.0,
+        "mrr": 1.0
+      }
+    },
+    {
+      "id": "MH-02",
+      "candidate_pool_size": 50,
+      "seed_entity_count": 54,
+      "entities_scored": 504,
+      "ppr_latency_ms": 167.43360000009488,
+      "current": {
+        "hit": true,
+        "coverage": 1.0,
+        "mrr": 1.0
+      },
+      "personalized_pagerank": {
+        "hit": true,
+        "coverage": 1.0,
+        "mrr": 1.0
+      }
+    },
+    {
+      "id": "MH-03",
+      "candidate_pool_size": 50,
+      "seed_entity_count": 37,
+      "entities_scored": 504,
+      "ppr_latency_ms": 214.67370000004848,
+      "current": {
+        "hit": true,
+        "coverage": 0.5,
+        "mrr": 0.5
+      },
+      "personalized_pagerank": {
+        "hit": true,
+        "coverage": 0.5,
+        "mrr": 0.5
+      }
+    },
+    {
+      "id": "MH-04",
+      "candidate_pool_size": 50,
+      "seed_entity_count": 47,
+      "entities_scored": 504,
+      "ppr_latency_ms": 280.5123000000549,
+      "current": {
+        "hit": true,
+        "coverage": 1.0,
+        "mrr": 1.0
+      },
+      "personalized_pagerank": {
+        "hit": true,
+        "coverage": 1.0,
+        "mrr": 1.0
+      }
+    },
+    {
+      "id": "MH-05",
+      "candidate_pool_size": 50,
+      "seed_entity_count": 41,
+      "entities_scored": 504,
+      "ppr_latency_ms": 254.91950000014185,
+      "current": {
+        "hit": true,
+        "coverage": 0.6666666666666666,
+        "mrr": 0.3333333333333333
+      },
+      "personalized_pagerank": {
+        "hit": true,
+        "coverage": 1.0,
+        "mrr": 0.3333333333333333
+      }
+    },
+    {
+      "id": "MH-06",
+      "candidate_pool_size": 50,
+      "seed_entity_count": 36,
+      "entities_scored": 504,
+      "ppr_latency_ms": 219.057199999952,
+      "current": {
+        "hit": true,
+        "coverage": 1.0,
+        "mrr": 0.25
+      },
+      "personalized_pagerank": {
+        "hit": true,
+        "coverage": 1.0,
+        "mrr": 1.0
+      }
+    },
+    {
+      "id": "CON-01",
+      "candidate_pool_size": 50,
+      "seed_entity_count": 42,
+      "entities_scored": 504,
+      "ppr_latency_ms": 349.3788000000677,
+      "current": {
+        "hit": true,
+        "coverage": 1.0,
+        "mrr": 1.0
+      },
+      "personalized_pagerank": {
+        "hit": true,
+        "coverage": 1.0,
+        "mrr": 1.0
+      }
+    },
+    {
+      "id": "CON-02",
+      "candidate_pool_size": 50,
+      "seed_entity_count": 35,
+      "entities_scored": 504,
+      "ppr_latency_ms": 340.2972999999747,
+      "current": {
+        "hit": true,
+        "coverage": 1.0,
+        "mrr": 1.0
+      },
+      "personalized_pagerank": {
+        "hit": true,
+        "coverage": 1.0,
+        "mrr": 0.5
+      }
+    },
+    {
+      "id": "AUT-01",
+      "candidate_pool_size": 50,
+      "seed_entity_count": 53,
+      "entities_scored": 504,
+      "ppr_latency_ms": 372.535599999992,
+      "current": {
+        "hit": true,
+        "coverage": 0.5,
+        "mrr": 0.1
+      },
+      "personalized_pagerank": {
+        "hit": false,
+        "coverage": 0.0,
+        "mrr": 0.0
+      }
+    },
+    {
+      "id": "AUT-02",
+      "candidate_pool_size": 50,
+      "seed_entity_count": 29,
+      "entities_scored": 504,
+      "ppr_latency_ms": 147.78830000000198,
+      "current": {
+        "hit": true,
+        "coverage": 1.0,
+        "mrr": 1.0
+      },
+      "personalized_pagerank": {
+        "hit": true,
+        "coverage": 1.0,
+        "mrr": 1.0
+      }
+    },
+    {
+      "id": "AUT-03",
+      "candidate_pool_size": 50,
+      "seed_entity_count": 55,
+      "entities_scored": 504,
+      "ppr_latency_ms": 179.4148999999834,
+      "current": {
+        "hit": true,
+        "coverage": 1.0,
+        "mrr": 0.5
+      },
+      "personalized_pagerank": {
+        "hit": true,
+        "coverage": 1.0,
+        "mrr": 0.25
+      }
+    },
+    {
+      "id": "INF-01",
+      "candidate_pool_size": 50,
+      "seed_entity_count": 28,
+      "entities_scored": 504,
+      "ppr_latency_ms": 141.71569999984968,
+      "current": {
+        "hit": true,
+        "coverage": 0.6666666666666666,
+        "mrr": 1.0
+      },
+      "personalized_pagerank": {
+        "hit": true,
+        "coverage": 0.6666666666666666,
+        "mrr": 1.0
+      }
+    },
+    {
+      "id": "INF-02",
+      "candidate_pool_size": 50,
+      "seed_entity_count": 32,
+      "entities_scored": 504,
+      "ppr_latency_ms": 107.14179999990847,
+      "current": {
+        "hit": true,
+        "coverage": 1.0,
+        "mrr": 0.5
+      },
+      "personalized_pagerank": {
+        "hit": true,
+        "coverage": 1.0,
+        "mrr": 0.5
+      }
+    },
+    {
+      "id": "NEG-01",
+      "candidate_pool_size": 50,
+      "seed_entity_count": 42,
+      "entities_scored": 504,
+      "ppr_latency_ms": 136.73149999999623,
+      "current": {
+        "hit": true,
+        "coverage": 1.0,
+        "mrr": 1.0
+      },
+      "personalized_pagerank": {
+        "hit": true,
+        "coverage": 1.0,
+        "mrr": 0.5
+      }
+    },
+    {
+      "id": "NEG-02",
+      "candidate_pool_size": 50,
+      "seed_entity_count": 46,
+      "entities_scored": 504,
+      "ppr_latency_ms": 80.64429999990352,
+      "current": {
+        "hit": true,
+        "coverage": 1.0,
+        "mrr": 0.5
+      },
+      "personalized_pagerank": {
+        "hit": true,
+        "coverage": 1.0,
+        "mrr": 1.0
+      }
+    },
+    {
+      "id": "TMP-01",
+      "candidate_pool_size": 50,
+      "seed_entity_count": 24,
+      "entities_scored": 504,
+      "ppr_latency_ms": 95.54319999983818,
+      "current": {
+        "hit": true,
+        "coverage": 1.0,
+        "mrr": 1.0
+      },
+      "personalized_pagerank": {
+        "hit": true,
+        "coverage": 1.0,
+        "mrr": 1.0
+      }
+    },
+    {
+      "id": "TMP-02",
+      "candidate_pool_size": 50,
+      "seed_entity_count": 48,
+      "entities_scored": 504,
+      "ppr_latency_ms": 141.85780000002524,
+      "current": {
+        "hit": true,
+        "coverage": 1.0,
+        "mrr": 1.0
+      },
+      "personalized_pagerank": {
+        "hit": true,
+        "coverage": 1.0,
+        "mrr": 1.0
+      }
+    },
+    {
+      "id": "TMP-03",
+      "candidate_pool_size": 50,
+      "seed_entity_count": 44,
+      "entities_scored": 504,
+      "ppr_latency_ms": 127.50009999990652,
+      "current": {
+        "hit": true,
+        "coverage": 1.0,
+        "mrr": 0.2
+      },
+      "personalized_pagerank": {
+        "hit": true,
+        "coverage": 0.5,
+        "mrr": 0.25
+      }
+    },
+    {
+      "id": "PRE-01",
+      "candidate_pool_size": 50,
+      "seed_entity_count": 29,
+      "entities_scored": 504,
+      "ppr_latency_ms": 100.8408000000145,
+      "current": {
+        "hit": true,
+        "coverage": 1.0,
+        "mrr": 1.0
+      },
+      "personalized_pagerank": {
+        "hit": true,
+        "coverage": 1.0,
+        "mrr": 0.3333333333333333
+      }
+    },
+    {
+      "id": "PRE-02",
+      "candidate_pool_size": 50,
+      "seed_entity_count": 29,
+      "entities_scored": 504,
+      "ppr_latency_ms": 129.97079999991,
+      "current": {
+        "hit": true,
+        "coverage": 1.0,
+        "mrr": 1.0
+      },
+      "personalized_pagerank": {
+        "hit": true,
+        "coverage": 1.0,
+        "mrr": 1.0
+      }
+    },
+    {
+      "id": "CAL-01",
+      "candidate_pool_size": 50,
+      "seed_entity_count": 42,
+      "entities_scored": 504,
+      "ppr_latency_ms": 134.74810000002435,
+      "current": {
+        "hit": true,
+        "coverage": 1.0,
+        "mrr": 1.0
+      },
+      "personalized_pagerank": {
+        "hit": true,
+        "coverage": 1.0,
+        "mrr": 1.0
+      }
+    },
+    {
+      "id": "AGT-01",
+      "candidate_pool_size": 50,
+      "seed_entity_count": 49,
+      "entities_scored": 504,
+      "ppr_latency_ms": 122.90499999994609,
+      "current": {
+        "hit": true,
+        "coverage": 1.0,
+        "mrr": 1.0
+      },
+      "personalized_pagerank": {
+        "hit": true,
+        "coverage": 1.0,
+        "mrr": 1.0
+      }
+    },
+    {
+      "id": "AGT-02",
+      "candidate_pool_size": 50,
+      "seed_entity_count": 39,
+      "entities_scored": 504,
+      "ppr_latency_ms": 100.66010000014103,
+      "current": {
+        "hit": true,
+        "coverage": 1.0,
+        "mrr": 0.5
+      },
+      "personalized_pagerank": {
+        "hit": true,
+        "coverage": 1.0,
+        "mrr": 0.5
+      }
+    },
+    {
+      "id": "CTX-01",
+      "candidate_pool_size": 50,
+      "seed_entity_count": 25,
+      "entities_scored": 504,
+      "ppr_latency_ms": 97.12660000013784,
+      "current": {
+        "hit": true,
+        "coverage": 0.5,
+        "mrr": 1.0
+      },
+      "personalized_pagerank": {
+        "hit": true,
+        "coverage": 0.5,
+        "mrr": 1.0
+      }
+    },
+    {
+      "id": "CTX-02",
+      "candidate_pool_size": 50,
+      "seed_entity_count": 34,
+      "entities_scored": 504,
+      "ppr_latency_ms": 91.04820000015934,
+      "current": {
+        "hit": true,
+        "coverage": 1.0,
+        "mrr": 1.0
+      },
+      "personalized_pagerank": {
+        "hit": true,
+        "coverage": 1.0,
+        "mrr": 0.5
+      }
+    }
+  ]
+}

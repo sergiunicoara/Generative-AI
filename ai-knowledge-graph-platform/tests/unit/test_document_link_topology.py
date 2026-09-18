@@ -125,6 +125,61 @@ async def test_link_retrieval_enforces_source_edge_and_target_acl_before_text() 
 
 
 @pytest.mark.asyncio
+async def test_get_chunk_filenames_interpolates_the_access_predicate() -> None:
+    """Regression guard: this query's `document_access_predicate('d')` call
+    was embedded in a plain (non-f) triple-quoted string, so it was sent to
+    Neo4j as the literal, unparseable text "{document_access_predicate('d')}"
+    on every call -- a CypherSyntaxError this mocked-run test suite couldn't
+    catch (nothing here sends real Cypher text to a real parser). Only
+    surfaced by a live benchmark run against real Neo4j. Fixed by adding the
+    missing `f` prefix; guarded here the same way
+    test_link_retrieval_enforces_source_edge_and_target_acl_before_text
+    already guards get_linked_document_chunks.
+    """
+    client = _client([])
+
+    await client.get_chunk_filenames(["chunk-1"], tenant="legal")
+
+    cypher = client.run.await_args.args[0]
+    assert "{document_access_predicate" not in cypher
+    assert "AND (\n        NOT $acl_enabled" in cypher
+
+
+@pytest.mark.asyncio
+async def test_get_best_chunk_for_document_interpolates_the_access_predicate() -> None:
+    """Same regression class as test_get_chunk_filenames_...: this query also
+    had an un-prefixed triple-quoted string, so both `{document_access_predicate('d')}`
+    and the double-braced `{{filename: $filename}}` map literal were sent to
+    Neo4j as literal, unparseable text on every call.
+    """
+    client = _client([])
+
+    await client.get_best_chunk_for_document("doc.txt", [0.1, 0.2], tenant="legal")
+
+    cypher = client.run.await_args.args[0]
+    assert "{document_access_predicate" not in cypher
+    assert "{{filename" not in cypher
+    assert "{filename: $filename}" in cypher
+
+
+@pytest.mark.asyncio
+async def test_bm25_search_entities_interpolates_the_access_predicate() -> None:
+    """Same regression class -- bm25_search_entities is on the production
+    hybrid-retrieval path (bm25_search.py -> HybridBM25Search.search), so this
+    bug broke fused BM25+vector retrieval for every query, on every tenant,
+    unconditionally (the literal template text is a syntax error regardless
+    of whether ACL enforcement is even enabled for that tenant).
+    """
+    client = _client([])
+
+    await client.bm25_search_entities("turbine", tenant="legal")
+
+    cypher = client.run.await_args.args[0]
+    assert "{document_access_predicate" not in cypher
+    assert "AND (\n        NOT $acl_enabled" in cypher
+
+
+@pytest.mark.asyncio
 async def test_contextual_representations_are_system_scoped_not_name_scoped() -> None:
     client = _client([{"assertions": 1}])
     customer = Entity(name="Customer", type="CONCEPT")

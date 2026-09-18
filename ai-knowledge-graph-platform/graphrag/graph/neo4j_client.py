@@ -1557,7 +1557,7 @@ class Neo4jClient:
         if not chunk_ids:
             return {}
         rows = await self.run(
-            """
+            f"""
             MATCH (c:Chunk)-[:PART_OF]->(d:Document)
             WHERE c.id IN $chunk_ids
               AND (c.tenant = $tenant)
@@ -1689,7 +1689,7 @@ class Neo4jClient:
         relevant chunk a seed slot even if it didn't survive fused-ranking.
         """
         rows = await self.run(
-            """
+            f"""
             MATCH (c:Chunk)-[:PART_OF]->(d:Document {{filename: $filename}})
             WHERE (c.tenant = $tenant)
               AND coalesce(d.is_deleted, false) = false
@@ -2047,7 +2047,7 @@ class Neo4jClient:
         Excludes quarantined entities.
         """
         return await self.run(
-            """
+            f"""
             CALL db.index.fulltext.queryNodes('entity_fulltext', $query)
             YIELD node AS e, score
             WHERE coalesce(e.quarantined, false) = false

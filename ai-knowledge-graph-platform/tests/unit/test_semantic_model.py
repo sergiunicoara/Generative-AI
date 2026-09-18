@@ -107,6 +107,31 @@ def test_compilation_is_deterministic_parseable_and_generates_exact_cardinality(
     )]
 
 
+def test_compiler_is_domain_general_not_energy_specific():
+    """Roadmap "P1 -- reusable domain onboarding and governance pack", bullet 4:
+    "Demonstrate a second domain reusing the compiler... without modifying
+    Energy code." `ontology/models/automotive-iatf-quality.yaml` re-expresses
+    the vocabulary already declared in `config/ontologies/automotive_iatf.yml`
+    (IATF 16949 quality management: suppliers, audits, nonconformities,
+    quality documents) as an Energy-schema semantic model, compiled through
+    the exact same `compile_model()`/`load_model()` used for Energy -- no
+    Energy-specific branch or flag involved.
+    """
+    automotive_path = ROOT / "ontology" / "models" / "automotive-iatf-quality.yaml"
+    model = load_model(automotive_path)
+    compiled = compile_model(model)
+
+    owl_graph = Graph().parse(data=compiled.owl, format="turtle")
+    automotive_ns = Namespace("https://example.automotive.demo/ontology#")
+    assert (automotive_ns.Supplier, RDF.type, OWL.Class) in owl_graph
+    assert (automotive_ns.Nonconformity, RDF.type, OWL.Class) in owl_graph
+    assert "CREATE CONSTRAINT" in compiled.neo4j
+    assert not any("energy" in d.message.lower() for d in compiled.diagnostics), (
+        "a compiler diagnostic mentioned Energy while compiling a non-Energy model -- "
+        "a hardcoded-wording regression"
+    )
+
+
 def test_generated_energy_owl_preserves_existing_core_vocabulary():
     compiled = compile_model(load_model(MODEL_PATH))
     graph = Graph().parse(data=compiled.owl, format="turtle")

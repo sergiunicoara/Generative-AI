@@ -97,8 +97,9 @@ ci:            ## The one command CI runs: lint + unit tests (no live services, 
 clean-snapshot-check: ## Archive the staged/HEAD tree and verify it in a fresh venv
 	$(PYTHON) scripts/verify_energy_clean_snapshot.py
 
-semantic-model-check: ## Fail when generated Energy semantic artifacts drift, or any diagnostic is error-severity
+semantic-model-check: ## Fail when generated semantic artifacts (Energy, automotive) drift, or any diagnostic is error-severity
 	$(PYTHON) -m graphrag.semantic_model compile ontology/models/energy-asset-intelligence.yaml --check --fail-on-error
+	$(PYTHON) -m graphrag.semantic_model compile ontology/models/automotive-iatf-quality.yaml --check --fail-on-error
 
 competency-questions-check: ## Fail when a domain's competency-question Cypher references a type/relation no longer in its ontology YAML
 	$(PYTHON) scripts/check_competency_questions.py

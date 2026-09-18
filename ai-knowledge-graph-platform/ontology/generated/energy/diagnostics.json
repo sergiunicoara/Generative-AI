@@ -1215,7 +1215,7 @@
       "element": "unknown_property_policy",
       "fidelity": "approximated",
       "line": null,
-      "message": "Generated shapes remain open to preserve existing Energy RDF metadata and do not reject every undeclared predicate.",
+      "message": "Generated shapes remain open to preserve existing RDF metadata and do not reject every undeclared predicate.",
       "model_path": "energy-asset-intelligence.yaml",
       "runtime_control": "Reject unknown LPG properties in the shared mutation validator; use curated closed SHACL shapes where required.",
       "severity": "warning",

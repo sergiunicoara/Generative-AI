@@ -1,0 +1,101 @@
+# DO NOT EDIT — generated from automotive-iatf-quality.yaml.
+@prefix dcterms: <http://purl.org/dc/terms/> .
+@prefix energy: <https://example.automotive.demo/ontology#> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix prov: <http://www.w3.org/ns/prov#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+
+energy: a owl:Ontology ; rdfs:label "Automotive IATF 16949 Quality Management ontology" ; owl:versionInfo "1.0.0" .
+
+energy:Audit a owl:Class ;
+  rdfs:label "Audit" ;
+  rdfs:subClassOf energy:QualityProcess .
+energy:AutomotiveComponent a owl:Class ;
+  rdfs:label "Automotive component" .
+energy:ClientOrg a owl:Class ;
+  rdfs:label "Client organization" ;
+  rdfs:subClassOf energy:Organization .
+energy:ClientRequirement a owl:Class ;
+  rdfs:label "Client requirement" ;
+  rdfs:subClassOf energy:QualityDocument .
+energy:FormRecord a owl:Class ;
+  rdfs:label "Form or record" ;
+  rdfs:subClassOf energy:QualityDocument .
+energy:InternalProcedure a owl:Class ;
+  rdfs:label "Internal procedure" ;
+  rdfs:subClassOf energy:QualityDocument .
+energy:KPI a owl:Class ;
+  rdfs:label "KPI" .
+energy:Nonconformity a owl:Class ;
+  rdfs:label "Nonconformity" ;
+  rdfs:subClassOf energy:QualityProcess .
+energy:Organization a owl:Class ;
+  rdfs:label "Organization" .
+energy:QualityDocument a owl:Class ;
+  rdfs:label "Quality document" .
+energy:QualityManual a owl:Class ;
+  rdfs:label "Quality manual" ;
+  rdfs:subClassOf energy:QualityDocument .
+energy:QualityProcess a owl:Class ;
+  rdfs:label "Quality process" .
+energy:Standard a owl:Class ;
+  rdfs:label "Standard" .
+energy:Supplier a owl:Class ;
+  rdfs:label "Supplier" ;
+  rdfs:subClassOf energy:Organization .
+
+energy:actualValue a owl:DatatypeProperty ; rdfs:domain energy:KPI ; rdfs:range xsd:decimal .
+energy:auditorId a owl:DatatypeProperty ; rdfs:domain energy:Audit ; rdfs:range xsd:string ; rdfs:comment "Actor identity for the audit trail -- who performed this audit." .
+energy:classification a owl:DatatypeProperty ; rdfs:domain energy:Supplier ; rdfs:range xsd:string ; rdfs:comment "One of \"approved\", \"conditional\", \"disqualified\" -- the supplier's current qualification status." .
+energy:closedAt a owl:DatatypeProperty ; rdfs:domain energy:Nonconformity ; rdfs:range xsd:dateTime .
+energy:completedAt a owl:DatatypeProperty ; rdfs:domain energy:Audit ; rdfs:range xsd:dateTime .
+energy:correctiveAction a owl:DatatypeProperty ; rdfs:domain energy:Nonconformity ; rdfs:range xsd:string .
+energy:createdAt a owl:DatatypeProperty ; rdfs:domain owl:Thing ; rdfs:range xsd:dateTime .
+energy:description a owl:DatatypeProperty ; rdfs:domain energy:AutomotiveComponent ; rdfs:range xsd:string .
+energy:documentId a owl:DatatypeProperty ; rdfs:domain energy:QualityDocument ; rdfs:range xsd:string .
+energy:name a owl:DatatypeProperty ; rdfs:domain energy:KPI ; rdfs:range xsd:string .
+energy:outcome a owl:DatatypeProperty ; rdfs:domain energy:Audit ; rdfs:range xsd:string ; rdfs:comment "One of \"pass\", \"conditional\", \"fail\"." .
+energy:partNumber a owl:DatatypeProperty ; rdfs:domain energy:AutomotiveComponent ; rdfs:range xsd:string .
+energy:reevaluationFrequencyMonths a owl:DatatypeProperty ; rdfs:domain energy:Supplier ; rdfs:range xsd:integer ; rdfs:comment "Retention/cadence control -- how often this supplier must be reassessed against IATF 16949." .
+energy:retentionPeriodYears a owl:DatatypeProperty ; rdfs:domain energy:QualityDocument ; rdfs:range xsd:integer ; rdfs:comment "How long this document or record must be retained for audit purposes." .
+energy:rootCause a owl:DatatypeProperty ; rdfs:domain energy:Nonconformity ; rdfs:range xsd:string ; rdfs:comment "Explainability -- why this nonconformity occurred, not just that it did." .
+energy:scheduledAt a owl:DatatypeProperty ; rdfs:domain energy:Audit ; rdfs:range xsd:dateTime .
+energy:severity a owl:DatatypeProperty ; rdfs:domain energy:Nonconformity ; rdfs:range xsd:string ; rdfs:comment "One of \"minor\", \"major\", \"critical\"." .
+energy:standardId a owl:DatatypeProperty ; rdfs:domain energy:Standard ; rdfs:range xsd:string .
+energy:supplierId a owl:DatatypeProperty ; rdfs:domain energy:Supplier ; rdfs:range xsd:string .
+energy:targetValue a owl:DatatypeProperty ; rdfs:domain energy:KPI ; rdfs:range xsd:decimal .
+energy:title a owl:DatatypeProperty ; rdfs:domain energy:Standard ; rdfs:range xsd:string .
+energy:updatedAt a owl:DatatypeProperty ; rdfs:domain owl:Thing ; rdfs:range xsd:dateTime .
+energy:appliesTo a owl:ObjectProperty ; rdfs:domain energy:QualityDocument ; rdfs:range energy:AutomotiveComponent .
+energy:audits a owl:ObjectProperty ; rdfs:domain energy:Audit ; rdfs:range energy:Supplier .
+energy:compliesWith a owl:ObjectProperty ; rdfs:domain energy:Supplier ; rdfs:range energy:Standard .
+energy:escalatesTo a owl:ObjectProperty ; rdfs:domain energy:Nonconformity ; rdfs:range energy:ClientOrg .
+energy:identifiedIn a owl:ObjectProperty ; rdfs:domain energy:Nonconformity ; rdfs:range energy:Audit .
+energy:mandates a owl:ObjectProperty ; rdfs:domain energy:Standard ; rdfs:range energy:QualityDocument .
+energy:monitoredBy a owl:ObjectProperty ; rdfs:domain energy:KPI ; rdfs:range energy:QualityProcess .
+energy:references a owl:ObjectProperty ; rdfs:domain energy:QualityDocument ; rdfs:range energy:QualityDocument .
+energy:sourcesFrom a owl:ObjectProperty ; rdfs:domain energy:ClientOrg ; rdfs:range energy:Supplier .
+energy:supersedes a owl:ObjectProperty ; rdfs:domain energy:QualityDocument ; rdfs:range energy:QualityDocument .
+energy:suppliesTo a owl:ObjectProperty ; rdfs:domain energy:Supplier ; rdfs:range energy:ClientOrg .
+
+energy:Audit rdfs:subClassOf [ a owl:Restriction ; owl:onProperty energy:auditorId ; owl:minCardinality "1"^^xsd:nonNegativeInteger ] .
+energy:AutomotiveComponent owl:hasKey ( energy:partNumber ) .
+energy:AutomotiveComponent rdfs:subClassOf [ a owl:Restriction ; owl:onProperty energy:partNumber ; owl:minCardinality "1"^^xsd:nonNegativeInteger ] .
+energy:ClientRequirement owl:hasKey ( energy:documentId ) .
+energy:ClientRequirement rdfs:subClassOf [ a owl:Restriction ; owl:onProperty energy:documentId ; owl:minCardinality "1"^^xsd:nonNegativeInteger ] .
+energy:FormRecord owl:hasKey ( energy:documentId ) .
+energy:FormRecord rdfs:subClassOf [ a owl:Restriction ; owl:onProperty energy:documentId ; owl:minCardinality "1"^^xsd:nonNegativeInteger ] .
+energy:InternalProcedure owl:hasKey ( energy:documentId ) .
+energy:InternalProcedure rdfs:subClassOf [ a owl:Restriction ; owl:onProperty energy:documentId ; owl:minCardinality "1"^^xsd:nonNegativeInteger ] .
+energy:KPI owl:hasKey ( energy:name ) .
+energy:KPI rdfs:subClassOf [ a owl:Restriction ; owl:onProperty energy:name ; owl:minCardinality "1"^^xsd:nonNegativeInteger ] .
+energy:QualityDocument owl:hasKey ( energy:documentId ) .
+energy:QualityDocument rdfs:subClassOf [ a owl:Restriction ; owl:onProperty energy:documentId ; owl:minCardinality "1"^^xsd:nonNegativeInteger ] .
+energy:QualityManual owl:hasKey ( energy:documentId ) .
+energy:QualityManual rdfs:subClassOf [ a owl:Restriction ; owl:onProperty energy:documentId ; owl:minCardinality "1"^^xsd:nonNegativeInteger ] .
+energy:Standard owl:hasKey ( energy:standardId ) .
+energy:Standard rdfs:subClassOf [ a owl:Restriction ; owl:onProperty energy:standardId ; owl:minCardinality "1"^^xsd:nonNegativeInteger ] .
+energy:Supplier owl:hasKey ( energy:supplierId ) .
+energy:Supplier rdfs:subClassOf [ a owl:Restriction ; owl:onProperty energy:supplierId ; owl:minCardinality "1"^^xsd:nonNegativeInteger ] .

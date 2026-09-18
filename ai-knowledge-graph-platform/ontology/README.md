@@ -62,6 +62,48 @@ checks established Energy vocabulary, verifies deterministic output and drift,
 and proves shared-write rejection. Existing Energy publication tests continue
 to exercise R2RML/RML → candidate RDF → SHACL → quarantine/publication → SPARQL.
 
+## Second domain: automotive (proof the compiler is domain-general)
+
+Roadmap "P1 — reusable domain onboarding and governance pack", bullet 4:
+demonstrate a second domain reusing the compiler, competency-question tests,
+curation queue and governance templates without modifying Energy code.
+
+[`models/automotive-iatf-quality.yaml`](models/automotive-iatf-quality.yaml)
+re-expresses the vocabulary already declared in
+[`../config/ontologies/automotive_iatf.yml`](../config/ontologies/automotive_iatf.yml)
+(IATF 16949 automotive quality management — suppliers, audits,
+nonconformities, quality documents, standards) as an Energy-schema semantic
+model, covering the four concerns a regulated domain needs: **auditability**
+(the `Auditable` mixin plus `Audit.auditorId`/`outcome`), **explainability**
+(`Nonconformity.rootCause`/`correctiveAction`), **retention**
+(`QualityDocument.retentionPeriodYears`,
+`Supplier.reevaluationFrequencyMonths`), and **policy traceability** (the
+`Standard --mandates--> QualityDocument --appliesTo--> AutomotiveComponent`
+chain, plus `references`/`supersedes` for document lineage).
+
+It compiles through the exact same `compile_model()`/`load_model()` used for
+Energy — no Energy-specific branch, flag, or code change was needed:
+
+```text
+python -m graphrag.semantic_model compile ontology/models/automotive-iatf-quality.yaml
+```
+
+`make semantic-model-check` drift-checks both models.
+`tests/unit/test_semantic_model.py::test_compiler_is_domain_general_not_energy_specific`
+compiles the automotive model and asserts no generated diagnostic mentions
+"Energy" — a real regression this exercise caught: `SHACL_UNKNOWN_PROPERTY_RUNTIME`'s
+message hardcoded "preserve existing Energy RDF metadata" even when compiling
+a non-Energy model; fixed to generic wording.
+
+Honest about scope: this is a compact vocabulary demo (11 types, 11
+relations), not a full re-import of `automotive_iatf.yml`'s richer LPG-only
+constructs (`inference_rules`, `exclusive_state_pairs`, `functional_relations`,
+`authority_levels`, `supersession_chains`) — those are specific to the
+`graphrag/graph/domain_ontology.py` LPG track and don't have an equivalent
+in the Energy YAML schema today. It does not create a new synthetic document
+corpus; automotive's existing 30-document corpus and competency questions
+(`evals/automotive_iatf/`) are unchanged and untouched by this model.
+
 This directory is the SHACL-shapes half of the platform's ontology system —
 see [`docs/ontology-model.md`](../docs/ontology-model.md) for the technical
 model (type hierarchy, relation domain/range rules, inference rules,

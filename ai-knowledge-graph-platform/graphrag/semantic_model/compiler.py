@@ -283,7 +283,7 @@ def _diagnostics(model: SemanticModel) -> tuple[Diagnostic, ...]:
     if model.unknown_property_policy == "reject":
         result.append(Diagnostic("warning", "SHACL_UNKNOWN_PROPERTY_RUNTIME", Target.SHACL, path, None,
             "unknown_property_policy",
-            "Generated shapes remain open to preserve existing Energy RDF metadata and do not reject every undeclared predicate.",
+            "Generated shapes remain open to preserve existing RDF metadata and do not reject every undeclared predicate.",
             "approximated", "Reject unknown LPG properties in the shared mutation validator; use curated closed SHACL shapes where required."))
         result.append(Diagnostic("warning", "NEO4J_UNKNOWN_PROPERTY_RUNTIME", Target.NEO4J, path, None,
             "unknown_property_policy",

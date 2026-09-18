@@ -1,0 +1,194 @@
+id: automotive-iatf-quality
+version: 1.0.0
+namespace: https://example.automotive.demo/ontology#
+label: Automotive IATF 16949 Quality Management ontology
+unknown_property_policy: reject
+prefixes:
+  prov: http://www.w3.org/ns/prov#
+mixins:
+  Auditable:
+    label: Auditable
+    description: Shared lifecycle metadata without asserting an inheritance class.
+    properties:
+      createdAt:
+        datatype: dateTime
+      updatedAt:
+        datatype: dateTime
+types:
+  Organization:
+    label: Organization
+    lpg_label: ORG
+    abstract: true
+    mixins: [Auditable]
+  Supplier:
+    label: Supplier
+    lpg_label: SUPPLIER
+    extends: Organization
+    properties:
+      supplierId:
+        datatype: string
+        required: true
+        key: true
+      classification:
+        datatype: string
+        description: One of "approved", "conditional", "disqualified" -- the supplier's current qualification status.
+      reevaluationFrequencyMonths:
+        datatype: integer
+        description: Retention/cadence control -- how often this supplier must be reassessed against IATF 16949.
+  ClientOrg:
+    label: Client organization
+    lpg_label: CLIENT_ORG
+    extends: Organization
+  QualityDocument:
+    label: Quality document
+    lpg_label: QUALITY_DOCUMENT
+    abstract: true
+    mixins: [Auditable]
+    properties:
+      documentId:
+        datatype: string
+        required: true
+        key: true
+      retentionPeriodYears:
+        datatype: integer
+        description: How long this document or record must be retained for audit purposes.
+  ClientRequirement:
+    label: Client requirement
+    lpg_label: CLIENT_REQUIREMENT
+    extends: QualityDocument
+  QualityManual:
+    label: Quality manual
+    lpg_label: QUALITY_MANUAL
+    extends: QualityDocument
+  InternalProcedure:
+    label: Internal procedure
+    lpg_label: INTERNAL_PROCEDURE
+    extends: QualityDocument
+  FormRecord:
+    label: Form or record
+    lpg_label: FORM_RECORD
+    extends: QualityDocument
+  Standard:
+    label: Standard
+    lpg_label: STANDARD
+    mixins: [Auditable]
+    properties:
+      standardId:
+        datatype: string
+        required: true
+        key: true
+      title:
+        datatype: string
+  QualityProcess:
+    label: Quality process
+    lpg_label: QUALITY_PROCESS
+    abstract: true
+    mixins: [Auditable]
+  Audit:
+    label: Audit
+    lpg_label: AUDIT
+    extends: QualityProcess
+    properties:
+      auditorId:
+        datatype: string
+        required: true
+        description: Actor identity for the audit trail -- who performed this audit.
+      scheduledAt:
+        datatype: dateTime
+      completedAt:
+        datatype: dateTime
+      outcome:
+        datatype: string
+        description: One of "pass", "conditional", "fail".
+  Nonconformity:
+    label: Nonconformity
+    lpg_label: NONCONFORMITY
+    extends: QualityProcess
+    properties:
+      severity:
+        datatype: string
+        description: One of "minor", "major", "critical".
+      rootCause:
+        datatype: string
+        description: Explainability -- why this nonconformity occurred, not just that it did.
+      correctiveAction:
+        datatype: string
+      closedAt:
+        datatype: dateTime
+        required: false
+  AutomotiveComponent:
+    label: Automotive component
+    lpg_label: AUTOMOTIVE_COMPONENT
+    mixins: [Auditable]
+    properties:
+      partNumber:
+        datatype: string
+        required: true
+        key: true
+      description:
+        datatype: string
+  KPI:
+    label: KPI
+    lpg_label: KPI
+    mixins: [Auditable]
+    properties:
+      name:
+        datatype: string
+        required: true
+        key: true
+      targetValue:
+        datatype: decimal
+      actualValue:
+        datatype: decimal
+relations:
+  suppliesTo:
+    source: Supplier
+    target: ClientOrg
+    lpg_type: SUPPLIES_TO
+  sourcesFrom:
+    source: ClientOrg
+    target: Supplier
+    lpg_type: SOURCES_FROM
+  audits:
+    source: Audit
+    target: Supplier
+    lpg_type: AUDITS
+  identifiedIn:
+    source: Nonconformity
+    target: Audit
+    lpg_type: IDENTIFIED_IN
+  mandates:
+    source: Standard
+    target: QualityDocument
+    lpg_type: MANDATES
+  compliesWith:
+    source: Supplier
+    target: Standard
+    lpg_type: COMPLIES_WITH
+  appliesTo:
+    source: QualityDocument
+    target: AutomotiveComponent
+    lpg_type: APPLIES_TO
+  references:
+    source: QualityDocument
+    target: QualityDocument
+    lpg_type: REFERENCES
+  supersedes:
+    source: QualityDocument
+    target: QualityDocument
+    lpg_type: SUPERSEDES
+  monitoredBy:
+    source: KPI
+    target: QualityProcess
+    lpg_type: MONITORED_BY
+  escalatesTo:
+    source: Nonconformity
+    target: ClientOrg
+    lpg_type: ESCALATES_TO
+artifacts:
+  owl: ontology/automotive/automotive-iatf-quality.ttl
+  shacl: ontology/shapes/automotive-iatf-quality.shapes.ttl
+  neo4j: ontology/generated/automotive/neo4j-constraints.cypher
+  diagnostics: ontology/generated/automotive/diagnostics.json
+  diagnostics_report: ontology/generated/automotive/diagnostics.md
+  erd: ontology/generated/automotive/erd.mmd

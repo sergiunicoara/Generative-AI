@@ -1,0 +1,82 @@
+classDiagram
+    class Auditable {
+        <<mixin>>
+        +dateTime createdAt
+        +dateTime updatedAt
+    }
+    class Audit {
+        +string auditorId!
+        +dateTime completedAt
+        +string outcome
+        +dateTime scheduledAt
+    }
+    QualityProcess <|-- Audit
+    class AutomotiveComponent {
+        +string description
+        +string partNumber*
+    }
+    AutomotiveComponent ..|> Auditable : mixin
+    class ClientOrg {
+    }
+    Organization <|-- ClientOrg
+    class ClientRequirement {
+    }
+    QualityDocument <|-- ClientRequirement
+    class FormRecord {
+    }
+    QualityDocument <|-- FormRecord
+    class InternalProcedure {
+    }
+    QualityDocument <|-- InternalProcedure
+    class KPI {
+        +decimal actualValue
+        +string name*
+        +decimal targetValue
+    }
+    KPI ..|> Auditable : mixin
+    class Nonconformity {
+        +dateTime closedAt
+        +string correctiveAction
+        +string rootCause
+        +string severity
+    }
+    QualityProcess <|-- Nonconformity
+    class Organization {
+        <<abstract>>
+    }
+    Organization ..|> Auditable : mixin
+    class QualityDocument {
+        <<abstract>>
+        +string documentId*
+        +integer retentionPeriodYears
+    }
+    QualityDocument ..|> Auditable : mixin
+    class QualityManual {
+    }
+    QualityDocument <|-- QualityManual
+    class QualityProcess {
+        <<abstract>>
+    }
+    QualityProcess ..|> Auditable : mixin
+    class Standard {
+        +string standardId*
+        +string title
+    }
+    Standard ..|> Auditable : mixin
+    class Supplier {
+        +string classification
+        +integer reevaluationFrequencyMonths
+        +string supplierId*
+    }
+    Organization <|-- Supplier
+    QualityDocument "1" --> "0..*" AutomotiveComponent : appliesTo
+    Audit "1" --> "0..*" Supplier : audits
+    Supplier "1" --> "0..*" Standard : compliesWith
+    Nonconformity "1" --> "0..*" ClientOrg : escalatesTo
+    Nonconformity "1" --> "0..*" Audit : identifiedIn
+    Standard "1" --> "0..*" QualityDocument : mandates
+    KPI "1" --> "0..*" QualityProcess : monitoredBy
+    QualityDocument "1" --> "0..*" QualityDocument : references
+    ClientOrg "1" --> "0..*" Supplier : sourcesFrom
+    QualityDocument "1" --> "0..*" QualityDocument : supersedes
+    Supplier "1" --> "0..*" ClientOrg : suppliesTo

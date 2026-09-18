@@ -1,0 +1,101 @@
+# DO NOT EDIT — generated from automotive-iatf-quality.yaml.
+@prefix energy: <https://example.automotive.demo/ontology#> .
+@prefix prov: <http://www.w3.org/ns/prov#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix sh: <http://www.w3.org/ns/shacl#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+
+energy:AuditShape a sh:NodeShape ; sh:targetClass energy:Audit ;
+  sh:property [ sh:path energy:auditorId ; sh:datatype xsd:string ; sh:minCount 1 ] ;
+  sh:property [ sh:path energy:completedAt ; sh:datatype xsd:dateTime ] ;
+  sh:property [ sh:path energy:createdAt ; sh:datatype xsd:dateTime ] ;
+  sh:property [ sh:path energy:outcome ; sh:datatype xsd:string ] ;
+  sh:property [ sh:path energy:scheduledAt ; sh:datatype xsd:dateTime ] ;
+  sh:property [ sh:path energy:updatedAt ; sh:datatype xsd:dateTime ] ;
+  sh:property [ sh:path energy:audits ; sh:nodeKind sh:IRI ; sh:class energy:Supplier ] .
+energy:AutomotiveComponentShape a sh:NodeShape ; sh:targetClass energy:AutomotiveComponent ;
+  sh:property [ sh:path energy:createdAt ; sh:datatype xsd:dateTime ] ;
+  sh:property [ sh:path energy:description ; sh:datatype xsd:string ] ;
+  sh:property [ sh:path energy:partNumber ; sh:datatype xsd:string ; sh:minCount 1 ] ;
+  sh:property [ sh:path energy:updatedAt ; sh:datatype xsd:dateTime ] .
+energy:ClientOrgShape a sh:NodeShape ; sh:targetClass energy:ClientOrg ;
+  sh:property [ sh:path energy:createdAt ; sh:datatype xsd:dateTime ] ;
+  sh:property [ sh:path energy:updatedAt ; sh:datatype xsd:dateTime ] ;
+  sh:property [ sh:path energy:sourcesFrom ; sh:nodeKind sh:IRI ; sh:class energy:Supplier ] .
+energy:ClientRequirementShape a sh:NodeShape ; sh:targetClass energy:ClientRequirement ;
+  sh:property [ sh:path energy:createdAt ; sh:datatype xsd:dateTime ] ;
+  sh:property [ sh:path energy:documentId ; sh:datatype xsd:string ; sh:minCount 1 ] ;
+  sh:property [ sh:path energy:retentionPeriodYears ; sh:datatype xsd:integer ] ;
+  sh:property [ sh:path energy:updatedAt ; sh:datatype xsd:dateTime ] ;
+  sh:property [ sh:path energy:appliesTo ; sh:nodeKind sh:IRI ; sh:class energy:AutomotiveComponent ] ;
+  sh:property [ sh:path energy:references ; sh:nodeKind sh:IRI ; sh:class energy:QualityDocument ] ;
+  sh:property [ sh:path energy:supersedes ; sh:nodeKind sh:IRI ; sh:class energy:QualityDocument ] .
+energy:FormRecordShape a sh:NodeShape ; sh:targetClass energy:FormRecord ;
+  sh:property [ sh:path energy:createdAt ; sh:datatype xsd:dateTime ] ;
+  sh:property [ sh:path energy:documentId ; sh:datatype xsd:string ; sh:minCount 1 ] ;
+  sh:property [ sh:path energy:retentionPeriodYears ; sh:datatype xsd:integer ] ;
+  sh:property [ sh:path energy:updatedAt ; sh:datatype xsd:dateTime ] ;
+  sh:property [ sh:path energy:appliesTo ; sh:nodeKind sh:IRI ; sh:class energy:AutomotiveComponent ] ;
+  sh:property [ sh:path energy:references ; sh:nodeKind sh:IRI ; sh:class energy:QualityDocument ] ;
+  sh:property [ sh:path energy:supersedes ; sh:nodeKind sh:IRI ; sh:class energy:QualityDocument ] .
+energy:InternalProcedureShape a sh:NodeShape ; sh:targetClass energy:InternalProcedure ;
+  sh:property [ sh:path energy:createdAt ; sh:datatype xsd:dateTime ] ;
+  sh:property [ sh:path energy:documentId ; sh:datatype xsd:string ; sh:minCount 1 ] ;
+  sh:property [ sh:path energy:retentionPeriodYears ; sh:datatype xsd:integer ] ;
+  sh:property [ sh:path energy:updatedAt ; sh:datatype xsd:dateTime ] ;
+  sh:property [ sh:path energy:appliesTo ; sh:nodeKind sh:IRI ; sh:class energy:AutomotiveComponent ] ;
+  sh:property [ sh:path energy:references ; sh:nodeKind sh:IRI ; sh:class energy:QualityDocument ] ;
+  sh:property [ sh:path energy:supersedes ; sh:nodeKind sh:IRI ; sh:class energy:QualityDocument ] .
+energy:KPIShape a sh:NodeShape ; sh:targetClass energy:KPI ;
+  sh:property [ sh:path energy:actualValue ; sh:datatype xsd:decimal ] ;
+  sh:property [ sh:path energy:createdAt ; sh:datatype xsd:dateTime ] ;
+  sh:property [ sh:path energy:name ; sh:datatype xsd:string ; sh:minCount 1 ] ;
+  sh:property [ sh:path energy:targetValue ; sh:datatype xsd:decimal ] ;
+  sh:property [ sh:path energy:updatedAt ; sh:datatype xsd:dateTime ] ;
+  sh:property [ sh:path energy:monitoredBy ; sh:nodeKind sh:IRI ; sh:class energy:QualityProcess ] .
+energy:NonconformityShape a sh:NodeShape ; sh:targetClass energy:Nonconformity ;
+  sh:property [ sh:path energy:closedAt ; sh:datatype xsd:dateTime ] ;
+  sh:property [ sh:path energy:correctiveAction ; sh:datatype xsd:string ] ;
+  sh:property [ sh:path energy:createdAt ; sh:datatype xsd:dateTime ] ;
+  sh:property [ sh:path energy:rootCause ; sh:datatype xsd:string ] ;
+  sh:property [ sh:path energy:severity ; sh:datatype xsd:string ] ;
+  sh:property [ sh:path energy:updatedAt ; sh:datatype xsd:dateTime ] ;
+  sh:property [ sh:path energy:escalatesTo ; sh:nodeKind sh:IRI ; sh:class energy:ClientOrg ] ;
+  sh:property [ sh:path energy:identifiedIn ; sh:nodeKind sh:IRI ; sh:class energy:Audit ] .
+energy:OrganizationShape a sh:NodeShape ; sh:targetClass energy:Organization ;
+  sh:property [ sh:path energy:createdAt ; sh:datatype xsd:dateTime ] ;
+  sh:property [ sh:path energy:updatedAt ; sh:datatype xsd:dateTime ] .
+energy:QualityDocumentShape a sh:NodeShape ; sh:targetClass energy:QualityDocument ;
+  sh:property [ sh:path energy:createdAt ; sh:datatype xsd:dateTime ] ;
+  sh:property [ sh:path energy:documentId ; sh:datatype xsd:string ; sh:minCount 1 ] ;
+  sh:property [ sh:path energy:retentionPeriodYears ; sh:datatype xsd:integer ] ;
+  sh:property [ sh:path energy:updatedAt ; sh:datatype xsd:dateTime ] ;
+  sh:property [ sh:path energy:appliesTo ; sh:nodeKind sh:IRI ; sh:class energy:AutomotiveComponent ] ;
+  sh:property [ sh:path energy:references ; sh:nodeKind sh:IRI ; sh:class energy:QualityDocument ] ;
+  sh:property [ sh:path energy:supersedes ; sh:nodeKind sh:IRI ; sh:class energy:QualityDocument ] .
+energy:QualityManualShape a sh:NodeShape ; sh:targetClass energy:QualityManual ;
+  sh:property [ sh:path energy:createdAt ; sh:datatype xsd:dateTime ] ;
+  sh:property [ sh:path energy:documentId ; sh:datatype xsd:string ; sh:minCount 1 ] ;
+  sh:property [ sh:path energy:retentionPeriodYears ; sh:datatype xsd:integer ] ;
+  sh:property [ sh:path energy:updatedAt ; sh:datatype xsd:dateTime ] ;
+  sh:property [ sh:path energy:appliesTo ; sh:nodeKind sh:IRI ; sh:class energy:AutomotiveComponent ] ;
+  sh:property [ sh:path energy:references ; sh:nodeKind sh:IRI ; sh:class energy:QualityDocument ] ;
+  sh:property [ sh:path energy:supersedes ; sh:nodeKind sh:IRI ; sh:class energy:QualityDocument ] .
+energy:QualityProcessShape a sh:NodeShape ; sh:targetClass energy:QualityProcess ;
+  sh:property [ sh:path energy:createdAt ; sh:datatype xsd:dateTime ] ;
+  sh:property [ sh:path energy:updatedAt ; sh:datatype xsd:dateTime ] .
+energy:StandardShape a sh:NodeShape ; sh:targetClass energy:Standard ;
+  sh:property [ sh:path energy:createdAt ; sh:datatype xsd:dateTime ] ;
+  sh:property [ sh:path energy:standardId ; sh:datatype xsd:string ; sh:minCount 1 ] ;
+  sh:property [ sh:path energy:title ; sh:datatype xsd:string ] ;
+  sh:property [ sh:path energy:updatedAt ; sh:datatype xsd:dateTime ] ;
+  sh:property [ sh:path energy:mandates ; sh:nodeKind sh:IRI ; sh:class energy:QualityDocument ] .
+energy:SupplierShape a sh:NodeShape ; sh:targetClass energy:Supplier ;
+  sh:property [ sh:path energy:classification ; sh:datatype xsd:string ] ;
+  sh:property [ sh:path energy:createdAt ; sh:datatype xsd:dateTime ] ;
+  sh:property [ sh:path energy:reevaluationFrequencyMonths ; sh:datatype xsd:integer ] ;
+  sh:property [ sh:path energy:supplierId ; sh:datatype xsd:string ; sh:minCount 1 ] ;
+  sh:property [ sh:path energy:updatedAt ; sh:datatype xsd:dateTime ] ;
+  sh:property [ sh:path energy:compliesWith ; sh:nodeKind sh:IRI ; sh:class energy:Standard ] ;
+  sh:property [ sh:path energy:suppliesTo ; sh:nodeKind sh:IRI ; sh:class energy:ClientOrg ] .

@@ -489,6 +489,7 @@ class HybridRetriever:
                         result.correlation_id = correlation_id
                         result.routing_reason = routing_reason
                         await _step("Answer cache hit; original governed trace reused")
+                        # Genuinely free -- a cache hit makes no LLM call.
                         record_cost_event(CostEvent(
                             tenant=tenant, stage="answer_cache", provider="redis",
                             model=result.model_version, cost_usd=0.0,
@@ -746,6 +747,14 @@ class HybridRetriever:
 
         latency_ms = (time.monotonic() - t0) * 1000
         budget = check_budget("synthesis", latency_ms, 0.0)
+        # This event's cost_usd is intentionally 0.0 -- it's stage-level
+        # wall-clock latency tracking (provider/model here are static
+        # config, not the real per-call provider that answered). The real,
+        # non-zero per-call cost for the get_llm().generate() call above is
+        # computed and emitted separately in
+        # genai_telemetry._finish(), which has the actual response's
+        # model/token counts. Don't treat this event's cost_usd as
+        # authoritative for the synthesis stage.
         record_cost_event(CostEvent(
             tenant=tenant, stage="synthesis", provider="configured",
             model=self._model_version, cost_usd=0.0, latency_ms=latency_ms,

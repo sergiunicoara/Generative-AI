@@ -113,6 +113,24 @@ class BaseLLM:
         raise NotImplementedError
 
 
+class NoFallbackLLM(BaseLLM):
+    """Stands in for a secondary provider that was deliberately not configured
+    (e.g. a spend-safety run with its API key blanked and no other fallback
+    key set). Fails only if the primary actually fails and a fallback is
+    attempted — unlike constructing the real provider client with an empty
+    key, which fails immediately for every call regardless of whether the
+    primary would have succeeded.
+    """
+
+    async def generate(self, prompt: str, model: str | None = None,
+                        json_mode: bool = False, temperature: float = 0.0,
+                        max_tokens: int | None = None) -> str:
+        raise RuntimeError(
+            "LLM primary failed and no fallback provider is configured "
+            "(fallback API key was empty/unset for this run)"
+        )
+
+
 # ── Groq text-generation client ───────────────────────────────────────────────
 
 class GroqLLM(BaseLLM):
@@ -360,6 +378,14 @@ class DeepSeekLLM(BaseLLM):
             "model":    model,
             "messages": [{"role": "user", "content": prompt}],
             "temperature": temperature,
+            # DeepSeek Flash defaults to thinking mode ON at "high" effort
+            # (api-docs.deepseek.com/guides/thinking_mode) — the chain-of-
+            # thought is billed as output tokens at 4x the input-miss rate.
+            # Every call site here wants a direct answer/JSON, never the
+            # reasoning trace, so this was pure unrequested spend — measured
+            # at ~92% of billed tokens being output on a $8.03/14.3M-token
+            # day. See tasks/lessons.md A139.
+            "extra_body": {"thinking": {"type": "disabled"}},
         }
         if json_mode:
             kwargs["response_format"] = {"type": "json_object"}
@@ -685,24 +711,41 @@ class FallbackLLM(BaseLLM):
         unchanged. Once a key is added, DeepSeek's own secondary becomes
         OpenRouter's ``:free`` tier instead of terminating — see
         ``OpenRouterLLM`` for slug/limit caveats.
+
+        ``cfg.deepseek_api_key`` empty (deliberately blanked to guarantee zero
+        DeepSeek spend for a run) skips building ``DeepSeekLLM`` entirely
+        instead of constructing it with an empty key: the underlying
+        ``openai.OpenAI(api_key="")`` raises ``OpenAIError`` at construction
+        time (an explicit empty string is NOT treated the same as omitting
+        the argument — it does not fall back to reading ``OPENAI_API_KEY``
+        from the environment), and that exception isn't in
+        ``fallback_exceptions`` below, so it previously surfaced as a fatal,
+        confusing "OPENAI_ADMIN_KEY" error on every extraction call that
+        needed the secondary hop. See tasks/lessons.md A139.
         """
         from groq import RateLimitError, APIStatusError, APITimeoutError, APIConnectionError
 
-        deepseek = DeepSeekLLM(api_key=cfg.deepseek_api_key)
-        secondary: BaseLLM = deepseek
+        deepseek_key = getattr(cfg, "deepseek_api_key", "") or ""
         openrouter_key = getattr(cfg, "openrouter_api_key", "") or ""
+        deepseek = DeepSeekLLM(api_key=deepseek_key) if deepseek_key else None
+        secondary: BaseLLM = deepseek if deepseek is not None else NoFallbackLLM()
         if openrouter_key:
             from openai import RateLimitError as _OAIRateLimit, APIStatusError as _OAIStatus, \
                 APITimeoutError as _OAITimeout, APIConnectionError as _OAIConn
-            secondary = cls(
-                primary=deepseek,
-                primary_name="deepseek",
-                secondary=OpenRouterLLM(
-                    api_key=openrouter_key,
-                    default_model=getattr(cfg, "openrouter_model", OpenRouterLLM._DEFAULT_MODEL)
-                        or OpenRouterLLM._DEFAULT_MODEL,
-                ),
-                fallback_exceptions=(_OAIRateLimit, _OAIStatus, _OAITimeout, _OAIConn),
+            openrouter = OpenRouterLLM(
+                api_key=openrouter_key,
+                default_model=getattr(cfg, "openrouter_model", OpenRouterLLM._DEFAULT_MODEL)
+                    or OpenRouterLLM._DEFAULT_MODEL,
+            )
+            secondary = (
+                cls(
+                    primary=deepseek,
+                    primary_name="deepseek",
+                    secondary=openrouter,
+                    fallback_exceptions=(_OAIRateLimit, _OAIStatus, _OAITimeout, _OAIConn),
+                )
+                if deepseek is not None
+                else openrouter
             )
 
         return cls(

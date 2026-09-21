@@ -261,3 +261,61 @@ class TestFindCandidateByEmbeddingFetchK:
         assert "$fetch_k" in query
         assert ", 10, " not in query  # the old hardcoded literal is gone
         assert kwargs["fetch_k"] == 100
+
+
+# ── Embedding auto-merge requires lexical corroboration (IMPLEMENTATION_AUDIT.md) ──
+# Embedding similarity alone previously auto-merged two same-tenant,
+# same-type entities with zero corroborating signal ("fail open"). A
+# candidate must now also clear a lexical-similarity floor.
+
+class TestFindDuplicateByEmbeddingRequiresLexicalCorroboration:
+    async def test_high_embedding_score_but_unrelated_names_does_not_merge(self):
+        neo4j = AsyncMock()
+        neo4j.run = AsyncMock(return_value=[
+            {"name": "Manager Achizitii", "type": "SUPPLIER", "score": 0.99},
+        ])
+        reg = AliasRegistry(neo4j, tenant="automotive")
+
+        result = await reg.find_duplicate_by_embedding(
+            [0.1, 0.2], "SUPPLIER", exclude_name="PlastiAuto SRL",
+        )
+
+        assert result is None
+
+    async def test_high_embedding_score_with_similar_name_merges(self):
+        neo4j = AsyncMock()
+        neo4j.run = AsyncMock(return_value=[
+            {"name": "PlastiAuto S.R.L.", "type": "SUPPLIER", "score": 0.99},
+        ])
+        reg = AliasRegistry(neo4j, tenant="automotive")
+
+        result = await reg.find_duplicate_by_embedding(
+            [0.1, 0.2], "SUPPLIER", exclude_name="PlastiAuto SRL",
+        )
+
+        assert result == ("PlastiAuto S.R.L.", "SUPPLIER", 0.99)
+
+    async def test_falls_through_to_a_lower_ranked_candidate_that_corroborates(self):
+        neo4j = AsyncMock()
+        neo4j.run = AsyncMock(return_value=[
+            {"name": "Manager Achizitii", "type": "SUPPLIER", "score": 0.99},
+            {"name": "PlastiAuto S.R.L.", "type": "SUPPLIER", "score": 0.93},
+        ])
+        reg = AliasRegistry(neo4j, tenant="automotive")
+
+        result = await reg.find_duplicate_by_embedding(
+            [0.1, 0.2], "SUPPLIER", exclude_name="PlastiAuto SRL",
+        )
+
+        assert result == ("PlastiAuto S.R.L.", "SUPPLIER", 0.93)
+
+    async def test_no_rows_returns_none(self):
+        neo4j = AsyncMock()
+        neo4j.run = AsyncMock(return_value=[])
+        reg = AliasRegistry(neo4j, tenant="automotive")
+
+        result = await reg.find_duplicate_by_embedding(
+            [0.1, 0.2], "SUPPLIER", exclude_name="PlastiAuto SRL",
+        )
+
+        assert result is None

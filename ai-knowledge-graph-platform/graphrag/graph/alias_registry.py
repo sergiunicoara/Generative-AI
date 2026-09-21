@@ -228,6 +228,18 @@ class AliasRegistry:
         self._fuzzy_threshold = ingestion_cfg.get(
             "alias_fuzzy_threshold", _DEFAULT_FUZZY_SCORE_THRESHOLD
         )
+        # Embedding similarity alone auto-merged two entities of the same
+        # tenant+type with zero corroborating signal — two lexically
+        # unrelated names in the same domain can score above the embedding
+        # threshold purely from shared domain vocabulary. This floor (a
+        # rapidfuzz ratio, same scale as alias_fuzzy_threshold) requires the
+        # candidate name to also be lexically plausible before auto-merge;
+        # candidates that clear the embedding threshold but fail this floor
+        # fall through to the existing ambiguous-band review queue instead
+        # of merging blind. See docs/IMPLEMENTATION_AUDIT.md ("fail open").
+        self._embedding_min_lexical = ingestion_cfg.get(
+            "alias_embedding_min_lexical_similarity", 30
+        )
 
     async def load(self) -> None:
         """Refresh alias table from Neo4j and push to Redis for cross-worker sharing."""
@@ -458,6 +470,14 @@ class AliasRegistry:
         """
         Search for an existing entity whose embedding is very close
         to the given one — tenant-scoped.  Returns (name, type, similarity) or None.
+
+        Embedding similarity alone is not sufficient to auto-merge: the top
+        embedding-scoring candidate must also clear a lexical-similarity
+        floor (rapidfuzz ratio against `exclude_name`, the entity being
+        resolved) as a corroborating signal. A candidate that clears the
+        embedding threshold but fails the lexical floor is not returned here
+        — the caller's existing ambiguous-band path (find_candidate_by_embedding)
+        still surfaces it for human review instead of silently dropping it.
         """
         rows = await self._neo4j.run(
             """
@@ -469,7 +489,7 @@ class AliasRegistry:
               AND score >= $threshold
             RETURN e.name AS name, e.type AS type, score
             ORDER BY score DESC
-            LIMIT 1
+            LIMIT 5
             """,
             fetch_k=_FETCH_K,
             embedding=embedding,
@@ -478,9 +498,28 @@ class AliasRegistry:
             tenant=self._tenant,
             threshold=self._embedding_threshold,
         )
-        if rows:
+        if not rows:
+            return None
+        try:
+            from rapidfuzz import fuzz
+        except ImportError:
+            # rapidfuzz not installed — no lexical signal available, fall
+            # back to the prior embedding-only behavior rather than crash.
             r = rows[0]
             return r["name"], r["type"], float(r["score"])
+
+        key = _normalize(exclude_name)
+        for r in rows:
+            lexical_score = fuzz.ratio(key, _normalize(r["name"]))
+            if lexical_score >= self._embedding_min_lexical:
+                return r["name"], r["type"], float(r["score"])
+            log.debug(
+                "alias_registry.embedding_dedup_no_lexical_corroboration",
+                raw=exclude_name,
+                candidate=r["name"],
+                embedding_score=round(float(r["score"]), 4),
+                lexical_score=lexical_score,
+            )
         return None
 
     async def find_candidate_by_embedding(

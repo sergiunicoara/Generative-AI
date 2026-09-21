@@ -1,0 +1,42 @@
+name: CI
+
+# `make ci` already exists and is labeled "the one command CI runs: lint +
+# unit tests (no live services, no Docker)" -- this workflow just wires that
+# existing, deliberately-scoped target to GitHub Actions, which previously
+# didn't exist for this repo at all (see docs/IMPLEMENTATION_AUDIT.md).
+#
+# Deliberately excluded from this workflow: scripts/run_golden_eval.py,
+# scripts/_aerospace_regression.py, scripts/run_automotive_eval.py, and the
+# adversarial security test corpus's live-model variants. Those make real,
+# billed calls to Groq/DeepSeek/Cerebras against a live, pre-seeded Neo4j
+# graph that doesn't exist in an ephemeral CI runner -- running them
+# automatically on every push/PR (including from external forks) would be
+# an unbounded, uncontrolled spend risk, not a safety improvement. They
+# remain manually-invoked, exactly as before.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch: {}
+
+jobs:
+  lint-and-unit-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt -r requirements-dev.txt
+
+      - name: make ci  (semantic-model-check + competency-questions-check + lint + unit tests)
+        run: make ci

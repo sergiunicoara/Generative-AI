@@ -264,6 +264,28 @@ def _finish(
             _llm_duration.labels(system=system, operation=operation).observe(max(0.0, elapsed))
     except Exception as exc:  # noqa: BLE001
         log.debug("genai_telemetry.metric_failed", error=str(exc))
-    record_token_usage(
-        provider, response.get("input_tokens"), response.get("output_tokens"),
+    input_tokens = response.get("input_tokens")
+    output_tokens = response.get("output_tokens")
+    record_token_usage(provider, input_tokens, output_tokens)
+
+    # Real per-call cost, computed from the actual response's model/token
+    # counts -- see pricing.py. Every prior cost_usd emitted from the
+    # retrieval layer was a hardcoded 0.0 regardless of whether a real, paid
+    # call happened; this is the one place that has genuine data for every
+    # provider this codebase calls. Tenant isn't in scope this deep in the
+    # call stack, so this event carries no tenant attribution -- consistent
+    # with cost_attribution.py's own note that tenant is deliberately not a
+    # Prometheus label (unbounded cardinality); per-tenant cost rollups need
+    # a separate join against request-level logs, not this event alone.
+    from graphrag.observability.cost_attribution import CostEvent, record_cost_event
+    from graphrag.observability.pricing import estimated_cost_usd
+
+    cost_usd = estimated_cost_usd(
+        provider, response.get("response_model"), input_tokens, output_tokens,
     )
+    if cost_usd is not None:
+        record_cost_event(CostEvent(
+            tenant="", stage=operation, provider=provider,
+            model=response.get("response_model") or "",
+            cost_usd=cost_usd, latency_ms=elapsed * 1000,
+        ))

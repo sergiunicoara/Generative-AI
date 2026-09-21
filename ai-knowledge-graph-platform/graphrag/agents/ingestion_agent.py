@@ -111,9 +111,25 @@ class IngestionAgent(BaseGraphRAGAgent):
         concurrency = get_settings().ingestion.get("extraction_concurrency", 5)
         semaphore = asyncio.Semaphore(concurrency)
 
+        chunk_extract_failures = 0
+
         async def _extract_one(chunk):
+            nonlocal chunk_extract_failures
             async with semaphore:
-                return await self._extractor.extract(chunk)
+                try:
+                    return await self._extractor.extract(chunk)
+                except Exception as exc:
+                    # One chunk's LLM call failing (rate limit, transient
+                    # provider error, unrelated SDK exception) must not
+                    # invalidate every other chunk in this document that
+                    # already extracted successfully — see tasks/lessons.md
+                    # A138. The gap is logged and counted, not hidden.
+                    chunk_extract_failures += 1
+                    log.warning(
+                        "ingestion_agent.chunk_extract_failed",
+                        job_id=job_id, chunk_id=chunk.id, error=str(exc)[:200],
+                    )
+                    return [], []
 
         extraction_started = perf_counter()
         extraction_results = await asyncio.gather(
@@ -133,12 +149,23 @@ class IngestionAgent(BaseGraphRAGAgent):
                 entity.embedding = emb
 
         artifact_results = [[] for _ in chunks]
+        artifact_extract_failures = 0
         if get_settings().ingestion.get("intelligence_artifacts_enabled", True):
             artifact_extractor = getattr(self, "_artifact_extractor", None)
             if artifact_extractor is not None:
+
                 async def _extract_artifacts(chunk, entities):
+                    nonlocal artifact_extract_failures
                     async with semaphore:
-                        return await artifact_extractor.extract(chunk, [entity.name for entity in entities])
+                        try:
+                            return await artifact_extractor.extract(chunk, [entity.name for entity in entities])
+                        except Exception as exc:
+                            artifact_extract_failures += 1
+                            log.warning(
+                                "ingestion_agent.chunk_artifact_extract_failed",
+                                job_id=job_id, chunk_id=chunk.id, error=str(exc)[:200],
+                            )
+                            return []
                 artifact_results = await asyncio.gather(
                     *(_extract_artifacts(chunk, entities) for chunk, (entities, _) in zip(chunks, extraction_results))
                 )
@@ -155,7 +182,13 @@ class IngestionAgent(BaseGraphRAGAgent):
         manifest.stage_metrics = {
             "chunking": {"duration_ms": round(chunk_elapsed_ms, 3), "items": len(chunks), "cost_usd": None},
             "embedding": {"duration_ms": round(embed_elapsed_ms, 3), "items": len(chunks) + len(all_entities_flat), "cost_usd": None},
-            "extraction": {"duration_ms": round(extraction_elapsed_ms, 3), "items": len(all_entities_flat), "cost_usd": None},
+            "extraction": {
+                "duration_ms": round(extraction_elapsed_ms, 3),
+                "items": len(all_entities_flat),
+                "cost_usd": None,
+                "chunk_failures": chunk_extract_failures,
+                "artifact_chunk_failures": artifact_extract_failures,
+            },
             "cost_status": {"value": "provider_usage_is_recorded_in_telemetry_when_available; manifest_never_invents_missing_cost"},
         }
 

@@ -56,6 +56,24 @@ class ResolvedMatch(NamedTuple):
     type: str
     method: str                  # "exact" | "fuzzy"
     score: float | None = None   # rapidfuzz ratio for "fuzzy"; None for "exact"
+    runner_ups: tuple[tuple[str, str, float], ...] = ()
+    # (name, type, score) for candidates that scored above the review
+    # threshold but lost to the winner above — persisted for later audit,
+    # never used to change which candidate wins. Always () for "exact"
+    # matches (nothing to have lost to) and for every caller not using
+    # with_detail=True.
+
+
+class EmbeddingMatch(NamedTuple):
+    """find_duplicate_by_embedding(..., with_detail=True)'s return for an
+    auto-resolved embedding match — same non-breaking-addition shape as
+    ResolvedMatch. Default (with_detail=False) callers keep the original
+    ``(name, type, score) | None`` return untouched.
+    """
+    name: str
+    type: str
+    score: float
+    runner_ups: tuple[tuple[str, str, float], ...] = ()
 
 
 # Defaults — overridden by ingestion.alias_embedding_threshold /
@@ -258,6 +276,17 @@ class AliasRegistry:
         self._embedding_min_lexical = ingestion_cfg.get(
             "alias_embedding_min_lexical_similarity", 30
         )
+        # Contextual disambiguation tie-break — see find_duplicate_by_embedding
+        # and _cooccurrence_tiebreak. Disabled by default pending a
+        # golden-eval validation pass, same precedent as include_superseded
+        # (tasks/lessons.md A128): a similarly-shaped naive change once
+        # caused an unexplained regression, so this ships opt-in.
+        self._cooccurrence_tiebreak_enabled = ingestion_cfg.get(
+            "alias_cooccurrence_tiebreak_enabled", False
+        )
+        self._embedding_tie_margin = ingestion_cfg.get(
+            "alias_embedding_tie_margin", 0.01
+        )
 
     async def load(self) -> None:
         """Refresh alias table from Neo4j and push to Redis for cross-worker sharing."""
@@ -337,9 +366,12 @@ class AliasRegistry:
         """
         key = _normalize(raw_name)
 
-        def _match(pair: tuple[str, str], method: str, score: float | None = None):
+        def _match(
+            pair: tuple[str, str], method: str, score: float | None = None,
+            runner_ups: tuple[tuple[str, str, float], ...] = (),
+        ):
             if with_detail:
-                return ResolvedMatch(pair[0], pair[1], method, score)
+                return ResolvedMatch(pair[0], pair[1], method, score, runner_ups)
             return pair
 
         # 1. Exact / normalized match (in-memory — loaded from Redis or Neo4j)
@@ -371,12 +403,23 @@ class AliasRegistry:
             review_min = get_settings().ingestion.get("review_fuzzy_min", 70)
             best_score = 0
             best_match = None
+            # Track every distinct canonical entity that scores >= review_min,
+            # in the same iteration order _fuzzy_candidates() produces, so a
+            # stable descending sort reproduces the exact winner the `score >
+            # best_score` loop below picks (ties keep the earliest-seen
+            # candidate) while also keeping whichever it beat, for
+            # docs/IMPLEMENTATION_AUDIT.md's runner-up persistence.
+            scored_candidates: list[tuple[float, tuple[str, str]]] = []
+            seen_canonical: set[tuple[str, str]] = set()
             for stored_key in self._fuzzy_candidates(key, minimum_score=review_min):
                 canonical = self._exact[stored_key]
                 score = fuzz.ratio(key, stored_key)
                 if score > best_score:
                     best_score = score
                     best_match = canonical
+                if score >= review_min and canonical not in seen_canonical:
+                    scored_candidates.append((score, canonical))
+                    seen_canonical.add(canonical)
             if best_score >= self._fuzzy_threshold and best_match:
                 log.debug(
                     "alias_registry.fuzzy_match",
@@ -384,7 +427,13 @@ class AliasRegistry:
                     canonical=best_match[0],
                     score=best_score,
                 )
-                return _match(best_match, "fuzzy", float(best_score))
+                scored_candidates.sort(key=lambda item: item[0], reverse=True)
+                runner_ups = tuple(
+                    (name, type_, score)
+                    for score, (name, type_) in scored_candidates
+                    if (name, type_) != best_match
+                )[:2]
+                return _match(best_match, "fuzzy", float(best_score), runner_ups)
             # Ambiguous band — close but not confident enough to auto-merge
             if review_min <= best_score < self._fuzzy_threshold and best_match:
                 log.debug(
@@ -497,7 +546,10 @@ class AliasRegistry:
         embedding: list[float],
         entity_type: str,
         exclude_name: str = "",
-    ) -> tuple[str, str, float] | None:
+        *,
+        with_detail: bool = False,
+        co_mentioned_names: list[str] | None = None,
+    ) -> tuple[str, str, float] | EmbeddingMatch | None:
         """
         Search for an existing entity whose embedding is very close
         to the given one — tenant-scoped.  Returns (name, type, similarity) or None.
@@ -509,6 +561,20 @@ class AliasRegistry:
         embedding threshold but fails the lexical floor is not returned here
         — the caller's existing ambiguous-band path (find_candidate_by_embedding)
         still surfaces it for human review instead of silently dropping it.
+
+        ``with_detail=True`` returns an ``EmbeddingMatch`` (name, type, score,
+        runner_ups) instead of a bare tuple — mirrors ``resolve()``'s own
+        ``with_detail`` precedent. Default is unchanged: every existing
+        caller keeps its original ``(name, type, score) | None`` contract.
+
+        ``co_mentioned_names``, if given AND
+        ``ingestion.alias_cooccurrence_tiebreak_enabled`` is set, breaks a
+        near-tie (top two corroborating candidates within
+        ``ingestion.alias_embedding_tie_margin`` of each other) using shared
+        graph structure instead of embedding score alone — see
+        ``_cooccurrence_tiebreak``'s docstring. Omitting it (the default for
+        every caller not passing it) skips the tie-break unconditionally,
+        independent of the config flag.
         """
         rows = await self._neo4j.run(
             """
@@ -537,21 +603,88 @@ class AliasRegistry:
             # rapidfuzz not installed — no lexical signal available, fall
             # back to the prior embedding-only behavior rather than crash.
             r = rows[0]
+            if with_detail:
+                return EmbeddingMatch(r["name"], r["type"], float(r["score"]))
             return r["name"], r["type"], float(r["score"])
 
         key = _normalize(exclude_name)
+        corroborated: list[tuple[str, str, float]] = []
         for r in rows:
             lexical_score = fuzz.ratio(key, _normalize(r["name"]))
             if lexical_score >= self._embedding_min_lexical:
-                return r["name"], r["type"], float(r["score"])
-            log.debug(
-                "alias_registry.embedding_dedup_no_lexical_corroboration",
-                raw=exclude_name,
-                candidate=r["name"],
-                embedding_score=round(float(r["score"]), 4),
-                lexical_score=lexical_score,
+                corroborated.append((r["name"], r["type"], float(r["score"])))
+            else:
+                log.debug(
+                    "alias_registry.embedding_dedup_no_lexical_corroboration",
+                    raw=exclude_name,
+                    candidate=r["name"],
+                    embedding_score=round(float(r["score"]), 4),
+                    lexical_score=lexical_score,
+                )
+        if not corroborated:
+            return None
+
+        winner = corroborated[0]
+        if (
+            len(corroborated) > 1
+            and co_mentioned_names
+            and self._cooccurrence_tiebreak_enabled
+            and (corroborated[0][2] - corroborated[1][2]) <= self._embedding_tie_margin
+        ):
+            winner = await self._cooccurrence_tiebreak(
+                corroborated, co_mentioned_names, entity_type,
             )
-        return None
+
+        if with_detail:
+            runner_ups = tuple(c for c in corroborated if c != winner)
+            return EmbeddingMatch(winner[0], winner[1], winner[2], runner_ups)
+        return winner
+
+    async def _cooccurrence_tiebreak(
+        self,
+        candidates: list[tuple[str, str, float]],
+        co_mentioned_names: list[str],
+        entity_type: str,
+    ) -> tuple[str, str, float]:
+        """Break a near-tie between embedding candidates using shared graph
+        structure: how many of the OTHER entities extracted from the same
+        chunk as this mention already have a RELATES_TO edge or a co-MENTIONS
+        chunk with each candidate. Highest co-occurrence count wins; a tie in
+        THAT count keeps the original (highest embedding score) ordering.
+
+        Deliberately narrow: only called for an already-lexically-corroborated,
+        already-score-near-tied candidate pair (see find_duplicate_by_embedding)
+        — never a substitute for the existing score cascade, only a nudge.
+        Ships disabled by default; see
+        ``ingestion.alias_cooccurrence_tiebreak_enabled`` and
+        docs/IMPLEMENTATION_AUDIT.md ("contextual disambiguation").
+        """
+        rows = await self._neo4j.run(
+            """
+            UNWIND $candidates AS cand
+            MATCH (c:Entity {name: cand.name, type: $entity_type, tenant: $tenant})
+            UNWIND $co_names AS co_name
+            OPTIONAL MATCH (c)-[:RELATES_TO]-(co:Entity {name: co_name, tenant: $tenant})
+            OPTIONAL MATCH (c)<-[:MENTIONS]-(:Chunk)-[:MENTIONS]->
+                            (co2:Entity {name: co_name, tenant: $tenant})
+            WITH cand, (co IS NOT NULL OR co2 IS NOT NULL) AS linked
+            RETURN cand.name AS name, count(CASE WHEN linked THEN 1 END) AS cooccurrence_score
+            """,
+            candidates=[{"name": name} for name, _, _ in candidates],
+            co_names=co_mentioned_names,
+            entity_type=entity_type,
+            tenant=self._tenant,
+        )
+        scores = {r["name"]: r["cooccurrence_score"] for r in rows}
+        # Highest co-occurrence score wins; a tie in that score keeps the
+        # original (highest-embedding-score-first) order — negate the score
+        # rather than use reverse=True, which would also reverse the index
+        # tie-break and pick the LOWEST-embedding-score candidate on a tie.
+        ranked = sorted(
+            candidates,
+            key=lambda c: (-scores.get(c[0], 0), candidates.index(c)),
+        )
+        return ranked[0]
 
     async def find_candidate_by_embedding(
         self,

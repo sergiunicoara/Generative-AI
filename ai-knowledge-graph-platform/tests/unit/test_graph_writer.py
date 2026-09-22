@@ -111,6 +111,7 @@ class TestWriteEntities:
             resolution_status="auto_resolved",
             resolution_method="fuzzy",
             resolution_score=92.0,
+            runner_ups=[],
         )
 
     async def test_mocked_resolve_without_with_detail_support_still_works(self):
@@ -135,6 +136,7 @@ class TestWriteEntities:
             resolution_status="auto_resolved",
             resolution_method="exact",   # getattr fallback default
             resolution_score=None,       # getattr fallback default
+            runner_ups=[],               # getattr fallback default
         )
 
     async def test_embedding_dedup_match_records_resolution_metadata(self):
@@ -144,10 +146,12 @@ class TestWriteEntities:
         entity = _make_entity("Tesla Inc")
         entity.embedding = [0.1] * 768
 
+        from graphrag.graph.alias_registry import EmbeddingMatch
+
         mock_registry = MagicMock()
         mock_registry.resolve = MagicMock(return_value=None)
         mock_registry.find_duplicate_by_embedding = AsyncMock(
-            return_value=("Tesla", "ORG", 0.96)
+            return_value=EmbeddingMatch("Tesla", "ORG", 0.96)
         )
         mock_registry.register_alias = AsyncMock()
         writer._neo4j.merge_mentions = AsyncMock()
@@ -161,6 +165,7 @@ class TestWriteEntities:
             resolution_status="auto_resolved",
             resolution_method="embedding",
             resolution_score=0.96,
+            runner_ups=[],
         )
 
     async def test_genuinely_new_entity_is_tagged_created_new(self):
@@ -394,11 +399,13 @@ class TestWriteEntities:
         entity = _make_entity("Tesla Inc")
         entity.embedding = [0.1] * 768
 
+        from graphrag.graph.alias_registry import EmbeddingMatch
+
         mock_registry = MagicMock()
         mock_registry.resolve = MagicMock(return_value=None)
         # Duplicate found via embedding
         mock_registry.find_duplicate_by_embedding = AsyncMock(
-            return_value=("Tesla", "ORG", 0.96)
+            return_value=EmbeddingMatch("Tesla", "ORG", 0.96)
         )
         mock_registry.register_alias = AsyncMock()
         writer._neo4j.merge_mentions = AsyncMock()

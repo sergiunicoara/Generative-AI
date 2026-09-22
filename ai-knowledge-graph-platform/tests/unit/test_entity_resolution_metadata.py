@@ -7,6 +7,7 @@ not overwrite the original creation-time resolution record.
 
 from __future__ import annotations
 
+import json
 from unittest.mock import AsyncMock
 
 from graphrag.core.models import Entity
@@ -88,10 +89,41 @@ async def test_set_entity_resolution_metadata_query_shape() -> None:
     assert "e.resolution_status" in cypher
     assert "e.resolution_method" in cypher
     assert "e.resolution_score" in cypher
+    assert "e.resolution_runner_ups = $runner_ups_json" in cypher
     kwargs = client.run.await_args.kwargs
     assert kwargs == {
         "name": "SpaceX", "type": "ORG", "tenant": "acme",
         "resolution_status": "auto_resolved",
         "resolution_method": "embedding",
         "resolution_score": 0.96,
+        "runner_ups_json": "[]",
     }
+
+
+async def test_set_entity_resolution_metadata_persists_runner_ups_as_json() -> None:
+    client = _client()
+
+    await client.set_entity_resolution_metadata(
+        name="SpaceX", type="ORG", tenant="acme",
+        resolution_status="auto_resolved", resolution_method="embedding",
+        resolution_score=0.96,
+        runner_ups=[("Space Exploration Corp", "ORG", 0.94), ("SpaceX Inc", "ORG", 0.93)],
+    )
+
+    kwargs = client.run.await_args.kwargs
+    runner_ups = json.loads(kwargs["runner_ups_json"])
+    assert runner_ups == [
+        {"name": "Space Exploration Corp", "type": "ORG", "score": 0.94},
+        {"name": "SpaceX Inc", "type": "ORG", "score": 0.93},
+    ]
+
+
+async def test_set_entity_resolution_metadata_omitted_runner_ups_serializes_empty() -> None:
+    client = _client()
+
+    await client.set_entity_resolution_metadata(
+        name="SpaceX", type="ORG", tenant="acme",
+        resolution_status="created_new", resolution_method="new",
+    )
+
+    assert client.run.await_args.kwargs["runner_ups_json"] == "[]"

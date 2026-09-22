@@ -311,8 +311,8 @@ class Neo4jClient:
             SET d.ingested_at     = $ingested_at,
                 d.status          = 'done',
                 d.authority_level = $authority_level,
-                d.valid_from      = $valid_from,
-                d.valid_to        = $valid_to,
+                d.valid_from      = datetime($valid_from),
+                d.valid_to        = datetime($valid_to),
                 d.source_id       = $source_id,
                 d.content_hash    = $content_hash,
                 // Three-tier governed metadata. Neo4j node properties cannot
@@ -1084,6 +1084,7 @@ class Neo4jClient:
         resolution_status: str,
         resolution_method: str,
         resolution_score: float | None = None,
+        runner_ups: list[tuple[str, str, float]] | None = None,
     ) -> None:
         """Record how a raw mention was auto-resolved onto an *existing*
         canonical Entity node (docs/IMPLEMENTATION_AUDIT.md item #8).
@@ -1095,6 +1096,13 @@ class Neo4jClient:
         merge_mentions() directly and never reach merge_entity). Reflects the
         most recent auto-resolution event that touched this entity, not a
         first-write-wins record.
+
+        ``runner_ups`` — candidates that scored above the review threshold
+        but lost to this resolution (from ``AliasRegistry.resolve()``'s or
+        ``find_duplicate_by_embedding()``'s ``with_detail=True`` return) —
+        persisted as JSON for later audit, same pattern as this file's own
+        ``metadata_envelope_json`` on Document. Not used for any live query;
+        nothing today needs to traverse "what else this almost merged into."
         """
         await self.run(
             """
@@ -1102,12 +1110,16 @@ class Neo4jClient:
             SET e.resolution_status    = $resolution_status,
                 e.resolution_method    = $resolution_method,
                 e.resolution_score     = $resolution_score,
+                e.resolution_runner_ups = $runner_ups_json,
                 e.resolution_updated_at = datetime()
             """,
             name=name, type=type, tenant=tenant,
             resolution_status=resolution_status,
             resolution_method=resolution_method,
             resolution_score=resolution_score,
+            runner_ups_json=json.dumps(
+                [{"name": n, "type": t, "score": s} for n, t, s in (runner_ups or [])]
+            ),
         )
 
     async def merge_mentions(self, chunk_id: str, entity_name: str, entity_type: str, tenant: str = "default"):
@@ -1250,8 +1262,8 @@ class Neo4jClient:
                 r.source_type      = $source_type,
                 r.constraint_type  = $constraint_type,
                 r.confidence_state = $confidence_state,
-                r.valid_from       = $valid_from,
-                r.valid_to         = $valid_to,
+                r.valid_from       = datetime($valid_from),
+                r.valid_to         = datetime($valid_to),
                 r.tenant           = $tenant,
                 // Accumulate all contributing document IDs as a list so that
                 // contradiction detection can see every source even after
@@ -1343,8 +1355,8 @@ class Neo4jClient:
                 r.source_type      = row.source_type,
                 r.constraint_type  = row.constraint_type,
                 r.confidence_state = row.confidence_state,
-                r.valid_from       = row.valid_from,
-                r.valid_to         = row.valid_to,
+                r.valid_from       = datetime(row.valid_from),
+                r.valid_to         = datetime(row.valid_to),
                 r.tenant           = $tenant,
                 r.source_doc_ids   = CASE
                     WHEN row.source_doc_id IN prior_docs THEN prior_docs

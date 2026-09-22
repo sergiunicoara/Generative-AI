@@ -6365,3 +6365,59 @@ and a string parameter must wrap the parameter in `datetime(...)` (or the
 matching temporal constructor) — the mismatch fails silently as `null`, not
 loudly as an error, so it will never surface via normal testing unless a
 live test asserts on the *data* returned, not the query string.
+
+## A177 - The A176 bug's other half: the WRITE side never stored a real `datetime` either
+
+Building docs/IMPLEMENTATION_AUDIT.md item #6 (a core, non-Energy-domain
+live out-of-order-ingestion test), a test seeding two `merge_document()`
+calls with real `valid_from`/`valid_to` and querying via `bm25_search_chunks`
+came back empty for a document that should have matched. This is a second,
+independent instance of A176's bug class — not a duplicate of it.
+
+**Root cause:** `merge_document` (`neo4j_client.py:314-315`) wrote
+`d.valid_from = $valid_from` / `d.valid_to = $valid_to` as **plain strings**
+— `graph_writer.py`'s only caller passes `doc.valid_from.isoformat()`, never
+a Cypher `datetime`. Every read-time query (`bm25_search_chunks` and
+siblings) correctly compares `d.valid_from <= datetime($valid_at)` — A176
+fixed the read side everywhere it needed fixing — but comparing a `datetime`
+to a plain `string` property is exactly the same silent-`null` semantics as
+A176, just triggered by the WRITE never producing the right type in the
+first place. `merge_relation` and `merge_relations_batch`
+(`neo4j_client.py:1253-1254`, `1346-1347`) had the identical defect for
+`RELATES_TO.valid_from`/`valid_to`. This means **any document or relation
+ever written through the real ingestion path with a non-null
+valid_from/valid_to has been unfilterable by `valid_at`**, in production,
+independent of and prior to A176's fix.
+
+**Why A176's own live test didn't catch this:** it seeded `RELATES_TO` edges
+via raw Cypher `CREATE (...)-[:RELATES_TO {valid_from: datetime("...")}]`
+directly, bypassing `merge_relation` entirely — proving the query-side fix
+correct without ever exercising the real write path the fix was meant to
+serve.
+
+**Fix:** wrap all four write sites in `datetime(...)`
+(`datetime($valid_from)`, `datetime(row.valid_from)` inside the `UNWIND` for
+the batch case — Cypher functions apply fine to a map-property expression).
+`datetime(null)` returns `null`, so the common case of an absent
+valid_from/valid_to is unaffected. Added
+`tests/e2e/test_live_core_out_of_order_ingestion.py`, which exercises the
+real `merge_document`/`merge_chunk` write path (not raw `CREATE`) and would
+have caught this immediately.
+
+**Scope explicitly not addressed here:** any document/relation already
+ingested into a real deployment before this fix has its bitemporal fields
+stored as unusable strings today — fixing the write path forward does not
+repair that. A backfill/migration decision was raised and deliberately
+deferred as a separate task, not attempted in this session. Also found (and
+separately flagged, not fixed here) the same missing-`datetime()`-cast
+pattern in `graphrag/graph/bitemporal.py`'s `as_of(vt, tt)` query functions
+— a different module, also production-used
+(`api/routes/kg/knowledge.py`), out of scope for this fix.
+
+**Rule:** A176's rule ("wrap the parameter") is necessary but not
+sufficient — when a Cypher property is compared against `datetime($x)` at
+read time, always check that every WRITE site for that same property also
+produces a real `datetime`, not just a same-shaped string. A read-side fix
+alone can look complete (and pass a test that seeds data via raw Cypher
+`datetime(...)` literals) while the actual production write path remains
+broken underneath it.

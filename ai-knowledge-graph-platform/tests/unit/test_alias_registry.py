@@ -381,3 +381,180 @@ class TestFindDuplicateByEmbeddingRequiresLexicalCorroboration:
         )
 
         assert result is None
+
+
+# ── Runner-up candidate persistence (docs/IMPLEMENTATION_AUDIT.md #5) ──────────
+# resolve()'s fuzzy branch and find_duplicate_by_embedding() both discard
+# every candidate but the winner. with_detail=True must surface the losing
+# candidates too, without changing which candidate wins or the default
+# (with_detail=False) return shape for either method.
+
+class TestResolveWithDetailRunnerUps:
+    def _registry(self, entries: dict) -> AliasRegistry:
+        neo4j = AsyncMock()
+        reg = AliasRegistry(neo4j, tenant="test")
+        reg._exact = entries
+        reg._loaded = True
+        return reg
+
+    def test_fuzzy_match_reports_runner_ups_in_descending_score_order(self):
+        from rapidfuzz import fuzz
+
+        entries = {
+            _normalize("Acme Corporation"): ("Acme Corporation", "ORG"),
+            _normalize("Acme Corp"): ("Acme Corp", "ORG"),
+            _normalize("Acme Co"): ("Acme Co", "ORG"),
+        }
+        reg = self._registry(entries)
+        raw = "Acme Corperation"  # typo of the best candidate
+        key = _normalize(raw)
+        scores = {
+            name: fuzz.ratio(key, _normalize(name))
+            for name, _ in entries.values()
+        }
+
+        result = reg.resolve(raw, with_detail=True)
+
+        assert result.method == "fuzzy"
+        winner_name = result.name
+        assert scores[winner_name] == max(scores.values())
+        runner_up_names = [n for n, _, _ in result.runner_ups]
+        assert winner_name not in runner_up_names
+        runner_up_scores = [s for _, _, s in result.runner_ups]
+        assert runner_up_scores == sorted(runner_up_scores, reverse=True)
+
+    def test_single_candidate_has_no_runner_ups(self):
+        reg = self._registry({_normalize("SpaceX Corp"): ("SpaceX Corp", "ORG")})
+        result = reg.resolve("SpaceX Corpo", with_detail=True)
+        assert result.method == "fuzzy"
+        assert result.runner_ups == ()
+
+    def test_exact_match_has_no_runner_ups(self):
+        reg = self._registry({_normalize("SpaceX"): ("SpaceX", "ORG")})
+        result = reg.resolve("SpaceX", with_detail=True)
+        assert result.method == "exact"
+        assert result.runner_ups == ()
+
+    def test_default_with_detail_false_unaffected_by_runner_ups(self):
+        """Byte-identical to the pre-runner-ups return for every caller not
+        opting into with_detail — confirms the addition is non-breaking."""
+        entries = {
+            _normalize("Acme Corporation"): ("Acme Corporation", "ORG"),
+            _normalize("Acme Corp"): ("Acme Corp", "ORG"),
+        }
+        reg = self._registry(entries)
+        result = reg.resolve("Acme Corperation")
+        assert type(result) is tuple
+        assert len(result) == 2
+
+
+class TestFindDuplicateByEmbeddingWithDetail:
+    """Re-runs TestFindDuplicateByEmbeddingRequiresLexicalCorroboration's
+    fixtures with with_detail=True to prove no default-path regression,
+    then covers the near-tie co-occurrence path."""
+
+    async def test_single_corroborated_candidate_with_detail(self):
+        neo4j = AsyncMock()
+        neo4j.run = AsyncMock(return_value=[
+            {"name": "PlastiAuto S.R.L.", "type": "SUPPLIER", "score": 0.99},
+        ])
+        reg = AliasRegistry(neo4j, tenant="automotive")
+
+        result = await reg.find_duplicate_by_embedding(
+            [0.1, 0.2], "SUPPLIER", exclude_name="PlastiAuto SRL", with_detail=True,
+        )
+
+        assert (result.name, result.type, result.score) == ("PlastiAuto S.R.L.", "SUPPLIER", 0.99)
+        assert result.runner_ups == ()
+
+    async def test_uncorroborated_row_excluded_with_detail_too(self):
+        neo4j = AsyncMock()
+        neo4j.run = AsyncMock(return_value=[
+            {"name": "Manager Achizitii", "type": "SUPPLIER", "score": 0.99},
+        ])
+        reg = AliasRegistry(neo4j, tenant="automotive")
+
+        result = await reg.find_duplicate_by_embedding(
+            [0.1, 0.2], "SUPPLIER", exclude_name="PlastiAuto SRL", with_detail=True,
+        )
+
+        assert result is None
+
+    async def test_two_corroborated_candidates_report_runner_up(self):
+        neo4j = AsyncMock()
+        neo4j.run = AsyncMock(return_value=[
+            {"name": "PlastiAuto S.R.L.", "type": "SUPPLIER", "score": 0.99},
+            {"name": "PlastiAuto SA", "type": "SUPPLIER", "score": 0.98},
+        ])
+        reg = AliasRegistry(neo4j, tenant="automotive")
+
+        result = await reg.find_duplicate_by_embedding(
+            [0.1, 0.2], "SUPPLIER", exclude_name="PlastiAuto SRL", with_detail=True,
+        )
+
+        assert (result.name, result.score) == ("PlastiAuto S.R.L.", 0.99)
+        assert result.runner_ups == (("PlastiAuto SA", "SUPPLIER", 0.98),)
+
+    async def test_near_tie_without_cooccurrence_flag_keeps_highest_score(self):
+        """Flag off (the shipped default): the tie-break never fires, no
+        matter how close the scores are or what co_mentioned_names says."""
+        neo4j = AsyncMock()
+        neo4j.run = AsyncMock(return_value=[
+            {"name": "PlastiAuto S.R.L.", "type": "SUPPLIER", "score": 0.94},
+            {"name": "PlastiAuto SA", "type": "SUPPLIER", "score": 0.935},
+        ])
+        reg = AliasRegistry(neo4j, tenant="automotive")
+        assert reg._cooccurrence_tiebreak_enabled is False  # shipped default
+
+        result = await reg.find_duplicate_by_embedding(
+            [0.1, 0.2], "SUPPLIER", exclude_name="PlastiAuto SRL", with_detail=True,
+            co_mentioned_names=["Some Co-Mentioned Entity"],
+        )
+
+        assert result.name == "PlastiAuto S.R.L."  # highest embedding score wins
+
+    async def test_near_tie_with_no_co_mentioned_names_skips_tiebreak(self):
+        """co_mentioned_names=None (the default for every caller not
+        passing it) skips the tie-break unconditionally, independent of the
+        config flag -- a second guarantee against changing existing callers'
+        behavior."""
+        neo4j = AsyncMock()
+        neo4j.run = AsyncMock(return_value=[
+            {"name": "PlastiAuto S.R.L.", "type": "SUPPLIER", "score": 0.94},
+            {"name": "PlastiAuto SA", "type": "SUPPLIER", "score": 0.935},
+        ])
+        reg = AliasRegistry(neo4j, tenant="automotive")
+        reg._cooccurrence_tiebreak_enabled = True  # even with the flag on
+
+        result = await reg.find_duplicate_by_embedding(
+            [0.1, 0.2], "SUPPLIER", exclude_name="PlastiAuto SRL", with_detail=True,
+        )
+
+        assert result.name == "PlastiAuto S.R.L."  # unchanged: no tiebreak call made
+        assert neo4j.run.call_count == 1  # only the ANN search query, no tiebreak query
+
+    async def test_near_tie_with_flag_and_cooccurrence_favors_connected_candidate(self):
+        """Flag on + a near-tie + co_mentioned_names: the candidate with
+        more shared graph structure to the co-mentioned entities wins, even
+        though it scored slightly lower on embedding similarity."""
+        neo4j = AsyncMock()
+        neo4j.run = AsyncMock(side_effect=[
+            [  # 1st call: the ANN search
+                {"name": "PlastiAuto S.R.L.", "type": "SUPPLIER", "score": 0.94},
+                {"name": "PlastiAuto SA", "type": "SUPPLIER", "score": 0.935},
+            ],
+            [  # 2nd call: the co-occurrence tiebreak query
+                {"name": "PlastiAuto S.R.L.", "cooccurrence_score": 0},
+                {"name": "PlastiAuto SA", "cooccurrence_score": 2},
+            ],
+        ])
+        reg = AliasRegistry(neo4j, tenant="automotive")
+        reg._cooccurrence_tiebreak_enabled = True
+
+        result = await reg.find_duplicate_by_embedding(
+            [0.1, 0.2], "SUPPLIER", exclude_name="PlastiAuto SRL", with_detail=True,
+            co_mentioned_names=["Bosch Romania"],
+        )
+
+        assert result.name == "PlastiAuto SA"  # won on co-occurrence, not embedding score
+        assert result.runner_ups == (("PlastiAuto S.R.L.", "SUPPLIER", 0.94),)

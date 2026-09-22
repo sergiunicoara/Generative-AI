@@ -391,6 +391,7 @@ class GraphWriter:
                     resolution_status="auto_resolved",
                     resolution_method=getattr(canonical, "method", "exact"),
                     resolution_score=getattr(canonical, "score", None),
+                    runner_ups=list(getattr(canonical, "runner_ups", ())),
                 )
                 contextual_entities.append(entity)
                 continue   # don't create a duplicate node
@@ -401,9 +402,14 @@ class GraphWriter:
                     embedding=entity.embedding,
                     entity_type=entity.type,
                     exclude_name=entity.name,
+                    with_detail=True,
+                    co_mentioned_names=[e.name for e in entities if e is not entity],
                 )
                 if dup:
-                    dup_name, dup_type, similarity = dup
+                    # dup is an EmbeddingMatch (name, type, score, runner_ups) —
+                    # index explicitly, matching this file's existing
+                    # ResolvedMatch convention above.
+                    dup_name, dup_type, similarity = dup.name, dup.type, dup.score
                     log.info(
                         "graph_writer.embedding_dedup",
                         raw=entity.name,
@@ -426,6 +432,7 @@ class GraphWriter:
                         resolution_status="auto_resolved",
                         resolution_method="embedding",
                         resolution_score=similarity,
+                        runner_ups=list(dup.runner_ups),
                     )
                     contextual_entities.append(entity)
                     continue

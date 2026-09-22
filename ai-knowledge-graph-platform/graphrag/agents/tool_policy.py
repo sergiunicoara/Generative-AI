@@ -15,6 +15,12 @@ ToolPolicy is the single gate between agent intent and tool execution:
      hold all of them (RBAC-lite without a full authz service).
   3. Argument validation — tools declare an argument schema (type + optional
      enum). Arguments that fail validation are rejected before any call.
+  3b. Tenant quota — every non-dry-run call is checked against
+     TenantQuotaStore before executing, and consumed on success. This is
+     the tool-execution-layer counterpart to api/quota.py's
+     enforce_tenant_quota FastAPI dependency, for call paths (MCP tool
+     calls, autonomous agent loops) that never go through that HTTP
+     dependency chain.
   4. Dry-run mode — if dry_run=True, the policy logs the intended call and
      returns a sentinel instead of executing. Safe for untrusted sessions.
   5. Timeout — every tool call is wrapped in asyncio.wait_for with a
@@ -40,9 +46,12 @@ from __future__ import annotations
 import asyncio
 import time
 from dataclasses import dataclass, field
-from typing import Any, Callable
+from typing import TYPE_CHECKING, Any, Callable
 
 import structlog
+
+if TYPE_CHECKING:
+    from graphrag.core.tenant_quota import TenantQuotaStore
 
 log = structlog.get_logger(__name__)
 
@@ -67,7 +76,7 @@ class ToolSpec:
 class DeniedAction:
     """Structured record for a refused tool call — never raises an exception."""
     tool:     str
-    reason:   str            # "not_allowed" | "missing_scope" | "invalid_arg" | "dry_run" | "timeout"
+    reason:   str            # "not_allowed" | "missing_scope" | "invalid_arg" | "dry_run" | "timeout" | "quota_exceeded"
     detail:   str = ""
     tenant:   str = ""
     caller_scopes: list[str] = field(default_factory=list)
@@ -158,12 +167,14 @@ class ToolPolicy:
         caller_scopes: list[str] | None = None,
         dry_run: bool = False,
         global_timeout_s: float = 30.0,
+        quota_store: "TenantQuotaStore | None" = None,
     ):
         self._tools:    dict[str, ToolSpec] = {t.name: t for t in tools}
         self._scopes:   list[str]  = caller_scopes or []
         self._dry_run:  bool       = dry_run
         self._timeout:  float      = global_timeout_s
         self._audit:    list[AuditEntry] = []
+        self._quota_store: "TenantQuotaStore | None" = quota_store
 
     # ── Public API ─────────────────────────────────────────────────────────────
 
@@ -204,6 +215,15 @@ class ToolPolicy:
         err = self._validate_args(spec, args)
         if err:
             return self._deny(tool_name, args, tenant, "invalid_arg", err, t0)
+
+        # 4b. Tenant quota — checked against whichever tenant this call
+        # actually spends against: a tool that declares its own `tenant`
+        # arg (already cross-tenant-validated above) spends THAT tenant's
+        # budget, not the caller session's nominal one.
+        effective_tenant = args.get("tenant") if "tenant" in spec.arg_schema else tenant
+        denial = await self._check_quota(tool_name, args, effective_tenant, t0)
+        if denial is not None:
+            return denial
 
         # 5. Execute with timeout
         # Force the policy-level tenant onto any tool whose schema doesn't
@@ -289,6 +309,34 @@ class ToolPolicy:
         """Return an error string on invalid args, None on success."""
         return validate_args(spec.arg_schema, args, self._scopes)
 
+    async def _check_quota(
+        self, tool_name: str, args: dict, tenant: str, t0: float,
+    ) -> "DeniedAction | None":
+        """Tool-execution-layer counterpart to api/quota.py's
+        enforce_tenant_quota FastAPI dependency — the second enforcement
+        point for call paths that never go through that HTTP dependency
+        chain (MCP tool calls, autonomous agent loops). Reuses
+        TenantQuotaStore.check()/consume() verbatim; the store itself
+        already fails open on a dead backend (unless configured strict),
+        so no second fail-open/fail-closed decision is made here.
+        """
+        from graphrag.core.tenant_quota import get_quota_store
+        from graphrag.observability.access_control_metrics import record_quota_rejected
+
+        store = self._quota_store or await get_quota_store()
+        verdict = await store.check(tenant, additional_requests=1.0)
+        if not verdict.allowed:
+            record_quota_rejected(tenant, verdict.dimension)
+            return self._deny(
+                tool_name, args, tenant, "quota_exceeded",
+                f"tenant quota exceeded on {verdict.dimension}: "
+                f"{verdict.used}/{verdict.limit} "
+                f"(resets in {verdict.reset_after_seconds}s)",
+                t0,
+            )
+        await store.consume(tenant, requests=1.0)
+        return None
+
     # ── Factory ────────────────────────────────────────────────────────────────
 
     @classmethod
@@ -296,6 +344,7 @@ class ToolPolicy:
         cls,
         caller_scopes: list[str] | None = None,
         dry_run: bool = False,
+        quota_store: "TenantQuotaStore | None" = None,
     ) -> "ToolPolicy":
         """
         Build a policy with the full GraphRAG tool registry.
@@ -436,4 +485,7 @@ class ToolPolicy:
                 },
             ),
         ]
-        return cls(tools=tools, caller_scopes=caller_scopes, dry_run=dry_run)
+        return cls(
+            tools=tools, caller_scopes=caller_scopes, dry_run=dry_run,
+            quota_store=quota_store,
+        )

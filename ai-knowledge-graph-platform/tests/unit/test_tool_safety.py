@@ -20,6 +20,7 @@ import asyncio
 import pytest
 
 from graphrag.agents.tool_policy import DeniedAction, ToolPolicy, ToolSpec
+from graphrag.core.tenant_quota import QuotaPolicy, TenantQuotaStore
 
 
 # ── Shared stubs ──────────────────────────────────────────────────────────────
@@ -44,8 +45,19 @@ async def _slow_tool(question: str = "", tenant: str = "") -> list[dict]:
     return []
 
 
-def _make_policy(scopes: list[str] | None = None, dry_run: bool = False) -> ToolPolicy:
-    """Build a test policy with the full risk-level spectrum."""
+def _make_policy(
+    scopes: list[str] | None = None,
+    dry_run: bool = False,
+    quota_store: TenantQuotaStore | None = None,
+) -> ToolPolicy:
+    """Build a test policy with the full risk-level spectrum.
+
+    Always injects a hermetic, redis_url=None (in-memory, unlimited-by-
+    default) TenantQuotaStore rather than letting ToolPolicy fall back to
+    the real process singleton (graphrag.core.tenant_quota.get_quota_store) —
+    same isolation precedent as tests/unit/test_tenant_quota.py, which never
+    exercises that singleton's real Redis config from a unit test either.
+    """
     tools = [
         # LOW RISK
         ToolSpec("local_search",  _read_tool_with_tenant, scopes=["read"],
@@ -96,7 +108,10 @@ def _make_policy(scopes: list[str] | None = None, dry_run: bool = False) -> Tool
                  timeout_s=0.05, risk="low",
                  arg_schema={"question": {"type": str}}),
     ]
-    return ToolPolicy(tools=tools, caller_scopes=scopes or [], dry_run=dry_run)
+    return ToolPolicy(
+        tools=tools, caller_scopes=scopes or [], dry_run=dry_run,
+        quota_store=quota_store or TenantQuotaStore(redis_url=None),
+    )
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -502,6 +517,7 @@ class TestTenantForcedForSchemalessTools:
             tools=[ToolSpec("probe", _capture, scopes=["read"], risk="low",
                              arg_schema={"question": {"type": str}})],
             caller_scopes=["read"],
+            quota_store=TenantQuotaStore(redis_url=None),
         )
         await p.call("probe", {"question": "q"}, tenant="automotive")
 
@@ -522,6 +538,7 @@ class TestTenantForcedForSchemalessTools:
             tools=[ToolSpec("probe", _capture, scopes=["read"], risk="low",
                              arg_schema={"question": {"type": str}})],
             caller_scopes=["read"],
+            quota_store=TenantQuotaStore(redis_url=None),
         )
         await p.call("probe", {"question": "q", "tenant": "attacker-chosen"},
                       tenant="real-tenant")
@@ -548,8 +565,111 @@ class TestTenantForcedForSchemalessTools:
             # this test can assert on the value the function actually
             # received (the point of this test).
             caller_scopes=["write", "tenant:aerospace"],
+            quota_store=TenantQuotaStore(redis_url=None),
         )
         await p.call("write_probe", {"entity_name": "Boeing", "tenant": "aerospace"},
                       tenant="unrelated-call-tenant")
 
         assert received["tenant"] == "aerospace"
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 10. Tenant quota enforced at the tool-execution layer
+# ═══════════════════════════════════════════════════════════════════════════
+
+class TestQuotaEnforced:
+    """ToolPolicy.call() is the second enforcement point for tenant quotas
+    (the first is api/quota.py's enforce_tenant_quota FastAPI dependency) —
+    covers MCP tool calls / agent loops that never go through that HTTP
+    dependency chain. Reuses TenantQuotaStore.check()/consume() verbatim;
+    these tests exercise that wiring, not the store's own logic (already
+    covered by tests/unit/test_tenant_quota.py)."""
+
+    async def test_tool_denied_when_request_quota_exhausted(self):
+        store = TenantQuotaStore(
+            redis_url=None, default_policy=QuotaPolicy(max_requests=1),
+        )
+        await store.consume("aerospace", requests=1.0)  # exhaust the ceiling
+        p = _make_policy(scopes=["read"], quota_store=store)
+
+        result = await p.call("global_search", {"question": "q"}, tenant="aerospace")
+
+        assert isinstance(result, DeniedAction)
+        assert result.reason == "quota_exceeded"
+        assert "requests" in result.detail
+
+    async def test_tool_allowed_when_under_quota(self):
+        store = TenantQuotaStore(
+            redis_url=None, default_policy=QuotaPolicy(max_requests=10),
+        )
+        p = _make_policy(scopes=["read"], quota_store=store)
+
+        result = await p.call("global_search", {"question": "q"}, tenant="aerospace")
+
+        assert not isinstance(result, DeniedAction)
+        usage = await store.usage("aerospace")
+        assert usage["requests"]["used"] == 1
+
+    async def test_cost_ceiling_denies_tool_call(self):
+        store = TenantQuotaStore(
+            redis_url=None, default_policy=QuotaPolicy(max_cost_usd=10.0),
+        )
+        # check()'s cost_usd dimension compares strictly: `used + 0.0 > ceiling`
+        # (the increment is always 0 pre-request, since real cost isn't known
+        # until after) -- so already-spent must exceed, not just equal, the
+        # ceiling to trigger a denial.
+        await store.consume("aerospace", requests=0.0, cost_usd=15.0)  # already over ceiling
+        p = _make_policy(scopes=["read"], quota_store=store)
+
+        result = await p.call("global_search", {"question": "q"}, tenant="aerospace")
+
+        assert isinstance(result, DeniedAction)
+        assert result.reason == "quota_exceeded"
+        assert "cost_usd" in result.detail
+
+    async def test_unconfigured_quota_never_denies(self):
+        """Regression guard for every other test in this file: the shipped
+        default (max_requests=0/max_cost_usd=0 = unlimited) must never
+        start denying calls just because a quota store now exists."""
+        p = _make_policy(scopes=["read"])  # default hermetic unlimited store
+
+        result = await p.call("global_search", {"question": "q"}, tenant="aerospace")
+
+        assert not isinstance(result, DeniedAction)
+
+    async def test_quota_check_uses_effective_tenant_for_schema_declared_tool(self):
+        """A tool that declares its own `tenant` arg (write/restricted
+        tools) spends THAT tenant's budget, not the caller session's
+        nominal tenant — matching the same distinction _validate_args'
+        cross-tenant guard already makes."""
+        store = TenantQuotaStore(
+            redis_url=None, default_policy=QuotaPolicy(max_requests=10),
+        )
+        p = _make_policy(
+            scopes=["write", "ingest", "tenant:target-tenant"], quota_store=store,
+        )
+
+        result = await p.call(
+            "ingest_document",
+            {"entity_name": "doc", "entity_type": "Document",
+             "tenant": "target-tenant", "doc_type": "regulatory"},
+            tenant="caller-session-tenant",
+        )
+
+        assert not isinstance(result, DeniedAction)
+        target_usage = await store.usage("target-tenant")
+        caller_usage = await store.usage("caller-session-tenant")
+        assert target_usage["requests"]["used"] == 1
+        assert caller_usage["requests"]["used"] == 0
+
+    async def test_quota_denial_recorded_in_audit_log(self):
+        store = TenantQuotaStore(
+            redis_url=None, default_policy=QuotaPolicy(max_requests=1),
+        )
+        await store.consume("aerospace", requests=1.0)
+        p = _make_policy(scopes=["read"], quota_store=store)
+
+        await p.call("global_search", {"question": "q"}, tenant="aerospace")
+
+        assert p.audit_log()[-1].reason == "quota_exceeded"
+        assert p.audit_log()[-1].outcome == "denied"

@@ -1940,8 +1940,8 @@ class Neo4jClient:
         Excludes quarantined entities. Optionally filters edges by valid_to.
         """
         temporal_filter = (
-            "AND (r.valid_from IS NULL OR r.valid_from <= $as_of) "
-            "AND (r.valid_to IS NULL OR r.valid_to > $as_of)"
+            "AND (r.valid_from IS NULL OR r.valid_from <= datetime($as_of)) "
+            "AND (r.valid_to IS NULL OR r.valid_to > datetime($as_of))"
             if as_of else ""
         )
         transaction_filter = (
@@ -1954,9 +1954,10 @@ class Neo4jClient:
             MATCH (c:Chunk {{id: cid}})-[:MENTIONS]->(e:Entity)
             WHERE coalesce(e.quarantined, false) = false
             OPTIONAL MATCH (e)-[r:RELATES_TO {{tenant: $tenant}}]-(neighbor:Entity {{tenant: $tenant}})
-            WHERE coalesce(neighbor.quarantined, false) = false {temporal_filter} {transaction_filter}
+            WITH e, neighbor,
+                 (coalesce(neighbor.quarantined, false) = false {temporal_filter} {transaction_filter}) AS neighbor_ok
             RETURN e.name AS entity, e.type AS type, e.description AS description,
-                   collect(DISTINCT neighbor.name) AS neighbors
+                   collect(DISTINCT CASE WHEN neighbor_ok THEN neighbor.name ELSE null END) AS neighbors
             """,
             chunk_ids=chunk_ids,
             tenant=tenant,
@@ -2005,8 +2006,8 @@ class Neo4jClient:
         total_cap = min(max(int(total_cap), 1), 5_000)
         temporal_filter = (
             "AND ALL(r IN relationships(path) WHERE "
-            "(r.valid_from IS NULL OR r.valid_from <= $as_of) "
-            "AND (r.valid_to IS NULL OR r.valid_to > $as_of))"
+            "(r.valid_from IS NULL OR r.valid_from <= datetime($as_of)) "
+            "AND (r.valid_to IS NULL OR r.valid_to > datetime($as_of)))"
             if as_of else ""
         )
         transaction_filter = (
@@ -2374,8 +2375,8 @@ class Neo4jClient:
         if not entities:
             return []
         temporal_filter = (
-            "AND (r.valid_from IS NULL OR r.valid_from <= $as_of) "
-            "AND (r.valid_to IS NULL OR r.valid_to > $as_of)"
+            "AND (r.valid_from IS NULL OR r.valid_from <= datetime($as_of)) "
+            "AND (r.valid_to IS NULL OR r.valid_to > datetime($as_of))"
             if as_of else ""
         )
         transaction_filter = (
@@ -2431,8 +2432,8 @@ class Neo4jClient:
         Excludes quarantined entities on either side.
         """
         temporal_filter = (
-            "AND (r.valid_from IS NULL OR r.valid_from <= $as_of) "
-            "AND (r.valid_to IS NULL OR r.valid_to > $as_of)"
+            "AND (r.valid_from IS NULL OR r.valid_from <= datetime($as_of)) "
+            "AND (r.valid_to IS NULL OR r.valid_to > datetime($as_of))"
             if as_of else ""
         )
         return await self.run(

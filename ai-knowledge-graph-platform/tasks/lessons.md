@@ -6286,3 +6286,82 @@ fragment's *text* is present proves nothing about whether it filters; only a
 live test against real data proves that, which is why
 `tests/e2e/test_live_tenant_isolation.py` now includes a real
 `LocalSearch.search()` call, not just graph-state checks.
+
+## A175 - Finishing A174's audit: `OPTIONAL MATCH ... WHERE` in `get_entity_neighbors` was fragile, not leaking — and A174's own fix (blind `WITH`) would have regressed it
+
+docs/IMPLEMENTATION_AUDIT.md item #7 asked for an exhaustive grep of every
+`OPTIONAL MATCH` immediately followed by `WHERE` in `neo4j_client.py` (A174
+only checked the three methods it was fixing). Went through all 15 instances
+in the file. 12 were already safe: either no `WHERE` follows, the `WHERE`
+already sits after an explicit `WITH`, or the `WHERE` only references
+variables newly bound by that same `OPTIONAL MATCH` (never a pre-existing
+anchor variable like `c`/`source`) — which is the one case where Cypher's
+pattern-predicate binding is actually the *intended* behavior (keep the
+anchor row, null out the optional part on no match), not a bug.
+
+`get_entity_neighbors` (`neo4j_client.py:1932`) was the one remaining
+unclear case, already flagged by A174 as "not a leak, just fragile" — its
+`WHERE coalesce(neighbor.quarantined,...) {temporal_filter} {transaction_filter}`
+only touches `neighbor`/`r` (newly-bound), so no anchor-row leak. But
+applying A174's literal fix (insert `WITH e, r, neighbor` before the
+`WHERE`) would have been wrong here: turning the `WHERE` into a genuine
+row-filter means an entity whose *only* neighbor fails the filter (quarantined,
+or outside `valid_at`/`transaction_at`) loses its entire output row — instead
+of surviving with an empty `neighbors` list, which is what every caller
+(`local_search.py` Step 6) expects for "entity has no qualifying neighbors."
+
+**Fix used instead:** `WITH e, neighbor, (<predicate>) AS neighbor_ok`, then
+`collect(DISTINCT CASE WHEN neighbor_ok THEN neighbor.name ELSE null END)`.
+This keeps the exact original null-out-don't-drop semantics but makes them
+explicit instead of relying on Cypher's implicit optional-pattern-predicate
+folding — so a later edit that adds a pre-existing-variable clause to that
+predicate can't silently turn it into A174's leak.
+
+**Rule:** A174's "insert `WITH` before `WHERE`" fix is only correct when
+dropping the row on predicate failure is the desired behavior. When the
+existing (correct) behavior is "null out the optional part, keep the row,"
+convert to `WITH ... AS flag` + `CASE WHEN flag` instead — never reach for
+the row-dropping fix reflexively just because the anti-pattern looks similar.
+
+## A176 - `datetime <= string` silently evaluates to `null`, not an error — `as_of` bitemporal filtering was dead code in four methods
+
+Found while closing docs/IMPLEMENTATION_AUDIT.md item #7 (the A174 audit):
+`get_entity_neighbors`, `get_multihop_chunks`, `get_entity_relations_subgraph`,
+and `get_relations_for_entity` in `neo4j_client.py` all built their
+`temporal_filter` string as `r.valid_from <= $as_of` / `r.valid_to > $as_of`
+— comparing a Neo4j `datetime` property directly to the raw `$as_of` string
+parameter, instead of `datetime($as_of)` like every `valid_at`-based filter
+elsewhere in the file already does.
+
+**Root cause:** Cypher does not raise on `datetime <= string`; per its
+comparison semantics for mismatched types, the whole comparison evaluates to
+`null`. `null` is not "true", so `(r.valid_to IS NULL OR r.valid_to > $as_of)`
+becomes `(false OR null)` = `null` whenever the edge actually has a
+`valid_to` set — which then propagates through the surrounding `AND` chain
+as `null`, and a `null`/false condition in a `CASE WHEN` (or the pre-A175
+`WHERE`) is treated as not-satisfied. Net effect: passing `as_of` to any of
+these four methods silently excluded **every** `RELATES_TO` edge, regardless
+of whether it was actually valid at that timestamp — a fail-closed bug (not
+a leak), but a real, silent breakage of every "as of" query through this
+path (`local_search.py` Step 6 and its multihop expansion).
+
+**Why the existing unit tests missed it:**
+`tests/unit/test_neo4j_retrieval_query_shape.py` only asserts the
+interpolated Cypher *string* contains `"r.valid_from"` — the same class of
+gap A174 already called out: a shape assertion proves nothing about whether
+the query actually filters when executed.
+
+**Fix:** wrap `$as_of` in `datetime($as_of)` in all four `temporal_filter`
+templates. Added `tests/e2e/test_live_bitemporal_as_of_filtering.py`
+(testcontainers, same pattern as `test_live_tenant_isolation.py`): seeds one
+`RELATES_TO` edge that's expired before `as_of` and one that's still valid,
+then proves `get_entity_neighbors`/`get_multihop_chunks` include only the
+valid one. Confirmed the test actually catches the bug by reverting the fix
+(`git stash` on just `neo4j_client.py`) and re-running — all three new tests
+failed with empty neighbor/hop sets before the fix, passed after.
+
+**Rule:** any Cypher comparison between a stored `datetime`/`date` property
+and a string parameter must wrap the parameter in `datetime(...)` (or the
+matching temporal constructor) — the mismatch fails silently as `null`, not
+loudly as an error, so it will never surface via normal testing unless a
+live test asserts on the *data* returned, not the query string.

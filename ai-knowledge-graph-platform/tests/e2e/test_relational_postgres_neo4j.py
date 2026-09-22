@@ -119,6 +119,7 @@ class TestRelationalPostgresToNeo4j:
         client._driver = driver
         client._filtered_vector_search = False
         client._filtered_vector_indexes = set()
+        client._in_flight = 0
         mapping = RelationalGraphMapping(
             id="sustainability-e2e",
             version="1.0.0",

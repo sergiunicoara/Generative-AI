@@ -76,6 +76,25 @@ def main() -> None:
             venv_dir = Path(temporary) / "venv"
             venv.EnvBuilder(with_pip=True, clear=True).create(venv_dir)
             python = str(venv_dir / ("Scripts/python.exe" if os.name == "nt" else "bin/python"))
+            if sys.platform in {"linux", "win32"}:
+                # The default PyPI torch wheel now declares CUDA runtime
+                # packages even when these CPU-only verification jobs cannot
+                # use them. Install the matching official CPU wheel first;
+                # the lockfile's `torch==X.Y.Z` pin accepts its `+cpu` local
+                # version, and pip check can then validate the actual runtime
+                # dependency set without pulling a CUDA toolkit into CI.
+                locked_torch = next(
+                    (line.split("==", 1)[1].strip() for line in (project / "requirements.lock").read_text().splitlines()
+                     if line.startswith("torch==")),
+                    None,
+                )
+                if locked_torch is None:
+                    raise RuntimeError("requirements.lock does not pin torch")
+                _run(
+                    [python, "-m", "pip", "install", "--disable-pip-version-check", "--no-deps",
+                     "--index-url", "https://download.pytorch.org/whl/cpu", f"torch=={locked_torch}+cpu"],
+                    cwd=project,
+                )
             # setuptools isn't in requirements.lock -- pip-compile excludes it
             # by policy (pinning your own build toolchain via a normal
             # requirements file is its own hazard), so it's whatever version

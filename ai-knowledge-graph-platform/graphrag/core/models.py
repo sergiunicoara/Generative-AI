@@ -215,6 +215,11 @@ class Entity(BaseModel):
     # shared GraphWriter validates these against an injected canonical model
     # before Neo4j receives them; ordinary extraction paths leave this empty.
     semantic_properties: dict[str, Any] = Field(default_factory=dict)
+    # ── Entity-resolution audit trail (docs/IMPLEMENTATION_AUDIT.md #8) ────────
+    # Set by graph_writer.py's write_entities() per resolution branch; empty
+    # for any caller that never routes through that resolution logic.
+    resolution_status: str = ""       # "auto_resolved" | "needs_review" | "created_new"
+    resolution_method: str = ""       # "exact" | "fuzzy" | "embedding" | "new"
 
     @property
     def canonical_identity(self) -> tuple[str, str] | None:

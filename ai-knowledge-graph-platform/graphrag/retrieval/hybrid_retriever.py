@@ -38,6 +38,7 @@ from graphrag.retrieval.adaptive_router import AdaptiveRetrievalRouter
 from graphrag.retrieval.sufficiency import assess_retrieval_sufficiency, abstention_message
 from graphrag.retrieval.evidence_bundle import build_evidence_bundle
 from graphrag.observability.budgets import check_budget
+from graphrag.observability.correlation import tenant_context
 from graphrag.observability.cost_attribution import CostEvent, record_cost_event
 from graphrag.retrieval.session_context import get_session_context
 from graphrag.retrieval.query_cache import (
@@ -367,6 +368,7 @@ class HybridRetriever:
         query_id: str = "",
         valid_at: str | None = None,
         transaction_at: str | None = None,
+        include_superseded: bool = True,
         retrieval_profile: str = "full",
         config_overrides: dict | None = None,
         correlation_id: str = "",
@@ -376,561 +378,581 @@ class HybridRetriever:
         requested_mode = mode
         routing_reason = "explicit_mode"
 
-        # Per-tenant config: merge this tenant's overrides over the global
-        # retrieval defaults (mirrors LocalSearch.search — resolved from
-        # self._cfg). Governs the knobs read below: query-rewrite gate, hybrid
-        # weights, the context top_k that decides how many chunks reach the LLM,
-        # claim verification, agentic fallback. Empty tenant_overrides ⇒ global.
-        profile_overrides = retrieval_profile_overrides(retrieval_profile)
-        # Evaluation adapters may compare declared route knobs without adding
-        # another public retrieval mode. Callers must record these overrides
-        # with their dataset/run metadata; they participate in the cache key.
-        if config_overrides:
-            profile_overrides = {**profile_overrides, **config_overrides}
-        cfg = {**resolve_tenant_config(self._cfg, tenant), **profile_overrides}
-        capture_trajectory = bool(cfg.get("trajectory_capture_enabled", True))
-        access_context = access_context or AccessContext()
-        acl_enforced = bool(get_settings().access_control.get("enabled", False))
-        if acl_enforced:
-            # Community summaries and agentic graph expansion are derived
-            # artifacts. Until ACLs are materialized on them, avoid a
-            # structural side channel and keep only filtered local retrieval.
-            cfg = {**cfg, "agentic_fallback": False}
-        if retrieval_profile == "vector_only":
-            mode = "local"
-            routing_reason = "retrieval_profile"
-        plan = retrieval_plan(question)
-        if mode == "hybrid" and cfg.get("query_planner_enabled", False):
-            # Bug fix 2026-08-17 (found while diagnosing NEG-03, see
-            # docs/audit-2026-08-13.md "What's left"): this block has computed
-            # a per-query-class top_k since the planner/adaptive-router were
-            # added, but every downstream self._local.search()/
-            # self._global.search() call below passed config_overrides=
-            # profile_overrides (the ORIGINAL, pre-planner dict) instead of
-            # this updated `cfg` — so the computed top_k never reached
-            # LocalSearch, and separately never touched `rerank_top_k`
-            # either (a same-named but distinct cutoff LocalSearch's own
-            # internal reranker and this function's context_builder call
-            # both read independently). Net effect: query_planner_enabled
-            # has been a no-op for top_k since it shipped — it correctly
-            # switched `mode` (confirmed: query_class-appropriate steps like
-            # "Graph expansion" do appear in live traces) but never widened
-            # or narrowed how many chunks reach the LLM. Only "negative"
-            # (added this session for NEG-03) is scoped tightly enough (1 of
-            # 34 golden questions matches its trigger) to fix here with a
-            # bounded, auditable blast radius; before touching this for
-            # relational/contradiction/multi_hop too, rerun the full golden
-            # eval — this exact lever has a documented regression history
-            # (see rerank_top_k's and local_top_k's comments below in
-            # settings.yml: A124/A125, and local_top_k=15 breaking AUT-02/
-            # NEG-02 on 2026-08-14).
-            if cfg.get("adaptive_router_enabled", True):
-                try:
-                    route = await self._adaptive_router.choose(question, tenant)
-                    mode = route.mode
-                    routing_reason = route.reason
-                    cfg = {**cfg, "local_top_k": route.top_k}
-                except Exception as exc:
-                    mode = plan["mode"]
-                    routing_reason = "planner_fail_open"
-                    cfg = {**cfg, "local_top_k": plan["top_k"]}
-                    log.warning("hybrid_retriever.adaptive_router_failed", error=str(exc)[:200])
-            else:
-                mode = plan["mode"]
-                routing_reason = "keyword_planner"
-                cfg = {**cfg, "local_top_k": plan["top_k"]}
-            if plan["query_class"] == "negative":
-                cfg = {**cfg, "rerank_top_k": cfg["local_top_k"]}
-                profile_overrides = {**profile_overrides, **cfg}
-            log.info("hybrid_retriever.query_plan", query_class=plan["query_class"], mode=mode,
-                     top_k=cfg["local_top_k"], fallback=plan["fallback"],
-                     routing_reason=routing_reason)
+        # Bitemporal default: an ordinary query with no valid_at supplied
+        # previously reached Neo4j as `$valid_at IS NULL`, which short-
+        # circuits the WHERE clause's valid_from/valid_to check to always-
+        # true (neo4j_client.py's vector/chunk search Cypher) -- so expired
+        # or not-yet-superseded-but-outdated evidence could enter results
+        # for every "normal" query, not just explicit historical ones.
+        # Ordinary queries should mean "as of right now" by default;
+        # `explicit_temporal_query` is captured BEFORE this default is
+        # applied so downstream logic that means "did the caller ask for a
+        # specific point in time" (the agentic-fallback gate a few hundred
+        # lines below) keeps its original meaning -- it must stay False for
+        # a defaulted "now" query, since that's not what it was built to
+        # detect.
+        explicit_temporal_query = bool(valid_at or transaction_at)
+        if valid_at is None:
+            valid_at = datetime.now(timezone.utc).isoformat()
 
-        from graphrag.retrieval.result_store import get_result_store
-        _store = get_result_store() if query_id else None
-
-        async def _step(msg: str):
-            if _store and query_id:
-                await _store.push_progress(query_id, msg)
-
-        answer_cache = None
-        cache_context = None
-        if (
-            query_id
-            and not session_id
-            and cfg.get("semantic_answer_cache_enabled", False)
-        ):
-            try:
-                corpus_state = await get_neo4j().get_corpus_state(tenant)
-                if not corpus_state.get("updating", False):
-                    cache_context = QueryCacheContext(
-                        corpus_revision=int(corpus_state.get("revision", 0)),
-                        requested_mode=requested_mode,
-                        effective_mode=mode,
-                        model_route=get_generation_route(),
-                        prompt_version=_PROMPT_VERSION,
-                        retrieval_config=_cache_retrieval_config(cfg),
-                        ontology_version=_ONTOLOGY_VERSION,
-                        valid_at=valid_at,
-                        transaction_at=transaction_at,
-                        access_fingerprint=(access_context.fingerprint if acl_enforced else "tenant-default"),
-                    )
-                    answer_cache = await get_query_cache()
-                    cached = await answer_cache.get(question, tenant, cache_context)
-                    if cached:
-                        result = QueryResult.model_validate(cached["result"])
-                        result.query_id = query_id
-                        result.question = question
-                        result.cache_hit = True
-                        result.cache_key = cached["cache_key"]
-                        result.source_query_id = cached["source_query_id"]
-                        result.source_trace_id = cached["source_trace_id"]
-                        result.latency_ms = (time.monotonic() - t0) * 1000
-                        result.correlation_id = correlation_id
-                        result.routing_reason = routing_reason
-                        await _step("Answer cache hit; original governed trace reused")
-                        # Genuinely free -- a cache hit makes no LLM call.
-                        record_cost_event(CostEvent(
-                            tenant=tenant, stage="answer_cache", provider="redis",
-                            model=result.model_version, cost_usd=0.0,
-                            latency_ms=result.latency_ms,
-                        ))
-                        return result
+        with tenant_context(tenant):
+            # Per-tenant config: merge this tenant's overrides over the global
+            # retrieval defaults (mirrors LocalSearch.search — resolved from
+            # self._cfg). Governs the knobs read below: query-rewrite gate, hybrid
+            # weights, the context top_k that decides how many chunks reach the LLM,
+            # claim verification, agentic fallback. Empty tenant_overrides ⇒ global.
+            profile_overrides = retrieval_profile_overrides(retrieval_profile)
+            # Evaluation adapters may compare declared route knobs without adding
+            # another public retrieval mode. Callers must record these overrides
+            # with their dataset/run metadata; they participate in the cache key.
+            if config_overrides:
+                profile_overrides = {**profile_overrides, **config_overrides}
+            cfg = {**resolve_tenant_config(self._cfg, tenant), **profile_overrides}
+            capture_trajectory = bool(cfg.get("trajectory_capture_enabled", True))
+            access_context = access_context or AccessContext()
+            acl_enforced = bool(get_settings().access_control.get("enabled", False))
+            if acl_enforced:
+                # Community summaries and agentic graph expansion are derived
+                # artifacts. Until ACLs are materialized on them, avoid a
+                # structural side channel and keep only filtered local retrieval.
+                cfg = {**cfg, "agentic_fallback": False}
+            if retrieval_profile == "vector_only":
+                mode = "local"
+                routing_reason = "retrieval_profile"
+            plan = retrieval_plan(question)
+            if mode == "hybrid" and cfg.get("query_planner_enabled", False):
+                # Bug fix 2026-08-17 (found while diagnosing NEG-03, see
+                # docs/audit-2026-08-13.md "What's left"): this block has computed
+                # a per-query-class top_k since the planner/adaptive-router were
+                # added, but every downstream self._local.search()/
+                # self._global.search() call below passed config_overrides=
+                # profile_overrides (the ORIGINAL, pre-planner dict) instead of
+                # this updated `cfg` — so the computed top_k never reached
+                # LocalSearch, and separately never touched `rerank_top_k`
+                # either (a same-named but distinct cutoff LocalSearch's own
+                # internal reranker and this function's context_builder call
+                # both read independently). Net effect: query_planner_enabled
+                # has been a no-op for top_k since it shipped — it correctly
+                # switched `mode` (confirmed: query_class-appropriate steps like
+                # "Graph expansion" do appear in live traces) but never widened
+                # or narrowed how many chunks reach the LLM. Only "negative"
+                # (added this session for NEG-03) is scoped tightly enough (1 of
+                # 34 golden questions matches its trigger) to fix here with a
+                # bounded, auditable blast radius; before touching this for
+                # relational/contradiction/multi_hop too, rerun the full golden
+                # eval — this exact lever has a documented regression history
+                # (see rerank_top_k's and local_top_k's comments below in
+                # settings.yml: A124/A125, and local_top_k=15 breaking AUT-02/
+                # NEG-02 on 2026-08-14).
+                if cfg.get("adaptive_router_enabled", True):
+                    try:
+                        route = await self._adaptive_router.choose(question, tenant)
+                        mode = route.mode
+                        routing_reason = route.reason
+                        cfg = {**cfg, "local_top_k": route.top_k}
+                    except Exception as exc:
+                        mode = plan["mode"]
+                        routing_reason = "planner_fail_open"
+                        cfg = {**cfg, "local_top_k": plan["top_k"]}
+                        log.warning("hybrid_retriever.adaptive_router_failed", error=str(exc)[:200])
                 else:
-                    log.info("query_cache.bypassed_corpus_updating", tenant=tenant)
-            except Exception as exc:
-                log.warning("query_cache.lookup_failed", tenant=tenant, error=str(exc)[:200])
+                    mode = plan["mode"]
+                    routing_reason = "keyword_planner"
+                    cfg = {**cfg, "local_top_k": plan["top_k"]}
+                if plan["query_class"] == "negative":
+                    cfg = {**cfg, "rerank_top_k": cfg["local_top_k"]}
+                    profile_overrides = {**profile_overrides, **cfg}
+                log.info("hybrid_retriever.query_plan", query_class=plan["query_class"], mode=mode,
+                         top_k=cfg["local_top_k"], fallback=plan["fallback"],
+                         routing_reason=routing_reason)
 
-        async def _store_governed_result(result: QueryResult, trace_id: str | None) -> None:
-            if not answer_cache or not cache_context or not trace_id or not result.citations:
-                return
-            key = await answer_cache.set(
-                question,
-                tenant,
-                cache_context,
-                result.model_dump(mode="json"),
-                source_query_id=query_id,
-                source_trace_id=trace_id,
-                entities_used=list(result.citations),
-            )
-            result.cache_key = key
-            result.source_query_id = query_id
-            result.source_trace_id = trace_id
+            from graphrag.retrieval.result_store import get_result_store
+            _store = get_result_store() if query_id else None
 
-        local_results = {}
-        global_results = {}
+            async def _step(msg: str):
+                if _store and query_id:
+                    await _store.push_progress(query_id, msg)
 
-        # ── Stage 1: query rewrite ─────────────────────────────────────────────
-        # Expand/normalize the query for retrieval only. The original `question`
-        # is kept for answer synthesis and evaluation — we rewrite what we search
-        # with, never what we answer or grade against. Fails open to `question`.
-        search_query = question
-        if cfg.get("query_rewrite_enabled", True):
-            search_query = await self._rewriter.rewrite(question, tenant=tenant)
-            if search_query != question:
-                await _step(f"📝 Query expanded → {search_query[:60]}")
-
-        retrieval_t0 = time.monotonic()
-        if mode == "hybrid":
-            # Local and global search share no data dependency, so run them
-            # concurrently instead of back-to-back — this hides global
-            # search's latency behind local search's rather than adding to
-            # it. TaskGroup (not gather) so a failing branch cancels its
-            # sibling instead of leaving it orphaned.
-            await _step("🔍 BM25 + vector search in graph...")
-            await _step("🕸️ GNN scoring — 2-hop traversal...")
-            await _step("🕸️ Graph expansion (Leiden communities)...")
-            try:
-                async with asyncio.TaskGroup() as tg:
-                    local_task = tg.create_task(
-                        self._local.search(
-                            search_query,
-                            session_id=session_id,
-                            tenant=tenant,
+            answer_cache = None
+            cache_context = None
+            if (
+                query_id
+                and not session_id
+                and cfg.get("semantic_answer_cache_enabled", False)
+            ):
+                try:
+                    corpus_state = await get_neo4j().get_corpus_state(tenant)
+                    if not corpus_state.get("updating", False):
+                        cache_context = QueryCacheContext(
+                            corpus_revision=int(corpus_state.get("revision", 0)),
+                            requested_mode=requested_mode,
+                            effective_mode=mode,
+                            model_route=get_generation_route(),
+                            prompt_version=_PROMPT_VERSION,
+                            retrieval_config=_cache_retrieval_config(cfg),
+                            ontology_version=_ONTOLOGY_VERSION,
                             valid_at=valid_at,
                             transaction_at=transaction_at,
-                            config_overrides=profile_overrides,
-                            access_context=access_context,
+                            access_fingerprint=(access_context.fingerprint if acl_enforced else "tenant-default"),
                         )
-                    )
-                    global_task = tg.create_task(
-                        self._global.search(
-                            search_query,
-                            tenant=tenant,
-                            valid_at=valid_at,
-                            transaction_at=transaction_at,
-                            config_overrides=profile_overrides,
-                            access_context=access_context,
-                        )
-                    )
-            except ExceptionGroup as eg:
-                # TaskGroup always wraps failures in an ExceptionGroup, even a
-                # single one. rabbitmq_client.py logs type(exc).__name__ for
-                # DLQ diagnostics — unwrap the common single-failure case so
-                # that still sees the real exception type (e.g.
-                # APIStatusError), not "ExceptionGroup". Only a genuine
-                # double-failure (both branches raising at once) surfaces as
-                # a group.
-                if len(eg.exceptions) == 1:
-                    raise eg.exceptions[0] from eg
-                raise
-            local_results = local_task.result()
-            global_results = global_task.result()
-            n_reranked = cfg.get("rerank_top_k", 5)
-            await _step(f"📊 Cross-encoder reranking → top {n_reranked} chunks")
-        elif mode == "local":
-            await _step("🔍 BM25 + vector search in graph...")
-            await _step("🕸️ GNN scoring — 2-hop traversal...")
-            local_results = await self._local.search(
-                search_query,
-                session_id=session_id,
-                tenant=tenant,
-                valid_at=valid_at,
-                transaction_at=transaction_at,
-                config_overrides=profile_overrides,
-                access_context=access_context,
-            )
-            n_reranked = cfg.get("rerank_top_k", 5)
-            await _step(f"📊 Cross-encoder reranking → top {n_reranked} chunks")
-        elif mode == "global":
-            await _step("🕸️ Graph expansion (Leiden communities)...")
-            global_results = await self._global.search(
-                search_query,
-                tenant=tenant,
-                valid_at=valid_at,
-                transaction_at=transaction_at,
-                config_overrides=profile_overrides,
-                access_context=access_context,
-            )
+                        answer_cache = await get_query_cache()
+                        cached = await answer_cache.get(question, tenant, cache_context)
+                        if cached:
+                            result = QueryResult.model_validate(cached["result"])
+                            result.query_id = query_id
+                            result.question = question
+                            result.cache_hit = True
+                            result.cache_key = cached["cache_key"]
+                            result.source_query_id = cached["source_query_id"]
+                            result.source_trace_id = cached["source_trace_id"]
+                            result.latency_ms = (time.monotonic() - t0) * 1000
+                            result.correlation_id = correlation_id
+                            result.routing_reason = routing_reason
+                            await _step("Answer cache hit; original governed trace reused")
+                            # Genuinely free -- a cache hit makes no LLM call.
+                            record_cost_event(CostEvent(
+                                tenant=tenant, stage="answer_cache", provider="redis",
+                                model=result.model_version, cost_usd=0.0,
+                                latency_ms=result.latency_ms,
+                            ))
+                            return result
+                    else:
+                        log.info("query_cache.bypassed_corpus_updating", tenant=tenant)
+                except Exception as exc:
+                    log.warning("query_cache.lookup_failed", tenant=tenant, error=str(exc)[:200])
 
-        primary_step: RetrievalStep | None = None
-        if capture_trajectory:
-            local_evidence = evidence_ids(local_results)
-            community_evidence = [
-                f"community:{identifier}"
-                for community in global_results.get("communities", [])
-                if (identifier := (
-                    community.get("community_id")
-                    or community.get("id")
-                    or community.get("title")
-                ))
-            ]
-            observed_evidence = list(dict.fromkeys(local_evidence + community_evidence))
-            primary_step = RetrievalStep(
-                step=1,
-                action="search",
-                query=search_query,
-                surfaces=surfaces_for_mode(
-                    mode, has_global=bool(global_results.get("communities")),
-                    text_enabled=bool(cfg.get("bm25_enabled", True)),
-                    graph_enabled=bool(
-                        cfg.get("multihop_depth", 2) > 0
-                        or cfg.get("entity_context_enabled", True)
-                        or cfg.get("gnn_enabled", True)
-                    ),
-                ),
-                evidence_ids=observed_evidence,
-                new_evidence_ids=observed_evidence,
-                graph_edges=graph_edge_ids(local_results),
-                outcome="evidence_found" if observed_evidence else "no_evidence",
-                latency_ms=(time.monotonic() - retrieval_t0) * 1000,
-            )
-
-        await self._apply_retrieval_feedback(local_results, tenant, cfg)
-
-        # Warn the LLM about entities in this result set that are the subject
-        # of an open, unresolved contradiction — otherwise a disputed fact can
-        # be retrieved and stated as settled with no signal it's contested.
-        # Reuses referenced_entities already computed by LocalSearch.search()
-        # — no extra retrieval-stage cost beyond the one Conflict lookup.
-        conflicts: list[dict] = []
-        if cfg.get("conflict_annotation_enabled", True):
-            referenced_entities = local_results.get("referenced_entities", [])
-            if referenced_entities:
-                conflicts = await self._contradiction.get_open_conflicts_for_entities(
-                    referenced_entities, tenant=tenant
+            async def _store_governed_result(result: QueryResult, trace_id: str | None) -> None:
+                if not answer_cache or not cache_context or not trace_id or not result.citations:
+                    return
+                key = await answer_cache.set(
+                    question,
+                    tenant,
+                    cache_context,
+                    result.model_dump(mode="json"),
+                    source_query_id=query_id,
+                    source_trace_id=trace_id,
+                    entities_used=list(result.citations),
                 )
-                if conflicts:
-                    await _step(f"⚠️ {len(conflicts)} unresolved conflict(s) flagged")
+                result.cache_key = key
+                result.source_query_id = query_id
+                result.source_trace_id = trace_id
 
-        await _step("✍️ Synthesising answer with LLM...")
-        evidence_count = len(local_results.get("referenced_chunks", []))
-        if evidence_count <= 0 or conflicts:
-            policy_result = PolicyResult.ESCALATE
-            policy_reason_code = (
-                "no_authorized_evidence" if evidence_count <= 0 and acl_enforced
-                else "missing_evidence" if evidence_count <= 0
-                else "unresolved_conflict"
-            )
-        else:
-            policy_result = PolicyResult.ALLOW
-            policy_reason_code = "evidence_captured"
+            local_results = {}
+            global_results = {}
 
-        # Corpus document names, so ContextBuilder can resolve entity-form
-        # citations ("AD 2024-01-02") back to the document they name
-        # ("FAA-AD-2024-01-02") — see its build() comment. Fetched per query
-        # rather than cached: the set changes on re-ingestion, and this
-        # mirrors the existing per-query fetch the named-document boost
-        # already does (local_search.py). Small indexed lookup. Fails open —
-        # citations simply keep their pre-2026-08-17 form if it errors, since
-        # a citation-naming refinement must never take down a query.
-        document_names: list[str] = []
-        try:
-            document_names = await get_neo4j().get_document_filenames(
-                tenant=tenant, access_context=access_context,
-            )
-        except Exception as exc:  # noqa: BLE001 — cosmetic enrichment, never fatal
-            log.warning("hybrid_retriever.document_names_failed", error=str(exc)[:160])
+            # ── Stage 1: query rewrite ─────────────────────────────────────────────
+            # Expand/normalize the query for retrieval only. The original `question`
+            # is kept for answer synthesis and evaluation — we rewrite what we search
+            # with, never what we answer or grade against. Fails open to `question`.
+            search_query = question
+            if cfg.get("query_rewrite_enabled", True):
+                search_query = await self._rewriter.rewrite(question, tenant=tenant)
+                if search_query != question:
+                    await _step(f"📝 Query expanded → {search_query[:60]}")
 
-        context, citations = self._context_builder.build(
-            local_results=local_results,
-            global_results=global_results,
-            document_names=document_names,
-            weights=(
-                cfg.get("hybrid_weight_local", 0.6),
-                cfg.get("hybrid_weight_global", 0.4),
-            ),
-            top_k=cfg.get("rerank_top_k", 5),
-            conflicts=conflicts,
-            hop_reserved_slots=cfg.get("context_hop_reserved_slots", 0),
-            hop_reserved_min_gnn=cfg.get("context_hop_reserved_min_gnn", 0.3),
-        )
+            retrieval_t0 = time.monotonic()
+            if mode == "hybrid":
+                # Local and global search share no data dependency, so run them
+                # concurrently instead of back-to-back — this hides global
+                # search's latency behind local search's rather than adding to
+                # it. TaskGroup (not gather) so a failing branch cancels its
+                # sibling instead of leaving it orphaned.
+                await _step("🔍 BM25 + vector search in graph...")
+                await _step("🕸️ GNN scoring — 2-hop traversal...")
+                await _step("🕸️ Graph expansion (Leiden communities)...")
+                try:
+                    async with asyncio.TaskGroup() as tg:
+                        local_task = tg.create_task(
+                            self._local.search(
+                                search_query,
+                                session_id=session_id,
+                                tenant=tenant,
+                                valid_at=valid_at,
+                                transaction_at=transaction_at,
+                                include_superseded=include_superseded,
+                                config_overrides=profile_overrides,
+                                access_context=access_context,
+                            )
+                        )
+                        global_task = tg.create_task(
+                            self._global.search(
+                                search_query,
+                                tenant=tenant,
+                                valid_at=valid_at,
+                                transaction_at=transaction_at,
+                                config_overrides=profile_overrides,
+                                access_context=access_context,
+                            )
+                        )
+                except ExceptionGroup as eg:
+                    # TaskGroup always wraps failures in an ExceptionGroup, even a
+                    # single one. rabbitmq_client.py logs type(exc).__name__ for
+                    # DLQ diagnostics — unwrap the common single-failure case so
+                    # that still sees the real exception type (e.g.
+                    # APIStatusError), not "ExceptionGroup". Only a genuine
+                    # double-failure (both branches raising at once) surfaces as
+                    # a group.
+                    if len(eg.exceptions) == 1:
+                        raise eg.exceptions[0] from eg
+                    raise
+                local_results = local_task.result()
+                global_results = global_task.result()
+                n_reranked = cfg.get("rerank_top_k", 5)
+                await _step(f"📊 Cross-encoder reranking → top {n_reranked} chunks")
+            elif mode == "local":
+                await _step("🔍 BM25 + vector search in graph...")
+                await _step("🕸️ GNN scoring — 2-hop traversal...")
+                local_results = await self._local.search(
+                    search_query,
+                    session_id=session_id,
+                    tenant=tenant,
+                    valid_at=valid_at,
+                    transaction_at=transaction_at,
+                    include_superseded=include_superseded,
+                    config_overrides=profile_overrides,
+                    access_context=access_context,
+                )
+                n_reranked = cfg.get("rerank_top_k", 5)
+                await _step(f"📊 Cross-encoder reranking → top {n_reranked} chunks")
+            elif mode == "global":
+                await _step("🕸️ Graph expansion (Leiden communities)...")
+                global_results = await self._global.search(
+                    search_query,
+                    tenant=tenant,
+                    valid_at=valid_at,
+                    transaction_at=transaction_at,
+                    config_overrides=profile_overrides,
+                    access_context=access_context,
+                )
 
-        sufficiency = assess_retrieval_sufficiency(
-            chunks=local_results.get("chunks", []),
-            citations=citations,
-            conflicts=conflicts,
-            min_evidence=int(cfg.get("retrieval_sufficiency_min_evidence", 1)),
-            min_average_score=float(cfg.get("retrieval_sufficiency_min_average_score", 0.0)),
-        )
-        evidence_bundle = build_evidence_bundle(
-            local_results=local_results,
-            global_results=global_results,
-            citations=citations,
-            valid_at=valid_at,
-            transaction_at=transaction_at,
-        )
-        sufficiency_enabled = cfg.get("retrieval_sufficiency_enabled", True)
-        if sufficiency_enabled:
-            log.info("hybrid_retriever.retrieval_sufficiency", **sufficiency.as_dict())
-            if not sufficiency.sufficient:
+            primary_step: RetrievalStep | None = None
+            if capture_trajectory:
+                local_evidence = evidence_ids(local_results)
+                community_evidence = [
+                    f"community:{identifier}"
+                    for community in global_results.get("communities", [])
+                    if (identifier := (
+                        community.get("community_id")
+                        or community.get("id")
+                        or community.get("title")
+                    ))
+                ]
+                observed_evidence = list(dict.fromkeys(local_evidence + community_evidence))
+                primary_step = RetrievalStep(
+                    step=1,
+                    action="search",
+                    query=search_query,
+                    surfaces=surfaces_for_mode(
+                        mode, has_global=bool(global_results.get("communities")),
+                        text_enabled=bool(cfg.get("bm25_enabled", True)),
+                        graph_enabled=bool(
+                            cfg.get("multihop_depth", 2) > 0
+                            or cfg.get("entity_context_enabled", True)
+                            or cfg.get("gnn_enabled", True)
+                        ),
+                    ),
+                    evidence_ids=observed_evidence,
+                    new_evidence_ids=observed_evidence,
+                    graph_edges=graph_edge_ids(local_results),
+                    outcome="evidence_found" if observed_evidence else "no_evidence",
+                    latency_ms=(time.monotonic() - retrieval_t0) * 1000,
+                )
+
+            await self._apply_retrieval_feedback(local_results, tenant, cfg)
+
+            # Warn the LLM about entities in this result set that are the subject
+            # of an open, unresolved contradiction — otherwise a disputed fact can
+            # be retrieved and stated as settled with no signal it's contested.
+            # Reuses referenced_entities already computed by LocalSearch.search()
+            # — no extra retrieval-stage cost beyond the one Conflict lookup.
+            conflicts: list[dict] = []
+            if cfg.get("conflict_annotation_enabled", True):
+                referenced_entities = local_results.get("referenced_entities", [])
+                if referenced_entities:
+                    conflicts = await self._contradiction.get_open_conflicts_for_entities(
+                        referenced_entities, tenant=tenant
+                    )
+                    if conflicts:
+                        await _step(f"⚠️ {len(conflicts)} unresolved conflict(s) flagged")
+
+            await _step("✍️ Synthesising answer with LLM...")
+            evidence_count = len(local_results.get("referenced_chunks", []))
+            if evidence_count <= 0 or conflicts:
                 policy_result = PolicyResult.ESCALATE
-                policy_reason_code = sufficiency.reason_code
+                policy_reason_code = (
+                    "no_authorized_evidence" if evidence_count <= 0 and acl_enforced
+                    else "missing_evidence" if evidence_count <= 0
+                    else "unresolved_conflict"
+                )
+            else:
+                policy_result = PolicyResult.ALLOW
+                policy_reason_code = "evidence_captured"
 
-        if (
-            sufficiency_enabled
-            and cfg.get("retrieval_sufficiency_abstain_enabled", False)
-            and not sufficiency.sufficient
-        ):
-            answer = abstention_message(sufficiency.reason_code)
-            citations = []
-        else:
-            answer = await get_llm().generate(
-                answer_prompt(cfg).format(
-                    context=escape_prompt_data(context),
-                    question=question,
+            # Corpus document names, so ContextBuilder can resolve entity-form
+            # citations ("AD 2024-01-02") back to the document they name
+            # ("FAA-AD-2024-01-02") — see its build() comment. Fetched per query
+            # rather than cached: the set changes on re-ingestion, and this
+            # mirrors the existing per-query fetch the named-document boost
+            # already does (local_search.py). Small indexed lookup. Fails open —
+            # citations simply keep their pre-2026-08-17 form if it errors, since
+            # a citation-naming refinement must never take down a query.
+            document_names: list[str] = []
+            try:
+                document_names = await get_neo4j().get_document_filenames(
+                    tenant=tenant, access_context=access_context,
+                )
+            except Exception as exc:  # noqa: BLE001 — cosmetic enrichment, never fatal
+                log.warning("hybrid_retriever.document_names_failed", error=str(exc)[:160])
+
+            context, citations = self._context_builder.build(
+                local_results=local_results,
+                global_results=global_results,
+                document_names=document_names,
+                weights=(
+                    cfg.get("hybrid_weight_local", 0.6),
+                    cfg.get("hybrid_weight_global", 0.4),
                 ),
-            ) or "Insufficient context to answer this question."
-        # See llm_utils.normalize_dashes — Groq's gpt-oss models write
-        # document IDs/dates with U+2011 NON-BREAKING HYPHEN instead of
-        # ASCII "-", found 2026-08-17 diagnosing golden-eval failures.
-        answer = normalize_dashes(answer)
-        answer, citations = apply_answer_policy(
-            answer, context, question, citations, document_names, cfg,
-        )
+                top_k=cfg.get("rerank_top_k", 5),
+                conflicts=conflicts,
+                hop_reserved_slots=cfg.get("context_hop_reserved_slots", 0),
+                hop_reserved_min_gnn=cfg.get("context_hop_reserved_min_gnn", 0.3),
+            )
 
-        # ── Claim verification — strip ungrounded sentences ────────────────────
-        if cfg.get("claim_verification", False):
-            answer, n_removed = await self._verifier.verify(answer, context)
-            if n_removed:
-                log.info("hybrid_retriever.claims_stripped", n_removed=n_removed)
+            sufficiency = assess_retrieval_sufficiency(
+                chunks=local_results.get("chunks", []),
+                citations=citations,
+                conflicts=conflicts,
+                min_evidence=int(cfg.get("retrieval_sufficiency_min_evidence", 1)),
+                min_average_score=float(cfg.get("retrieval_sufficiency_min_average_score", 0.0)),
+            )
+            evidence_bundle = build_evidence_bundle(
+                local_results=local_results,
+                global_results=global_results,
+                citations=citations,
+                valid_at=valid_at,
+                transaction_at=transaction_at,
+            )
+            sufficiency_enabled = cfg.get("retrieval_sufficiency_enabled", True)
+            if sufficiency_enabled:
+                log.info("hybrid_retriever.retrieval_sufficiency", **sufficiency.as_dict())
+                if not sufficiency.sufficient:
+                    policy_result = PolicyResult.ESCALATE
+                    policy_reason_code = sufficiency.reason_code
 
-        latency_ms = (time.monotonic() - t0) * 1000
-        budget = check_budget("synthesis", latency_ms, 0.0)
-        # This event's cost_usd is intentionally 0.0 -- it's stage-level
-        # wall-clock latency tracking (provider/model here are static
-        # config, not the real per-call provider that answered). The real,
-        # non-zero per-call cost for the get_llm().generate() call above is
-        # computed and emitted separately in
-        # genai_telemetry._finish(), which has the actual response's
-        # model/token counts. Don't treat this event's cost_usd as
-        # authoritative for the synthesis stage.
-        record_cost_event(CostEvent(
-            tenant=tenant, stage="synthesis", provider="configured",
-            model=self._model_version, cost_usd=0.0, latency_ms=latency_ms,
-        ))
-        if not budget["within_budget"]:
-            log.warning("hybrid_retriever.budget_exceeded", **budget)
+            if (
+                sufficiency_enabled
+                and cfg.get("retrieval_sufficiency_abstain_enabled", False)
+                and not sufficiency.sufficient
+            ):
+                answer = abstention_message(sufficiency.reason_code)
+                citations = []
+            else:
+                answer = await get_llm().generate(
+                    answer_prompt(cfg).format(
+                        context=escape_prompt_data(context),
+                        question=question,
+                    ),
+                ) or "Insufficient context to answer this question."
+            # See llm_utils.normalize_dashes — Groq's gpt-oss models write
+            # document IDs/dates with U+2011 NON-BREAKING HYPHEN instead of
+            # ASCII "-", found 2026-08-17 diagnosing golden-eval failures.
+            answer = normalize_dashes(answer)
+            answer, citations = apply_answer_policy(
+                answer, context, question, citations, document_names, cfg,
+            )
 
-        # ── Record session turn with the real answer ───────────────────────────
-        # Done here (not in local_search) so the stored turn always reflects the
-        # actual answer shown to the user, making follow-up enrichment faithful.
-        if self._use_session_ctx and self._session_ctx and session_id and local_results:
-            await self._session_ctx.record_turn(
-                session_id=session_id,
+            # ── Claim verification — strip ungrounded sentences ────────────────────
+            if cfg.get("claim_verification", False):
+                answer, n_removed = await self._verifier.verify(answer, context)
+                if n_removed:
+                    log.info("hybrid_retriever.claims_stripped", n_removed=n_removed)
+
+            latency_ms = (time.monotonic() - t0) * 1000
+            budget = check_budget("synthesis", latency_ms, 0.0)
+            # This event's cost_usd is intentionally 0.0 -- it's stage-level
+            # wall-clock latency tracking (provider/model here are static
+            # config, not the real per-call provider that answered). The real,
+            # non-zero per-call cost for the get_llm().generate() call above is
+            # computed and emitted separately in
+            # genai_telemetry._finish(), which has the actual response's
+            # model/token counts. Don't treat this event's cost_usd as
+            # authoritative for the synthesis stage.
+            record_cost_event(CostEvent(
+                tenant=tenant, stage="synthesis", provider="configured",
+                model=self._model_version, cost_usd=0.0, latency_ms=latency_ms,
+            ))
+            if not budget["within_budget"]:
+                log.warning("hybrid_retriever.budget_exceeded", **budget)
+
+            # ── Record session turn with the real answer ───────────────────────────
+            # Done here (not in local_search) so the stored turn always reflects the
+            # actual answer shown to the user, making follow-up enrichment faithful.
+            if self._use_session_ctx and self._session_ctx and session_id and local_results:
+                await self._session_ctx.record_turn(
+                    session_id=session_id,
+                    question=question,
+                    answer=answer,
+                    referenced_entities=local_results.get("referenced_entities", []),
+                    referenced_chunks=local_results.get("referenced_chunks", []),
+                    tenant=tenant,
+                )
+
+            # ── Agentic fallback ───────────────────────────────────────────────────
+            # If the hybrid answer is low-confidence, hand off to the iterative
+            # agent which re-searches sub-questions until it accumulates enough
+            # context to answer confidently (solves multi-document reasoning).
+            agentic_enabled = cfg.get("agentic_fallback", True) and not explicit_temporal_query
+            if cfg.get("agentic_fallback", True) and explicit_temporal_query:
+                log.info("hybrid_retriever.agentic_skipped", reason="temporal_query")
+            # Per-tenant: when true, a hedging answer triggers the agent even if it
+            # carried citations (see _is_low_confidence). Off by default.
+            hedge_only = cfg.get("agentic_hedge_only_fallback", False)
+            low_confidence = _is_low_confidence(
+                answer, citations, require_no_citations=not hedge_only,
+            )
+            # An evidence-shortage abstention can benefit from iterative retrieval;
+            # an unresolved conflict cannot, because more retrieval does not settle
+            # competing evidence without an explicit review policy.
+            low_confidence = low_confidence or (
+                sufficiency_enabled
+                and not sufficiency.sufficient
+                and sufficiency.reason_code in {"insufficient_evidence", "low_evidence_score"}
+            )
+            # A planned multi-hop fallback must not be blocked merely because a
+            # global-only search returned an incidental citation.  In that mode
+            # `local_results` is intentionally empty, so the policy already says
+            # we have no chunk-level evidence for the synthesized answer.  The
+            # previous strict hedge-and-no-citation gate turned that explicit
+            # planner decision into a one-citation refusal (AGT-02).
+            planned_missing_evidence = (
+                routing_reason in {
+                    "keyword_planner", "planner_fail_open", "planner_cold_start",
+                }
+                and plan["fallback"] == "agentic"
+                and policy_reason_code == "missing_evidence"
+            )
+            if agentic_enabled and (low_confidence or planned_missing_evidence):
+                log.info(
+                    "hybrid_retriever.low_confidence",
+                    answer_preview=answer[:80],
+                    triggering=(
+                        "planned_missing_evidence" if planned_missing_evidence
+                        else "low_confidence"
+                    ),
+                )
+                result = await self._agentic.retrieve_and_answer(
+                    question=question,
+                    initial_context=context,
+                    initial_citations=citations,
+                    tenant=tenant,
+                    session_id=session_id,
+                )
+                result.latency_ms += latency_ms
+                result.query_id = query_id or result.query_id
+                result.valid_at = valid_at
+                result.transaction_at = transaction_at
+                result.correlation_id = correlation_id
+                result.routing_reason = routing_reason
+                result.policy_result = policy_result.value
+                result.policy_reason_code = policy_reason_code
+                result.retrieval_sufficiency = sufficiency.as_dict()
+                result.evidence_bundle = evidence_bundle.as_dict()
+                if capture_trajectory:
+                    agentic_steps = (
+                        result.retrieval_trajectory.steps
+                        if result.retrieval_trajectory else []
+                    )
+                    combined_steps = ([primary_step] if primary_step else []) + agentic_steps
+                    combined_steps = [
+                        step.model_copy(update={"step": index})
+                        for index, step in enumerate(combined_steps, start=1)
+                    ]
+                    result.retrieval_trajectory = trajectory_from_steps(
+                        query_class=plan["query_class"],
+                        planned_mode=mode,
+                        routing_reason=routing_reason,
+                        steps=combined_steps,
+                        completed_by=(
+                            result.retrieval_trajectory.completed_by
+                            if result.retrieval_trajectory else "agentic_fallback"
+                        ),
+                    )
+                trace_id = await self._record_context_trace(
+                    question=question, answer=result.answer, tenant=tenant, query_id=query_id,
+                    mode=result.retrieval_mode, model_version=result.model_version,
+                    local_results=local_results, cache_context=cache_context,
+                    valid_at=valid_at, transaction_at=transaction_at,
+                    session_id=session_id, correlation_id=correlation_id,
+                    conflict_count=len(conflicts),
+                )
+                # The agentic retriever can add evidence not represented in
+                # local_results yet. Do not cache it until that complete evidence
+                # set is available to the governed trace.
+                result.source_trace_id = trace_id or ""
+                try:
+                    await self._adaptive_router.observe(
+                        tenant=tenant, question=question, mode=mode,
+                        latency_ms=result.latency_ms,
+                        quality=1.0 if result.citations and not _is_low_confidence(
+                            result.answer, result.citations, require_no_citations=False,
+                        ) else 0.25,
+                    )
+                except Exception as exc:
+                    log.warning("hybrid_retriever.route_observation_failed", error=str(exc)[:200])
+                return result
+
+            log.info("hybrid_retriever.done", mode=mode, latency_ms=round(latency_ms, 1))
+
+            result = QueryResult(
                 question=question,
                 answer=answer,
-                referenced_entities=local_results.get("referenced_entities", []),
-                referenced_chunks=local_results.get("referenced_chunks", []),
-                tenant=tenant,
-            )
-
-        # ── Agentic fallback ───────────────────────────────────────────────────
-        # If the hybrid answer is low-confidence, hand off to the iterative
-        # agent which re-searches sub-questions until it accumulates enough
-        # context to answer confidently (solves multi-document reasoning).
-        agentic_enabled = cfg.get("agentic_fallback", True) and not (valid_at or transaction_at)
-        if cfg.get("agentic_fallback", True) and (valid_at or transaction_at):
-            log.info("hybrid_retriever.agentic_skipped", reason="temporal_query")
-        # Per-tenant: when true, a hedging answer triggers the agent even if it
-        # carried citations (see _is_low_confidence). Off by default.
-        hedge_only = cfg.get("agentic_hedge_only_fallback", False)
-        low_confidence = _is_low_confidence(
-            answer, citations, require_no_citations=not hedge_only,
-        )
-        # An evidence-shortage abstention can benefit from iterative retrieval;
-        # an unresolved conflict cannot, because more retrieval does not settle
-        # competing evidence without an explicit review policy.
-        low_confidence = low_confidence or (
-            sufficiency_enabled
-            and not sufficiency.sufficient
-            and sufficiency.reason_code in {"insufficient_evidence", "low_evidence_score"}
-        )
-        # A planned multi-hop fallback must not be blocked merely because a
-        # global-only search returned an incidental citation.  In that mode
-        # `local_results` is intentionally empty, so the policy already says
-        # we have no chunk-level evidence for the synthesized answer.  The
-        # previous strict hedge-and-no-citation gate turned that explicit
-        # planner decision into a one-citation refusal (AGT-02).
-        planned_missing_evidence = (
-            routing_reason in {
-                "keyword_planner", "planner_fail_open", "planner_cold_start",
-            }
-            and plan["fallback"] == "agentic"
-            and policy_reason_code == "missing_evidence"
-        )
-        if agentic_enabled and (low_confidence or planned_missing_evidence):
-            log.info(
-                "hybrid_retriever.low_confidence",
-                answer_preview=answer[:80],
-                triggering=(
-                    "planned_missing_evidence" if planned_missing_evidence
-                    else "low_confidence"
+                # `context` is the full string fed to the synthesis LLM (local chunks +
+                # entity context + global community knowledge). Using only local chunks
+                # here caused RAGAS to judge claims grounded in "Community knowledge"
+                # as unsupported (faithfulness=0.0 false negatives, e.g. AUT-03).
+                contexts=[context] if context else [],
+                citations=citations,
+                latency_ms=latency_ms,
+                retrieval_mode=mode,
+                model_version=self._model_version,
+                valid_at=valid_at,
+                transaction_at=transaction_at,
+                correlation_id=correlation_id,
+                routing_reason=routing_reason,
+                policy_result=policy_result.value,
+                policy_reason_code=policy_reason_code,
+                retrieval_sufficiency=sufficiency.as_dict(),
+                evidence_bundle=evidence_bundle.as_dict(),
+                retrieval_trajectory=(
+                    trajectory_from_steps(
+                        query_class=plan["query_class"],
+                        planned_mode=mode,
+                        routing_reason=routing_reason,
+                        steps=[primary_step] if primary_step else [],
+                        completed_by="synthesis",
+                    )
+                    if capture_trajectory else None
                 ),
             )
-            result = await self._agentic.retrieve_and_answer(
-                question=question,
-                initial_context=context,
-                initial_citations=citations,
-                tenant=tenant,
-                session_id=session_id,
-            )
-            result.latency_ms += latency_ms
-            result.query_id = query_id or result.query_id
-            result.valid_at = valid_at
-            result.transaction_at = transaction_at
-            result.correlation_id = correlation_id
-            result.routing_reason = routing_reason
-            result.policy_result = policy_result.value
-            result.policy_reason_code = policy_reason_code
-            result.retrieval_sufficiency = sufficiency.as_dict()
-            result.evidence_bundle = evidence_bundle.as_dict()
-            if capture_trajectory:
-                agentic_steps = (
-                    result.retrieval_trajectory.steps
-                    if result.retrieval_trajectory else []
-                )
-                combined_steps = ([primary_step] if primary_step else []) + agentic_steps
-                combined_steps = [
-                    step.model_copy(update={"step": index})
-                    for index, step in enumerate(combined_steps, start=1)
-                ]
-                result.retrieval_trajectory = trajectory_from_steps(
-                    query_class=plan["query_class"],
-                    planned_mode=mode,
-                    routing_reason=routing_reason,
-                    steps=combined_steps,
-                    completed_by=(
-                        result.retrieval_trajectory.completed_by
-                        if result.retrieval_trajectory else "agentic_fallback"
-                    ),
-                )
+            if query_id:
+                result.query_id = query_id
             trace_id = await self._record_context_trace(
-                question=question, answer=result.answer, tenant=tenant, query_id=query_id,
-                mode=result.retrieval_mode, model_version=result.model_version,
-                local_results=local_results, cache_context=cache_context,
+                question=question, answer=answer, tenant=tenant, query_id=query_id,
+                mode=mode, model_version=self._model_version, local_results=local_results,
+                cache_context=cache_context,
                 valid_at=valid_at, transaction_at=transaction_at,
                 session_id=session_id, correlation_id=correlation_id,
                 conflict_count=len(conflicts),
             )
-            # The agentic retriever can add evidence not represented in
-            # local_results yet. Do not cache it until that complete evidence
-            # set is available to the governed trace.
-            result.source_trace_id = trace_id or ""
+            await _store_governed_result(result, trace_id)
             try:
                 await self._adaptive_router.observe(
                     tenant=tenant, question=question, mode=mode,
-                    latency_ms=result.latency_ms,
-                    quality=1.0 if result.citations and not _is_low_confidence(
-                        result.answer, result.citations, require_no_citations=False,
-                    ) else 0.25,
+                    latency_ms=latency_ms,
+                    quality=1.0 if citations and not _is_low_confidence(
+                        answer, citations, require_no_citations=False,
+                    ) else (0.5 if citations else 0.0),
                 )
             except Exception as exc:
                 log.warning("hybrid_retriever.route_observation_failed", error=str(exc)[:200])
             return result
-
-        log.info("hybrid_retriever.done", mode=mode, latency_ms=round(latency_ms, 1))
-
-        result = QueryResult(
-            question=question,
-            answer=answer,
-            # `context` is the full string fed to the synthesis LLM (local chunks +
-            # entity context + global community knowledge). Using only local chunks
-            # here caused RAGAS to judge claims grounded in "Community knowledge"
-            # as unsupported (faithfulness=0.0 false negatives, e.g. AUT-03).
-            contexts=[context] if context else [],
-            citations=citations,
-            latency_ms=latency_ms,
-            retrieval_mode=mode,
-            model_version=self._model_version,
-            valid_at=valid_at,
-            transaction_at=transaction_at,
-            correlation_id=correlation_id,
-            routing_reason=routing_reason,
-            policy_result=policy_result.value,
-            policy_reason_code=policy_reason_code,
-            retrieval_sufficiency=sufficiency.as_dict(),
-            evidence_bundle=evidence_bundle.as_dict(),
-            retrieval_trajectory=(
-                trajectory_from_steps(
-                    query_class=plan["query_class"],
-                    planned_mode=mode,
-                    routing_reason=routing_reason,
-                    steps=[primary_step] if primary_step else [],
-                    completed_by="synthesis",
-                )
-                if capture_trajectory else None
-            ),
-        )
-        if query_id:
-            result.query_id = query_id
-        trace_id = await self._record_context_trace(
-            question=question, answer=answer, tenant=tenant, query_id=query_id,
-            mode=mode, model_version=self._model_version, local_results=local_results,
-            cache_context=cache_context,
-            valid_at=valid_at, transaction_at=transaction_at,
-            session_id=session_id, correlation_id=correlation_id,
-            conflict_count=len(conflicts),
-        )
-        await _store_governed_result(result, trace_id)
-        try:
-            await self._adaptive_router.observe(
-                tenant=tenant, question=question, mode=mode,
-                latency_ms=latency_ms,
-                quality=1.0 if citations and not _is_low_confidence(
-                    answer, citations, require_no_citations=False,
-                ) else (0.5 if citations else 0.0),
-            )
-        except Exception as exc:
-            log.warning("hybrid_retriever.route_observation_failed", error=str(exc)[:200])
-        return result

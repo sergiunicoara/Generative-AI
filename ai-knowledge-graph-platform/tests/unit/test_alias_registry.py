@@ -160,6 +160,68 @@ class TestResolve:
         assert reg.resolve("Furnizorilor") == ("furnizor", "ORG")
 
 
+# ── AliasRegistry.resolve(with_detail=True) ─────────────────────────────────────
+# docs/IMPLEMENTATION_AUDIT.md item #8: resolve() must keep its default,
+# byte-identical (name, type) tuple return (asserted above and by every
+# existing caller) while still exposing match method/score to the one
+# caller (graph_writer.py) that opts in via with_detail=True.
+
+class TestResolveWithDetail:
+    def _registry(self, entries: dict) -> AliasRegistry:
+        neo4j = AsyncMock()
+        reg = AliasRegistry(neo4j, tenant="test")
+        reg._exact = entries
+        reg._loaded = True
+        return reg
+
+    def test_default_return_is_unchanged_bare_tuple(self):
+        reg = self._registry({_normalize("SpaceX"): ("SpaceX", "ORG")})
+        result = reg.resolve("SpaceX")
+        assert result == ("SpaceX", "ORG")
+        assert type(result) is tuple
+
+    def test_exact_match_reports_method_exact_and_no_score(self):
+        reg = self._registry({_normalize("SpaceX"): ("SpaceX", "ORG")})
+        result = reg.resolve("SpaceX", with_detail=True)
+        assert (result.name, result.type) == ("SpaceX", "ORG")
+        assert result.method == "exact"
+        assert result.score is None
+        # Still index-compatible with the (name, type) tuple contract.
+        assert (result[0], result[1]) == ("SpaceX", "ORG")
+
+    def test_regulatory_prefix_match_reports_method_exact(self):
+        reg = self._registry({_normalize("AD 2022-0201"): ("AD 2022-0201", "REGULATION")})
+        result = reg.resolve("EASA AD 2022-0201", with_detail=True)
+        assert (result.name, result.type) == ("AD 2022-0201", "REGULATION")
+        assert result.method == "exact"
+
+    def test_stem_match_reports_method_exact(self):
+        reg = self._registry({_normalize("furnizor"): ("furnizor", "ORG")})
+        reg._stemmed = {_normalize_ro("furnizor"): ("furnizor", "ORG")}
+        result = reg.resolve("furnizorii", with_detail=True)
+        assert (result.name, result.type) == ("furnizor", "ORG")
+        assert result.method == "exact"
+
+    def test_fuzzy_match_reports_method_fuzzy_and_real_score(self):
+        reg = self._registry({_normalize("SpaceX Corp"): ("SpaceX Corp", "ORG")})
+        result = reg.resolve("SpaceX Corpo", with_detail=True)
+        assert (result.name, result.type) == ("SpaceX Corp", "ORG")
+        assert result.method == "fuzzy"
+        assert result.score is not None and result.score >= reg._fuzzy_threshold
+
+    def test_unknown_returns_none_regardless_of_with_detail(self):
+        reg = self._registry({})
+        assert reg.resolve("Unknown Corp", with_detail=True) is None
+
+    def test_ambiguous_band_unaffected_by_with_detail(self):
+        # rapidfuzz ratio("acme industries inc", "acme industri") == 81.25,
+        # inside the default [review_min=70, fuzzy_threshold=85) ambiguous band.
+        reg = self._registry({_normalize("Acme Industries Inc"): ("Acme Industries Inc", "ORG")})
+        result = reg.resolve("Acme Industri", with_detail=True)
+        from graphrag.graph.alias_registry import AmbiguousMatch
+        assert isinstance(result, AmbiguousMatch)
+
+
 # ── AliasRegistry.register_alias ──────────────────────────────────────────────
 
 class TestRegisterAlias:

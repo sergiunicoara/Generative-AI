@@ -1,0 +1,49 @@
+{
+  "version": "1.0",
+  "description": "Seeded, LLM-free retrieval regression tripwire for CI (docs/IMPLEMENTATION_AUDIT.md item #2). Deliberately small and loosely thresholded -- this proves BM25-over-Neo4j hasn't structurally regressed (e.g. the A174 cross-tenant/filter leak), not that retrieval quality is good. Loaded by tests/e2e/test_retrieval_quality_gate.py.",
+  "thresholds": {
+    "recall_at_5_min": 0.6,
+    "mrr_min": 0.5
+  },
+  "documents": [
+    {"id": "doc-supplier-cert", "filename": "supplier-cert.txt"},
+    {"id": "doc-torque-spec", "filename": "torque-spec.txt"},
+    {"id": "doc-safety-audit", "filename": "safety-audit.txt"}
+  ],
+  "chunks": [
+    {
+      "id": "chunk-supplier-1",
+      "document_id": "doc-supplier-cert",
+      "text": "Supplier AcmeGear Corp holds ISO 9001 quality certification valid through 2027."
+    },
+    {
+      "id": "chunk-supplier-2",
+      "document_id": "doc-supplier-cert",
+      "text": "AcmeGear Corp's certification body is TUV Rheinland, audited annually."
+    },
+    {
+      "id": "chunk-torque-1",
+      "document_id": "doc-torque-spec",
+      "text": "Wheel bolt torque specification is 120 newton-meters for the rear axle assembly."
+    },
+    {
+      "id": "chunk-safety-1",
+      "document_id": "doc-safety-audit",
+      "text": "The safety audit found no critical non-conformances in the welding process."
+    }
+  ],
+  "queries": [
+    {
+      "question": "What is the wheel bolt torque specification for the rear axle?",
+      "expected_relevant": ["chunk-torque-1"]
+    },
+    {
+      "question": "What quality certification does the supplier AcmeGear Corp hold?",
+      "expected_relevant": ["chunk-supplier-1", "chunk-supplier-2"]
+    },
+    {
+      "question": "What did the safety audit find about the welding process?",
+      "expected_relevant": ["chunk-safety-1"]
+    }
+  ]
+}

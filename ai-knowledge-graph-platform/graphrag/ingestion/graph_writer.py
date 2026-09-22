@@ -356,11 +356,13 @@ class GraphWriter:
                 )
 
             # 1. Alias resolution — name-based
-            canonical = registry.resolve(entity.name)
+            canonical = registry.resolve(entity.name, with_detail=True)
             # Ambiguous band (fuzzy 70-84) — queue for human review, fail open
             if isinstance(canonical, AmbiguousMatch):
                 if self._cfg.ingestion.get("review_queue_enabled", True):
                     await self._enqueue_safe(entity, canonical, chunk, tenant)
+                entity.resolution_status = "needs_review"
+                entity.resolution_method = canonical.match_type
                 canonical = None
             if canonical and (canonical[0] != entity.name or canonical[1] != entity.type):
                 log.info(
@@ -370,7 +372,9 @@ class GraphWriter:
                     type=canonical[1],
                     tenant=tenant,
                 )
-                entity.redirect_to(*canonical)
+                # canonical is a ResolvedMatch (name, type, method, score) —
+                # index explicitly, don't *-unpack (it's 4 fields, not 2).
+                entity.redirect_to(canonical[0], canonical[1])
                 # Register the new variant as an alias and use the canonical
                 await registry.register_alias(
                     raw_value=entity.name,
@@ -381,6 +385,12 @@ class GraphWriter:
                 # Link the chunk to the canonical entity instead
                 await self._neo4j.merge_mentions(
                     chunk.id, canonical[0], canonical[1], tenant=tenant
+                )
+                await self._neo4j.set_entity_resolution_metadata(
+                    name=canonical[0], type=canonical[1], tenant=tenant,
+                    resolution_status="auto_resolved",
+                    resolution_method=getattr(canonical, "method", "exact"),
+                    resolution_score=getattr(canonical, "score", None),
                 )
                 contextual_entities.append(entity)
                 continue   # don't create a duplicate node
@@ -411,6 +421,12 @@ class GraphWriter:
                     await self._neo4j.merge_mentions(
                         chunk.id, dup_name, dup_type, tenant=tenant
                     )
+                    await self._neo4j.set_entity_resolution_metadata(
+                        name=dup_name, type=dup_type, tenant=tenant,
+                        resolution_status="auto_resolved",
+                        resolution_method="embedding",
+                        resolution_score=similarity,
+                    )
                     contextual_entities.append(entity)
                     continue
 
@@ -432,6 +448,8 @@ class GraphWriter:
                                        score=soft_sim, match_type="embedding"),
                         chunk, tenant,
                     )
+                    entity.resolution_status = "needs_review"
+                    entity.resolution_method = "embedding"
                     # fall through — fail open, create new entity anyway
 
             # 3. Genuinely new entity — queue for batched write below.
@@ -441,6 +459,13 @@ class GraphWriter:
             # entities within one chunk both see this as "create" since
             # neither is written until the batched merge at the end) — not
             # worth a round-trip per entity for a best-effort label.
+            # A prior branch may already have tagged this needs_review (2b)
+            # before falling through here — don't overwrite that with
+            # created_new, since the entity IS being newly created but the
+            # more informative signal is "we found a candidate but couldn't
+            # auto-merge it", not "no candidate existed at all".
+            entity.resolution_status = entity.resolution_status or "created_new"
+            entity.resolution_method = entity.resolution_method or "new"
             to_merge.append(entity)
             entity.redirect_to(entity.name, entity.type)
             contextual_entities.append(entity)

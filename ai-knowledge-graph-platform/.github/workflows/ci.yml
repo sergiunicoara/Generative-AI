@@ -40,3 +40,52 @@ jobs:
 
       - name: make ci  (semantic-model-check + competency-questions-check + lint + unit tests)
         run: make ci
+
+  live-tenant-isolation:
+    # Real, live-data proof that tenant isolation holds -- not just that a
+    # Cypher query string contains a tenant filter against a mock (which is
+    # all tests/unit/test_tenant_isolation.py can prove). Uses testcontainers
+    # to spin up a throwaway Neo4j Community container; no external service,
+    # no API key, no paid call -- self-contained and safe to run on every
+    # push/PR, unlike the golden-eval jobs excluded above.
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt -r requirements-dev.txt
+
+      - name: Live tenant-isolation e2e test
+        run: python scripts/run_pytest.py tests/e2e/test_live_tenant_isolation.py -v
+
+  deterministic-retrieval-gate:
+    # Seeded, LLM-free retrieval regression tripwire (docs/IMPLEMENTATION_AUDIT.md
+    # item #2) -- recall@5/MRR over a tiny fixed fixture, BM25-over-Neo4j only
+    # (vector search/reranker/GNN disabled), so no API key or model download is
+    # needed. A separate job from live-tenant-isolation so a retrieval-quality
+    # regression and a tenant-isolation regression are distinctly attributable.
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt -r requirements-dev.txt
+
+      - name: Deterministic retrieval gate
+        run: python scripts/run_pytest.py tests/e2e/test_retrieval_quality_gate.py -v

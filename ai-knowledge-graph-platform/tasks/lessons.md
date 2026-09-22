@@ -6224,3 +6224,65 @@ claims, and only the second is what a user clicking a button experiences.
 Caught here only because the verification step included a live browser
 click-through instead of stopping at the test suite; see the standing
 "Verification Before Done" rule this confirms rather than introduces.
+
+---
+
+## A174 - `OPTIONAL MATCH ... WHERE` silently no-ops as a row filter — real cross-tenant leak in bm25/vector search
+
+Implementing docs/IMPLEMENTATION_AUDIT.md item #1 (supersession exclusion),
+the new `include_superseded` predicate passed every mocked query-shape unit
+test but a live testcontainers check showed it did nothing — the superseded
+chunk was still returned. Isolating it further (live, not mocked) showed the
+*pre-existing* `tenant`/`is_deleted` filters in the same queries were also
+silently non-functional: seeding two tenants with a shared search term and
+calling `bm25_search_chunks(query, tenant="tenant-a")` directly returned
+**both** tenants' chunks.
+
+**Root cause:** in openCypher, `OPTIONAL MATCH pattern WHERE predicate` binds
+the `WHERE` to the *pattern match itself*, not to the rows downstream of it —
+this applies to the whole predicate, including clauses that reference only
+already-bound variables (like `c.tenant = $tenant`), not just clauses on the
+newly-optional variable. If the predicate fails, Neo4j doesn't drop the row;
+it just falls back to "no match" and nulls the optionally-matched variable
+(`d`), leaving the anchor row (`c`, already bound from an earlier `CALL ...
+YIELD` or `MATCH`) untouched. `vector_search_chunks` (default/non-filtered
+path), `bm25_search_chunks`, and `bm25_search_entities` in
+`graphrag/graph/neo4j_client.py` all wrote
+`OPTIONAL MATCH (c)-[:PART_OF]->(d:Document) WHERE (c.tenant = $tenant) AND
+...` — every clause in that chain (tenant, is_deleted, valid_at/
+transaction_at, the quarantined-entity `NOT EXISTS`, and
+`document_access_predicate`'s ACL check) was dead code for filtering
+purposes. Confirmed live: `bm25_search_chunks("shared term", tenant="tenant-a")`
+returned tenant-b's chunk too.
+
+**Why 59+ existing unit tests never caught it:** every retrieval query-shape
+test (`tests/unit/test_neo4j_retrieval_query_shape.py` and friends) asserts
+against a *mocked* Neo4j client — it checks that `"tenant: $tenant"` or
+similar text appears in the generated Cypher string, never that the string
+actually filters anything when executed. `tests/e2e/test_live_tenant_isolation.py`
+existed but only ran `scripts/verify_tenant_isolation.py`'s direct Cypher
+checks against graph *state* — it never called a real retrieval method. This
+is exactly the gap docs/IMPLEMENTATION_AUDIT.md item #3 (live retrieval-path
+isolation test) was written to close; building that test is what surfaced
+this.
+
+**Fix:** insert an explicit `WITH c, d, score` (carrying every variable the
+rest of the query needs) between the `OPTIONAL MATCH` and the `WHERE` in all
+three methods. `WITH` forces a genuine row-boundary; the `WHERE` after it is
+an ordinary filter with normal row-dropping semantics. Verified live,
+before/after, for both the tenant leak and the is_deleted/superseded_by
+cases. `get_best_chunk_for_document` and `get_linked_document_chunks` are
+unaffected — they use `MATCH` (not `OPTIONAL MATCH`), where `WHERE` has
+always had normal filter semantics.
+
+**Rule:** never write `OPTIONAL MATCH pattern WHERE predicate` when the
+predicate is meant to filter rows (as opposed to genuinely wanting "keep the
+row either way, but null out the optional part if the predicate fails").
+Always insert `WITH <vars> WHERE <predicate>` between them instead. Any
+future `OPTIONAL MATCH` in this file that's immediately followed by `WHERE`
+should be treated as a probable bug until proven otherwise — grep for the
+pattern and check each one. A query-shape unit test asserting a WHERE
+fragment's *text* is present proves nothing about whether it filters; only a
+live test against real data proves that, which is why
+`tests/e2e/test_live_tenant_isolation.py` now includes a real
+`LocalSearch.search()` call, not just graph-state checks.

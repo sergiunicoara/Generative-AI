@@ -85,6 +85,135 @@ class TestWriteEntities:
         writer._neo4j.merge_entity.assert_not_called()
         assert result == []   # alias-resolved entities are not in the written list
 
+    async def test_auto_resolved_entity_records_resolution_metadata(self):
+        """docs/IMPLEMENTATION_AUDIT.md item #8: an exact/fuzzy auto-resolve
+        to an *existing* entity never reaches merge_entity/merge_entities_batch
+        (it redirects + merge_mentions instead) -- set_entity_resolution_metadata
+        is the only place that records the resolution decision for this path."""
+        writer = _build_writer()
+        chunk = _make_chunk()
+
+        from graphrag.graph.alias_registry import ResolvedMatch
+        mock_registry = MagicMock()
+        mock_registry.resolve = MagicMock(
+            return_value=ResolvedMatch("SpaceX", "ORG", "fuzzy", 92.0)
+        )
+        mock_registry.register_alias = AsyncMock()
+        writer._neo4j.merge_mentions = AsyncMock()
+
+        with patch.object(writer, "_get_registry", return_value=mock_registry), \
+             patch.object(writer, "_ensure_registry", AsyncMock()):
+            entity = _make_entity("Space Exploration Technologies")
+            await writer.write_entities([entity], chunk)
+
+        writer._neo4j.set_entity_resolution_metadata.assert_called_once_with(
+            name="SpaceX", type="ORG", tenant="default",
+            resolution_status="auto_resolved",
+            resolution_method="fuzzy",
+            resolution_score=92.0,
+        )
+
+    async def test_mocked_resolve_without_with_detail_support_still_works(self):
+        """Existing test doubles across this file return a plain
+        (name, type) tuple regardless of the with_detail kwarg (MagicMock
+        ignores it) -- getattr fallbacks must not crash on a bare tuple."""
+        writer = _build_writer()
+        chunk = _make_chunk()
+
+        mock_registry = MagicMock()
+        mock_registry.resolve = MagicMock(return_value=("SpaceX", "ORG"))
+        mock_registry.register_alias = AsyncMock()
+        writer._neo4j.merge_mentions = AsyncMock()
+
+        with patch.object(writer, "_get_registry", return_value=mock_registry), \
+             patch.object(writer, "_ensure_registry", AsyncMock()):
+            entity = _make_entity("Space Exploration Technologies")
+            await writer.write_entities([entity], chunk)
+
+        writer._neo4j.set_entity_resolution_metadata.assert_called_once_with(
+            name="SpaceX", type="ORG", tenant="default",
+            resolution_status="auto_resolved",
+            resolution_method="exact",   # getattr fallback default
+            resolution_score=None,       # getattr fallback default
+        )
+
+    async def test_embedding_dedup_match_records_resolution_metadata(self):
+        writer = _build_writer()
+        chunk = _make_chunk()
+
+        entity = _make_entity("Tesla Inc")
+        entity.embedding = [0.1] * 768
+
+        mock_registry = MagicMock()
+        mock_registry.resolve = MagicMock(return_value=None)
+        mock_registry.find_duplicate_by_embedding = AsyncMock(
+            return_value=("Tesla", "ORG", 0.96)
+        )
+        mock_registry.register_alias = AsyncMock()
+        writer._neo4j.merge_mentions = AsyncMock()
+
+        with patch.object(writer, "_get_registry", return_value=mock_registry), \
+             patch.object(writer, "_ensure_registry", AsyncMock()):
+            await writer.write_entities([entity], chunk)
+
+        writer._neo4j.set_entity_resolution_metadata.assert_called_once_with(
+            name="Tesla", type="ORG", tenant="default",
+            resolution_status="auto_resolved",
+            resolution_method="embedding",
+            resolution_score=0.96,
+        )
+
+    async def test_genuinely_new_entity_is_tagged_created_new(self):
+        writer = _build_writer()
+        chunk = _make_chunk()
+
+        mock_registry = MagicMock()
+        mock_registry.resolve = MagicMock(return_value=None)
+        mock_registry.find_duplicate_by_embedding = AsyncMock(return_value=None)
+        mock_registry._exact = {}
+
+        writer._neo4j.merge_entities_batch = AsyncMock(return_value=[])
+        writer._neo4j.merge_mentions_batch = AsyncMock()
+
+        with patch.object(writer, "_get_registry", return_value=mock_registry), \
+             patch.object(writer, "_ensure_registry", AsyncMock()):
+            entity = _make_entity("SpaceX")
+            await writer.write_entities([entity], chunk)
+
+        batched_entities = writer._neo4j.merge_entities_batch.call_args.args[0]
+        assert batched_entities[0].resolution_status == "created_new"
+        assert batched_entities[0].resolution_method == "new"
+
+    async def test_ambiguous_name_match_falls_through_tagged_needs_review(self):
+        """The name-ambiguous band (fuzzy 70-84) enqueues for review, fails
+        open, and creates the entity anyway -- it must still carry
+        needs_review, not created_new, since a real candidate was found."""
+        writer = _build_writer()
+        writer._cfg.ingestion = {"review_queue_enabled": True}
+        chunk = _make_chunk()
+
+        from graphrag.graph.alias_registry import AmbiguousMatch
+        mock_registry = MagicMock()
+        mock_registry.resolve = MagicMock(
+            return_value=AmbiguousMatch(candidate=("Acme Industries Inc", "ORG"),
+                                         score=81.0, match_type="fuzzy")
+        )
+        mock_registry.find_duplicate_by_embedding = AsyncMock(return_value=None)
+        mock_registry._exact = {}
+
+        writer._neo4j.merge_entities_batch = AsyncMock(return_value=[])
+        writer._neo4j.merge_mentions_batch = AsyncMock()
+
+        with patch.object(writer, "_get_registry", return_value=mock_registry), \
+             patch.object(writer, "_ensure_registry", AsyncMock()), \
+             patch.object(writer, "_enqueue_safe", AsyncMock()):
+            entity = _make_entity("Acme Industri")
+            await writer.write_entities([entity], chunk)
+
+        batched_entities = writer._neo4j.merge_entities_batch.call_args.args[0]
+        assert batched_entities[0].resolution_status == "needs_review"
+        assert batched_entities[0].resolution_method == "fuzzy"
+
     async def test_same_name_different_type_redirected_to_canonical(self):
         """Same name re-extracted under a different type must redirect to the
         first-registered (name, type) canonical, not create a duplicate node."""

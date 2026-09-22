@@ -37,6 +37,7 @@ stable fields" rather than "instrument every call site".
 
 from __future__ import annotations
 
+import asyncio
 import time
 from contextlib import contextmanager
 from contextvars import ContextVar
@@ -272,20 +273,43 @@ def _finish(
     # counts -- see pricing.py. Every prior cost_usd emitted from the
     # retrieval layer was a hardcoded 0.0 regardless of whether a real, paid
     # call happened; this is the one place that has genuine data for every
-    # provider this codebase calls. Tenant isn't in scope this deep in the
-    # call stack, so this event carries no tenant attribution -- consistent
+    # provider this codebase calls. Tenant is read from the contextvar
+    # HybridRetriever.retrieve_and_answer() publishes (see
+    # graphrag/observability/correlation.py's tenant_context) -- this event
+    # still carries only the label, not a Prometheus dimension: consistent
     # with cost_attribution.py's own note that tenant is deliberately not a
     # Prometheus label (unbounded cardinality); per-tenant cost rollups need
     # a separate join against request-level logs, not this event alone.
+    from graphrag.observability.correlation import current_tenant
     from graphrag.observability.cost_attribution import CostEvent, record_cost_event
     from graphrag.observability.pricing import estimated_cost_usd
 
     cost_usd = estimated_cost_usd(
         provider, response.get("response_model"), input_tokens, output_tokens,
     )
+    tenant = current_tenant()
     if cost_usd is not None:
         record_cost_event(CostEvent(
-            tenant="", stage=operation, provider=provider,
+            tenant=tenant, stage=operation, provider=provider,
             model=response.get("response_model") or "",
             cost_usd=cost_usd, latency_ms=elapsed * 1000,
         ))
+        if tenant and cost_usd:
+            _schedule_tenant_usage_record(tenant, cost_usd)
+
+
+def _schedule_tenant_usage_record(tenant: str, cost_usd: float) -> None:
+    """Fire-and-forget quota update: api/quota.py's record_tenant_usage is
+    async, but _finish() runs synchronously inside llm_call_span's `finally`
+    (itself entered from FallbackLLM.generate, an async def) -- there is a
+    live event loop, just not one this sync function can await on directly.
+    A dropped/failed update self-corrects on the next request per
+    record_tenant_usage's own docstring, so best-effort scheduling is an
+    accepted trade-off, not a silent correctness gap.
+    """
+    from api.quota import record_tenant_usage
+
+    try:
+        asyncio.create_task(record_tenant_usage(tenant, cost_usd=cost_usd))
+    except RuntimeError as exc:
+        log.debug("genai_telemetry.tenant_usage_schedule_failed", tenant=tenant, error=str(exc))

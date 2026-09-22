@@ -1054,6 +1054,8 @@ class Neo4jClient:
                           e.source_doc_id    = $source_doc_id,
                           e.extraction_model = $extraction_model,
                           e.prompt_version   = $prompt_version,
+                          e.resolution_status = $resolution_status,
+                          e.resolution_method = $resolution_method,
                           e.created_at       = datetime(),
                           e.recorded_at      = datetime()   // transaction time — never updated
             ON MATCH SET  e.description = CASE WHEN e.description = '' THEN $description ELSE e.description END,
@@ -1070,6 +1072,42 @@ class Neo4jClient:
             source_doc_id=entity.source_doc_id,
             extraction_model=entity.extraction_model,
             prompt_version=entity.prompt_version,
+            resolution_status=entity.resolution_status,
+            resolution_method=entity.resolution_method,
+        )
+
+    async def set_entity_resolution_metadata(
+        self,
+        name: str,
+        type: str,  # noqa: A002 - matches the (name, type) natural-key vocabulary used throughout this file
+        tenant: str,
+        resolution_status: str,
+        resolution_method: str,
+        resolution_score: float | None = None,
+    ) -> None:
+        """Record how a raw mention was auto-resolved onto an *existing*
+        canonical Entity node (docs/IMPLEMENTATION_AUDIT.md item #8).
+
+        merge_entity/merge_entities_batch's ON CREATE-only fields cover a
+        genuinely new entity's own origin; this covers the separate case of
+        a raw name redirecting to an entity that already existed (graph_writer.py's
+        exact/fuzzy/embedding auto-resolve branches, which call
+        merge_mentions() directly and never reach merge_entity). Reflects the
+        most recent auto-resolution event that touched this entity, not a
+        first-write-wins record.
+        """
+        await self.run(
+            """
+            MATCH (e:Entity {name: $name, type: $type, tenant: $tenant})
+            SET e.resolution_status    = $resolution_status,
+                e.resolution_method    = $resolution_method,
+                e.resolution_score     = $resolution_score,
+                e.resolution_updated_at = datetime()
+            """,
+            name=name, type=type, tenant=tenant,
+            resolution_status=resolution_status,
+            resolution_method=resolution_method,
+            resolution_score=resolution_score,
         )
 
     async def merge_mentions(self, chunk_id: str, entity_name: str, entity_type: str, tenant: str = "default"):
@@ -1112,11 +1150,16 @@ class Neo4jClient:
                 "source_doc_id": e.source_doc_id,
                 "extraction_model": e.extraction_model,
                 "prompt_version": e.prompt_version,
+                "resolution_status": e.resolution_status,
+                "resolution_method": e.resolution_method,
                 # Reserved identity/scope fields cannot be overwritten by a
                 # caller-supplied semantic property map.
                 "semantic_properties": {
                     key: value for key, value in e.semantic_properties.items()
-                    if key not in {"id", "name", "type", "tenant"}
+                    if key not in {
+                        "id", "name", "type", "tenant",
+                        "resolution_status", "resolution_method",
+                    }
                 },
             }
             for e in entities
@@ -1142,6 +1185,8 @@ class Neo4jClient:
                           e.source_doc_id    = row.source_doc_id,
                           e.extraction_model = row.extraction_model,
                           e.prompt_version   = row.prompt_version,
+                          e.resolution_status = row.resolution_status,
+                          e.resolution_method = row.resolution_method,
                           e += row.semantic_properties,
                           e.created_at       = datetime(),
                           e.recorded_at      = datetime()
@@ -1466,11 +1511,21 @@ class Neo4jClient:
         tenant: str = "default",
         valid_at: str | None = None,
         transaction_at: str | None = None,
+        include_superseded: bool = True,
         access_context: AccessContext | None = None,
     ) -> list[dict]:
         """ANN search over Chunk.embedding using Neo4j vector index.
         Filters by tenant, source-document temporal boundaries, and excludes
         chunks whose mentioned entities are quarantined.
+
+        ``include_superseded=False`` excludes chunks belonging to a superseded
+        document (``d.superseded_by IS NOT NULL``). Defaults to ``True``
+        (today's pre-existing behavior, unchanged) rather than the audit's
+        ideal "exclude by default": a similar-sounding change once caused an
+        unexplained golden-eval regression (tasks/lessons.md A128), and this
+        is a *stronger* intervention (hard exclusion vs. downweighting) that
+        has not yet been validated against the aerospace golden eval. Flip
+        the default only after that validation passes.
 
         Over-fetches before tenant-filtering — same tenant-starvation risk
         as vector_search_communities, see that method's docstring and
@@ -1487,7 +1542,9 @@ class Neo4jClient:
                     LIMIT $top_k
                   ) SCORE AS score
                 OPTIONAL MATCH (c)-[:PART_OF]->(d:Document {tenant: $tenant})
+                WITH c, d, score
                 WHERE (d IS NULL OR coalesce(d.is_deleted, false) = false)
+                  AND ($include_superseded OR d IS NULL OR d.superseded_by IS NULL)
                   AND ($valid_at IS NULL OR (
                     d IS NOT NULL
                     AND (d.valid_from IS NULL OR d.valid_from <= datetime($valid_at))
@@ -1508,6 +1565,7 @@ class Neo4jClient:
                 top_k=top_k,
                 valid_at=valid_at,
                 transaction_at=transaction_at,
+                include_superseded=include_superseded,
                 **self._content_access_params(access_context),
             )
         fetch_k = max(top_k * 20, 100)
@@ -1516,8 +1574,10 @@ class Neo4jClient:
             CALL db.index.vector.queryNodes('chunk_embeddings', $fetch_k, $embedding)
             YIELD node AS c, score
             OPTIONAL MATCH (c)-[:PART_OF]->(d:Document)
+            WITH c, d, score
             WHERE (c.tenant = $tenant)
               AND (d IS NULL OR coalesce(d.is_deleted, false) = false)
+              AND ($include_superseded OR d IS NULL OR d.superseded_by IS NULL)
               AND ($valid_at IS NULL OR (
                   d IS NOT NULL
                   AND (d.valid_from IS NULL OR d.valid_from <= datetime($valid_at))
@@ -1543,6 +1603,7 @@ class Neo4jClient:
             top_k=top_k,
             valid_at=valid_at,
             transaction_at=transaction_at,
+            include_superseded=include_superseded,
             **self._content_access_params(access_context),
         )
 
@@ -1594,6 +1655,7 @@ class Neo4jClient:
         query_embedding: list[float] | None = None,
         valid_at: str | None = None,
         transaction_at: str | None = None,
+        include_superseded: bool = True,
         access_context: AccessContext | None = None,
     ) -> list[dict]:
         """Follow explicit document links from seed evidence to authorised chunks.
@@ -1602,6 +1664,10 @@ class Neo4jClient:
         from similarity, and it evaluates the source document, the ACL snapshot
         captured on ``LINKS_TO``, and the target document before returning any
         target text.
+
+        ``include_superseded=False`` excludes superseded source/target
+        documents; defaults to ``True`` pending golden-eval validation — see
+        ``vector_search_chunks``'s docstring for why.
         """
         if not seed_chunk_ids:
             return []
@@ -1613,6 +1679,8 @@ class Neo4jClient:
             MATCH (chunk:Chunk {tenant: $tenant})-[:PART_OF]->(target)
             WHERE coalesce(source.is_deleted, false) = false
               AND coalesce(target.is_deleted, false) = false
+              AND ($include_superseded OR source.superseded_by IS NULL)
+              AND ($include_superseded OR target.superseded_by IS NULL)
               AND ($valid_at IS NULL OR (
                 (target.valid_from IS NULL OR target.valid_from <= datetime($valid_at))
                 AND (target.valid_to IS NULL OR target.valid_to > datetime($valid_at))
@@ -1645,6 +1713,7 @@ class Neo4jClient:
             query_embedding=query_embedding,
             valid_at=valid_at,
             transaction_at=transaction_at,
+            include_superseded=include_superseded,
             **self._content_access_params(access_context),
         )
         return rows
@@ -1696,18 +1765,24 @@ class Neo4jClient:
         tenant: str = "default",
         valid_at: str | None = None,
         transaction_at: str | None = None,
+        include_superseded: bool = True,
         access_context: AccessContext | None = None,
     ) -> dict | None:
         """Best chunk (by cosine similarity to `embedding`) belonging to the
         document with this exact filename. Used by the named-document boost:
         when the question explicitly names a document, guarantee its most
         relevant chunk a seed slot even if it didn't survive fused-ranking.
+
+        ``include_superseded=False`` excludes a superseded document; defaults
+        to ``True`` pending golden-eval validation — see
+        ``vector_search_chunks``'s docstring for why.
         """
         rows = await self.run(
             f"""
             MATCH (c:Chunk)-[:PART_OF]->(d:Document {{filename: $filename}})
             WHERE (c.tenant = $tenant)
               AND coalesce(d.is_deleted, false) = false
+              AND ($include_superseded OR d.superseded_by IS NULL)
               AND c.embedding IS NOT NULL
               AND ($valid_at IS NULL OR (
                   (d.valid_from IS NULL OR d.valid_from <= datetime($valid_at))
@@ -1728,6 +1803,7 @@ class Neo4jClient:
             tenant=tenant,
             valid_at=valid_at,
             transaction_at=transaction_at,
+            include_superseded=include_superseded,
             **self._content_access_params(access_context),
         )
         return rows[0] if rows else None
@@ -2010,10 +2086,15 @@ class Neo4jClient:
         tenant: str = "default",
         valid_at: str | None = None,
         transaction_at: str | None = None,
+        include_superseded: bool = True,
         access_context: AccessContext | None = None,
     ) -> list[dict]:
         """BM25 fulltext search over Chunk.text using Neo4j fulltext index.
         Filters by tenant and excludes quarantined entity chunks.
+
+        ``include_superseded=False`` excludes chunks whose document is
+        superseded; defaults to ``True`` pending golden-eval validation —
+        see ``vector_search_chunks``'s docstring for why.
         """
         query = _escape_lucene_query(query)
         return await self.run(
@@ -2021,8 +2102,10 @@ class Neo4jClient:
             CALL db.index.fulltext.queryNodes('chunk_fulltext', $query)
             YIELD node AS c, score
             OPTIONAL MATCH (c)-[:PART_OF]->(d:Document)
+            WITH c, d, score
             WHERE (c.tenant = $tenant)
               AND (d IS NULL OR coalesce(d.is_deleted, false) = false)
+              AND ($include_superseded OR d IS NULL OR d.superseded_by IS NULL)
               AND ($valid_at IS NULL OR (
                   d IS NOT NULL
                   AND (d.valid_from IS NULL OR d.valid_from <= datetime($valid_at))
@@ -2047,6 +2130,7 @@ class Neo4jClient:
             tenant=tenant,
             valid_at=valid_at,
             transaction_at=transaction_at,
+            include_superseded=include_superseded,
             **self._content_access_params(access_context),
         )
 
@@ -2057,10 +2141,15 @@ class Neo4jClient:
         tenant: str = "default",
         valid_at: str | None = None,
         transaction_at: str | None = None,
+        include_superseded: bool = True,
         access_context: AccessContext | None = None,
     ) -> list[dict]:
         """BM25 fulltext search over Entity name + description.
         Excludes quarantined entities.
+
+        ``include_superseded=False`` excludes chunks whose document is
+        superseded; defaults to ``True`` pending golden-eval validation —
+        see ``vector_search_chunks``'s docstring for why.
         """
         query = _escape_lucene_query(query)
         return await self.run(
@@ -2070,8 +2159,10 @@ class Neo4jClient:
             WHERE coalesce(e.quarantined, false) = false
             OPTIONAL MATCH (c:Chunk)-[:MENTIONS]->(e)
             OPTIONAL MATCH (c)-[:PART_OF]->(d:Document)
+            WITH e, c, d, score
             WHERE (c.tenant = $tenant)
               AND (d IS NULL OR coalesce(d.is_deleted, false) = false)
+              AND ($include_superseded OR d IS NULL OR d.superseded_by IS NULL)
               AND ($valid_at IS NULL OR (
                   d IS NOT NULL
                   AND (d.valid_from IS NULL OR d.valid_from <= datetime($valid_at))
@@ -2092,6 +2183,7 @@ class Neo4jClient:
             tenant=tenant,
             valid_at=valid_at,
             transaction_at=transaction_at,
+            include_superseded=include_superseded,
             **self._content_access_params(access_context),
         )
 

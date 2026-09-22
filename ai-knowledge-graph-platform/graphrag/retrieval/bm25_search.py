@@ -72,6 +72,7 @@ class HybridBM25Search:
         tenant: str = "default",
         valid_at: str | None = None,
         transaction_at: str | None = None,
+        include_superseded: bool = True,
         access_context: AccessContext | None = None,
     ) -> list[dict]:
         """
@@ -90,6 +91,7 @@ class HybridBM25Search:
             tenant=tenant,
             valid_at=valid_at,
             transaction_at=transaction_at,
+            include_superseded=include_superseded,
             access_context=access_context,
         )
 
@@ -100,6 +102,7 @@ class HybridBM25Search:
             tenant=tenant,
             valid_at=valid_at,
             transaction_at=transaction_at,
+            include_superseded=include_superseded,
             access_context=access_context,
         )
 

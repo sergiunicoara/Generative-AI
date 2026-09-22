@@ -130,6 +130,7 @@ class LocalSearch:
         tenant: str = "default",
         valid_at: str | None = None,
         transaction_at: str | None = None,
+        include_superseded: bool = True,
         config_overrides: dict | None = None,
         access_context: AccessContext | None = None,
     ) -> dict:
@@ -145,7 +146,27 @@ class LocalSearch:
         available after LLM generation; callers should use the returned
         referenced_* fields to call session_ctx.record_turn() with the real
         answer once it is known.
+
+        ``include_superseded=False`` excludes documents/chunks marked
+        superseded. Defaults to ``True`` (today's behavior, unchanged)
+        pending an aerospace golden-eval validation pass — see
+        ``neo4j_client.vector_search_chunks``'s docstring for why this isn't
+        `False` by default yet.
         """
+        # Bitemporal default: an unset valid_at previously reached Neo4j as
+        # `$valid_at IS NULL`, which short-circuits the vector/chunk-search
+        # WHERE clause's valid_from/valid_to check to always-true -- so
+        # expired or superseded evidence could enter results for any
+        # ordinary query, including callers that reach this function
+        # directly (e.g. graphrag/retrieval/agentic_retriever.py's seed and
+        # sub-searches never pass valid_at at all today). Defaulting here
+        # too, not only in hybrid_retriever.retrieve_and_answer(), is the
+        # safety net for those callers. An explicit valid_at from a caller
+        # that resolved its own point-in-time policy is never overridden.
+        if valid_at is None:
+            from datetime import datetime, timezone
+            valid_at = datetime.now(timezone.utc).isoformat()
+
         # Per-tenant config: merge this tenant's overrides over the global
         # retrieval defaults. Resolved from self._cfg (the global retrieval dict,
         # which carries the tenant_overrides sub-block) rather than re-fetching
@@ -185,6 +206,7 @@ class LocalSearch:
         temporal_kwargs = {
             **({"valid_at": valid_at} if valid_at else {}),
             **({"transaction_at": transaction_at} if transaction_at else {}),
+            "include_superseded": include_superseded,
         }
 
         # ── Session context: resolve ambiguous follow-up queries ──────────────
@@ -399,6 +421,7 @@ class LocalSearch:
                 query_embedding=embedding,
                 valid_at=valid_at,
                 transaction_at=transaction_at,
+                include_superseded=include_superseded,
                 access_context=access_context,
             )
             for chunk in document_link_chunks:

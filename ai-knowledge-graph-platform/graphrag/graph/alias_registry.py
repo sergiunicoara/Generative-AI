@@ -25,6 +25,7 @@ import os
 import re
 import structlog
 from dataclasses import dataclass
+from typing import NamedTuple
 
 log = structlog.get_logger(__name__)
 
@@ -38,6 +39,23 @@ class AmbiguousMatch:
     candidate: tuple[str, str]   # (canonical_name, canonical_type)
     score: float                 # rapidfuzz ratio (fuzzy) or cosine similarity (embedding)
     match_type: str              # "fuzzy" | "embedding"
+
+
+class ResolvedMatch(NamedTuple):
+    """resolve(..., with_detail=True)'s return for an auto-resolved match.
+
+    Only used by the one caller that opts into ``with_detail=True``
+    (graph_writer.py's entity-write path) — every other caller keeps
+    resolve()'s default, unchanged ``(name, type)`` tuple return, which
+    14+ existing tests and two other call sites still assert against.
+    ``canonical[0]``/``canonical[1]`` index the same as a plain tuple, but
+    ``*canonical`` unpacks all 4 fields, not 2 — any caller that opts into
+    ``with_detail`` must index explicitly, not star-unpack.
+    """
+    name: str
+    type: str
+    method: str                  # "exact" | "fuzzy"
+    score: float | None = None   # rapidfuzz ratio for "fuzzy"; None for "exact"
 
 
 # Defaults — overridden by ingestion.alias_embedding_threshold /
@@ -302,18 +320,31 @@ class AliasRegistry:
             finally:
                 await redis.aclose()
 
-    def resolve(self, raw_name: str) -> tuple[str, str] | AmbiguousMatch | None:
+    def resolve(
+        self, raw_name: str, *, with_detail: bool = False,
+    ) -> tuple[str, str] | ResolvedMatch | AmbiguousMatch | None:
         """
         Resolve a raw name to (canonical_name, canonical_type).
         Checks in-memory cache first (O(1)), then falls back to None.
         Redis is used only during load() — resolve() stays sync and fast.
         Returns None if not found — caller should treat as new entity.
+
+        ``with_detail=True`` returns a ``ResolvedMatch`` (name, type, method,
+        score) instead of a bare tuple for an auto-resolved match — used by
+        graph_writer.py to persist resolution_status/resolution_method.
+        Default is unchanged so every other caller (and the 14+ existing
+        tests that assert a literal ``(name, type)`` tuple) keeps working.
         """
         key = _normalize(raw_name)
 
+        def _match(pair: tuple[str, str], method: str, score: float | None = None):
+            if with_detail:
+                return ResolvedMatch(pair[0], pair[1], method, score)
+            return pair
+
         # 1. Exact / normalized match (in-memory — loaded from Redis or Neo4j)
         if key in self._exact:
-            return self._exact[key]
+            return _match(self._exact[key], "exact")
 
         # 1b. Regulatory prefix-stripped match
         # "EASA AD 2022-0201" → "AD 2022-0201" canonical key
@@ -321,7 +352,7 @@ class AliasRegistry:
         if reg_key != key and reg_key in self._exact:
             log.debug("alias_registry.regulatory_prefix_match", raw=raw_name,
                       canonical=self._exact[reg_key][0])
-            return self._exact[reg_key]
+            return _match(self._exact[reg_key], "exact")
 
         # 1c. Romanian noun-stem fallback match
         # "furnizori" / "furnizorul" / "furnizorii" / "furnizorilor" → "furnizor"
@@ -329,7 +360,7 @@ class AliasRegistry:
         if stem_key in self._stemmed:
             log.debug("alias_registry.stem_match", raw=raw_name,
                       canonical=self._stemmed[stem_key][0])
-            return self._stemmed[stem_key]
+            return _match(self._stemmed[stem_key], "exact")
 
         # 2. Fuzzy match (optional, requires rapidfuzz).  Candidate selection
         # uses only a score upper bound derived from string lengths, therefore
@@ -353,7 +384,7 @@ class AliasRegistry:
                     canonical=best_match[0],
                     score=best_score,
                 )
-                return best_match
+                return _match(best_match, "fuzzy", float(best_score))
             # Ambiguous band — close but not confident enough to auto-merge
             if review_min <= best_score < self._fuzzy_threshold and best_match:
                 log.debug(

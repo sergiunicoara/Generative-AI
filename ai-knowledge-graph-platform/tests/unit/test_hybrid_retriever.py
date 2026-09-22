@@ -35,7 +35,7 @@ def _make_hybrid_retriever(cfg_overrides: dict | None = None) -> HybridRetriever
     hr._local = AsyncMock()
     hr._global = AsyncMock()
     hr._context_builder = MagicMock()
-    hr._context_builder.build.return_value = ("some context", ["e1"])
+    hr._context_builder.build.return_value = ("some context", ["e1"], [])
     hr._contradiction = AsyncMock()
     hr._model_version = "test-model"
     hr._agentic = AsyncMock()
@@ -299,3 +299,45 @@ class TestPlannedAgenticFallback:
         assert result.routing_reason == "planner_cold_start"
         hr._agentic.retrieve_and_answer.assert_awaited_once()
         assert result.retrieval_mode == "agentic"
+
+
+class TestStructuredEvidence:
+    """`QueryResult.evidence` is populated alongside `citations`, and both
+    empty together on abstention — additive, never replacing `citations`."""
+
+    async def test_evidence_is_populated_alongside_citations(self) -> None:
+        from graphrag.core.models import CitationEvidence
+
+        hr = _make_hybrid_retriever()
+        hr._local.search = AsyncMock(return_value={"chunks": [{"chunk_id": "c1", "text": "t"}]})
+        hr._global.search = AsyncMock(return_value={})
+        hr._context_builder.build.return_value = (
+            "context", ["DocA"],
+            [CitationEvidence(source_id="DocA", source_label="DocA", path="[DocA]", confidence=0.9)],
+        )
+
+        result = await hr.retrieve_and_answer("question", mode="local")
+
+        assert result.citations == ["DocA"]
+        assert len(result.evidence) == 1
+        assert result.evidence[0].source_id == "DocA"
+        assert result.evidence[0].confidence == 0.9
+
+    async def test_abstention_empties_evidence_alongside_citations(self) -> None:
+        from graphrag.core.models import CitationEvidence
+
+        hr = _make_hybrid_retriever({
+            "retrieval_sufficiency_abstain_enabled": True,
+            "retrieval_sufficiency_min_evidence": 5,
+        })
+        hr._local.search = AsyncMock(return_value={"chunks": []})
+        hr._global.search = AsyncMock(return_value={})
+        hr._context_builder.build.return_value = (
+            "context", ["DocA"],
+            [CitationEvidence(source_id="DocA", source_label="DocA")],
+        )
+
+        result = await hr.retrieve_and_answer("question", mode="local")
+
+        assert result.citations == []
+        assert result.evidence == []

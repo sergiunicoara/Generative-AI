@@ -405,12 +405,30 @@ class RetrievalTrajectory(BaseModel):
     completed_by: str = "synthesis"
 
 
+class CitationEvidence(BaseModel):
+    """One structured piece of evidence backing a citation in `QueryResult.answer`.
+
+    Additive sibling to `QueryResult.citations: list[str]` — never replaces it.
+    Every field beyond `source_id`/`source_label`/`path` is `None`/absent when
+    the originating retrieval path genuinely has no such data (e.g. agentic
+    citations, document-link edges, graph-relationship endpoints); this model
+    never fabricates a score or timestamp to fill a gap.
+    """
+
+    source_id: str
+    source_label: str
+    path: str = ""
+    valid_from: str | None = None
+    confidence: float | None = None
+
+
 class QueryResult(BaseModel):
     query_id: str = Field(default_factory=lambda: str(uuid4()))
     question: str
     answer: str
     contexts: list[str] = Field(default_factory=list)
     citations: list[str] = Field(default_factory=list)
+    evidence: list[CitationEvidence] = Field(default_factory=list)
     latency_ms: float = 0.0
     retrieval_mode: str = "hybrid"
     model_version: str = ""

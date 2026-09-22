@@ -182,7 +182,7 @@ async def test_hybrid_retriever_bypasses_cache_for_session_context() -> None:
     retriever._local.search.return_value = {}
     retriever._global.search.return_value = {}
     retriever._context_builder = MagicMock()
-    retriever._context_builder.build.return_value = ("context", [])
+    retriever._context_builder.build.return_value = ("context", [], [])
     neo4j = AsyncMock()
 
     with (
@@ -206,7 +206,7 @@ async def test_hybrid_retriever_stores_only_after_governed_trace() -> None:
         "referenced_chunks": ["chunk-1"],
     }
     retriever._context_builder = MagicMock()
-    retriever._context_builder.build.return_value = ("Policy allows it.", ["policy-doc"])
+    retriever._context_builder.build.return_value = ("Policy allows it.", ["policy-doc"], [])
     retriever._record_context_trace = AsyncMock(return_value="decision-1")
     cache = AsyncMock()
     cache.get.return_value = None
@@ -245,7 +245,7 @@ async def test_hybrid_retriever_does_not_store_without_trace() -> None:
         "referenced_chunks": ["chunk-1"],
     }
     retriever._context_builder = MagicMock()
-    retriever._context_builder.build.return_value = ("Policy allows it.", ["policy-doc"])
+    retriever._context_builder.build.return_value = ("Policy allows it.", ["policy-doc"], [])
     retriever._record_context_trace = AsyncMock(return_value=None)
     cache = AsyncMock()
     cache.get.return_value = None
@@ -275,7 +275,7 @@ async def test_hybrid_retriever_bypasses_cache_during_ingestion() -> None:
     retriever = _retriever()
     retriever._local.search.return_value = {}
     retriever._context_builder = MagicMock()
-    retriever._context_builder.build.return_value = ("context", [])
+    retriever._context_builder.build.return_value = ("context", [], [])
     neo4j = AsyncMock()
     neo4j.get_corpus_state.return_value = {"revision": 4, "updating": True}
 

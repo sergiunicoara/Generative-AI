@@ -107,3 +107,28 @@ class TestAnswerNamedDocumentCitations:
         )  # answer_policy defaults to "generic"
 
         assert citations == ["FAA-AD-2022-03-07", "FAA-AD-2024-01-02"]
+
+
+class TestStructuredEvidence:
+    """This retrieval path has no chunk-backed score at the point citations
+    are finalized — `evidence` must still exist, 1:1 with `citations`, with
+    `confidence`/`valid_from` left `None` rather than invented."""
+
+    async def test_answer_shortcut_produces_minimal_evidence_matching_citations(self) -> None:
+        ar = _make_agentic_retriever()
+        ar._reason = AsyncMock(return_value="ANSWER: The AD applies.")
+
+        result = await ar.retrieve_and_answer("What applies?")
+
+        assert [e.source_id for e in result.evidence] == result.citations
+        assert all(e.confidence is None and e.valid_from is None for e in result.evidence)
+
+    async def test_final_synthesis_produces_minimal_evidence_matching_citations(self) -> None:
+        ar = _make_agentic_retriever(max_steps=1)
+        ar._reason = AsyncMock(return_value="UNRECOGNIZED FORMAT")
+        ar._synthesize = AsyncMock(return_value="AD-2024-01-02 applies.")
+
+        result = await ar.retrieve_and_answer("What is the current document ID?")
+
+        assert [e.source_id for e in result.evidence] == result.citations
+        assert all(e.confidence is None and e.valid_from is None for e in result.evidence)

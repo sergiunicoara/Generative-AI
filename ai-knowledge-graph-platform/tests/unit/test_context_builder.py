@@ -490,3 +490,82 @@ class TestChunkTokenBudget:
             _local(chunks), {}, top_k=2, token_budget=100,
         )
         assert citations == ["huge"]
+
+
+class TestContextBuilderEvidence:
+    """`return_evidence=True` returns a structured, additive third value —
+    `citations` itself must stay byte-identical either way."""
+
+    def test_default_return_is_still_a_two_tuple(self):
+        chunks = [{"chunk_id": "a", "text": "a text", "final_score": 1.0}]
+        result = ContextBuilder().build(_local(chunks), {}, top_k=1)
+        assert len(result) == 2
+
+    def test_return_evidence_true_returns_a_three_tuple(self):
+        chunks = [{"chunk_id": "a", "text": "a text", "final_score": 1.0}]
+        context, citations, evidence = ContextBuilder().build(
+            _local(chunks), {}, top_k=1, return_evidence=True,
+        )
+        assert citations == ["a"]
+        assert len(evidence) == 1
+
+    def test_chunk_evidence_carries_confidence_and_path(self):
+        chunks = [{"chunk_id": "c1", "text": "text", "final_score": 0.87, "_doc_name": "DocA"}]
+        _, citations, evidence = ContextBuilder().build(
+            _local(chunks), {}, top_k=1, return_evidence=True,
+        )
+        assert citations == ["DocA"]
+        assert evidence[0].source_id == "DocA"
+        assert evidence[0].confidence == 0.87
+        assert evidence[0].path == "[DocA]"
+
+    def test_chunk_with_no_score_field_has_no_confidence(self):
+        chunks = [{"chunk_id": "c1", "text": "text"}]
+        _, _, evidence = ContextBuilder().build(
+            _local(chunks), {}, top_k=1, return_evidence=True,
+        )
+        assert evidence[0].confidence is None
+
+    def test_document_link_edge_evidence_has_traversal_path_no_confidence(self):
+        local = _local([])
+        local["document_link_edges"] = [{"src": "DocA", "tgt": "DocB"}]
+        _, citations, evidence = ContextBuilder().build(
+            local, {}, top_k=1, return_evidence=True,
+        )
+        assert citations == ["DocA", "DocB"]
+        assert all(e.confidence is None for e in evidence)
+        assert all("—LINKS_TO→" in e.path for e in evidence)
+
+    def test_entity_edge_evidence_has_traversal_path_no_confidence(self):
+        local = _local(
+            [], entity_edges=[{"src": "DocA", "tgt": "DocB", "relation": "SUPERSEDES"}],
+        )
+        _, citations, evidence = ContextBuilder().build(
+            local, {}, top_k=1, return_evidence=True,
+        )
+        assert citations == ["DocA", "DocB"]
+        assert all(e.confidence is None for e in evidence)
+        assert all("—SUPERSEDES→" in e.path for e in evidence)
+
+    def test_global_community_evidence_carries_community_confidence(self):
+        global_results = {
+            "communities": [{"community_id": "cm1", "score": 0.42, "source_documents": ["DocX"]}],
+        }
+        _, citations, evidence = ContextBuilder().build(
+            _local([]), global_results, top_k=1, return_evidence=True,
+        )
+        assert citations == ["DocX"]
+        assert evidence[0].confidence == 0.42
+        assert evidence[0].path == "[community cm1]"
+
+    def test_canonical_alias_citations_are_not_duplicated_in_evidence(self):
+        # The canonical-name-resolution step only ever appends to `citations`;
+        # `evidence` is deliberately left as a subset here (see build()'s
+        # own comment) rather than fabricating a duplicate evidence entry
+        # for an alias of an artifact already covered.
+        chunks = [{"chunk_id": "c1", "text": "text mentions AD 2024-01-02", "final_score": 1.0, "_doc_name": "AD 2024-01-02"}]
+        _, citations, evidence = ContextBuilder().build(
+            _local(chunks), {}, top_k=1, return_evidence=True,
+            document_names=["FAA-AD-2024-01-02.txt"],
+        )
+        assert len(evidence) < len(citations)

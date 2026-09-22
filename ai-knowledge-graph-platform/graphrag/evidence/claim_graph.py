@@ -27,6 +27,10 @@ class ArtifactNode:
     artifact_type: str
     external_id: str
     content_digest: str = ""
+    source_label: str = ""
+    path: str = ""
+    valid_from: str | None = None
+    confidence: float | None = None
 
 
 @dataclass(frozen=True)
@@ -91,12 +95,26 @@ def build_claim_evidence_graph(
         graph.produced_by.append((claim.id, action.id))
 
     artifacts: list[ArtifactNode] = []
-    for citation in dict.fromkeys(str(item) for item in result.citations if str(item).strip()):
-        artifacts.append(ArtifactNode(
-            id=f"artifact:{query_id}:document:{_safe_id(citation)}",
-            tenant=tenant, query_id=query_id, artifact_type="document",
-            external_id=citation,
-        ))
+    if result.evidence:
+        seen_ids: set[str] = set()
+        for item in result.evidence:
+            if item.source_id in seen_ids or not item.source_id.strip():
+                continue
+            seen_ids.add(item.source_id)
+            artifacts.append(ArtifactNode(
+                id=f"artifact:{query_id}:document:{_safe_id(item.source_id)}",
+                tenant=tenant, query_id=query_id, artifact_type="document",
+                external_id=item.source_id,
+                source_label=item.source_label, path=item.path,
+                valid_from=item.valid_from, confidence=item.confidence,
+            ))
+    else:
+        for citation in dict.fromkeys(str(item) for item in result.citations if str(item).strip()):
+            artifacts.append(ArtifactNode(
+                id=f"artifact:{query_id}:document:{_safe_id(citation)}",
+                tenant=tenant, query_id=query_id, artifact_type="document",
+                external_id=citation,
+            ))
     for index, context in enumerate(result.contexts):
         digest = hashlib.sha256(context.encode("utf-8")).hexdigest()
         artifacts.append(ArtifactNode(
@@ -154,7 +172,9 @@ async def persist_claim_evidence_graph(neo4j: Any, graph: ClaimEvidenceGraph) ->
         UNWIND $items AS item
         MERGE (n:Artifact {tenant: item.tenant, id: item.id})
         SET n.query_id = item.query_id, n.artifact_type = item.artifact_type,
-            n.external_id = item.external_id, n.content_digest = item.content_digest
+            n.external_id = item.external_id, n.content_digest = item.content_digest,
+            n.source_label = item.source_label, n.path = item.path,
+            n.valid_from = item.valid_from, n.confidence = item.confidence
         """,
         items=[vars(item) for item in graph.artifacts],
     )

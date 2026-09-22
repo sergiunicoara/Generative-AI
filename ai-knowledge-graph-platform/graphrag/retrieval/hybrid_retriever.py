@@ -704,7 +704,7 @@ class HybridRetriever:
             except Exception as exc:  # noqa: BLE001 — cosmetic enrichment, never fatal
                 log.warning("hybrid_retriever.document_names_failed", error=str(exc)[:160])
 
-            context, citations = self._context_builder.build(
+            context, citations, evidence = self._context_builder.build(
                 local_results=local_results,
                 global_results=global_results,
                 document_names=document_names,
@@ -716,6 +716,7 @@ class HybridRetriever:
                 conflicts=conflicts,
                 hop_reserved_slots=cfg.get("context_hop_reserved_slots", 0),
                 hop_reserved_min_gnn=cfg.get("context_hop_reserved_min_gnn", 0.3),
+                return_evidence=True,
             )
 
             sufficiency = assess_retrieval_sufficiency(
@@ -746,6 +747,7 @@ class HybridRetriever:
             ):
                 answer = abstention_message(sufficiency.reason_code)
                 citations = []
+                evidence = []
             else:
                 answer = await get_llm().generate(
                     answer_prompt(cfg).format(
@@ -760,6 +762,10 @@ class HybridRetriever:
             answer, citations = apply_answer_policy(
                 answer, context, question, citations, document_names, cfg,
             )
+            # `evidence` deliberately isn't re-derived to mirror this mutation
+            # (dedup / aerospace regulatory-identifier grounding) — it documents
+            # what was actually retrieved, a simpler and distinct contract from
+            # "what survived policy grounding."
 
             # ── Claim verification — strip ungrounded sentences ────────────────────
             if cfg.get("claim_verification", False):
@@ -912,6 +918,7 @@ class HybridRetriever:
                 # as unsupported (faithfulness=0.0 false negatives, e.g. AUT-03).
                 contexts=[context] if context else [],
                 citations=citations,
+                evidence=evidence,
                 latency_ms=latency_ms,
                 retrieval_mode=mode,
                 model_version=self._model_version,

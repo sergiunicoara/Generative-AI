@@ -5,6 +5,7 @@ from __future__ import annotations
 import re
 from difflib import SequenceMatcher
 
+from graphrag.core.models import CitationEvidence
 from graphrag.core.tokens import estimate_tokens
 from graphrag.graph.alias_registry import canonical_document_key
 from graphrag.observability.context_size import record_context_composition
@@ -12,6 +13,15 @@ from graphrag.observability.context_size import record_context_composition
 _NEAR_DUPLICATE_RATIO = 0.85
 
 _SECTION_SEPARATOR = "\n\n---\n\n"
+
+
+def _chunk_confidence(chunk: dict) -> float | None:
+    """Best available ranking score for a chunk, or `None` if it has none."""
+    for key in ("final_score", "rerank_score", "score", "gnn_score"):
+        value = chunk.get(key)
+        if value is not None:
+            return float(value)
+    return None
 
 
 class _Sections:
@@ -77,7 +87,8 @@ class ContextBuilder:
         hop_reserved_min_gnn: float = 0.3,
         document_names: list[str] | None = None,
         token_budget: int | None = None,
-    ) -> tuple[str, list[str]]:
+        return_evidence: bool = False,
+    ) -> tuple[str, list[str]] | tuple[str, list[str], list[CitationEvidence]]:
         """Assemble the prompt context and its citation list.
 
         `token_budget`, when set, caps the tokens spent on the primary top-k
@@ -103,6 +114,7 @@ class ContextBuilder:
         """
         sections = _Sections()
         citations: list[str] = []
+        evidence: list[CitationEvidence] = []
 
         # Local: top-k chunks, ranked by the GNN-blended final_score (falls back
         # to rerank_score / path_score for chunks the GNN scorer didn't touch).
@@ -188,7 +200,12 @@ class ContextBuilder:
             header = f"[Chunk {chunk['chunk_id']} | Source: {source}]" if source else f"[Chunk {chunk['chunk_id']}]"
             sections.add("chunks", f"{header}\n{chunk['text']}")
             doc_name = chunk.get("_doc_name") or (source.replace(".txt", "") if source else None)
-            citations.append(doc_name if doc_name else chunk["chunk_id"])
+            citation = doc_name if doc_name else chunk["chunk_id"]
+            citations.append(citation)
+            evidence.append(CitationEvidence(
+                source_id=citation, source_label=citation, path=f"[{citation}]",
+                confidence=_chunk_confidence(chunk),
+            ))
 
         # A topology-reached document can be relevant precisely because it was
         # linked, not because it independently won textual ranking. Reserve a
@@ -207,7 +224,12 @@ class ContextBuilder:
                 header = f"[Linked chunk {chunk['chunk_id']} | Source: {source}]" if source else f"[Linked chunk {chunk['chunk_id']}]"
                 sections.add("linked_chunks", f"{header}\n{chunk['text']}")
                 doc_name = chunk.get("_doc_name") or (source.replace(".txt", "") if source else None)
-                citations.append(doc_name if doc_name else chunk["chunk_id"])
+                citation = doc_name if doc_name else chunk["chunk_id"]
+                citations.append(citation)
+                evidence.append(CitationEvidence(
+                    source_id=citation, source_label=citation, path=f"[{citation}]",
+                    confidence=_chunk_confidence(chunk),
+                ))
                 link_slots -= 1
 
         document_link_edges = local_results.get("document_link_edges", [])
@@ -219,6 +241,9 @@ class ContextBuilder:
                     line += f" (anchor: {edge['anchor_text']})"
                 lines.append(line)
                 citations.extend([edge["src"], edge["tgt"]])
+                link_path = f"{edge['src']} —LINKS_TO→ {edge['tgt']}"
+                evidence.append(CitationEvidence(source_id=edge["src"], source_label=edge["src"], path=link_path))
+                evidence.append(CitationEvidence(source_id=edge["tgt"], source_label=edge["tgt"], path=link_path))
             if lines:
                 sections.add("document_links", "Explicit document links:\n" + "\n".join(lines))
 
@@ -285,6 +310,8 @@ class ContextBuilder:
                 # chunk-derived citations, and the [:10] cap above bounds it.
                 citations.append(e["src"])
                 citations.append(e["tgt"])
+                evidence.append(CitationEvidence(source_id=e["src"], source_label=e["src"], path=line))
+                evidence.append(CitationEvidence(source_id=e["tgt"], source_label=e["tgt"], path=line))
             if edge_lines:
                 sections.add(
                     "graph_relationships",
@@ -322,7 +349,16 @@ class ContextBuilder:
         # better than the unconditional empty list every purely-global-mode
         # answer previously returned regardless of how well-grounded it was.
         for community in global_results.get("communities", []):
-            citations.extend(community.get("source_documents", []))
+            source_documents = community.get("source_documents", [])
+            citations.extend(source_documents)
+            community_confidence = community.get("score")
+            community_id = community.get("community_id")
+            community_path = f"[community {community_id}]" if community_id else ""
+            for doc in source_documents:
+                evidence.append(CitationEvidence(
+                    source_id=doc, source_label=doc, path=community_path,
+                    confidence=float(community_confidence) if community_confidence is not None else None,
+                ))
 
         context = sections.render()
         # Published after assembly rather than accumulated during it, so the
@@ -364,4 +400,7 @@ class ContextBuilder:
             ]
             citations.extend(resolved)
 
-        return context, list(dict.fromkeys(citations))  # deduplicate preserving order
+        deduped_citations = list(dict.fromkeys(citations))  # deduplicate preserving order
+        if return_evidence:
+            return context, deduped_citations, evidence
+        return context, deduped_citations

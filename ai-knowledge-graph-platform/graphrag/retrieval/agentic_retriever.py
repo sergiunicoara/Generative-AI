@@ -20,7 +20,7 @@ from graphrag.graph.alias_registry import canonical_document_key
 from graphrag.graph.neo4j_client import get_neo4j
 from graphrag.core.llm_client import get_fast_llm, get_llm
 from graphrag.core.llm_utils import normalize_dashes
-from graphrag.core.models import QueryResult, RetrievalStep
+from graphrag.core.models import CitationEvidence, QueryResult, RetrievalStep
 from graphrag.core.prompt_security import escape_prompt_data
 from graphrag.retrieval.local_search import LocalSearch
 from graphrag.retrieval.context_builder import ContextBuilder
@@ -248,6 +248,12 @@ class AgenticRetriever:
                 answer, citations = apply_answer_policy(
                     answer, current_context, question, citations, document_names, cfg,
                 )
+                # No chunk-backed score/timestamp is available on this path —
+                # a minimal evidence entry per citation, nothing invented.
+                evidence = [
+                    CitationEvidence(source_id=c, source_label=c, path=f"[{c}]")
+                    for c in citations
+                ]
                 if capture_trajectory:
                     trajectory_steps.append(RetrievalStep(
                         step=len(trajectory_steps) + 1,
@@ -260,6 +266,7 @@ class AgenticRetriever:
                     answer=answer,
                     contexts=[c.get("text", "") for c in all_chunks],
                     citations=citations,
+                    evidence=evidence,
                     latency_ms=latency_ms,
                     retrieval_mode="agentic",
                     model_version=get_settings().groq_model,  # final synthesis model
@@ -354,6 +361,10 @@ class AgenticRetriever:
         final_answer, citations = apply_answer_policy(
             final_answer, final_context, question, citations, document_names, cfg,
         )
+        evidence = [
+            CitationEvidence(source_id=c, source_label=c, path=f"[{c}]")
+            for c in citations
+        ]
         if capture_trajectory:
             trajectory_steps.append(RetrievalStep(
                 step=len(trajectory_steps) + 1,
@@ -366,6 +377,7 @@ class AgenticRetriever:
             answer=final_answer.strip(),
             contexts=[c.get("text", "") for c in all_chunks],
             citations=citations,
+            evidence=evidence,
             latency_ms=latency_ms,
             retrieval_mode="agentic",
             model_version=get_settings().groq_model,

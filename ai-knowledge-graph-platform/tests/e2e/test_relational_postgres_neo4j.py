@@ -71,8 +71,11 @@ class TestRelationalPostgresToNeo4j:
         from sqlalchemy import text
         from sqlalchemy.ext.asyncio import create_async_engine
 
+        from graphrag.core.config import ROOT
         from graphrag.graph.controlled_query import execute_controlled_query
+        from graphrag.graph.domain_ontology import get_relation_rules, load_domain_ontology
         from graphrag.graph.neo4j_client import Neo4jClient
+        from graphrag.graph.ontology_registry import get_ontology_registry
         from graphrag.ingestion.graph_writer import GraphWriter
         from graphrag.ingestion.relational import (
             EntityTableMapping,
@@ -120,6 +123,12 @@ class TestRelationalPostgresToNeo4j:
         client._filtered_vector_search = False
         client._filtered_vector_indexes = set()
         client._in_flight = 0
+        domain_ontology = load_domain_ontology(
+            ROOT / "config" / "ontologies" / "sustainability_supply_chain.yml"
+        )
+        get_ontology_registry(client, tenant=tenant).add_domain_range_rules(
+            get_relation_rules(domain_ontology)
+        )
         mapping = RelationalGraphMapping(
             id="sustainability-e2e",
             version="1.0.0",

@@ -157,39 +157,28 @@ class TestEmbedderCountMismatch:
         from graphrag.core.models import Chunk
         return [Chunk(document_id="d", text=f"text {i}", chunk_index=i) for i in range(n)]
 
-    def _mock_embedder(self):
-        from graphrag.ingestion.embedder import Embedder
-        e = Embedder.__new__(Embedder)
-        e._client = MagicMock()
-        e._model = "embed-model"
-        e._batch_size = 100
-        return e
-
     async def test_count_mismatch_raises_value_error(self):
-        embedder = self._mock_embedder()
+        from graphrag.ingestion.embedder import Embedder
+        embedder = Embedder.__new__(Embedder)
+        embedder._batch_size = 100
         chunks = self._make_chunks(3)
 
-        # API returns only 2 embeddings for 3 chunks (OpenAI format)
-        mock_result = MagicMock()
-        mock_result.data = [MagicMock(embedding=[0.1, 0.2]) for _ in range(2)]
-
-        with patch("asyncio.get_running_loop") as mock_loop:
-            mock_loop.return_value.run_in_executor = AsyncMock(return_value=mock_result)
+        # Return fewer vectors than chunks without constructing a real API client.
+        fake_client = MagicMock()
+        fake_client.embed = AsyncMock(return_value=[[0.1, 0.2], [0.3, 0.4]])
+        with patch("graphrag.ingestion.embedder.get_embedder", return_value=fake_client):
             with pytest.raises(ValueError, match="count mismatch"):
                 await embedder.embed_chunks(chunks)
 
     async def test_correct_count_succeeds(self):
-        embedder = self._mock_embedder()
+        from graphrag.ingestion.embedder import Embedder
+        embedder = Embedder.__new__(Embedder)
+        embedder._batch_size = 100
         chunks = self._make_chunks(2)
 
-        mock_result = MagicMock()
-        mock_result.data = [
-            MagicMock(embedding=[0.1, 0.2]),
-            MagicMock(embedding=[0.3, 0.4]),
-        ]
-
-        with patch("asyncio.get_running_loop") as mock_loop:
-            mock_loop.return_value.run_in_executor = AsyncMock(return_value=mock_result)
+        fake_client = MagicMock()
+        fake_client.embed = AsyncMock(return_value=[[0.1, 0.2], [0.3, 0.4]])
+        with patch("graphrag.ingestion.embedder.get_embedder", return_value=fake_client):
             result = await embedder.embed_chunks(chunks)
 
         assert result[0].embedding == [0.1, 0.2]

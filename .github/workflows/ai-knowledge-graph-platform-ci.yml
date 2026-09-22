@@ -71,13 +71,13 @@ jobs:
         run: python scripts/verify_energy_clean_snapshot.py
 
       - name: Run unit tests
-        run: pytest tests/unit/ -v --tb=short
+        run: python -m pytest tests/unit/ -v --tb=short
 
       - name: Run integration tests
-        run: pytest tests/integration/ -v --tb=short
+        run: python -m pytest tests/integration/ -v --tb=short
 
       - name: Run load tests
-        run: pytest tests/load/ -v --tb=short
+        run: python -m pytest tests/load/ -v --tb=short
 
       - name: Validate evaluation datasets
         run: python scripts/validate_eval_datasets.py
@@ -106,7 +106,7 @@ jobs:
       - name: Run E2E tests
         run: |
           set -o pipefail
-          pytest tests/e2e/ -v --tb=short -ra -p no:randomly | tee e2e.log
+          python -m pytest tests/e2e/ -v --tb=short -ra -p no:randomly | tee e2e.log
           if grep -qE '[0-9]+ skipped' e2e.log; then
             echo "::error::E2E tests skipped — Docker or testcontainers unavailable on the runner."
             exit 1

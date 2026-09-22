@@ -259,21 +259,21 @@ async def _seed_retrieval_fixture(client, tenant: str, marker: str) -> None:
     is unambiguous in the results.
     """
     await client.run(
-        f"""
-        CREATE (d:Document {{id: $doc_id, tenant: $tenant, filename: $filename}})
-        CREATE (c:Chunk {{id: $chunk_id, tenant: $tenant,
-          text: "Retrieval isolation probe mentions " + $marker + " certification"}})
+        """
+        CREATE (d:Document {id: $doc_id, tenant: $tenant, filename: $filename})
+        CREATE (c:Chunk {id: $chunk_id, tenant: $tenant,
+          text: "Retrieval isolation probe mentions " + $marker + " certification"})
         CREATE (c)-[:PART_OF]->(d)
-        CREATE (e1:Entity {{name: $marker + "-Supplier", type: "SUPPLIER", tenant: $tenant,
-          description: "d", confidence: 0.9, quarantined: false}})
-        CREATE (e2:Entity {{name: $marker + "-Standard", type: "STANDARD", tenant: $tenant,
-          description: "d", confidence: 0.9, quarantined: false}})
+        CREATE (e1:Entity {name: $marker + "-Supplier", type: "SUPPLIER", tenant: $tenant,
+          description: "d", confidence: 0.9, quarantined: false})
+        CREATE (e2:Entity {name: $marker + "-Standard", type: "STANDARD", tenant: $tenant,
+          description: "d", confidence: 0.9, quarantined: false})
         CREATE (c)-[:MENTIONS]->(e1)
-        CREATE (hc:Chunk {{id: $hop_chunk_id, tenant: $tenant,
-          text: $marker + " hop-reachable chunk"}})
+        CREATE (hc:Chunk {id: $hop_chunk_id, tenant: $tenant,
+          text: $marker + " hop-reachable chunk"})
         CREATE (hc)-[:MENTIONS]->(e2)
-        CREATE (e1)-[:RELATES_TO {{relation: "CERTIFIED_UNDER", tenant: $tenant,
-          confidence: 0.9, source_doc_ids: ["doc-1"]}}]->(e2)
+        CREATE (e1)-[:RELATES_TO {relation: "CERTIFIED_UNDER", tenant: $tenant,
+          confidence: 0.9, source_doc_ids: ["doc-1"]}]->(e2)
         """,
         tenant=tenant, marker=marker,
         doc_id=f"doc-{marker}", filename=f"{marker}.txt",

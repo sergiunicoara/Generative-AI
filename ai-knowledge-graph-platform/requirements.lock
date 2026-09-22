@@ -563,7 +563,7 @@ pytz==2026.3.post1
     # via neo4j
 pywavelets==1.9.0
     # via imagehash
-pywin32==312
+pywin32==312 ; sys_platform == "win32"
     # via
     #   docker
     #   mcp

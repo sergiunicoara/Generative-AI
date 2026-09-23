@@ -309,6 +309,35 @@ async def health_ready():
         checks["llm_provider"] = "unavailable"
         failed = True
 
+    # ── RabbitMQ ─────────────────────────────────────────────────────────────
+    # The async query path (POST /query with a queued response) and all
+    # ingestion depend on this broker being reachable; a down broker means
+    # accepted work silently never executes, the same failure mode Redis's
+    # comment above describes. Previously omitted from this endpoint despite
+    # being a hard dependency for that path (docs/IMPLEMENTATION_AUDIT.md).
+    try:
+        from graphrag.messaging.rabbitmq_client import get_rabbitmq_if_connected, ping_reachable
+
+        # Reuse the already-connected client if this process holds one (the
+        # normal case) -- a channel acquire on a live pool is cheap and
+        # exact. Only fall back to a raw TCP reachability check when nothing
+        # is connected yet: `get_rabbitmq()` would call
+        # `aio_pika.connect_robust()`, which is unsuitable for a readiness
+        # probe (see `RabbitMQClient.ping()`'s docstring -- confirmed
+        # directly that its reconnect loop swallows cancellation and leaks a
+        # permanently-retrying background task per failed poll).
+        existing = get_rabbitmq_if_connected()
+        alive = await existing.ping() if existing is not None else await ping_reachable()
+        if alive:
+            checks["rabbitmq"] = "ok"
+        else:
+            checks["rabbitmq"] = "unavailable"
+            failed = True
+    except Exception as exc:  # noqa: BLE001
+        log.warning("health.ready_check_failed", component="rabbitmq", error=str(exc))
+        checks["rabbitmq"] = "unavailable"
+        failed = True
+
     if failed:
         raise HTTPException(status_code=503, detail={"status": "unhealthy", "checks": checks})
     return {"status": "healthy", "checks": checks}

@@ -79,6 +79,14 @@ SCENES = [
         "dashboard_publication_audit.png",
     ),
     Scene(
+        "Governance gaps made visible", 20,
+        "Governance remains explicit across technology choices. This generated report shows "
+        "where a runtime projection, such as Neo4j, cannot enforce a semantic rule directly, "
+        "and which controls -- including SHACL validation and controlled loading -- keep the "
+        "canonical model authoritative.",
+        "dashboard_capability_gaps.png",
+    ),
+    Scene(
         "Built for review and traceability", 22,
         "Behind the business view, source data is mapped into RDF, checked through a "
         "SHACL publication gate, and evaluated by version-controlled SPARQL. A governed "
@@ -136,8 +144,23 @@ def add_capture(image: Image.Image, draw: ImageDraw.ImageDraw, filename: str) ->
     if not source.exists():
         raise RuntimeError(f"Missing capture {source}; run scripts/capture_energy_demo_ui.py")
     capture = Image.open(source).convert("RGB")
+    if filename == "dashboard_insufficient_evidence.png":
+        # Full-page dashboard capture also includes the long remediation and
+        # audit sections. The scene needs the actual no-evidence decision,
+        # not a scaled-down strip of the entire page.
+        capture = capture.crop((300, 245, 1360, 980))
+        capture.thumbnail((1040, 500), Image.Resampling.LANCZOS)
+        x, y = (W - capture.width) // 2, 164 + (500 - capture.height) // 2
+        draw.rounded_rectangle((x - 10, y - 10, x + capture.width + 10, y + capture.height + 10),
+                               radius=12, fill=PANEL, outline=CYAN, width=2)
+        image.paste(capture, (x, y))
+        return
     if filename == "dashboard_technical_trace.png":
         capture = why_trace_excerpt(capture)
+        # Start directly at the expanded explanation. The preceding form
+        # field is visually empty and made the evidence screenshot appear
+        # absent at the opening of the scene.
+        capture = capture.crop((0, 52, capture.width, capture.height))
         capture.thumbnail((710, 460), Image.Resampling.LANCZOS)
         x, y = 510, 175
         draw.rounded_rectangle((x - 10, y - 10, x + capture.width + 10, y + capture.height + 10),

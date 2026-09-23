@@ -17,23 +17,54 @@ def main() -> None:
     with sync_playwright() as playwright:
         browser = playwright.chromium.launch()
         page = browser.new_page(viewport={"width": 1440, "height": 900}, device_scale_factor=1)
-        page.goto(f"{BASE}/auth/dev-login?next=/energy-demo", wait_until="networkidle")
+        # The API may retain background connections (for example broker health
+        # checks), so ``networkidle`` is not a reliable page-ready signal.
+        # The authenticated dashboard itself is ready once its DOM loads.
+        page.goto(
+            f"{BASE}/auth/dev-login?next=/energy-demo",
+            wait_until="domcontentloaded",
+            timeout=90_000,
+        )
+        page.locator("#capability-gaps").wait_for()
         page.screenshot(path=str(OUT / "dashboard_current.png"), full_page=True)
 
-        page.locator("button").nth(1).click()
-        page.wait_for_timeout(250)
-        page.screenshot(path=str(OUT / "dashboard_insufficient_evidence.png"), full_page=True)
-
-        page.locator("summary").click()
-        page.wait_for_timeout(150)
-        page.screenshot(path=str(OUT / "dashboard_technical_trace.png"), full_page=True)
-
+        # The report is fetched after the dashboard shell renders. Wait for
+        # generated data rather than capturing its transient loading state.
+        page.wait_for_function(
+            "document.getElementById('capability-gaps-status')?.textContent"
+            ".indexOf('Loading') === -1"
+        )
         # Keep the generated capability-loss report read-only and unobtrusive
         # in the normal dashboard, but capture its expanded state for the
         # technical walkthrough and evidence manifest.
         page.locator("#capability-gaps summary").click()
         page.wait_for_timeout(250)
-        page.screenshot(path=str(OUT / "dashboard_capability_gaps.png"), full_page=True)
+        capability_panel = page.locator("#capability-gaps")
+        panel_box = capability_panel.bounding_box()
+        if panel_box is None:
+            raise RuntimeError("Capability diagnostics panel was not visible for capture")
+        # The full generated report can contain hundreds of entries. Capture
+        # the populated top portion at readable scale; this is a real,
+        # unaltered subset, not a manually curated report.
+        page.screenshot(
+            path=str(OUT / "dashboard_capability_gaps.png"),
+            clip={
+                "x": panel_box["x"],
+                "y": panel_box["y"],
+                "width": panel_box["width"],
+                "height": min(panel_box["height"], 620),
+            },
+        )
+        page.locator("#capability-gaps summary").click()
+        page.wait_for_timeout(100)
+
+        page.locator("button").nth(1).click()
+        page.wait_for_timeout(250)
+        page.screenshot(path=str(OUT / "dashboard_insufficient_evidence.png"), full_page=True)
+
+        page.get_by_text("Why am I seeing this?", exact=True).click()
+        page.wait_for_timeout(150)
+        page.screenshot(path=str(OUT / "dashboard_technical_trace.png"), full_page=True)
 
         # Text-based selectors here (not `.nth()`): the remediation panel's
         # own buttons come after everything the two captures above rely on,

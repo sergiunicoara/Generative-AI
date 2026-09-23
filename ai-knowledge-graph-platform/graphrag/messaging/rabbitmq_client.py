@@ -68,6 +68,37 @@ class RabbitMQClient:
         self._connection_pool = None
         log.info("rabbitmq.closed")
 
+    async def ping(self) -> bool:
+        """Cheap liveness check for readiness probes.
+
+        If this process already holds a live connection pool (the normal
+        case — the API process connects at startup), reuse it: acquire a
+        channel, which round-trips to the broker over the existing
+        connection at the same cost `publish()`/`consume()` already pay.
+
+        If nothing is connected yet, this deliberately does NOT fall back to
+        `get_rabbitmq()` / `aio_pika.connect_robust()`. That call is
+        genuinely unsuitable for a readiness probe: confirmed directly
+        against this project's own broker config that `RobustConnection`
+        swallows `asyncio.CancelledError` inside its own reconnect state
+        machine and treats it as "connection dropped, retry" rather than
+        "caller gave up" — cancelling the coroutine does not stop it, it
+        just spawns another 5-second retry cycle, forever, as a background
+        task nothing can reach again. A readiness check that starts one of
+        those on every failed poll while the broker is down is a genuine
+        leak, not just a slow endpoint. `ping_reachable()` below is the
+        right tool for "is anything listening at all" without touching
+        aio_pika's retry machinery.
+        """
+        if not self._channel_pool:
+            return False
+        try:
+            async with self._channel_pool.acquire() as channel:
+                return not channel.is_closed
+        except Exception as exc:  # noqa: BLE001
+            log.warning("rabbitmq.ping_failed", error=str(exc)[:200])
+            return False
+
     async def ensure_topology(self) -> None:
         """Declare all durable exchanges, work queues, bindings, and DLQs."""
         if not self._channel_pool:
@@ -278,17 +309,42 @@ class RabbitMQClient:
                             await message.ack()
                         else:
                             # Build structured DLQ envelope so ops can triage without
-                            # parsing raw RabbitMQ headers.
+                            # parsing raw RabbitMQ headers. `payload_summary` stays
+                            # for human triage (grep-able in logs without base64
+                            # noise); `original_body_b64` carries the complete,
+                            # untruncated message so scripts/replay_dlq.py can
+                            # actually requeue it. The prior version only kept the
+                            # 8-key/80-char summary, which made every DLQ message
+                            # permanently unreplayable -- there was no way to
+                            # reconstruct what was actually being retried.
+                            import base64
                             dlq_envelope = {
-                                "dlq_reason":       "max_retries_exceeded",
-                                "exception_type":   exc_type,
-                                "error":            exc_msg,
-                                "retry_count":      retries,
-                                "queue":            queue_name,
-                                "message_id":       str(message.message_id or ""),
-                                "payload_summary":  payload_summary,
+                                "dlq_reason":         "max_retries_exceeded",
+                                "exception_type":     exc_type,
+                                "error":              exc_msg,
+                                "retry_count":        retries,
+                                "queue":              queue_name,
+                                "message_id":         str(message.message_id or ""),
+                                "payload_summary":    payload_summary,
+                                "original_body_b64":  base64.b64encode(message.body).decode("ascii"),
+                                "original_headers":   dict(message.headers or {}),
+                                "original_priority":  message.priority or 0,
+                                "original_correlation_id": message.correlation_id,
                             }
-                            log.error("rabbitmq.dlq_sent", dlq=dlq_name, **dlq_envelope)
+                            # Log only the triage-sized fields -- the full base64
+                            # body belongs in the DLQ message itself, not in every
+                            # structured log line (would bloat log storage for
+                            # every large ingest payload).
+                            log.error(
+                                "rabbitmq.dlq_sent", dlq=dlq_name,
+                                dlq_reason=dlq_envelope["dlq_reason"],
+                                exception_type=dlq_envelope["exception_type"],
+                                error=dlq_envelope["error"],
+                                retry_count=dlq_envelope["retry_count"],
+                                queue=dlq_envelope["queue"],
+                                message_id=dlq_envelope["message_id"],
+                                payload_summary=dlq_envelope["payload_summary"],
+                            )
                             # Work being discarded permanently. A log line is
                             # not alertable at the rate an operator needs.
                             record_dlq(queue_name, exc_type)
@@ -339,3 +395,39 @@ async def close_rabbitmq() -> None:
     if client is not None:
         await client.close()
     _client_lock = None
+
+
+def get_rabbitmq_if_connected() -> RabbitMQClient | None:
+    """Return the singleton client only if it already exists -- never
+    connects. For callers (readiness probes) that must not trigger
+    `aio_pika.connect_robust()`'s indefinite retry loop as a side effect of
+    checking whether it's already up.
+    """
+    return _client
+
+
+async def ping_reachable(url: str | None = None, timeout: float = 2.0) -> bool:
+    """Raw TCP reachability check against the configured broker, bounded and
+    genuinely cancellable — does not touch `aio_pika.connect_robust()` (see
+    `RabbitMQClient.ping()`'s docstring for why that path can't be used
+    here). Proves "something is listening on this host:port", not a full
+    AMQP handshake — sufficient signal for a readiness probe.
+    """
+    from urllib.parse import urlparse
+
+    parsed = urlparse(url or get_settings().rabbitmq_url)
+    host = parsed.hostname or "localhost"
+    port = parsed.port or 5672
+    try:
+        reader, writer = await asyncio.wait_for(
+            asyncio.open_connection(host, port), timeout=timeout,
+        )
+        writer.close()
+        try:
+            await writer.wait_closed()
+        except Exception:  # noqa: BLE001 - best-effort close
+            pass
+        return True
+    except Exception as exc:  # noqa: BLE001
+        log.warning("rabbitmq.ping_reachable_failed", host=host, port=port, error=str(exc)[:200])
+        return False

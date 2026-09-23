@@ -227,7 +227,7 @@ names, even when a canonical mapping has been deliberately approved.
 ## Reproduction and limitations
 
 The machine-readable finding set is in `research/linkedin_findings.json` and the
-priorities are summarized in the root `ROADMAP.md`. LinkedIn may reorder or hide
+priorities are summarized in the canonical `docs/roadmap.md`. LinkedIn may reorder or hide
 posts, relative date labels are not immutable timestamps, and inaccessible post
 comments were not treated as evidence. Primary-source status is recorded as of
 2026-08-26 and should be rechecked before adopting deferred technologies.

@@ -157,3 +157,18 @@ default for an unspecified or `application/json` Content-Type/Accept. See
 JSON-only for now — the remote store's own results body is passed through verbatim rather
 than reconstructed — and any other Accept type returns `501` rather than a silently
 incorrect conversion.
+
+## Addendum (2026-09-23) — Gremlin (Neptune/Cosmos DB) on the property-graph side
+
+The addenda above are all SPARQL-side (RDF triple stores). Gremlin is a
+different thing entirely — a property-graph traversal language, the same
+category as Cypher, not RDF/SPARQL. It's the query interface Neptune and
+Cosmos DB's Gremlin API speak, and Neo4j does not.
+
+**This still does not revisit the Decision above.** See
+[ADR-0012](0012-graphbackend-protocol-and-gremlin.md) for the actual
+decision: a `GraphBackend` Protocol covering `Neo4jClient`'s core CRUD/
+1-hop-retrieval shape, and a `GremlinBackend` implementing it. `Neo4jClient`
+remains the platform's only runtime backend — `GremlinBackend` is additive,
+inert unless `GREMLIN_URL` is explicitly configured, and no `get_neo4j()`
+call site changes.

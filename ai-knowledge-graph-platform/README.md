@@ -62,6 +62,7 @@ The graph is not a RAG index. It is a formally modeled knowledge base:
 - [`docs/adr/0008-adaptive-retrieval-routing.md`](docs/adr/0008-adaptive-retrieval-routing.md) — Measured tenant-scoped retrieval route selection
 - [`docs/adr/0009-agent-platform-trust-boundaries.md`](docs/adr/0009-agent-platform-trust-boundaries.md) — Agent identity, capability, write, and telemetry trust boundaries
 - [`docs/adr/ADR-Context-Graph-Decision-Trace.md`](docs/adr/ADR-Context-Graph-Decision-Trace.md) — Bounded Context Graph ownership, trace integrity, and privacy rules
+- [`docs/adr/0012-graphbackend-protocol-and-gremlin.md`](docs/adr/0012-graphbackend-protocol-and-gremlin.md) — `GraphBackend` Protocol + a live-verified Gremlin (Neptune/Cosmos DB) backend, additive to Neo4j
 - [`docs/mcp-operations.md`](docs/mcp-operations.md) — authenticated Streamable HTTP MCP operations and deployment gate
 - [`docs/mcp-operations.md`](docs/mcp-operations.md) — authenticated MCP operations and the reusable, compatibility-tested capability contract
 - [`docs/templates/production-evidence-template.json`](docs/templates/production-evidence-template.json) — source-of-truth fields for production scale and business-impact claims
@@ -186,6 +187,8 @@ local live Neo4j; production traffic and production-scale tuning remain open.
 | Feature | Details |
 |---------|---------|
 | **Batched ingestion writes** | Entity embeddings (A131) + chunk/entity/relation writes (A129 + A132) batched via UNWIND to minimize Neo4j round-trips — 30-doc corpus ingests in ~48 min wall-clock (90+ min → 48 min after A129-A132 optimization) |
+| **GraphBackend Protocol + Gremlin backend** | `graphrag/graph/graph_backend.py` extracts an 11-method Protocol from `Neo4jClient`'s core CRUD/1-hop-retrieval shape; `GremlinBackend` implements it for Neptune/Cosmos DB, live-verified against a real `tinkerpop/gremlin-server` container (not just mocked) — additive only, Neo4j remains the runtime backend. See [ADR-0012](docs/adr/0012-graphbackend-protocol-and-gremlin.md). |
+| **Document-catalog read API** | `GET /kg/catalog/documents` / `/kg/catalog/documents/{doc_id}` — filtered document listing plus metadata-envelope, ACL, and ingestion-run-history detail, reading fields `merge_document`/`upsert_ingestion_manifest` already write; no new node types |
 | **Five-stage retrieval pipeline + synthesis** | Vector ANN → BM25+RRF → Cross-encoder → Multi-hop → GAT/GCN GNN → LLM synthesis; IRCoT is an iterative fallback |
 | **Graph Attention Network (GAT)** | GCN/GAT re-scores chunks using entity embedding propagation; attention weights by cosine similarity between neighbours |
 | **Query-adaptive GNN weights** | Relational queries (e.g. "how did X cause Y") auto-shift to 50/50 text/GNN; factoid queries use default α/β |
@@ -277,7 +280,7 @@ The cross-encoder scores text similarity. It doesn't know that *Falcon 9* and *S
 
 | Component | Technology |
 |-----------|-----------|
-| Graph DB | Neo4j 5.20 compatibility baseline; validated Neo4j 2026.06 path with tenant-filtered vector `SEARCH` via `compose.neo4j-modern.yaml` |
+| Graph DB | Neo4j 5.20 compatibility baseline; validated Neo4j 2026.06 path with tenant-filtered vector `SEARCH` via `compose.neo4j-modern.yaml`. Optional additive Gremlin backend (Neptune/Cosmos DB, `GREMLIN_URL`) for a core CRUD/retrieval subset — see [ADR-0012](docs/adr/0012-graphbackend-protocol-and-gremlin.md) |
 | Session Store | Redis 7 |
 | Message Queue | RabbitMQ 3.13 |
 | KPI Store | SQLite by default; optional TimescaleDB via `KPI_BACKEND=timescale` |

@@ -4,22 +4,29 @@
 ``Neo4jClient`` (neo4j_client.py) has 60 async methods and no backend
 abstraction -- every one of its callers (~100 files) imports ``get_neo4j()``
 and depends on a concrete ``Neo4jClient``. This module does **not** change
-that. It extracts a Protocol covering the 9 methods below, which
+that. It extracts a Protocol covering the 11 methods below, which
 ``Neo4jClient`` already satisfies structurally with no code changes, so that
 an alternative backend (``gremlin_client.py``'s ``GremlinBackend``, for
 Neptune/Cosmos DB's Gremlin API) can implement the same shape for the
 retrieval-critical subset.
 
+``merge_entities_batch``/``merge_mentions_batch`` cover the actual
+ingestion-volume write path. ``GremlinBackend``'s versions are documented
+as thin loops over the single-item methods, not a true server-side batch
+the way ``Neo4jClient``'s single Cypher ``UNWIND`` is -- see
+``gremlin_client.py``'s docstring for the exact gap (no
+``prior_similarity``, one round-trip per item).
+
 What this Protocol deliberately does NOT cover
 ------------------------------------------------
-``Neo4jClient`` has ~50 other methods with no Gremlin equivalent here:
+``Neo4jClient`` has ~48 other methods with no Gremlin equivalent here:
 schema/corpus-lifecycle admin (``init_schema``, ``begin_corpus_update``,
 ``advance_corpus_revision``, ...), document/chunk/structured-data ingestion
 (``merge_document``, ``merge_chunk``, ``merge_structured_tables``, ...),
-batch variants (``merge_entities_batch``, ``merge_relations_batch``, ...),
-community detection (``merge_community``, ``clear_communities``), vector/BM25
-search (``vector_search_chunks``, ``bm25_search_entities``, ...), multi-hop
-traversal (``get_multihop_chunks``), and PageRank/GDS-dependent analytics
+``merge_relations_batch``, community detection (``merge_community``,
+``clear_communities``), vector/BM25 search (``vector_search_chunks``,
+``bm25_search_entities``, ...), multi-hop traversal
+(``get_multihop_chunks``), and PageRank/GDS-dependent analytics
 (``run_pagerank``, ``get_top_entities_by_pagerank``, ...). None of these are
 part of ``GraphBackend`` and no ``GremlinBackend`` method exists for them --
 same honesty convention this package's ``triplestore.py`` uses for Neptune's
@@ -87,6 +94,14 @@ class GraphBackend(Protocol):
     async def get_all_entities(self, tenant: str = "default") -> list[dict]: ...
 
     async def get_all_relations(self, tenant: str = "default") -> list[dict]: ...
+
+    async def merge_entities_batch(
+        self, entities: list[Entity], tenant: str = "default",
+    ) -> list[dict]: ...
+
+    async def merge_mentions_batch(
+        self, chunk_id: str, entity_refs: list[tuple[str, str]], tenant: str = "default",
+    ) -> None: ...
 
 
 __all__ = ["GraphBackend"]

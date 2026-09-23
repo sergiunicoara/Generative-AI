@@ -423,6 +423,93 @@ class Neo4jClient:
             for r in rows if r.get("filename")
         }
 
+    async def get_documents_catalog(
+        self,
+        tenant: str = "default",
+        *,
+        collection: str | None = None,
+        classification: str | None = None,
+        source_system: str | None = None,
+        limit: int = 50,
+        offset: int = 0,
+    ) -> list[dict]:
+        """Filtered, paginated document listing over the MetadataEnvelope
+        fields merge_document already flattens onto the Document node
+        (collection/source_system/classification/... -- see merge_document's
+        own SET clause). Read-only; no new node types or write paths.
+        Excludes soft-deleted documents by default, same
+        coalesce(..., false) = false pattern get_all_entities uses for
+        quarantined entities.
+        """
+        filters = ["coalesce(d.is_deleted, false) = false"]
+        params: dict = {"tenant": tenant, "limit": limit, "offset": offset}
+        if collection is not None:
+            filters.append("d.collection = $collection")
+            params["collection"] = collection
+        if classification is not None:
+            filters.append("d.classification = $classification")
+            params["classification"] = classification
+        if source_system is not None:
+            filters.append("d.source_system = $source_system")
+            params["source_system"] = source_system
+        where_clause = " AND ".join(filters)
+        return await self.run(
+            f"""
+            MATCH (d:Document {{tenant: $tenant}})
+            WHERE {where_clause}
+            RETURN d.id AS id, d.filename AS filename, d.collection AS collection,
+                   d.source_system AS source_system, d.classification AS classification,
+                   d.content_type AS content_type, d.authority_level AS authority_level,
+                   d.ingested_at AS ingested_at, d.status AS status
+            ORDER BY d.ingested_at DESC
+            SKIP $offset LIMIT $limit
+            """,
+            **params,
+        )
+
+    async def get_document_catalog_detail(
+        self, doc_id: str, tenant: str = "default",
+    ) -> dict | None:
+        """Single document's full MetadataEnvelope + ACL fields + its
+        IngestionRunManifest run history (via the -[:INGESTS]-> edge
+        upsert_ingestion_manifest already creates). Returns None if the
+        document doesn't exist in this tenant -- caller (the catalog route)
+        turns that into a 404.
+        """
+        rows = await self.run(
+            """
+            MATCH (d:Document {id: $doc_id, tenant: $tenant})
+            RETURN d.id AS id, d.filename AS filename, d.collection AS collection,
+                   d.source_system AS source_system, d.external_id AS external_id,
+                   d.source_url AS source_url, d.source_version AS source_version,
+                   d.content_type AS content_type, d.classification AS classification,
+                   d.metadata_schema_version AS metadata_schema_version,
+                   d.metadata_envelope_json AS metadata_envelope_json,
+                   d.access_mode AS access_mode, d.acl_state AS acl_state,
+                   d.allow_principals AS allow_principals, d.deny_principals AS deny_principals,
+                   d.authority_level AS authority_level, d.ingested_at AS ingested_at,
+                   d.status AS status, d.source_id AS source_id,
+                   coalesce(d.is_deleted, false) AS is_deleted
+            """,
+            doc_id=doc_id,
+            tenant=tenant,
+        )
+        if not rows:
+            return None
+        detail = rows[0]
+        detail["ingestion_runs"] = await self.run(
+            """
+            MATCH (m:IngestionRunManifest)-[:INGESTS]->(d:Document {id: $doc_id, tenant: $tenant})
+            RETURN m.job_id AS job_id, m.status AS status, m.started_at AS started_at,
+                   m.completed_at AS completed_at, m.model_provider AS model_provider,
+                   m.model_version AS model_version
+            ORDER BY m.started_at DESC
+            """,
+            doc_id=doc_id,
+            tenant=tenant,
+        )
+        return detail
+
     async def tombstone_documents(
         self, filenames: list[str], tenant: str = "default",
     ) -> int:

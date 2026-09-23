@@ -6,6 +6,7 @@ from fastapi import APIRouter
 
 from api.routes.kg import (
     calibration,
+    catalog,
     confidence,
     community,
     compliance,
@@ -24,6 +25,7 @@ from api.routes.kg import (
 router = APIRouter()
 
 router.include_router(calibration.router)
+router.include_router(catalog.router)
 router.include_router(confidence.router)
 router.include_router(community.router)
 router.include_router(compliance.router)

@@ -156,6 +156,19 @@ class TestGremlinBackendLive:
         entities = await backend.get_all_entities(tenant=tenant)
         assert {e["name"] for e in entities} == {"FAA", "Boeing"}
 
+        # Batch methods: a third entity via merge_entities_batch, mentioned
+        # via merge_mentions_batch -- both are thin loops over the
+        # single-item methods (see gremlin_client.py's docstring), so this
+        # confirms they actually write, not just that they don't raise.
+        batch_result = await backend.merge_entities_batch(
+            [_make_entity(id="e-airbus", name="Airbus", description="Aircraft manufacturer")], tenant=tenant,
+        )
+        assert batch_result == [{"name": "Airbus", "type": "ORG", "prior_similarity": None}]
+        await backend.merge_mentions_batch("c1", [("Airbus", "ORG")], tenant=tenant)
+
+        entities = await backend.get_all_entities(tenant=tenant)
+        assert {e["name"] for e in entities} == {"FAA", "Boeing", "Airbus"}
+
         await backend.merge_relation(_make_relation(), "FAA", "ORG", "Boeing", "ORG", tenant=tenant)
         relations = await backend.get_all_relations(tenant=tenant)
         assert len(relations) == 1

@@ -70,16 +70,26 @@ Known, documented behavioral differences from ``Neo4jClient``
   portably") -- TinkerPop edge properties are single-cardinality scalars,
   not natively list-valued, so this is the same honest workaround, not a
   new invention.
+- ``merge_entities_batch``/``merge_mentions_batch`` are thin Python loops
+  over ``merge_entity``/``merge_mentions`` -- one round trip per item, not
+  a single server-side batch the way ``Neo4jClient``'s versions use one
+  Cypher ``UNWIND``. ``merge_entities_batch`` also never computes
+  ``prior_similarity`` (always ``None``): ``Neo4jClient``'s version derives
+  it from Neo4j's ``vector.similarity.cosine``, which has no portable
+  TinkerPop equivalent verified here -- returning a fabricated similarity
+  value would be worse than admitting it isn't computed.
 """
 
 from __future__ import annotations
 
 import asyncio
 import json
+import os
 from collections.abc import Callable
 from datetime import datetime, timezone
 from typing import Any
 
+import structlog
 from gremlin_python.driver.driver_remote_connection import DriverRemoteConnection
 from gremlin_python.process.anonymous_traversal import traversal
 from gremlin_python.process.graph_traversal import GraphTraversal, GraphTraversalSource, __
@@ -87,6 +97,8 @@ from gremlin_python.process.traversal import Order, P
 
 from graphrag.core.connector_url_safety import assert_safe_connector_url
 from graphrag.core.models import Entity, Relation
+
+log = structlog.get_logger(__name__)
 
 _GREMLIN_SCHEMES = frozenset({"ws", "wss"})
 
@@ -195,6 +207,35 @@ class GremlinBackend:
                 __.add_e("MENTIONS").from_("c").to("e"),
             )
         )
+
+    async def merge_entities_batch(
+        self, entities: list[Entity], tenant: str = "default",
+    ) -> list[dict]:
+        """Loops over ``merge_entity`` -- one ``_submit`` round-trip per
+        entity, not ``Neo4jClient.merge_entities_batch``'s single
+        server-side ``UNWIND``. Also always returns ``prior_similarity:
+        None``: that field is a cosine similarity between old/new
+        embeddings computed in Cypher via ``vector.similarity.cosine``,
+        with no portable TinkerPop equivalent verified here. Documented
+        scope reduction, not a silent behavioral gap -- a caller relying on
+        collision detection via ``prior_similarity`` must not use this
+        backend for that check.
+        """
+        if not entities:
+            return []
+        results = []
+        for entity in entities:
+            await self.merge_entity(entity, tenant=tenant)
+            results.append({"name": entity.name, "type": entity.type, "prior_similarity": None})
+        return results
+
+    async def merge_mentions_batch(
+        self, chunk_id: str, entity_refs: list[tuple[str, str]], tenant: str = "default",
+    ) -> None:
+        """Loops over ``merge_mentions`` -- one ``_submit`` round-trip per
+        entity reference, not a single batched traversal."""
+        for entity_name, entity_type in entity_refs:
+            await self.merge_mentions(chunk_id, entity_name, entity_type, tenant=tenant)
 
     # ── Relation CRUD ────────────────────────────────────────────────────
 
@@ -345,4 +386,23 @@ class GremlinBackend:
         )
 
 
-__all__ = ["GremlinBackend"]
+def gremlin_source_from_env() -> GremlinBackend | None:
+    """Build a GremlinBackend from GREMLIN_* env vars, or None.
+
+    Mirrors triplestore.py's ``remote_sparql_source_from_env()``: read from
+    the process environment only, return None (not raise) when unset, so a
+    deployment that never configures a Gremlin endpoint is unaffected. Ad
+    hoc ``os.getenv``, not a ``Settings`` field -- ``Settings``
+    (``graphrag/core/config.py``) has no SPARQL-equivalent config either,
+    so this follows the same existing convention rather than a new one.
+    """
+    url = os.getenv("GREMLIN_URL", "").strip()
+    if not url:
+        return None
+    username = os.getenv("GREMLIN_USERNAME", "").strip() or None
+    password = os.getenv("GREMLIN_PASSWORD", "").strip() or None
+    log.info("gremlin_client.remote_source_configured", url=url)
+    return GremlinBackend(url, username=username, password=password)
+
+
+__all__ = ["GremlinBackend", "gremlin_source_from_env"]

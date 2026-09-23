@@ -132,6 +132,9 @@ entity-migrate: ## Migrate entity type (OLD_TYPE= NEW_TYPE= TENANT= required)
 	$(PYTHON) scripts/entity_type_migration.py \
 	  --old-type $(OLD_TYPE) --new-type $(NEW_TYPE) --tenant $(TENANT)
 
+gremlin-query: ## Smoke-check a live Gremlin endpoint (TENANT= URL= optional, or set GREMLIN_URL)
+	$(PYTHON) scripts/query_gremlin.py --tenant $(or $(TENANT),default) $(if $(URL),--url $(URL),)
+
 smoke-test:    ## End-to-end stack health check: unit tests + demo + API ping (no live services needed)
 	@echo "=== 1/3  Unit tests ==="
 	$(PYTEST) tests/unit/ -q --no-header

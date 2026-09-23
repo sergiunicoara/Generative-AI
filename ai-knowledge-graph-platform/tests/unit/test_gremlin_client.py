@@ -7,13 +7,14 @@ every method's real traversal-building logic above it runs for real.
 from __future__ import annotations
 
 import json
+import os
 from datetime import datetime, timezone
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, patch
 
 import pytest
 
 from graphrag.core.models import ConstraintType, Entity, Relation, SourceType
-from graphrag.graph.gremlin_client import GremlinBackend
+from graphrag.graph.gremlin_client import GremlinBackend, gremlin_source_from_env
 
 
 def _make_backend() -> GremlinBackend:
@@ -109,6 +110,50 @@ class TestMergeMentions:
         backend._submit = AsyncMock(return_value=[])
         await backend.merge_mentions("c1", "FAA", "ORG", tenant="aerospace")
         assert backend._submit.call_count == 1
+
+
+class TestMergeEntitiesBatch:
+    async def test_empty_list_short_circuits(self) -> None:
+        backend = _make_backend()
+        backend._submit = AsyncMock()
+        result = await backend.merge_entities_batch([], tenant="aerospace")
+        assert result == []
+        backend._submit.assert_not_awaited()
+
+    async def test_one_submit_per_entity_prior_similarity_always_none(self) -> None:
+        backend = _make_backend()
+        entities = [_make_entity(id="e1", name="FAA"), _make_entity(id="e2", name="Boeing")]
+        # Each merge_entity call issues its own upsert _submit, and since the
+        # returned id always matches the input entity's id, no ON-MATCH
+        # refresh _submit follows -- so exactly one call per entity.
+        backend._submit = AsyncMock(
+            side_effect=[
+                [{"id": "e1", "description": "", "embedding_json": "[]"}],
+                [{"id": "e2", "description": "", "embedding_json": "[]"}],
+            ]
+        )
+
+        result = await backend.merge_entities_batch(entities, tenant="aerospace")
+
+        assert backend._submit.call_count == 2
+        assert result == [
+            {"name": "FAA", "type": "ORG", "prior_similarity": None},
+            {"name": "Boeing", "type": "ORG", "prior_similarity": None},
+        ]
+
+
+class TestMergeMentionsBatch:
+    async def test_one_submit_per_entity_ref(self) -> None:
+        backend = _make_backend()
+        backend._submit = AsyncMock(return_value=[])
+        await backend.merge_mentions_batch("c1", [("FAA", "ORG"), ("Boeing", "ORG")], tenant="aerospace")
+        assert backend._submit.call_count == 2
+
+    async def test_empty_refs_makes_no_calls(self) -> None:
+        backend = _make_backend()
+        backend._submit = AsyncMock()
+        await backend.merge_mentions_batch("c1", [], tenant="aerospace")
+        backend._submit.assert_not_awaited()
 
 
 class TestMergeRelation:
@@ -211,3 +256,30 @@ class TestGetAllRelations:
         result = await backend.get_all_relations(tenant="aerospace")
         assert result[0]["relation"] == "REGULATES"
         assert backend._submit.call_count == 1
+
+
+class TestGremlinSourceFromEnv:
+    def test_unset_url_returns_none(self) -> None:
+        with patch.dict(os.environ, {}, clear=False):
+            os.environ.pop("GREMLIN_URL", None)
+            assert gremlin_source_from_env() is None
+
+    def test_configured_url_builds_a_backend(self) -> None:
+        with patch.dict(os.environ, {"GREMLIN_URL": "ws://gremlin.example:8182/gremlin"}):
+            source = gremlin_source_from_env()
+        assert isinstance(source, GremlinBackend)
+        assert source._connection.url == "ws://gremlin.example:8182/gremlin"
+
+    def test_username_password_env_vars_do_not_break_construction(self) -> None:
+        """gremlinpython has no public attribute exposing stored credentials
+        back out (confirmed: only name-mangled private fields on the
+        underlying Client) -- this asserts construction succeeds with auth
+        env vars set, not that the driver internally stored them correctly,
+        which only a live authenticated connection could actually prove."""
+        with patch.dict(os.environ, {
+            "GREMLIN_URL": "ws://gremlin.example:8182/gremlin",
+            "GREMLIN_USERNAME": "user",
+            "GREMLIN_PASSWORD": "pass",
+        }):
+            source = gremlin_source_from_env()
+        assert isinstance(source, GremlinBackend)

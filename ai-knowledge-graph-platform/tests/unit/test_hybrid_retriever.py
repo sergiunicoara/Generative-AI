@@ -341,3 +341,91 @@ class TestStructuredEvidence:
 
         assert result.citations == []
         assert result.evidence == []
+
+
+class TestSemanticAnswerCacheKeyStability:
+    """Regression coverage for the 2026-09-23 audit finding: a missing
+    valid_at was defaulted to datetime.now(timezone.utc).isoformat() BEFORE
+    the QueryCacheContext was built, so the cache key embedded a fresh
+    microsecond-precision timestamp on every call. Two back-to-back
+    identical queries with no explicit valid_at built two different keys,
+    so the semantic answer cache never returned a hit for any caller that
+    didn't pass valid_at explicitly -- while still paying for the
+    corpus-state read and the Redis write on every single call."""
+
+    async def test_two_calls_with_no_valid_at_build_the_same_cache_context(self) -> None:
+        from graphrag.core.models import CitationEvidence
+
+        hr = _make_hybrid_retriever({"semantic_answer_cache_enabled": True})
+        hr._local.search = AsyncMock(return_value={"chunks": []})
+        hr._global.search = AsyncMock(return_value={})
+        hr._context_builder.build.return_value = (
+            "context", ["DocA"],
+            [CitationEvidence(source_id="DocA", source_label="DocA")],
+        )
+
+        fake_neo4j = MagicMock()
+        fake_neo4j.get_corpus_state = AsyncMock(return_value={"revision": 1, "updating": False})
+        fake_cache = AsyncMock()
+        fake_cache.get = AsyncMock(return_value=None)  # every call is a cache miss
+        fake_cache.set = AsyncMock(return_value="cache-key")
+        seen_contexts = []
+
+        async def _get(question, tenant, context):
+            seen_contexts.append(context)
+            return None
+
+        fake_cache.get.side_effect = _get
+
+        with (
+            patch("graphrag.retrieval.hybrid_retriever.get_neo4j", return_value=fake_neo4j),
+            patch("graphrag.retrieval.hybrid_retriever.get_query_cache", AsyncMock(return_value=fake_cache)),
+        ):
+            await hr.retrieve_and_answer("question", mode="local", query_id="q1")
+            await hr.retrieve_and_answer("question", mode="local", query_id="q2")
+
+        assert len(seen_contexts) == 2
+        # The bug: these used to differ (each a fresh isoformat() timestamp),
+        # which meant build_cache_key(...) never produced the same key twice
+        # for a caller that never passes valid_at explicitly.
+        assert seen_contexts[0].valid_at is None
+        assert seen_contexts[1].valid_at is None
+        assert seen_contexts[0] == seen_contexts[1]
+
+    async def test_an_explicit_valid_at_still_participates_in_the_cache_key(self) -> None:
+        """The fix must not flatten a genuine historical query into the same
+        key as an "as of now" one."""
+        from graphrag.core.models import CitationEvidence
+
+        hr = _make_hybrid_retriever({"semantic_answer_cache_enabled": True})
+        hr._local.search = AsyncMock(return_value={"chunks": []})
+        hr._global.search = AsyncMock(return_value={})
+        hr._context_builder.build.return_value = (
+            "context", ["DocA"],
+            [CitationEvidence(source_id="DocA", source_label="DocA")],
+        )
+
+        fake_neo4j = MagicMock()
+        fake_neo4j.get_corpus_state = AsyncMock(return_value={"revision": 1, "updating": False})
+        fake_cache = AsyncMock()
+        fake_cache.set = AsyncMock(return_value="cache-key")
+        seen_contexts = []
+
+        async def _get(question, tenant, context):
+            seen_contexts.append(context)
+            return None
+
+        fake_cache.get = AsyncMock(side_effect=_get)
+
+        with (
+            patch("graphrag.retrieval.hybrid_retriever.get_neo4j", return_value=fake_neo4j),
+            patch("graphrag.retrieval.hybrid_retriever.get_query_cache", AsyncMock(return_value=fake_cache)),
+        ):
+            await hr.retrieve_and_answer(
+                "question", mode="local", query_id="q1", valid_at="2020-01-01T00:00:00+00:00",
+            )
+            await hr.retrieve_and_answer("question", mode="local", query_id="q2")
+
+        assert seen_contexts[0].valid_at == "2020-01-01T00:00:00+00:00"
+        assert seen_contexts[1].valid_at is None
+        assert seen_contexts[0] != seen_contexts[1]

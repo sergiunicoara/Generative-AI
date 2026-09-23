@@ -74,10 +74,13 @@ with measured RTO/RPO. Unit-testing the federation code is not the same as
 tested disaster recovery.
 
 ### 7. Branch-protection enforcement on `main`
-CI (`.github/workflows/ci.yml`) runs on push/PR to `main`, but whether
-GitHub's branch-protection rule actually *requires* it to pass before merge
-is unverified — this is a GitHub repo-settings toggle, not a file in the
-repo.
+CI (`../.github/workflows/ai-knowledge-graph-platform-ci.yml`, at the
+monorepo root — an in-project copy at `.github/workflows/ci.yml` was
+deleted again on 2026-09-23 after being silently reintroduced; see
+[docs/archive/audits/audit-2026-09-23.md](archive/audits/audit-2026-09-23.md)
+item 8) runs on push/PR to `main`, but whether GitHub's branch-protection
+rule actually *requires* it to pass before merge is unverified — this is a
+GitHub repo-settings toggle, not a file in the repo.
 **Needs:** authenticated `gh`/GitHub API access (`gh auth login` or the
 GitHub MCP connector).
 

@@ -392,6 +392,15 @@ class HybridRetriever:
         # a defaulted "now" query, since that's not what it was built to
         # detect.
         explicit_temporal_query = bool(valid_at or transaction_at)
+        # Captured before the "now" default below so the cache key means
+        # "no explicit valid_at" (stable — None every call) rather than the
+        # microsecond-precision timestamp just assigned to `valid_at` for
+        # retrieval. Using the defaulted value here made two back-to-back
+        # identical queries build two different cache keys, so the semantic
+        # answer cache never returned a hit for any caller that didn't pass
+        # valid_at explicitly, while still paying for the corpus-state read
+        # and the Redis write on every call (2026-09-23 audit finding).
+        requested_valid_at = valid_at
         if valid_at is None:
             valid_at = datetime.now(timezone.utc).isoformat()
 
@@ -491,7 +500,7 @@ class HybridRetriever:
                             prompt_version=_PROMPT_VERSION,
                             retrieval_config=_cache_retrieval_config(cfg),
                             ontology_version=_ONTOLOGY_VERSION,
-                            valid_at=valid_at,
+                            valid_at=requested_valid_at,
                             transaction_at=transaction_at,
                             access_fingerprint=(access_context.fingerprint if acl_enforced else "tenant-default"),
                         )

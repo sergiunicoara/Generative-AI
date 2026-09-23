@@ -664,17 +664,31 @@ class Neo4jClient:
 
     async def merge_chunk(self, chunk: Chunk, tenant: str = "default"):
         """MERGE on (tenant, document_id, chunk_index) — stable across re-ingestion and
-        re-chunking, unlike chunk.id (fresh uuid4() every run). Also writes
-        document_id itself, which chunks never carried before this change
-        (see backfill_chunk_document_id.py) — this activates the existing
-        chunk_doc index and is what counterfactual.py's document-removal
-        simulation queries on, previously matching nothing.
+        re-chunking. Also writes document_id itself, which chunks never
+        carried before this change (see backfill_chunk_document_id.py) — this
+        activates the existing chunk_doc index and is what
+        counterfactual.py's document-removal simulation queries on,
+        previously matching nothing.
+
+        c.id is reconciled on every write, not just ON CREATE: Chunk.id is
+        now a uuid5 deterministic in (tenant, document_id, chunk_index) (see
+        chunker.py / relational.py), so every write computes the same value
+        for the same natural key and this is a no-op once a chunk has been
+        written under the new scheme. It is NOT a no-op the first time a
+        pre-existing chunk (created back when Chunk.id was a random uuid4())
+        is re-ingested -- that chunk's stale id gets corrected here, which is
+        required for it to ever match again. Before this, mentions/entity
+        writes that look chunks up by id (merge_mentions_batch,
+        merge_contextual_entity_representations) would silently match nothing
+        on any re-ingest or queue retry, because the in-memory Chunk rebuilt
+        for that attempt had a different random id than the one already
+        stored on the node.
         """
         await self.run(
             """
             MERGE (c:Chunk {tenant: $tenant, document_id: $doc_id, chunk_index: $chunk_index})
-            ON CREATE SET c.id = $id
-            SET c.text      = $text,
+            SET c.id        = $id,
+                c.text      = $text,
                 c.embedding = $embedding
             WITH c
             MATCH (d:Document {id: $doc_id, tenant: $tenant})
@@ -689,7 +703,9 @@ class Neo4jClient:
         )
 
     async def merge_chunks_batch(self, chunks: list[Chunk], tenant: str = "default") -> None:
-        """Same MERGE semantics as merge_chunk(), one round-trip for the batch.
+        """Same MERGE semantics as merge_chunk() -- including reconciling
+        c.id on every write, not just ON CREATE -- one round-trip for the
+        batch.
 
         Caller (GraphWriter.write_chunks) sub-batches this — a single UNWIND
         carrying hundreds of 3072-dim chunk embeddings in one payload is the
@@ -710,8 +726,8 @@ class Neo4jClient:
             """
             UNWIND $rows AS row
             MERGE (c:Chunk {tenant: $tenant, document_id: row.doc_id, chunk_index: row.chunk_index})
-            ON CREATE SET c.id = row.id
-            SET c.text      = row.text,
+            SET c.id        = row.id,
+                c.text      = row.text,
                 c.embedding = row.embedding
             WITH c, row
             MATCH (d:Document {id: row.doc_id, tenant: $tenant})

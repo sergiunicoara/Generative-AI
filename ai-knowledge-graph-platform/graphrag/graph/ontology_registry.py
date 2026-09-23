@@ -587,7 +587,7 @@ class OntologyRegistry:
             """
             MATCH (e:Entity {type: $old_type})
             WHERE (e.tenant = $tenant)
-              AND NOT e.quarantined = true
+              AND coalesce(e.quarantined, false) = false
             RETURN count(e) AS n
             """,
             old_type=old_upper,

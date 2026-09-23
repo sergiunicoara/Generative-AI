@@ -143,7 +143,7 @@ class CounterfactualAnalyzer:
             """
             MATCH (e:Entity)
             WHERE (e.tenant = $tenant)
-              AND NOT e.quarantined = true
+              AND coalesce(e.quarantined, false) = false
             WITH count(e) AS entity_count
             OPTIONAL MATCH ()-[r:RELATES_TO]->()
             WHERE (r.tenant = $tenant)

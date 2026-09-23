@@ -8,6 +8,7 @@ also writes `original_body_b64` (see graphrag/messaging/rabbitmq_client.py's
 
 from __future__ import annotations
 
+import asyncio
 import base64
 import json
 import sys
@@ -71,6 +72,104 @@ def _fake_client_with_dlq_messages(messages: list[bytes]):
     client = MagicMock()
     client._channel_pool = pool
     return client, channel, dlq_queue
+
+
+def _fake_client_with_requeue_semantics(messages: list[bytes]):
+    """Like `_fake_client_with_dlq_messages`, but a nack(requeue=True) really
+    puts the message back into the queue (appended to the tail) instead of
+    discarding it -- the behaviour the infinite-loop bug depended on. Only
+    ack() permanently removes a message. Used to prove replay() terminates
+    even when every message it sees gets nacked back."""
+    pending: list[bytes] = list(messages)
+
+    async def _get(fail=False):
+        if not pending:
+            return None
+        body = pending.pop(0)
+        msg = MagicMock()
+        msg.body = body
+        msg.message_id = "some-id"
+
+        async def _nack(requeue=True):
+            if requeue:
+                pending.append(body)
+
+        msg.ack = AsyncMock()
+        msg.nack = AsyncMock(side_effect=_nack)
+        return msg
+
+    dlq_queue = MagicMock()
+    dlq_queue.get = AsyncMock(side_effect=_get)
+
+    channel = MagicMock()
+    channel.declare_queue = AsyncMock(return_value=dlq_queue)
+    channel.default_exchange = MagicMock()
+    channel.default_exchange.publish = AsyncMock()
+
+    context = AsyncMock()
+    context.__aenter__.return_value = channel
+    pool = MagicMock()
+    pool.acquire.return_value = context
+
+    client = MagicMock()
+    client._channel_pool = pool
+    return client, channel, dlq_queue
+
+
+class TestReplayDlqTerminatesWithRequeueSemantics:
+    """Regression tests for the infinite-loop bug: nack(requeue=True) puts a
+    message straight back at the front of the queue, so any code path that
+    only ever nacks (dry-run, an unparseable envelope, a missing
+    original_body_b64) must still terminate rather than re-fetching the same
+    message forever."""
+
+    async def test_dry_run_with_no_limit_terminates_and_visits_each_once(self):
+        envelopes = [_envelope(message_id="a"), _envelope(message_id="b"), _envelope(message_id="c")]
+        client, channel, _ = _fake_client_with_requeue_semantics(envelopes)
+        with patch("graphrag.messaging.rabbitmq_client.get_rabbitmq", AsyncMock(return_value=client)):
+            exit_code = await asyncio.wait_for(
+                replay_dlq.replay("graphrag.ingest.queue", dry_run=True, limit=None),
+                timeout=5,
+            )
+
+        assert exit_code == 0
+        channel.default_exchange.publish.assert_not_awaited()
+
+    async def test_single_unparseable_message_does_not_loop_forever(self):
+        client, channel, _ = _fake_client_with_requeue_semantics([b"not json"])
+        with patch("graphrag.messaging.rabbitmq_client.get_rabbitmq", AsyncMock(return_value=client)):
+            exit_code = await asyncio.wait_for(
+                replay_dlq.replay("graphrag.ingest.queue", dry_run=False, limit=None),
+                timeout=5,
+            )
+
+        assert exit_code == 1  # unreplayable, but must still terminate
+
+    async def test_message_without_original_body_does_not_loop_forever(self):
+        envelope = json.loads(_envelope())
+        del envelope["original_body_b64"]
+        client, channel, _ = _fake_client_with_requeue_semantics([json.dumps(envelope).encode()])
+        with patch("graphrag.messaging.rabbitmq_client.get_rabbitmq", AsyncMock(return_value=client)):
+            exit_code = await asyncio.wait_for(
+                replay_dlq.replay("graphrag.ingest.queue", dry_run=False, limit=None),
+                timeout=5,
+            )
+
+        assert exit_code == 1
+
+    async def test_mixed_batch_all_distinct_messages_are_still_visited(self):
+        """A bad message that keeps getting requeued must not starve the
+        good messages behind it in the same run."""
+        bad = b"not json"
+        good = _envelope(message_id="good-1")
+        client, channel, _ = _fake_client_with_requeue_semantics([bad, good])
+        with patch("graphrag.messaging.rabbitmq_client.get_rabbitmq", AsyncMock(return_value=client)):
+            await asyncio.wait_for(
+                replay_dlq.replay("graphrag.ingest.queue", dry_run=False, limit=None),
+                timeout=5,
+            )
+
+        channel.default_exchange.publish.assert_awaited_once()
 
 
 class TestReplayDlq:

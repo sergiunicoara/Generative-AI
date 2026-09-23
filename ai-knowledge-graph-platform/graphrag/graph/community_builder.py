@@ -302,7 +302,7 @@ class CommunityBuilder:
             """
             MATCH (e:Entity {tenant: $tenant})
             WHERE e.embedding IS NOT NULL AND size(e.embedding) > 0
-              AND NOT e.quarantined = true
+              AND coalesce(e.quarantined, false) = false
             RETURN e.name AS name, e.embedding AS embedding
             """,
             tenant=self._tenant,

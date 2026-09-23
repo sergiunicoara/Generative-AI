@@ -116,13 +116,13 @@ class QuarantineService:
             f"""
             MATCH (seed:Entity {{name: $seed_name, tenant: $tenant}})
             MATCH (seed)-[:RELATES_TO*1..{depth}]->(neighbor:Entity {{tenant: $tenant}})
-            WHERE NOT neighbor.quarantined = true
+            WHERE coalesce(neighbor.quarantined, false) = false
             // Only quarantine if neighbor has no path from non-quarantined nodes
             //  other than through the seed
             WITH neighbor
             WHERE NOT EXISTS {{
                 MATCH (other:Entity {{tenant: $tenant}})-[:RELATES_TO*1..{depth}]->(neighbor)
-                WHERE NOT other.quarantined = true
+                WHERE coalesce(other.quarantined, false) = false
                   AND other.name <> $seed_name
             }}
             SET neighbor.quarantined       = true,

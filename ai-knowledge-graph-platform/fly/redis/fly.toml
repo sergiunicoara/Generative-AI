@@ -4,15 +4,18 @@ primary_region = "ams"
 [build]
   image = "redis:7.2-alpine"
 
-[[services]]
-  internal_port = 6379
-  protocol = "tcp"
-  auto_stop_machines = false
-  auto_start_machines = true
+# Auth: set the REDIS_PASSWORD secret before deploying —
+#   flyctl secrets set REDIS_PASSWORD="<password>" -a graphrag-redis-sn
+# The `sh -c` wrapper is required for $REDIS_PASSWORD to be expanded; Fly
+# execs this command directly (no shell), so without it the literal string
+# "$REDIS_PASSWORD" would be passed to redis-server as the password.
+[processes]
+  app = "sh -c 'exec docker-entrypoint.sh redis-server --requirepass \"$REDIS_PASSWORD\"'"
 
-  [[services.ports]]
-    port = 6379
-
+# Internal-only — no [[services]]/[[services.ports]] means not exposed
+# externally but still reachable over private 6PN from other apps in the
+# same organization (see fly/neo4j/fly.toml for the same pattern). This was
+# previously a [[services]] block publishing 6379 with no password.
 [vm]
   memory = "256mb"
   cpu_kind = "shared"

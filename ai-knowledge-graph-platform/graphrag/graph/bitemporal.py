@@ -102,7 +102,7 @@ class BitemporalStore:
             """
             MATCH (e:Entity)
             WHERE (e.tenant = $tenant)
-              AND NOT e.quarantined = true
+              AND coalesce(e.quarantined, false) = false
               // Valid-time filter (treat NULL as always valid)
               AND (e.valid_from IS NULL OR e.valid_from <= $vt)
               AND (e.valid_to   IS NULL OR e.valid_to   >  $vt)
@@ -140,8 +140,8 @@ class BitemporalStore:
               AND (r.valid_from  IS NULL OR r.valid_from  <= $vt)
               AND (r.valid_to    IS NULL OR r.valid_to    >  $vt)
               AND (r.recorded_at IS NULL OR r.recorded_at <= $tt)
-              AND NOT s.quarantined = true
-              AND NOT t.quarantined = true
+              AND coalesce(s.quarantined, false) = false
+              AND coalesce(t.quarantined, false) = false
             RETURN s.name             AS src,
                    s.type             AS src_type,
                    t.name             AS tgt,
@@ -177,8 +177,8 @@ class BitemporalStore:
               AND (stmt.valid_from IS NULL OR stmt.valid_from <= $vt)
               AND (stmt.valid_to   IS NULL OR stmt.valid_to   >  $vt)
               AND (stmt.recorded_at IS NULL OR stmt.recorded_at <= $tt)
-              AND NOT s.quarantined = true
-              AND NOT t.quarantined = true
+              AND coalesce(s.quarantined, false) = false
+              AND coalesce(t.quarantined, false) = false
             RETURN s.name AS src, s.type AS src_type,
                    stmt.relation AS relation,
                    t.name AS tgt, t.type AS tgt_type,
@@ -264,7 +264,7 @@ class BitemporalStore:
               AND e.recorded_at IS NOT NULL
               AND e.recorded_at >  $tt_from
               AND e.recorded_at <= $tt_to
-              AND NOT e.quarantined = true
+              AND coalesce(e.quarantined, false) = false
             RETURN count(e) AS count
             """,
             tenant=tenant,
@@ -289,7 +289,7 @@ class BitemporalStore:
             MATCH (e:Entity)
             WHERE (e.tenant = $tenant)
               AND (e.recorded_at IS NULL OR e.recorded_at <= $tt_to)
-              AND NOT e.quarantined = true
+              AND coalesce(e.quarantined, false) = false
             WITH count(e) AS entity_count
             MATCH ()-[r:RELATES_TO]->()
             WHERE (r.tenant = $tenant)

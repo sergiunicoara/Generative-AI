@@ -67,7 +67,7 @@ class CommunityManager:
             """
             MATCH (c:Chunk)-[:MENTIONS]->(e:Entity)
             WHERE (c.tenant = $tenant)
-              AND NOT e.quarantined = true
+              AND coalesce(e.quarantined, false) = false
             WITH count(DISTINCT e) AS entity_count
             MATCH ()-[r:RELATES_TO {tenant: $tenant}]->()
             WITH entity_count, count(r) AS edge_count
@@ -150,7 +150,7 @@ class CommunityManager:
             """
             MATCH (c:Chunk)-[:MENTIONS]->(e:Entity)
             WHERE (c.tenant = $tenant)
-              AND NOT e.quarantined = true
+              AND coalesce(e.quarantined, false) = false
             WITH count(DISTINCT e) AS entities
             MATCH ()-[r:RELATES_TO {tenant: $tenant}]->()
             RETURN entities, count(r) AS edges

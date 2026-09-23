@@ -158,3 +158,57 @@ class TestUnheadedDocument:
 
         assert len(chunks) >= 1
         assert all(len(c.text) <= 512 * 1.6 for c in chunks)
+
+
+class TestChunkIdIsStableAcrossReingestion:
+    """Regression coverage for the 2026-09-23 audit finding: Chunk.id used to
+    default to a fresh uuid4() on every call, so re-chunking the same
+    document (a re-ingest, or a queue retry re-running extract()) produced
+    chunks whose ids matched nothing already in the graph, and every
+    MENTIONS edge for that document silently failed to write
+    (merge_mentions_batch MATCHes Chunk by id -- see neo4j_client.py).
+
+    Chunk.id must be seeded from the document's real identity -- (tenant,
+    filename), matching Neo4jClient.merge_document()'s own natural key --
+    not from document.id, which is itself a fresh uuid4() at extract() time
+    and only becomes stable after write_document() resolves it later in the
+    pipeline (see ingestion_agent.write()).
+    """
+
+    def test_same_document_rechunked_twice_gets_identical_chunk_ids(self):
+        # Two separate Document instances for "the same file" -- exactly what
+        # a second extract() run builds on re-ingest: same tenant/filename,
+        # but a fresh, different document.id each time (the default_factory).
+        first = _doc("## Section One\n\nSome content.\n\n## Section Two\n\nMore content.")
+        second = _doc("## Section One\n\nSome content, revised.\n\n## Section Two\n\nMore content.")
+        assert first.id != second.id  # sanity: these really are different uuids
+
+        chunks_first = chunk_document(first)
+        chunks_second = chunk_document(second)
+
+        assert len(chunks_first) == len(chunks_second)
+        assert [c.id for c in chunks_first] == [c.id for c in chunks_second]
+
+    def test_different_documents_get_different_chunk_ids(self):
+        doc_a = _doc("## Section\n\nContent A.")
+        doc_b = Document(
+            filename="other.txt", source_path="other.txt", raw_text=doc_a.raw_text,
+            tenant="test", ingested_at=datetime.now(timezone.utc),
+        )
+
+        chunks_a = chunk_document(doc_a)
+        chunks_b = chunk_document(doc_b)
+
+        assert chunks_a[0].id != chunks_b[0].id
+
+    def test_chunk_id_does_not_depend_on_document_id(self):
+        """The id most available at chunk_document() call time -- document.id
+        -- is exactly the one that must NOT be used, since it is not yet the
+        canonical id a re-ingest will resolve to."""
+        doc = _doc("## Section\n\nContent.")
+        chunks = chunk_document(doc)
+
+        doc.id = "a-completely-different-id"
+        chunks_after_id_change = chunk_document(doc)
+
+        assert [c.id for c in chunks] == [c.id for c in chunks_after_id_change]

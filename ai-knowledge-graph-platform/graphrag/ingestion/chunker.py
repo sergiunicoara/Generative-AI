@@ -34,6 +34,7 @@ Re-ingesting a tenant whose golden set was tuned to the old boundaries
 from __future__ import annotations
 
 import re
+from uuid import NAMESPACE_URL, uuid5
 
 from graphrag.core.config import get_settings
 from graphrag.core.models import Chunk, Document
@@ -128,8 +129,28 @@ def chunk_document(document: Document) -> list[Chunk]:
     doc_label = Path(document.filename).stem
     texts = [f"[{doc_label}]\n\n{text}" for text in texts]
 
+    # Chunk.id must be deterministic and, critically, based on the document's
+    # real identity -- (tenant, filename), the same natural key
+    # Neo4jClient.merge_document() MERGEs documents on -- not document.id.
+    # document.id is a fresh uuid4() assigned every extraction run (see
+    # Document's default_factory); it only becomes the document's *canonical*
+    # id after write_document() resolves it in ingestion_agent.write(), which
+    # happens later, in a separate phase, after chunk_document() has already
+    # run. Seeding the chunk id off document.id would make it just as
+    # unstable across re-ingests as document.id itself.
+    #
+    # Determinism matters beyond this run: merge_chunks_batch reconciles c.id
+    # on every write (not just ON CREATE) so that a chunk whose stale id
+    # predates this scheme self-heals on its next ingest -- but that only
+    # converges if the *same* run recomputes the *same* id every time. A
+    # random id here would mean merge_mentions_batch's same-run lookup by id
+    # still fails (a fresh uuid4() never matches whatever this run just wrote
+    # moments before), and any durable external reference to a chunk id
+    # (e.g. LineageDraft.evidence_chunk_id in graphrag/enterprise/lineage.py)
+    # would go stale on every single re-ingest instead of at most once.
     return [
         Chunk(
+            id=str(uuid5(NAMESPACE_URL, f"chunk:{document.tenant}:{document.filename}:{i}")),
             document_id=document.id,
             text=text,
             chunk_index=i,

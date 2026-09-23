@@ -6,17 +6,17 @@ primary_region = "ams"
 
 [env]
   RABBITMQ_DEFAULT_USER = "graphrag"
-  RABBITMQ_DEFAULT_PASS = "graphrag_dev"
+  # RABBITMQ_DEFAULT_PASS is a secret, not a plain env var — set it before
+  # deploying:
+  #   flyctl secrets set RABBITMQ_DEFAULT_PASS="<password>" -a graphrag-rabbit
+  # (Fly injects secrets into the container the same way as [env], so the
+  # image needs no other change.) This used to be hard-coded here as
+  # "graphrag_dev".
 
-[[services]]
-  internal_port = 5672
-  protocol = "tcp"
-  auto_stop_machines = false
-  auto_start_machines = true
-
-  [[services.ports]]
-    port = 5672
-
+# Internal-only — no [[services]]/[[services.ports]] means not exposed
+# externally but still reachable over private 6PN from other apps in the
+# same organization (see fly/neo4j/fly.toml for the same pattern). This was
+# previously a [[services]] block publishing 5672 with a default password.
 [[mounts]]
   source = "rabbitmq_data"
   destination = "/var/lib/rabbitmq"

@@ -406,7 +406,7 @@ class EdgeEmbeddingService:
             """
             MATCH (t:Entity {tenant: $tenant})
             WHERE t.embedding IS NOT NULL AND size(t.embedding) > 0
-              AND NOT t.quarantined = true
+              AND coalesce(t.quarantined, false) = false
               AND NOT EXISTS {
                   MATCH (src:Entity {name: $src_name, type: $src_type, tenant: $tenant})
                         -[:RELATES_TO {relation: $relation}]->(t)

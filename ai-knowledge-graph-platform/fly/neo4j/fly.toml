@@ -5,7 +5,9 @@ primary_region = "ams"
   dockerfile = "docker/Dockerfile"
 
 [env]
-  NEO4J_AUTH = "neo4j/graphrag_dev"
+  # NEO4J_AUTH is a secret, not a plain env var — set it before deploying:
+  #   flyctl secrets set NEO4J_AUTH="neo4j/<password>" -a graphrag-neo4j
+  # This used to be hard-coded here as "neo4j/graphrag_dev".
   NEO4J_server_memory_heap_max__size = "256m"
   NEO4J_server_memory_pagecache_size = "128m"
   NEO4J_server_bolt_listen__address = "[::]:7687"

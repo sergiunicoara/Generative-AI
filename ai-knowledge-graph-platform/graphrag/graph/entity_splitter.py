@@ -82,7 +82,7 @@ class EntitySplitter:
         rows = await self._neo4j.run(
             """
             MATCH (e:Entity {tenant: $tenant})<-[:MENTIONS]-(c:Chunk)
-            WHERE NOT e.quarantined = true
+            WHERE coalesce(e.quarantined, false) = false
             WITH e, count(c) AS chunk_count
             WHERE chunk_count >= $min_chunks
             MATCH (e)<-[:MENTIONS]-(c:Chunk)-[:PART_OF]->(d:Document)

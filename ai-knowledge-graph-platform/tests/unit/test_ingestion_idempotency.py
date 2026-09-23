@@ -137,7 +137,14 @@ class TestMergeChunkNaturalKey:
         cypher = client.run.call_args[0][0]
         assert "MERGE (c:Chunk {tenant: $tenant, document_id: row.doc_id, chunk_index: row.chunk_index})" in cypher
         assert "MATCH (d:Document {id: row.doc_id, tenant: $tenant})" in cypher
-        assert "ON CREATE SET c.id = row.id" in cypher
+        # c.id is reconciled unconditionally, not just ON CREATE (2026-09-23
+        # audit fix): Chunk.id is now a uuid5 deterministic in the document's
+        # real identity, so this is idempotent once a chunk is on the new
+        # scheme, and self-heals a pre-existing chunk's stale random id on
+        # its next write. ON CREATE-only left every re-ingest or queue retry
+        # writing MENTIONS edges against an id the stored chunk no longer had.
+        assert "ON CREATE SET c.id" not in cypher
+        assert "SET c.id        = row.id" in cypher
 
     @pytest.mark.asyncio
     async def test_batch_of_empty_list_is_a_noop(self):
@@ -377,6 +384,185 @@ class TestReingestionDoesNotDuplicate:
         assert canonical_id_2 == canonical_id_1
         assert len(documents) == 1
         assert len(chunks) == 3   # not 6
+
+
+class TestReingestionPreservesMentions:
+    """The gap the test above left open (flagged in the 2026-09-23 audit):
+    it checks chunk *count* survives a re-ingest, but never that a MENTIONS
+    edge -- written by matching Chunk.id, not the natural key -- still
+    resolves on the second run. Uses the real chunk_document() (not
+    hand-built Chunk(...) objects) so it exercises the actual id a re-ingest
+    computes, and a fake merge_mentions_batch that only records a mention
+    when its MATCH would really succeed."""
+
+    @pytest.mark.asyncio
+    async def test_mentions_written_on_second_ingest_resolve_to_the_existing_chunk(self):
+        from graphrag.core.models import Document
+        from graphrag.graph.neo4j_client import Neo4jClient
+        from graphrag.ingestion.chunker import chunk_document
+
+        documents: dict[tuple[str, str], dict] = {}          # (tenant, filename) -> row
+        chunk_nodes: dict[tuple[str, str, int], dict] = {}   # (tenant, doc_id, chunk_index) -> row
+        chunk_ids_live: set[str] = set()                     # every id currently stored on a Chunk node
+        mentions: list[tuple[str, str]] = []                 # (chunk_id, entity_name) that actually matched
+
+        client = Neo4jClient.__new__(Neo4jClient)
+
+        async def fake_run(cypher, **params):
+            if "MERGE (d:Document" in cypher:
+                key = (params["tenant"], params["filename"])
+                if key not in documents:
+                    documents[key] = {"id": params["id"]}
+                return [{"doc_id": documents[key]["id"]}]
+            if "MATCH (c:Chunk {id: $chunk_id" in cypher:  # merge_mentions_batch
+                if params["chunk_id"] in chunk_ids_live:
+                    for row in params["rows"]:
+                        mentions.append((params["chunk_id"], row["name"]))
+                return []
+            if "UNWIND $rows AS row" in cypher and "Chunk" in cypher:  # merge_chunks_batch
+                # Faithfully reflect the REAL Cypher's own id semantics
+                # (rather than always "healing" in the fake itself), so a
+                # regression back to ON-CREATE-only would make this test
+                # fail instead of trivially passing.
+                id_reconciled_unconditionally = "ON CREATE SET c.id" not in cypher
+                for row in params["rows"]:
+                    key = (params["tenant"], row["doc_id"], row["chunk_index"])
+                    existing = chunk_nodes.get(key)
+                    if existing is None:
+                        chunk_nodes[key] = {"id": row["id"]}
+                        chunk_ids_live.add(row["id"])
+                    elif id_reconciled_unconditionally:
+                        chunk_ids_live.discard(existing["id"])
+                        chunk_nodes[key] = {"id": row["id"]}
+                        chunk_ids_live.add(row["id"])
+                    # else: ON CREATE-only — existing node keeps its stored id
+                return []
+            if "delete_stale" in cypher.lower() or "chunk_index >= $keep_count" in cypher:
+                return [{"deleted": 0}]
+            return []
+
+        client.run = fake_run
+
+        async def ingest(raw_text: str) -> None:
+            doc = Document(filename="AD-2024.txt", source_path="/x", raw_text=raw_text,
+                            tenant="aerospace")
+            original_id = doc.id
+            canonical_id = await client.merge_document(
+                doc_id=doc.id, filename=doc.filename,
+                ingested_at="2026-01-01T00:00:00", tenant="aerospace",
+            )
+            chunks = chunk_document(doc)
+            if canonical_id != original_id:
+                for c in chunks:
+                    c.document_id = canonical_id  # ingestion_agent.write()'s is_reingest patch
+            await client.merge_chunks_batch(chunks, tenant="aerospace")
+            for chunk in chunks:
+                await client.merge_mentions_batch(
+                    chunk.id, [("Boeing 737", "Aircraft")], tenant="aerospace",
+                )
+
+        await ingest("## Overview\n\nThe Boeing 737 is discussed here.")
+        assert len(mentions) >= 1, "first ingest must be able to write its own mentions"
+        mentions.clear()
+
+        # Re-ingest the same file — a fresh Document (fresh doc.id) and a
+        # fresh set of Chunk objects from chunk_document(), exactly as a
+        # second extract() run produces.
+        await ingest("## Overview\n\nThe Boeing 737 is discussed here, revised.")
+
+        assert len(mentions) >= 1, (
+            "MENTIONS written on the second ingest must resolve to the "
+            "existing Chunk node — this is the bug: chunk.id used to be a "
+            "fresh uuid4() every run, so merge_mentions_batch's MATCH by id "
+            "silently found nothing and every mention was dropped."
+        )
+
+    @pytest.mark.asyncio
+    async def test_legacy_chunk_with_a_stale_random_id_self_heals_on_next_ingest(self):
+        """Isolates the *other* half of the fix, independent of chunk id
+        determinism: a chunk already sitting in the graph with an id from
+        before this scheme existed (a random uuid4(), same as any chunk
+        written before this fix shipped) must be corrected to the new
+        deterministic id on its very next ingest -- merge_chunks_batch sets
+        c.id unconditionally now, not only ON CREATE. Without that, this
+        node would keep its stale id forever, and mentions computed against
+        the new deterministic id would never match it."""
+        from graphrag.core.models import Document
+        from graphrag.graph.neo4j_client import Neo4jClient
+        from graphrag.ingestion.chunker import chunk_document
+
+        documents: dict[tuple[str, str], dict] = {}
+        chunk_nodes: dict[tuple[str, str, int], dict] = {}
+        chunk_ids_live: set[str] = set()
+        mentions: list[tuple[str, str]] = []
+
+        client = Neo4jClient.__new__(Neo4jClient)
+
+        async def fake_run(cypher, **params):
+            if "MERGE (d:Document" in cypher:
+                key = (params["tenant"], params["filename"])
+                if key not in documents:
+                    documents[key] = {"id": params["id"]}
+                return [{"doc_id": documents[key]["id"]}]
+            if "MATCH (c:Chunk {id: $chunk_id" in cypher:
+                if params["chunk_id"] in chunk_ids_live:
+                    for row in params["rows"]:
+                        mentions.append((params["chunk_id"], row["name"]))
+                return []
+            if "UNWIND $rows AS row" in cypher and "Chunk" in cypher:  # merge_chunks_batch
+                # Faithfully reflect the REAL Cypher's own id semantics
+                # (rather than always "healing" in the fake itself), so a
+                # regression back to ON-CREATE-only would make this test
+                # fail instead of trivially passing.
+                id_reconciled_unconditionally = "ON CREATE SET c.id" not in cypher
+                for row in params["rows"]:
+                    key = (params["tenant"], row["doc_id"], row["chunk_index"])
+                    existing = chunk_nodes.get(key)
+                    if existing is None:
+                        chunk_nodes[key] = {"id": row["id"]}
+                        chunk_ids_live.add(row["id"])
+                    elif id_reconciled_unconditionally:
+                        chunk_ids_live.discard(existing["id"])
+                        chunk_nodes[key] = {"id": row["id"]}
+                        chunk_ids_live.add(row["id"])
+                    # else: ON CREATE-only — existing node keeps its stored id
+                return []
+            return []
+
+        client.run = fake_run
+
+        doc = Document(filename="AD-2024.txt", source_path="/x", raw_text="t",
+                        tenant="aerospace")
+        canonical_id = await client.merge_document(
+            doc_id=doc.id, filename=doc.filename,
+            ingested_at="2026-01-01T00:00:00", tenant="aerospace",
+        )
+        # Seed a legacy chunk node directly, bypassing chunk_document(), with
+        # a random id -- exactly what a chunk written before this fix shipped
+        # looks like right now, in production.
+        legacy_id = "legacy-random-uuid4-0000"
+        chunk_nodes[("aerospace", canonical_id, 0)] = {"id": legacy_id}
+        chunk_ids_live.add(legacy_id)
+
+        doc2 = Document(filename="AD-2024.txt", source_path="/x", raw_text="t (re-ingested)",
+                         tenant="aerospace")
+        canonical_id_2 = await client.merge_document(
+            doc_id=doc2.id, filename=doc2.filename,
+            ingested_at="2026-01-02T00:00:00", tenant="aerospace",
+        )
+        assert canonical_id_2 == canonical_id
+        chunks = chunk_document(doc2)
+        for c in chunks:
+            c.document_id = canonical_id_2
+        await client.merge_chunks_batch(chunks, tenant="aerospace")
+
+        healed_id = chunk_nodes[("aerospace", canonical_id, 0)]["id"]
+        assert healed_id == chunks[0].id
+        assert healed_id != legacy_id
+        assert legacy_id not in chunk_ids_live
+
+        await client.merge_mentions_batch(chunks[0].id, [("Boeing 737", "Aircraft")], tenant="aerospace")
+        assert mentions == [(chunks[0].id, "Boeing 737")]
 
     @pytest.mark.asyncio
     async def test_different_tenants_same_filename_stay_distinct(self):

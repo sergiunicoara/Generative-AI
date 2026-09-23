@@ -101,7 +101,7 @@ class PageRankComputer:
         stats_rows = await self._neo4j.run(
             """
             MATCH (e:Entity {tenant: $tenant})
-            WHERE NOT e.quarantined = true
+            WHERE coalesce(e.quarantined, false) = false
             WITH count(e) AS entity_count
             MATCH ()-[r:RELATES_TO {tenant: $tenant}]->()
             RETURN entity_count, count(r) AS edge_count
@@ -180,7 +180,7 @@ class PageRankComputer:
         curr_rows = await self._neo4j.run(
             """
             MATCH (e:Entity {tenant: $tenant})
-            WHERE NOT e.quarantined = true
+            WHERE coalesce(e.quarantined, false) = false
             WITH count(e) AS entities
             MATCH ()-[r:RELATES_TO {tenant: $tenant}]->()
             RETURN entities, count(r) AS edges

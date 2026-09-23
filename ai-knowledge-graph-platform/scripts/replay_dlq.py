@@ -56,6 +56,17 @@ async def replay(queue_name: str, dry_run: bool, limit: int | None) -> int:
     skipped = 0
     errors = 0
 
+    # A message we nack(requeue=True) goes straight back into the DLQ and the
+    # very next dlq.get() redelivers that same message -- there is nothing
+    # else in a `--dry-run` (which never acks) or a triage skip/error path to
+    # advance the queue. Without a way to notice "I've already looked at
+    # this one", `--dry-run` with no --limit, or a single unparseable/
+    # unreplayable message, spins forever re-reporting the same message.
+    # Track the body of every message we've put back this run; once one
+    # comes back around, the DLQ has cycled and every distinct message has
+    # been visited exactly once, so stop instead of looping.
+    seen_requeued_bodies: set[bytes] = set()
+
     print(f"\n{'='*60}")
     print(f"  DLQ replay: {dlq_name} -> {queue_name}{'  (dry run)' if dry_run else ''}")
     print(f"{'='*60}\n")
@@ -68,11 +79,17 @@ async def replay(queue_name: str, dry_run: bool, limit: int | None) -> int:
             if message is None:
                 break  # queue drained
 
+            if message.body in seen_requeued_bodies:
+                await message.nack(requeue=True)  # put it back exactly as found
+                print("  (DLQ has cycled back to a message already seen this run -- stopping)")
+                break
+
             try:
                 envelope = json.loads(message.body)
             except Exception as exc:  # noqa: BLE001
                 print(f"  ERROR  unparseable DLQ envelope (message_id={message.message_id}): {exc}")
                 errors += 1
+                seen_requeued_bodies.add(message.body)
                 await message.nack(requeue=True)  # leave it in the DLQ, don't lose it
                 continue
 
@@ -82,6 +99,7 @@ async def replay(queue_name: str, dry_run: bool, limit: int | None) -> int:
                 print(f"  SKIP   message_id={msg_id}: no original_body_b64 "
                       f"(written before replay support existed) -- payload_summary={envelope.get('payload_summary')}")
                 skipped += 1
+                seen_requeued_bodies.add(message.body)
                 await message.nack(requeue=True)  # leave it for manual triage
                 continue
 
@@ -90,6 +108,7 @@ async def replay(queue_name: str, dry_run: bool, limit: int | None) -> int:
             except Exception as exc:  # noqa: BLE001
                 print(f"  ERROR  message_id={msg_id}: base64 decode failed: {exc}")
                 errors += 1
+                seen_requeued_bodies.add(message.body)
                 await message.nack(requeue=True)
                 continue
 
@@ -98,6 +117,7 @@ async def replay(queue_name: str, dry_run: bool, limit: int | None) -> int:
                   f"original_reason={envelope.get('exception_type')}: {reason}")
 
             if dry_run:
+                seen_requeued_bodies.add(message.body)
                 await message.nack(requeue=True)  # dry run must not drain the queue
                 replayed += 1
                 continue
@@ -114,7 +134,8 @@ async def replay(queue_name: str, dry_run: bool, limit: int | None) -> int:
                 correlation_id=envelope.get("original_correlation_id"),
             )
             await channel.default_exchange.publish(replay_msg, routing_key=queue_name)
-            await message.ack()  # only remove from the DLQ once safely republished
+            await message.ack()  # only remove from the DLQ once safely republished -- never
+            # added to seen_requeued_bodies, since an acked message can't come back around
             replayed += 1
 
     print(f"\n{'='*60}")

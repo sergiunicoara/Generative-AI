@@ -11,7 +11,6 @@ import pytest
 from graphrag.ingestion.r2rml import (
     FederatedOBDAIngestor, FederatedOBDASource, r2rml_to_mapping,
 )
-from graphrag.ingestion.relational import RelationalGraphMapping
 
 _GLEIF_MAPPING = Path(__file__).resolve().parents[2] / "ontology/mappings/gleif-lei.r2rml.ttl"
 _SUPPLY_CHAIN_MAPPING = Path(__file__).resolve().parents[2] / "ontology/mappings/supply-chain.r2rml.ttl"

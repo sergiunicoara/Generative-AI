@@ -133,7 +133,6 @@ class TestMergeRelation:
 
         await backend.merge_relation(rel, "FAA", "ORG", "Boeing", "ORG", tenant="aerospace")
 
-        upsert_call = backend._submit.call_args_list[1]
         # The lambda captures new_confidence/new_docs via closure; verify by
         # re-deriving what the method computed and asserting no exception
         # plus exactly two calls (lookup, then upsert) -- the confidence

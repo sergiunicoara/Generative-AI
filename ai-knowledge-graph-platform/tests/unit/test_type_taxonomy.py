@@ -206,3 +206,37 @@ class TestDomainOntologyIntegration:
         assert isinstance(rules[0], InferenceRule)
         assert rules[0].relation == "SUPERSEDES"
         assert rules[0].max_depth == 5
+
+    def test_build_inference_rules_carries_note_and_owner(self):
+        """note/owner are optional rule-rationale fields (Tier 2 of the
+        SBVR-vs-RDF/OWL business-rule discussion) -- must round-trip from
+        YAML entry to InferenceRule dataclass, not be silently dropped."""
+        from graphrag.graph.domain_ontology import build_inference_rules_from_ontology
+
+        ontology = {
+            "inference_rules": [
+                {"name": "supersedes_transitivity",
+                 "relation": "SUPERSEDES",
+                 "rule_type": "transitivity",
+                 "note": "If A supersedes B and B supersedes C, A also supersedes C.",
+                 "owner": "regulatory-compliance-team"}
+            ]
+        }
+        rules = build_inference_rules_from_ontology(ontology)
+        assert len(rules) == 1
+        assert rules[0].note == "If A supersedes B and B supersedes C, A also supersedes C."
+        assert rules[0].owner == "regulatory-compliance-team"
+
+    def test_build_inference_rules_defaults_note_and_owner_to_empty_string(self):
+        """No note/owner in the YAML -- today's behavior for every existing
+        config/ontologies/*.yml inference rule -- must keep working."""
+        from graphrag.graph.domain_ontology import build_inference_rules_from_ontology
+
+        ontology = {
+            "inference_rules": [
+                {"name": "supersedes_transitivity", "relation": "SUPERSEDES", "rule_type": "transitivity"}
+            ]
+        }
+        rules = build_inference_rules_from_ontology(ontology)
+        assert rules[0].note == ""
+        assert rules[0].owner == ""

@@ -39,6 +39,20 @@ _ONTOLOGY_SECTIONS = {
 }
 
 
+def _validate_rule_rationale(rule: dict, path: str) -> list[str]:
+    """Shared check for the optional note/owner fields on a relation_rules
+    or inference_rules entry -- both must be strings when present. Factored
+    out since both call sites need the identical check."""
+    errors: list[str] = []
+    note = rule.get("note")
+    if note is not None and not isinstance(note, str):
+        errors.append(f"{path}.note must be a string")
+    owner = rule.get("owner")
+    if owner is not None and not isinstance(owner, str):
+        errors.append(f"{path}.owner must be a string")
+    return errors
+
+
 class OntologyValidationError(ValueError):
     """Raised when an ontology cannot safely become the active schema."""
 
@@ -145,12 +159,15 @@ def validate_ontology_document(
             continue
         if not rule.get("domain") or not rule.get("target"):
             errors.append(f"relation_rules.{relation} needs non-empty domain and target")
+        errors.extend(_validate_rule_rationale(rule, f"relation_rules.{relation}"))
 
     for index, rule in enumerate(ontology.get("inference_rules", []) or []):
         if not isinstance(rule, dict) or not rule.get("name") or not rule.get("relation"):
             errors.append(f"inference_rules[{index}] needs name and relation")
         elif not _RELATION_RE.match(str(rule["relation"]).upper()):
             errors.append(f"inference_rules[{index}].relation is invalid")
+        if isinstance(rule, dict):
+            errors.extend(_validate_rule_rationale(rule, f"inference_rules[{index}]"))
 
     vocabulary = ontology.get("vocabulary", {})
     if not isinstance(vocabulary, dict):
@@ -476,6 +493,8 @@ def build_inference_rules_from_ontology(ontology: dict):
                 body_relation_2  = entry.get("body_relation_2", "").upper(),
                 max_depth        = int(entry.get("max_depth", 3)),
                 confidence_decay = float(entry.get("confidence_decay", 0.9)),
+                note             = entry.get("note", ""),
+                owner            = entry.get("owner", ""),
             )
             rules.append(rule)
         except (KeyError, TypeError, ValueError) as exc:

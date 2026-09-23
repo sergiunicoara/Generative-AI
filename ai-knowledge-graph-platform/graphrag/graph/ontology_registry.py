@@ -76,6 +76,7 @@ class OntologyRegistry:
         self._migration_map: dict[str, str] = {}   # deprecated → canonical name
         self._domain_rules: dict[str, set[tuple[str, str]]] = {}  # domain-specific constraints
         self._vocabulary: dict[str, dict] = {}  # term -> {definition, synonyms}
+        self._relation_rationale: dict[str, dict] = {}  # relation -> {note, owner}
         self._version_id: str = ""
         self._loaded: bool = False
 
@@ -114,6 +115,10 @@ class OntologyRegistry:
                 self._domain_rules[rel_upper] = pairs
             # Also register the relation as known so drift detection doesn't flag it
             self._known_relations.add(rel_upper)
+            note  = spec.get("note", "")
+            owner = spec.get("owner", "")
+            if note or owner:
+                self._relation_rationale[rel_upper] = {"note": note, "owner": owner}
 
         log.info("ontology_registry.domain_rules_added",
                  relations=len(rules),
@@ -241,6 +246,15 @@ class OntologyRegistry:
         A shallow copy — callers cannot mutate the registry's internal state
         through this property."""
         return dict(self._vocabulary)
+
+    @property
+    def relation_rationale(self) -> dict[str, dict]:
+        """Human-readable {note, owner} per relation name, from that
+        relation's ``relation_rules`` entry in the domain ontology. Only
+        relations with a non-empty note or owner appear here. A shallow
+        copy — callers cannot mutate the registry's internal state through
+        this property."""
+        return dict(self._relation_rationale)
 
     def validate_extraction(
         self,

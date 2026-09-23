@@ -117,3 +117,63 @@ def test_get_vocabulary_extracts_and_uppercases_keys():
 
 def test_get_vocabulary_defaults_to_empty_dict():
     assert get_vocabulary(_ontology()) == {}
+
+
+def test_relation_rule_note_and_owner_pass_validation():
+    ontology = _ontology()
+    ontology["relation_rules"]["USES"]["note"] = "A widget consumer relationship."
+    ontology["relation_rules"]["USES"]["owner"] = "platform-team"
+    report = assert_valid_ontology(ontology)
+    assert report["valid"] is True
+
+
+def test_relation_rule_note_must_be_a_string():
+    ontology = _ontology()
+    ontology["relation_rules"]["USES"]["note"] = 123
+    with pytest.raises(OntologyValidationError, match="relation_rules.USES.note must be a string"):
+        assert_valid_ontology(ontology)
+
+
+def test_relation_rule_owner_must_be_a_string():
+    ontology = _ontology()
+    ontology["relation_rules"]["USES"]["owner"] = ["not", "a", "string"]
+    with pytest.raises(OntologyValidationError, match="relation_rules.USES.owner must be a string"):
+        assert_valid_ontology(ontology)
+
+
+def test_inference_rule_note_and_owner_pass_validation():
+    ontology = _ontology()
+    ontology["inference_rules"] = [{
+        "name": "uses_transitivity", "rule_type": "transitivity", "relation": "USES",
+        "note": "If A uses B and B uses C, A transitively uses C.",
+        "owner": "platform-team",
+    }]
+    report = assert_valid_ontology(ontology)
+    assert report["valid"] is True
+
+
+def test_inference_rule_note_must_be_a_string():
+    ontology = _ontology()
+    ontology["inference_rules"] = [{
+        "name": "uses_transitivity", "rule_type": "transitivity", "relation": "USES",
+        "note": 123,
+    }]
+    with pytest.raises(OntologyValidationError, match=r"inference_rules\[0\].note must be a string"):
+        assert_valid_ontology(ontology)
+
+
+def test_inference_rule_owner_must_be_a_string():
+    ontology = _ontology()
+    ontology["inference_rules"] = [{
+        "name": "uses_transitivity", "rule_type": "transitivity", "relation": "USES",
+        "owner": 123,
+    }]
+    with pytest.raises(OntologyValidationError, match=r"inference_rules\[0\].owner must be a string"):
+        assert_valid_ontology(ontology)
+
+
+def test_rule_note_and_owner_are_optional():
+    """No note/owner on either section -- today's behavior for every
+    existing config/ontologies/*.yml file -- must keep validating clean."""
+    report = assert_valid_ontology(_ontology())
+    assert report["valid"] is True

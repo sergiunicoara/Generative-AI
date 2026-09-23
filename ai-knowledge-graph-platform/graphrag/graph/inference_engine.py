@@ -59,6 +59,8 @@ class InferenceRule:
     body_relation_2:   str = ""     # for composition: the second body relation
     max_depth:         int = 3      # transitivity only: max chain length
     confidence_decay:  float = 0.9  # per-hop confidence multiplier
+    note:              str = ""     # human-readable rule statement/rationale
+    owner:             str = ""     # accountable team/person for this rule
 
 
 # Canonical built-in rules — safe to apply to any domain

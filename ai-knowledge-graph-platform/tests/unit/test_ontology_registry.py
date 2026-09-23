@@ -75,6 +75,38 @@ async def test_load_populates_vocabulary_from_domain_ontology(monkeypatch):
     }
 
 
+async def test_load_populates_relation_rationale_from_domain_ontology(monkeypatch):
+    import graphrag.graph.domain_ontology as domain_ontology_module
+
+    ontology_doc = {
+        "ontology": {"id": "widgets", "version": "1.0.0", "status": "active", "compatible_with": ">=1.0.0"},
+        "type_hierarchy": [["WIDGET", "CONCEPT"]],
+        "relation_rules": {
+            "SUPERSEDES": {
+                "domain": ["WIDGET"], "target": ["WIDGET"],
+                "note": "The newer widget replaces the older one.",
+                "owner": "widgets-team",
+            },
+        },
+    }
+    monkeypatch.setattr(
+        domain_ontology_module, "get_ontology_path_for_tenant", lambda tenant, base: "fake.yml",
+    )
+    monkeypatch.setattr(domain_ontology_module, "load_domain_ontology", lambda path: ontology_doc)
+
+    neo4j = AsyncMock()
+    neo4j.run = AsyncMock(side_effect=[[], [{"version_id": "v-test-rationale"}]])
+    registry = OntologyRegistry(neo4j, tenant="widgets")
+    await registry.load(["CONCEPT"])
+
+    assert registry.relation_rationale == {
+        "SUPERSEDES": {
+            "note": "The newer widget replaces the older one.",
+            "owner": "widgets-team",
+        },
+    }
+
+
 async def test_vocabulary_is_empty_before_load():
     registry = OntologyRegistry(AsyncMock(), tenant="unloaded")
     assert registry.vocabulary == {}
@@ -263,6 +295,27 @@ class TestAddDomainRangeRules:
             "MANDATED_BY": {"domain": ["REGULATION"], "target": ["ORG"]}
         })
         assert "MANDATED_BY" in registry._known_relations
+
+    async def test_note_and_owner_captured_in_relation_rationale(self, registry):
+        registry.add_domain_range_rules({
+            "SUPERSEDES": {
+                "domain": ["REGULATION"], "target": ["REGULATION"],
+                "note": "The newer document replaces the older one.",
+                "owner": "regulatory-compliance-team",
+            }
+        })
+        assert registry.relation_rationale == {
+            "SUPERSEDES": {
+                "note": "The newer document replaces the older one.",
+                "owner": "regulatory-compliance-team",
+            }
+        }
+
+    async def test_relation_without_note_or_owner_has_no_rationale_entry(self, registry):
+        registry.add_domain_range_rules({
+            "SUPERSEDES": {"domain": ["REGULATION"], "target": ["REGULATION"]}
+        })
+        assert "SUPERSEDES" not in registry.relation_rationale
 
 
 # ── F13: tenant scoping of relation vocabulary and version history ────────────

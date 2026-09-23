@@ -62,6 +62,182 @@ deployed workload and monitoring data behind the claim.
 
 ### Known scale limits
 
+## Semantic modelling and compilation roadmap
+
+The Energy implementation validates a reusable pattern for the base platform:
+author domain meaning once, then compile it into the representations required by
+each deployment. This is the practical lesson from frame/slot modelling and
+from the RDF-versus-LPG question: the durable asset is the domain model, not a
+particular database schema.
+
+The canonical YAML model already emits OWL/RDFS, SHACL and Neo4j artefacts and
+records target limitations. The following additions are ordered by the value
+they add to every future domain, with Energy as the first reference model.
+
+**Status (2026-09-18):** the domain-onboarding and curation-workbench
+sections below are fully closed. What remains — the P0 capability-matrix
+redesign and the P1 qualified-cardinality/composite-key schema change — are
+each explicitly flagged, in their own bullet text, as needing "a real
+redesign" / "a schema change... needs its own design pass," not an
+additive implementation. Neither is assessed as worth picking up without
+that design pass happening first; see the Audit Follow-ons section's
+"Current status" note for the same conclusion applied to the rest of the
+document.
+
+### P0 — target capability matrix and loss diagnostics
+
+- [ ] Give every semantic rule a typed target outcome: `enforced`,
+      `translated`, `runtime-mitigated`, `warning`, or `unsupported`.
+      `fidelity` today is a 3-value axis
+      (`preserved`/`approximated`/`unenforceable`,
+      `graphrag/semantic_model/compiler.py`'s `Diagnostic.fidelity`) read by
+      a live demo consumer (`api/routes/energy_demo.py`) and its tests; the
+      5-value split additionally implies emitting a positive `enforced`
+      record for every natively-enforced rule × target, not just losses —
+      turning `diagnostics.json` from a loss report into a full matrix and
+      roughly doubling its size. A real redesign, not a rename; needs its
+      own design pass.
+
+**Base project value:** makes format choice a compilation decision, supports
+architecture reviews and prevents false confidence from incomplete schemas.
+
+### P1 — visual and tool-friendly semantic modelling
+
+- [ ] Add explicit support and examples for qualified cardinalities,
+      relationship attributes and composite keys where the target supports
+      them. Needs new fields on `PropertySpec`/`RelationSpec`/`Cardinality`
+      (`graphrag/semantic_model/models.py`) and touches every emitter in
+      `compiler.py` (OWL restrictions, SHACL property shapes, Neo4j
+      constraints) — a schema change, not an additive one; needs its own
+      design pass.
+
+**Base project boundary:** YAML remains the canonical source; ERD and Protégé
+are review and interoperability surfaces, not competing sources of truth.
+
+### P1 — ontology curation and human-in-the-loop workbench
+
+- [x] Add a reusable curator queue for proposed entities, relations and schema
+      changes with confidence, provenance, conflicts and affected use cases.
+      `graphrag/graph/ontology_proposals.py`'s pre-existing `OntologyProposalService`
+      (`:OntologyProposal` nodes, `EVIDENCED_BY`/`ASSERTED_IN`/`PROPOSED_FOR`
+      provenance) now also carries `confidence` (from extraction), `conflicts`
+      (same proposed value proposed under more than one kind in the same
+      batch — a real, cheaply-computed collision), and an `affected_use_cases`
+      field (populated by the caller; wiring it to
+      `ontology_migration.find_affected_competency_questions` is a natural
+      follow-up, not done here to avoid forcing a `MigrationReport` out of a
+      single ad hoc proposal).
+- [x] Support approve, edit, reject, merge, defer and quarantine decisions,
+      each with actor, reason, timestamp and model/version evidence.
+      `OntologyProposalService.decide(..., action=...)` — six actions, each
+      recording `reviewed_by`, `reviewed_at`, `decision_reason`, and
+      `decision_model_version`; `edit` also stores the corrected
+      `proposed_value`, `merge` stores `merge_target`. The old
+      `approve: bool` call shape still works for existing callers.
+      `api/routes/kg/ontology_proposals.py` exposes all six as
+      `POST /kg/ontology/proposals/{id}/{approve|edit|reject|merge|defer|quarantine}`.
+- [x] Add duplicate and contradiction views backed by the existing entity
+      resolution, provenance and validation services.
+      `GET /kg/curation/duplicates-and-contradictions`
+      (`api/routes/kg/curation_review.py`) — a thin, read-only aggregation
+      over the already-persisted `ReviewQueueService.list_pending()` and
+      `ContradictionDetector.get_open_conflicts()`. No new storage, no new
+      write path; approve/reject/resolve stay at their existing endpoints.
+- [x] Add request intake and prioritisation fields: business impact, urgency,
+      effort, risk, dependencies and requesting team.
+      `OntologyProposalService.submit()`/`list()` carry
+      `business_impact`/`urgency`/`effort`/`risk`/`dependencies`/
+      `requesting_team` alongside each proposal; populated by the caller
+      (curator UI or ingestion), no fixed vocabulary enforced.
+- [x] Export review decisions as golden-set/training data and expose status
+      reporting for partner teams.
+      `OntologyProposalService.export_golden_set()` returns decided
+      proposals (approved/rejected/edited/merged/deferred/quarantined) as
+      `(input, label)` records with the human's corrective evidence
+      (`corrected_value`, `merge_target`, `decision_reason`); no reward or
+      ranking signal is inferred, that's left to the consumer.
+      `status_report()` is a plain count-by-status/kind breakdown (no
+      SLA/throughput metric — none is agreed for curator turnaround yet).
+      `GET /kg/ontology/proposals/export` and
+      `GET /kg/ontology/proposals/status-report`.
+
+**Energy first example:** review WT-01 evidence, missing-evidence requests,
+invalid observations and work-order state transitions in one operations-facing
+curation flow.
+
+### P1 — reusable domain onboarding and governance pack
+
+- [x] Provide templates for a business glossary, SME workshop notes, entity and
+      relationship decisions, unresolved questions, ownership and deprecation.
+      `docs/templates/domain-onboarding-*.md` (5 files), referenced from
+      `ontology/README.md`'s new "Onboarding a new domain" section. Templates
+      only — nothing validates they were filled in.
+- [x] Add a domain profile describing identifiers, naming policy, provenance,
+      retention, access, temporal semantics, validation and publication rules.
+      `docs/templates/domain-profile-template.md` — each field states
+      whether it's platform-enforced (with the enforcing code cited) or
+      policy-only.
+- [x] Add a regulated-domain example, such as insurance or financial services,
+      covering auditability, explainability, retention and policy traceability.
+      Used automotive IATF 16949 (already in the repo, already regulated)
+      rather than inventing a new domain from scratch. See below.
+- [x] Demonstrate a second domain reusing the compiler, competency-question
+      tests, curation queue and governance templates without modifying Energy
+      code.
+      `ontology/models/automotive-iatf-quality.yaml` re-expresses
+      `config/ontologies/automotive_iatf.yml`'s vocabulary (suppliers,
+      audits, nonconformities, quality documents, standards) in the Energy
+      compiler's YAML schema, compiled through the same `compile_model()`/
+      `load_model()` with no Energy-specific code change. Covers the four
+      named concerns: auditability (`Auditable` mixin, `Audit.auditorId`/
+      `outcome`), explainability (`Nonconformity.rootCause`/
+      `correctiveAction`), retention (`retentionPeriodYears`,
+      `reevaluationFrequencyMonths`), policy traceability
+      (`Standard→mandates→QualityDocument→appliesTo→AutomotiveComponent`,
+      `references`/`supersedes`). Details, scope, and honest limitations in
+      `ontology/README.md`'s "Second domain: automotive" section.
+      `make semantic-model-check` now drift-checks both models; a new test
+      (`test_compiler_is_domain_general_not_energy_specific`) compiled it and
+      caught a real bug in the process — a diagnostic message hardcoded
+      "Energy" even for non-Energy models, fixed in `compiler.py`.
+      Competency-question tests and the curation queue were *not* re-plumbed
+      into this model: automotive's existing Cypher competency questions
+      (`evals/automotive_iatf/`) run against the separate LPG/Neo4j track
+      (`graphrag/graph/domain_ontology.py`), which this YAML model doesn't
+      feed into; the curation queue (`OntologyProposalService`) is likewise
+      LPG-track and tenant-agnostic to which YAML produced the schema, so it
+      already applies to any domain, automotive included, without change.
+
+**Value:** turns stakeholder discovery into reviewable engineering artefacts and
+provides evidence for collaboration with SMEs, architects and country teams.
+
+### P2 — additional target and integration adapters
+
+- [ ] Add read-only conformance adapters for additional LPG/RDF targets only
+      when a real deployment requires them; benchmark against the same dataset
+      fingerprint and competency-question suite.
+- [x] Gremlin (Neptune/Cosmos DB): `GraphBackend` Protocol + `GremlinBackend`
+      cover core entity/relation CRUD and 1-hop retrieval, additive to Neo4j,
+      live-verified against a real `tinkerpop/gremlin-server` container (not
+      Neptune/Cosmos DB themselves). See
+      [ADR-0012](adr/0012-graphbackend-protocol-and-gremlin.md).
+- [ ] Consider Stardog and GQL adapters as interoperability targets, not as
+      additional sources of truth.
+- [ ] Add GraphQL only as a stable consumer API over governed RDF/Neo4j reads;
+      it must not bypass SPARQL, SHACL, tenant boundaries or audit controls.
+- [ ] Add optional Jira/ticketing and spreadsheet import/export integrations for
+      curator operations after the core review model is stable.
+
+### Explicit non-goals
+
+- Do not generate a large number of database dialects merely to increase the
+  artifact count.
+- Do not make Protégé, GraphQL, Neo4j or any other target a second canonical
+  model source.
+- Do not call synthetic Energy fixtures live SAP, Snowflake or SharePoint
+  connectors, and do not present local scorecard measurements as enterprise
+  SLAs.
+
 ### Technology evaluation boundaries
 
 Neo4j remains the production system of record. The platform's graph
@@ -642,6 +818,97 @@ against each other rather than stacking. Revisit only if the existing
 lexical-diversity step is removed or substantially changed — this verdict
 is about MMR *stacked on top of* that mechanism, not MMR in isolation.
 
+## When to add query-personalized PageRank reranking
+
+**Not building it — measured, not just unproven.** Live-benchmarked against
+the real aerospace corpus (33 golden questions, live Neo4j + real
+embeddings, `scripts/benchmark_personalized_pagerank_quality.py`): seed GDS
+Personalized PageRank (`sourceNodes`) with entities mentioned by the
+current top-5 candidate chunks, propagate over the tenant's Entity/
+RELATES_TO graph, blend 50/50 with original fused relevance. Result is
+**mildly negative**: hit rate 0.970→0.939, coverage 0.904→0.884, MRR
+0.744→0.708, 5 questions improved vs. 7 regressed vs. 21 tied. Cost is real
+but modest: mean 164ms/query, p95 349ms (one GDS graph projection reused
+across all queries in a run, not re-projected per query). Full results in
+`evals/personalized_pagerank_quality_results.json`.
+
+This exercise also caught and fixed a real production bug, independent of
+the personalization verdict: three Cypher-building methods in
+`neo4j_client.py` (`get_chunk_filenames`, `get_best_chunk_for_document`,
+`bm25_search_entities`) embedded `document_access_predicate('d')` in a
+plain (non-f) triple-quoted string, so the literal, unparseable text
+`{document_access_predicate('d')}` was sent to Neo4j on *every* call to
+those three methods, unconditionally — `bm25_search_entities` sits on the
+production hybrid-retrieval path (`bm25_search.py`), so this broke
+BM25-over-entities retrieval outright, for every tenant, whether or not ACL
+enforcement was even enabled. Every existing unit test mocks `neo4j.run`,
+so nothing ever sent this Cypher text through a real parser until this live
+run. Fixed by adding the missing `f` prefix; regression-tested in
+`tests/unit/test_document_link_topology.py` (asserts the predicate call is
+actually interpolated, not left as literal template text) rather than
+relying on a live Neo4j instance to catch a recurrence.
+
+## When to add DRIFT-style search
+
+**Not building it — measured, and decisively negative on cost, flat on
+quality.** Live-benchmarked against the real aerospace corpus (33 golden
+questions, live Neo4j, real LLM calls,
+`scripts/benchmark_drift_search_quality.py`) against the existing bounded
+agentic (IRCoT) fallback (`agentic_retriever.py`), both given an identical
+seed local search on the raw question so only the expansion strategy
+differed: DRIFT's one-shot global-primer-driven follow-ups (community
+summaries → fast-model primer + up to 3 follow-up sub-questions → one local
+search per follow-up → large-model synthesis) versus the existing
+iterative fast-model reasoning loop (up to 4 steps, each either answering
+or issuing one more local-search sub-query).
+
+Result: hit rate 1.000 vs. 1.000, coverage 1.000 vs. 0.985, **MRR
+identical to three decimal places (0.787 vs. 0.787) — 0 questions
+improved, 0 regressed, 33 tied**, at **3.8x the latency** (agentic mean
+5993ms vs. DRIFT mean 22915ms) from DRIFT's larger, fixed evidence-gathering
+shape (seed + primer + up to 3 follow-up local searches run unconditionally,
+each a full 6-stage retrieval pipeline, versus agentic's early-exit-capable
+loop — most golden questions resolved in 1 agentic step). DRIFT's LLM-call
+count is actually lower (2 fixed vs. agentic's 2-5), so the added latency is
+retrieval-pipeline cost, not LLM cost. Full results in
+`evals/drift_search_quality_results.json`.
+
+This exercise caught and fixed two further real production bugs, both
+independent of the DRIFT verdict itself and both invisible to every
+existing unit test because they mock `neo4j.run`/the LLM client and never
+exercise a real Groq response or a real Lucene parser:
+
+- **`FallbackLLM`'s Groq→DeepSeek chain didn't catch `groq.APIStatusError`.**
+  A live 413 "tokens per minute" response (DRIFT's larger accumulated
+  context occasionally exceeded Groq's per-org TPM budget) is a
+  `groq.APIStatusError` instance, not the `groq.RateLimitError` subclass
+  the fallback chain checked for (`isinstance(openai.APITimeoutError(...),
+  groq.APITimeoutError)` and the equivalent groq/groq pairing being False
+  across SDKs the same way) — so it crashed the caller instead of failing
+  over to DeepSeek, exactly the failure mode the DeepSeek→Groq direction
+  was already hardened against after the 2026-07-24 incident (see
+  `deepseek_primary()`'s docstring). Fixed in `graphrag/core/llm_client.py`
+  by adding `APIStatusError` to both `GroqClient.generate()`'s caught
+  exceptions and `FallbackLLM.groq_primary()`'s `fallback_exceptions`
+  tuple. While adding regression coverage, also found and fixed a *pre-existing
+  vacuous test*: `TestGroqFailFast`'s one test constructed its exception
+  from `openai.APITimeoutError` instead of `groq`'s own (the two are
+  separate class hierarchies, not `isinstance`-compatible), so it never
+  actually exercised `GroqClient.generate()`'s except clause at all.
+- **Unescaped Lucene special characters crashed BM25 fulltext search.**
+  `bm25_search_chunks`/`bm25_search_entities` (`neo4j_client.py`) passed
+  the raw question straight into `db.index.fulltext.queryNodes` with zero
+  escaping. A DRIFT-generated follow-up question containing a `/`
+  (`"...LEAP-1B/CFM56..."`) crashed with a Lucene `TokenMgrError` instead of
+  searching for it — and since this is on the production hybrid-retrieval
+  path (`bm25_search.py`, used by every retrieval mode), any real user
+  question containing `/ - ! ( ) : ^ " ~ * ? | & { } [ ] \` (all plausible
+  in technical/aviation text — part numbers, dates, aircraft designators)
+  could crash retrieval outright today, not just under DRIFT. Fixed with
+  `_escape_lucene_query()`, matching Lucene's own
+  `QueryParserBase.escape()` character set; regression-tested in the new
+  `tests/unit/test_bm25_lucene_escaping.py`.
+
 ---
 
 # 2026-08-21 Audit Follow-ons
@@ -650,6 +917,46 @@ The implementation and evidence are recorded in
 `docs/archive/audits/audit-2026-08-21.md` and
 `docs/archive/audits/audit-2026-08-21-second-pass.md`. Remaining work is ordered by
 production value, not trend visibility.
+
+### Current status (2026-09-18): nothing below is assessed as worth
+### implementing right now
+
+Every item in this section falls into one of three buckets, none of them
+"a tractable improvement waiting to be built":
+
+- **Measured and rejected.** Query-personalized PageRank and DRIFT-style
+  search were both live-benchmarked against the real aerospace corpus (see
+  "When to add query-personalized PageRank reranking" and "When to add
+  DRIFT-style search" in the Scaling Decision Reference above) and are
+  **not being built** — flat-to-negative quality for real added latency.
+  Both benchmark runs also each surfaced and fixed a real, previously
+  undetected production bug (a Cypher f-string defect, a missing LLM
+  provider-fallback exception, unescaped Lucene query syntax) — the more
+  durable value of this pass was hardening what already exists, not adding
+  to it.
+- **Infra/deployment-gated, not a code gap.** RS256 rollout, 10x load
+  testing, `semantic_answer_cache_strict` with monitored Redis, and the
+  remaining P2 adapters (Stardog/GraphQL, Jira/spreadsheet integration)
+  all require a real deployment or explicitly contradict this document's
+  own non-goals ("do not generate a large number of database dialects
+  merely to increase the artifact count"). Building them now would be
+  lower-quality work by the project's own stated standard. Gremlin
+  (Neptune/Cosmos DB) is the one P2 adapter that closed since this was
+  written — `GraphBackend`/`GremlinBackend`, live-verified against a real
+  Gremlin Server, still deployment-gated only for the two named vendors
+  themselves (see ADR-0012).
+- **Not benchmarked, deprioritized rather than rejected.** LightRAG-style
+  extraction is the one remaining "Experimental" item genuinely untested.
+  It wasn't skipped for a negative result — it's the most expensive of the
+  three experimental items to measure honestly (it needs a *second,
+  separate* corpus ingestion with an alternate extraction pipeline, real
+  LLM spend on top of what personalized-PageRank and DRIFT already used),
+  and two other benchmarks measured this same session both came back
+  negative. That's a reason to deprioritize spending more on this pattern
+  next, not a claim that LightRAG itself is known to be a bad idea.
+
+RAGAS replacement remains blocked on an upstream fix, independent of this
+assessment.
 
 ## Production-critical
 
@@ -674,104 +981,33 @@ production value, not trend visibility.
    correction cannot evict a sibling's copy.
    *Prerequisite:* a Redis instance whose availability is actually monitored.
    *Complexity:* low — configuration plus a failure drill.
-4. Broaden the parent monorepo CI lint command to `ruff check .`; the current
-   project tree passes, but the workflow still scans only selected directories.
-
-## Recently completed
-
-- **Property-based and concurrency testing.** `hypothesis` is now a dev
-  dependency. `tests/unit/test_property_invariants.py` pins invariants across
-  generated inputs — answer-cache tenant isolation above all, since a key
-  collision there serves one tenant another's answer with nothing erroring, and
-  no finite set of examples can establish its absence.
-  `tests/unit/test_write_path_concurrency.py` covers the optimistic-concurrency
-  guard, quota counters, and revocation under real `asyncio.gather` contention,
-  using a state-holding fake rather than an `AsyncMock` (a canned mock answers
-  identically regardless of arrival order, so it cannot demonstrate a
-  concurrency property at all). Those assertions were mutation-verified.
-  *Still open:* a **live** concurrency drill against real Neo4j. The fake
-  models the guard; only the database can demonstrate the atomicity the guard
-  relies on.
-
-- **Async rate limiting.** `api/limiter.py` was rebuilt on `limits.aio`;
-  no code imports `slowapi` anymore (`tests/unit/test_rate_limit_identity.py`
-  asserts this). It is gone from the root `requirements.txt`, but
-  `requirements/api.txt` — the file the API Docker image actually builds
-  from — still pins `slowapi>=0.1.9` as of this writing; that's drift in the
-  per-image lock file, not yet cleaned up. Its Limiter is synchronous with
-  no async variant in 0.1.x, so every Redis-backed check blocked the event loop
-  — tolerable only while six low-rate endpoints were limited, and exactly wrong
-  at the load where limiting matters. Enforcement is now a FastAPI dependency
-  rather than a decorator, so endpoints no longer carry `request: Request`
-  purely for the limiter's benefit.
-- **Per-tenant quotas.** `graphrag/core/tenant_quota.py` adds a fixed-window
-  budget per tenant across two dimensions (requests, cost USD), gating
-  `/query` and `/ingest`. This closes a gap a rate limiter cannot: one tenant
-  running steadily just under the rate limit could consume an entire day of
-  shared LLM spend with every individual request looking well-behaved.
-  Ceilings default to unlimited, so the feature throttles nobody until a
-  deployment chooses numbers.
-
 ## Recommended
 
-1. **Decouple the answer prompt from the aerospace corpus.** `_ANSWER_PROMPT`
-   in `graphrag/retrieval/hybrid_retriever.py` hardcodes corpus-specific rules
-   — revision-number formatting (`rev.2` -> `rev2`), `doc_id` metadata
-   conventions, specific airworthiness phrasing. They exist because they moved
-   the golden-set pass rate, and they are the single largest obstacle to the
-   platform being domain-general: onboarding a second corpus today means
-   editing a shared prompt that another corpus depends on.
-   *Rationale:* a per-ontology prompt fragment, versioned alongside the
-   ontology and composed into the base prompt, keeps the measured behaviour
-   while making it additive rather than shared.
-   *Prerequisite:* a runnable golden eval — this must not be changed on
-   inspection alone, since the current rules are the only evidence anyone has
-   about what the corpus needs.
-   *Benefit:* second-corpus onboarding stops being a merge conflict.
-   *Complexity:* medium; the risk is entirely in the eval, not the code.
-2. Add a GraphRAG-Benchmark-compatible adapter (ICLR 2026) and compare the
-   existing local/global/hybrid/agentic routes on the same datasets and cost
-   envelope. The benchmark's own finding — that graph structure helps on
-   multi-hop, global, and sensemaking questions and not on single-fact lookup
-   — is the hypothesis to test against this corpus, not to assume.
-   *Complexity:* medium. *Benefit:* replaces anecdotal route comparison with
-   a quality/latency/cost triple.
-3. ~~Add dashboards and alerts for oldest RabbitMQ message age, DLQ growth,
-   publish failures, Neo4j pool saturation, and per-tenant model spend.~~
-   **Done** — `graphrag/observability/operational_metrics.py` emits queue age,
-   DLQ, publish outcome, retry, graph pool occupancy, and store-degradation
-   signals; `monitoring/prometheus/alerts.yml` consumes them. A test asserts
-   every metric an alert references actually exists, because a rule pointing at
-   a typo'd metric never fires and never-firing looks exactly like healthy.
-   **Done** — `monitoring/prometheus/prometheus.yml` wires the rules into a
-   Prometheus scrape, and `monitoring/grafana/graphrag-overview.json` is
-   provisioned by the Docker Compose Grafana service. SLO targets remain
-   provisional until the load, soak, and restore exit criteria are met.
-4. ~~Track OpenTelemetry GenAI semantic conventions and adopt the stable fields
-   that map cleanly to the platform's existing traces.~~
-   **Done** — `graphrag/observability/genai_telemetry.py` emits
-   `gen_ai.operation.name`, `gen_ai.system`, request/response model, and
-   provider-reported token usage, attached at `FallbackLLM.generate` (the
-   single choke point every production model call passes through). Prompt and
-   completion content are deliberately never attached: they carry customer
-   document text, and a trace backend has none of the retention, tenancy, or
-   erasure guarantees `graphrag/graph/gdpr.py` exists to provide.
-5. **Adopt the MCP 2026-07-28 transport changes.** This pass implemented the
-   specification's authorization requirements only. Its stateless protocol
-   core, multi-round-trip requests, header-based routing, and cacheable list
-   results remain unadopted.
-   *Prerequisite:* an SDK upgrade (`mcp` is currently constrained to 1.x) and
-   a client-compatibility review.
-   *Complexity:* medium-high; not worth taking piecemeal.
-6. Replace RAGAS if upstream does not fix its multi-modal SSRF and DiskCache
+1. Replace RAGAS if upstream does not fix its multi-modal SSRF and DiskCache
    dependency; until then keep it isolated to offline evaluation workers.
+
+**Done, not reflected before this pass:**
+- Decoupling the answer prompt from the aerospace corpus — done, see
+  `graphrag/retrieval/answer_policy.py` (`BASE_ANSWER_PROMPT` plus a
+  per-`answer_policy` domain-rules fragment; `hybrid_retriever.py` now calls
+  `answer_prompt(cfg)` instead of hardcoding aerospace rules).
+- GraphRAG-Benchmark-compatible adapter — done, see
+  `graphrag/evaluation/graphrag_benchmark.py` and
+  `scripts/run_graphrag_benchmark.py`. Actually running it to compare
+  local/global/hybrid/agentic routes on a shared dataset/cost envelope is a
+  live-evidence task, not a code gap.
+- MCP 2026-07-28 stateless transport — done, see
+  `mcp_server/transport_20260728.py` (stateless `tools/list`/`tools/call`
+  core over the same entitlement-filtered registry as the legacy SDK path).
 
 ## Experimental — benchmark before implementation
 
-1. DRIFT-style search versus the current bounded agentic fallback.
-2. Query-personalized PageRank versus existing graph expansion/PageRank.
-3. FastGraphRAG/LightRAG-style extraction versus current ontology-governed
+1. FastGraphRAG/LightRAG-style extraction versus current ontology-governed
    extraction, measuring indexing cost and domain-relation recall together.
+
+Query-personalized PageRank and DRIFT-style search were both benchmarked
+and are **not being built** — see "When to add query-personalized PageRank
+reranking" and "When to add DRIFT-style search" above.
 
 ## Explicitly deferred
 

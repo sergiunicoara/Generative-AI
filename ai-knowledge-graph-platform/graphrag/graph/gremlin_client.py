@@ -22,12 +22,29 @@ Every traversal below is unit-tested against a mocked ``_submit`` boundary
 (the query-building logic runs for real; only the network call is faked --
 see ``tests/unit/test_gremlin_client.py``, mirroring how
 ``tests/unit/test_neo4j_client_embeddings.py`` mocks ``Neo4jClient.run``).
-**None of it has ever been executed against a live Neptune, Cosmos DB, or
-Gremlin Server instance** -- no such infrastructure is available in this
-environment (the same Docker-unavailable constraint already documented for
-Neo4j/Redis/RabbitMQ in the audit backlog). Treat this as a documented,
-carefully-reasoned starting point, not a verified claim -- the exact status
-``triplestore.py`` already gives Stardog, RDFox, and Virtuoso.
+
+**Live-verified (2026-09-23) against ``tinkerpop/gremlin-server:3.7.2``**
+(the TinkerPop reference server, backed by an in-memory TinkerGraph) -- all
+9 methods were run end to end: ``merge_entity`` create + ON-MATCH refresh,
+``merge_mentions``, ``merge_relation`` create + repeat-doc no-op + Bayesian
+accumulation across two documents (0.8, 0.5 -> 0.9, matching the exact
+formula), ``get_all_entities``/``get_all_relations``,
+``get_entity_neighbors`` 1-hop expansion both directions, and
+``get_relations_for_entity``'s ``outgoing``/``incoming`` direction tagging
+verified from both endpoints. ``as_of`` was confirmed to raise
+``NotImplementedError`` rather than silently return unfiltered rows. This
+proves the bytecode is not just syntactically valid but semantically
+correct against a real TinkerPop-compliant engine.
+
+**Still NOT verified**: a real Neptune or Cosmos DB Gremlin API endpoint.
+Both are TinkerPop-compliant but each has its own documented deviations
+from the reference server (step support gaps, property-cardinality and
+schema differences) -- the same distinction ``triplestore.py`` draws
+between "tested against a real container" (Blazegraph, GraphDB) and
+"follows the vendor's documented protocol, never exercised against a
+running instance" (Stardog, RDFox, Virtuoso). This module is now in the
+first category for TinkerPop generally, and still the second for the two
+vendors actually named in scope (Neptune, Cosmos DB).
 
 Known, documented behavioral differences from ``Neo4jClient``
 ------------------------------------------------------------------
@@ -104,7 +121,7 @@ class GremlinBackend:
         method still runs for real against the mocked return value.
         """
         t = build(self._g)
-        return await asyncio.to_thread(t.toList)
+        return await asyncio.to_thread(t.to_list)
 
     # ── Entity CRUD ──────────────────────────────────────────────────────
 
@@ -112,7 +129,7 @@ class GremlinBackend:
         self, name: str, entity_type: str, tenant: str = "default",
     ) -> bool:
         rows = await self._submit(
-            lambda g: g.V().hasLabel("Entity")
+            lambda g: g.V().has_label("Entity")
             .has("name", name).has("type", entity_type).has("tenant", tenant)
             .count()
         )
@@ -124,12 +141,12 @@ class GremlinBackend:
             entity.source_type if isinstance(entity.source_type, str) else entity.source_type.value
         )
         rows = await self._submit(
-            lambda g: g.V().hasLabel("Entity")
+            lambda g: g.V().has_label("Entity")
             .has("name", entity.name).has("type", entity.type).has("tenant", tenant)
             .fold()
             .coalesce(
                 __.unfold(),
-                __.addV("Entity")
+                __.add_v("Entity")
                 .property("name", entity.name)
                 .property("type", entity.type)
                 .property("tenant", tenant)
@@ -160,7 +177,7 @@ class GremlinBackend:
         new_description = entity.description if row["description"] == "" else row["description"]
         new_embedding_json = json.dumps(entity.embedding) if entity.embedding else row["embedding_json"]
         await self._submit(
-            lambda g: g.V().hasLabel("Entity")
+            lambda g: g.V().has_label("Entity")
             .has("name", entity.name).has("type", entity.type).has("tenant", tenant)
             .property("description", new_description)
             .property("embedding_json", new_embedding_json)
@@ -171,11 +188,11 @@ class GremlinBackend:
         self, chunk_id: str, entity_name: str, entity_type: str, tenant: str = "default",
     ) -> None:
         await self._submit(
-            lambda g: g.V().hasLabel("Chunk").has("id", chunk_id).has("tenant", tenant).as_("c")
-            .V().hasLabel("Entity").has("name", entity_name).has("type", entity_type).has("tenant", tenant).as_("e")
+            lambda g: g.V().has_label("Chunk").has("id", chunk_id).has("tenant", tenant).as_("c")
+            .V().has_label("Entity").has("name", entity_name).has("type", entity_type).has("tenant", tenant).as_("e")
             .coalesce(
-                __.select("c").outE("MENTIONS").where(__.inV().where(P.eq("e"))),
-                __.addE("MENTIONS").from_("c").to("e"),
+                __.select("c").out_e("MENTIONS").where(__.in_v().where(P.eq("e"))),
+                __.add_e("MENTIONS").from_("c").to("e"),
             )
         )
 
@@ -195,9 +212,9 @@ class GremlinBackend:
             rel.constraint_type if isinstance(rel.constraint_type, str) else rel.constraint_type.value
         )
         existing = await self._submit(
-            lambda g: g.V().hasLabel("Entity").has("name", src_name).has("type", src_type).has("tenant", tenant)
-            .outE("RELATES_TO").has("relation", rel.relation)
-            .where(__.inV().has("name", tgt_name).has("type", tgt_type).has("tenant", tenant))
+            lambda g: g.V().has_label("Entity").has("name", src_name).has("type", src_type).has("tenant", tenant)
+            .out_e("RELATES_TO").has("relation", rel.relation)
+            .where(__.in_v().has("name", tgt_name).has("type", tgt_type).has("tenant", tenant))
             .project("confidence", "source_doc_ids_json")
             .by(__.coalesce(__.values("confidence"), __.constant(None)))
             .by(__.coalesce(__.values("source_doc_ids_json"), __.constant("[]")))
@@ -219,12 +236,12 @@ class GremlinBackend:
 
         now = datetime.now(timezone.utc).isoformat()
         await self._submit(
-            lambda g: g.V().hasLabel("Entity").has("name", src_name).has("type", src_type).has("tenant", tenant).as_("s")
-            .V().hasLabel("Entity").has("name", tgt_name).has("type", tgt_type).has("tenant", tenant).as_("t")
+            lambda g: g.V().has_label("Entity").has("name", src_name).has("type", src_type).has("tenant", tenant).as_("s")
+            .V().has_label("Entity").has("name", tgt_name).has("type", tgt_type).has("tenant", tenant).as_("t")
             .coalesce(
-                __.select("s").outE("RELATES_TO").has("relation", rel.relation)
-                .where(__.inV().where(P.eq("t"))),
-                __.addE("RELATES_TO").from_("s").to("t")
+                __.select("s").out_e("RELATES_TO").has("relation", rel.relation)
+                .where(__.in_v().where(P.eq("t"))),
+                __.add_e("RELATES_TO").from_("s").to("t")
                 .property("relation", rel.relation)
                 .property("recorded_at", now),
             )
@@ -257,8 +274,8 @@ class GremlinBackend:
                 "see this module's docstring."
             )
         return await self._submit(
-            lambda g: g.V().hasLabel("Chunk").has("id", P.within(chunk_ids))
-            .out("MENTIONS").hasLabel("Entity")
+            lambda g: g.V().has_label("Chunk").has("id", P.within(chunk_ids))
+            .out("MENTIONS").has_label("Entity")
             .not_(__.has("quarantined", True))
             .project("entity", "type", "description", "neighbors")
             .by("name").by("type").by("description")
@@ -284,20 +301,20 @@ class GremlinBackend:
                 "module's docstring."
             )
         return await self._submit(
-            lambda g: g.V().hasLabel("Entity").has("name", name).has("type", type).has("tenant", tenant)
+            lambda g: g.V().has_label("Entity").has("name", name).has("type", type).has("tenant", tenant)
             .not_(__.has("quarantined", True)).as_("e")
-            .bothE("RELATES_TO")
-            .where(__.otherV().not_(__.has("quarantined", True)))
+            .both_e("RELATES_TO")
+            .where(__.other_v().not_(__.has("quarantined", True)))
             .order().by("confidence", Order.desc)
             .limit(limit)
             .project("name", "type", "weight", "confidence", "extracted_at", "source_doc_id", "direction")
-            .by(__.otherV().values("name"))
-            .by(__.otherV().values("type"))
+            .by(__.other_v().values("name"))
+            .by(__.other_v().values("type"))
             .by(__.coalesce(__.values("weight"), __.constant(None)))
             .by(__.coalesce(__.values("confidence"), __.constant(1.0)))
             .by(__.coalesce(__.values("extracted_at"), __.constant(None)))
             .by(__.coalesce(__.values("source_doc_id"), __.constant(None)))
-            .by(__.choose(__.outV().where(P.eq("e")), __.constant("outgoing"), __.constant("incoming")))
+            .by(__.choose(__.out_v().where(P.eq("e")), __.constant("outgoing"), __.constant("incoming")))
         )
 
     # ── Bulk read ────────────────────────────────────────────────────────
@@ -307,8 +324,8 @@ class GremlinBackend:
         # Neo4jClient.get_all_entities's actual contract -- not a naive
         # vertex scan. See graph_backend.py's docstring on why.
         return await self._submit(
-            lambda g: g.V().hasLabel("Chunk").has("tenant", tenant)
-            .out("MENTIONS").hasLabel("Entity")
+            lambda g: g.V().has_label("Chunk").has("tenant", tenant)
+            .out("MENTIONS").has_label("Entity")
             .not_(__.has("quarantined", True))
             .dedup()
             .project("id", "name", "type")
@@ -317,12 +334,12 @@ class GremlinBackend:
 
     async def get_all_relations(self, tenant: str = "default") -> list[dict]:
         return await self._submit(
-            lambda g: g.E().hasLabel("RELATES_TO").has("tenant", tenant)
-            .where(__.outV().not_(__.has("quarantined", True)))
-            .where(__.inV().not_(__.has("quarantined", True)))
+            lambda g: g.E().has_label("RELATES_TO").has("tenant", tenant)
+            .where(__.out_v().not_(__.has("quarantined", True)))
+            .where(__.in_v().not_(__.has("quarantined", True)))
             .project("source_id", "target_id", "relation", "weight")
-            .by(__.outV().values("id"))
-            .by(__.inV().values("id"))
+            .by(__.out_v().values("id"))
+            .by(__.in_v().values("id"))
             .by("relation")
             .by(__.coalesce(__.values("weight"), __.values("confidence"), __.constant(1.0)))
         )

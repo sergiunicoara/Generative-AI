@@ -1,0 +1,22 @@
+@prefix rr: <http://www.w3.org/ns/r2rml#> .
+@prefix gleif: <https://www.gleif.org/ontology/L1/> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+
+# Static/cached local extract of GLEIF's public Level-1 golden-record data --
+# no live GLEIF API. Federated as an independently-validated same-tenant OBDA
+# source via FederatedOBDAIngestor (graphrag/ingestion/r2rml.py), alongside
+# supply-chain.r2rml.ttl's Supplier source. Subject URIs use GLEIF's real LEI
+# URI pattern (https://www.gleif.org/lei/<20-char-code>) so a record that later
+# gets a live GLEIF-sourced extract needs no URI migration.
+#
+# Deliberately NOT joined to ex:Supplier via rr:parentTriplesMap: this
+# adapter's joins only resolve within one parsed .ttl file (see
+# r2rml_to_mapping() in graphrag/ingestion/r2rml.py), and a cross-source join
+# is properly an entity-resolution-time concern
+# (graphrag/graph/alias_registry.py), not an R2RML mapping-time one. A
+# LegalEntityRecord node and a Supplier node that share the same
+# registration/LEI value are reconciled downstream, not here.
+gleif:LegalEntityRecordMap a rr:TriplesMap;
+  rr:logicalTable [ rr:tableName "gleif_lei_extract" ];
+  rr:subjectMap [ rr:template "https://www.gleif.org/lei/{lei_code}"; rr:class gleif:LegalEntityRecord ];
+  rr:predicateObjectMap [ rr:predicate rdfs:label; rr:objectMap [ rr:column "legal_name" ] ].

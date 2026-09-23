@@ -28,6 +28,7 @@ from graphrag.graph.sparql_bridge import SPARQLBridge
 from graphrag.ingestion.r2rml_rdf import materialize_r2rml
 from graphrag.ingestion.relational import SQLiteSourceConnector
 from graphrag.ingestion.rml_rdf import materialize_rml
+from graphrag.provenance.sosa import SOSA, annotate_sosa_observations
 
 ROOT = Path(__file__).resolve().parents[3]
 SHAPES_PATH = ROOT / "ontology" / "shapes" / "energy-asset-intelligence.shapes.ttl"
@@ -122,6 +123,7 @@ class EnergyDemoService:
         graph = Graph()
         graph.bind("energy", ENERGY)
         graph.bind("prov", PROV)
+        graph.bind("sosa", SOSA)
         site = ASSET["north-sea-wind-farm"]
         graph.add((site, RDF.type, ENERGY.Site))
         graph.add((site, RDFS.label, Literal("North Sea Demonstration Wind Farm")))
@@ -136,6 +138,7 @@ class EnergyDemoService:
         graph += await materialize_rml(
             ROOT / "ontology/mappings/energy-observations.rml.ttl", ROOT,
         )
+        annotate_sosa_observations(graph)
         self._add_bulletin(
             graph, "MFG-GBX-17-R1", "2026-01-01T00:00:00Z", "2026-06-01T00:00:00Z", 90.0, None,
             recorded_at="2026-01-01T00:00:00Z",

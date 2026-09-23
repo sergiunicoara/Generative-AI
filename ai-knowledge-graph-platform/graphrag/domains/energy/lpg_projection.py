@@ -21,6 +21,7 @@ from rdflib.namespace import RDF, RDFS
 from graphrag.core.models import Entity
 from graphrag.domains.energy.demo import ENERGY, PROV
 from graphrag.domains.energy.graph_blobs import content_hash
+from graphrag.provenance.sosa import SOSA
 
 
 class RDFProjectionError(ValueError):
@@ -115,6 +116,13 @@ def _subject_properties(graph: Graph, subject: URIRef) -> tuple[dict[str, Any], 
     provenance_sources: list[str] = []
     for predicate, value in graph.predicate_objects(subject):
         if predicate in {RDF.type, RDFS.label}:
+            continue
+        if isinstance(predicate, URIRef) and str(predicate).startswith(str(SOSA)):
+            # SOSA is an RDF-only annotation layer (graphrag/provenance/sosa.py)
+            # over the same energy:Observation subject -- RDF/SHACL stays the
+            # authoritative semantic layer, Neo4j/LPG is a rebuildable
+            # projection with different native constraint capabilities (see
+            # ontology/README.md). Not projected, same as RDF.type/RDFS.label.
             continue
         if predicate == PROV.wasDerivedFrom:
             if not isinstance(value, URIRef):

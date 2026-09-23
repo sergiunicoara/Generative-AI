@@ -16,6 +16,11 @@ type_hierarchy:
   - [ASSESSMENT, EVENT]
   - [RISK, CONCEPT]
   - [EVIDENCE, CONCEPT]
+  # GLEIF Level-1 golden-record entity (see ontology/mappings/gleif-lei.r2rml.ttl).
+  # Not joined to SUPPLIER at the ontology-relation level: cross-source
+  # identity reconciliation is an entity-resolution-time concern, not a
+  # domain-ontology one -- see that mapping file's header comment.
+  - [LEGAL_ENTITY_RECORD, ORG]
 
 relation_rules:
   SUPPLIES:

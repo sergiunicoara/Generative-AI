@@ -475,6 +475,65 @@ class TestAliasesArePublished:
         assert (entity, SKOS.prefLabel, Literal("EASA AD 2022-0201")) in graph
 
 
+# ── Ontology vocabulary (definitions/synonyms) export ────────────────────────
+# Not to be confused with "Vocabulary versioning" below (OWL ontology
+# version). This is graphrag/graph/domain_ontology.py's `vocabulary` section
+# -- human-readable definitions/synonyms per type or relation name.
+
+class TestOntologyVocabularyIsExported:
+    async def test_type_definition_and_synonym_are_exported(self, tmp_path: Path) -> None:
+        from export_rdf import _type_uri, export
+
+        neo4j = _make_neo4j(
+            type_rows=[{"child": "AIRWORTHINESS_DIRECTIVE", "parent": "REGULATION"}],
+        )
+        vocabulary = {
+            "AIRWORTHINESS_DIRECTIVE": {
+                "definition": "A legally enforceable regulation mandating inspection or repair.",
+                "synonyms": ["AD"],
+            },
+        }
+        output = tmp_path / "vocab_type.ttl"
+        with patch("graphrag.graph.neo4j_client.get_neo4j", return_value=neo4j), \
+             patch("graphrag.graph.domain_ontology.get_ontology_path_for_tenant", return_value="fake.yml"), \
+             patch("graphrag.graph.domain_ontology.load_domain_ontology", return_value={"vocabulary": vocabulary}):
+            await export(tenant="aerospace", output=output, limit=10)
+
+        graph = Graph().parse(output, format="turtle")
+        term = _type_uri("AIRWORTHINESS_DIRECTIVE")
+        assert (term, SKOS.definition, Literal(vocabulary["AIRWORTHINESS_DIRECTIVE"]["definition"])) in graph
+        assert (term, SKOS.altLabel, Literal("AD")) in graph
+
+    async def test_relation_definition_is_exported(self, tmp_path: Path) -> None:
+        from export_rdf import _rel_uri, export
+
+        neo4j = _make_neo4j(rel_rows=[{"rel": "SUPERSEDES"}])
+        vocabulary = {"SUPERSEDES": {"definition": "The newer document replaces the older one."}}
+        output = tmp_path / "vocab_rel.ttl"
+        with patch("graphrag.graph.neo4j_client.get_neo4j", return_value=neo4j), \
+             patch("graphrag.graph.domain_ontology.get_ontology_path_for_tenant", return_value="fake.yml"), \
+             patch("graphrag.graph.domain_ontology.load_domain_ontology", return_value={"vocabulary": vocabulary}):
+            await export(tenant="aerospace", output=output, limit=10)
+
+        graph = Graph().parse(output, format="turtle")
+        term = _rel_uri("SUPERSEDES")
+        assert (term, SKOS.definition, Literal(vocabulary["SUPERSEDES"]["definition"])) in graph
+
+    async def test_no_vocabulary_section_emits_no_skos_definition(self, tmp_path: Path) -> None:
+        """Today's default -- no domain ontology, or one with no `vocabulary`
+        key -- must keep exporting cleanly with zero skos:definition triples."""
+        from export_rdf import export
+
+        neo4j = _make_neo4j(type_rows=[{"child": "AIRCRAFT_MODEL", "parent": "ASSET"}])
+        output = tmp_path / "no_vocab.ttl"
+        with patch("graphrag.graph.neo4j_client.get_neo4j", return_value=neo4j), \
+             patch("graphrag.graph.domain_ontology.get_ontology_path_for_tenant", return_value=None):
+            await export(tenant="aerospace", output=output, limit=10)
+
+        graph = Graph().parse(output, format="turtle")
+        assert len(list(graph.subjects(SKOS.definition, None))) == 0
+
+
 # ── Vocabulary versioning ─────────────────────────────────────────────────────
 
 class TestVocabularyIsVersionedAndAnchored:

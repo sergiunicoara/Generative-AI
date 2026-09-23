@@ -49,6 +49,43 @@ def _relation(src, tgt, rel: str):
     return r
 
 
+async def test_load_populates_vocabulary_from_domain_ontology(monkeypatch):
+    import graphrag.graph.domain_ontology as domain_ontology_module
+
+    ontology_doc = {
+        "ontology": {"id": "widgets", "version": "1.0.0", "status": "active", "compatible_with": ">=1.0.0"},
+        "type_hierarchy": [["WIDGET", "CONCEPT"]],
+        "relation_rules": {},
+        "vocabulary": {
+            "WIDGET": {"definition": "A generic manufactured item.", "synonyms": ["GADGET"]},
+        },
+    }
+    monkeypatch.setattr(
+        domain_ontology_module, "get_ontology_path_for_tenant", lambda tenant, base: "fake.yml",
+    )
+    monkeypatch.setattr(domain_ontology_module, "load_domain_ontology", lambda path: ontology_doc)
+
+    neo4j = AsyncMock()
+    neo4j.run = AsyncMock(side_effect=[[], [{"version_id": "v-test-vocab"}]])
+    registry = OntologyRegistry(neo4j, tenant="widgets")
+    await registry.load(["CONCEPT"])
+
+    assert registry.vocabulary == {
+        "WIDGET": {"definition": "A generic manufactured item.", "synonyms": ["GADGET"]},
+    }
+
+
+async def test_vocabulary_is_empty_before_load():
+    registry = OntologyRegistry(AsyncMock(), tenant="unloaded")
+    assert registry.vocabulary == {}
+
+
+async def test_vocabulary_property_returns_a_copy_not_the_internal_dict(registry):
+    snapshot = registry.vocabulary
+    snapshot["INJECTED"] = {"definition": "should not stick"}
+    assert "INJECTED" not in registry.vocabulary
+
+
 def test_get_ontology_registry_is_isolated_by_tenant():
     _registries.clear()
     neo4j = AsyncMock()

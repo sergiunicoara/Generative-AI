@@ -75,6 +75,7 @@ class OntologyRegistry:
         self._known_relations: set[str] = set()
         self._migration_map: dict[str, str] = {}   # deprecated → canonical name
         self._domain_rules: dict[str, set[tuple[str, str]]] = {}  # domain-specific constraints
+        self._vocabulary: dict[str, dict] = {}  # term -> {definition, synonyms}
         self._version_id: str = ""
         self._loaded: bool = False
 
@@ -138,6 +139,7 @@ class OntologyRegistry:
                 get_ontology_path_for_tenant,
                 get_relation_rules,
                 get_type_hierarchy_pairs,
+                get_vocabulary,
                 load_domain_ontology,
             )
             from graphrag.core.config import ROOT
@@ -150,6 +152,7 @@ class OntologyRegistry:
                 if ontology:
                     assert_valid_ontology(ontology, source=str(full_path))
                     self.add_domain_range_rules(get_relation_rules(ontology))
+                    self._vocabulary.update(get_vocabulary(ontology))
                     # Extend allowed types from the domain hierarchy
                     for child, _ in get_type_hierarchy_pairs(ontology):
                         self._allowed_types.add(child)
@@ -229,6 +232,15 @@ class OntologyRegistry:
     def version_id(self) -> str:
         """Active tenant-scoped ontology version, or an empty value before load."""
         return self._version_id
+
+    @property
+    def vocabulary(self) -> dict[str, dict]:
+        """Human-readable {definition, synonyms} metadata per type/relation
+        name, loaded from the domain ontology's ``vocabulary`` section.
+        Empty before load() or when the domain ontology defines none.
+        A shallow copy — callers cannot mutate the registry's internal state
+        through this property."""
+        return dict(self._vocabulary)
 
     def validate_extraction(
         self,

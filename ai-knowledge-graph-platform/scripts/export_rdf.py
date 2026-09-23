@@ -106,6 +106,23 @@ def _declare_base_term(g: Graph, uri: URIRef) -> URIRef:
     return uri
 
 
+def _emit_vocabulary(g: Graph, uri: URIRef, term: str, vocabulary: dict[str, dict]) -> None:
+    """Emit skos:definition/skos:altLabel for a type or relation name, if the
+    tenant's domain ontology defines vocabulary metadata for it (see
+    graphrag/graph/domain_ontology.py get_vocabulary()). A no-op when the
+    term has no entry -- vocabulary is optional, this never blocks export.
+    """
+    entry = vocabulary.get(term.upper())
+    if not entry:
+        return
+    definition = entry.get("definition")
+    if isinstance(definition, str) and definition:
+        g.add((uri, SKOS.definition, Literal(definition)))
+    for synonym in entry.get("synonyms") or []:
+        if isinstance(synonym, str) and synonym:
+            g.add((uri, SKOS.altLabel, Literal(synonym)))
+
+
 def _entity_uri(name: str, etype: str, tenant: str) -> URIRef:
     """Stable entity URI — tenant-scoped to prevent cross-tenant collisions."""
     def _safe(s: str) -> str:
@@ -388,8 +405,16 @@ async def export(
     strict: bool = False,
 ) -> None:
     from graphrag.graph.neo4j_client import get_neo4j
+    from graphrag.graph.domain_ontology import (
+        get_ontology_path_for_tenant, load_domain_ontology, get_vocabulary,
+    )
 
     neo4j = get_neo4j()
+    # This script works straight from Neo4j and never instantiates
+    # OntologyRegistry, so the vocabulary is read directly from the tenant's
+    # domain ontology YAML the same way OntologyRegistry.load() does.
+    _onto_path = get_ontology_path_for_tenant(tenant)
+    vocabulary = get_vocabulary(load_domain_ontology(_onto_path)) if _onto_path else {}
     g = _init_graph()
     scheme = _scheme_uri(tenant)
     g.add((scheme, RDF.type, SKOS.ConceptScheme))
@@ -415,6 +440,7 @@ async def export(
                 g.add((t_uri, RDF.type, SKOS.Concept))
                 g.add((t_uri, SKOS.prefLabel, Literal(t)))
                 g.add((t_uri, SKOS.inScheme, scheme))
+                _emit_vocabulary(g, t_uri, t, vocabulary)
                 declared_types.add(t)
         g.add((_type_uri(child), RDFS.subClassOf, _type_uri(parent)))
         g.add((_type_uri(child), SKOS.broader, _type_uri(parent)))
@@ -435,6 +461,7 @@ async def export(
             r_uri = _declare_base_term(g, _rel_uri(rel))
             g.add((r_uri, RDF.type, OWL.ObjectProperty))
             g.add((r_uri, RDFS.label, Literal(rel)))
+            _emit_vocabulary(g, r_uri, rel, vocabulary)
             declared_rels.add(rel)
 
     # ── PROV-O activities, agents, and trace evidence ─────────────────────────
@@ -521,6 +548,7 @@ async def export(
             g.add((type_uri, RDF.type, SKOS.Concept))
             g.add((type_uri, SKOS.prefLabel, Literal(etype)))
             g.add((type_uri, SKOS.inScheme, scheme))
+            _emit_vocabulary(g, type_uri, etype, vocabulary)
             declared_types.add(etype)
 
         g.add((uri, RDF.type, OWL.NamedIndividual))

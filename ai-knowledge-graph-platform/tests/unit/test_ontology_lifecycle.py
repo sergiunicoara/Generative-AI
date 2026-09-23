@@ -7,6 +7,7 @@ import pytest
 from graphrag.graph.domain_ontology import (
     OntologyValidationError,
     assert_valid_ontology,
+    get_vocabulary,
     validate_ontology_yaml,
 )
 
@@ -61,3 +62,58 @@ def test_major_version_change_is_incompatible():
     current["ontology"]["version"] = "2.0.0"
     with pytest.raises(OntologyValidationError, match="incompatible major"):
         assert_valid_ontology(current, previous=_ontology())
+
+
+def test_vocabulary_definition_and_synonyms_pass_validation():
+    ontology = _ontology()
+    ontology["vocabulary"] = {
+        "widget": {"definition": "A generic manufactured item.", "synonyms": ["gadget", "thing"]},
+    }
+    report = assert_valid_ontology(ontology)
+    assert report["valid"] is True
+
+
+def test_vocabulary_entry_must_be_a_mapping():
+    ontology = _ontology()
+    ontology["vocabulary"] = {"WIDGET": "not a mapping"}
+    with pytest.raises(OntologyValidationError, match="vocabulary.WIDGET must be a mapping"):
+        assert_valid_ontology(ontology)
+
+
+def test_vocabulary_definition_must_be_a_string():
+    ontology = _ontology()
+    ontology["vocabulary"] = {"WIDGET": {"definition": 123}}
+    with pytest.raises(OntologyValidationError, match="vocabulary.WIDGET.definition must be a string"):
+        assert_valid_ontology(ontology)
+
+
+def test_vocabulary_synonyms_must_be_a_list_of_strings():
+    ontology = _ontology()
+    ontology["vocabulary"] = {"WIDGET": {"synonyms": "gadget"}}
+    with pytest.raises(OntologyValidationError, match="vocabulary.WIDGET.synonyms must be a list of strings"):
+        assert_valid_ontology(ontology)
+
+    ontology["vocabulary"] = {"WIDGET": {"synonyms": ["gadget", 123]}}
+    with pytest.raises(OntologyValidationError, match="vocabulary.WIDGET.synonyms must be a list of strings"):
+        assert_valid_ontology(ontology)
+
+
+def test_vocabulary_section_is_optional():
+    """No vocabulary key at all -- today's behavior for every existing
+    config/ontologies/*.yml file -- must keep validating clean."""
+    report = assert_valid_ontology(_ontology())
+    assert report["valid"] is True
+
+
+def test_get_vocabulary_extracts_and_uppercases_keys():
+    ontology = _ontology()
+    ontology["vocabulary"] = {
+        "widget": {"definition": "A generic manufactured item.", "synonyms": ["gadget"]},
+    }
+    assert get_vocabulary(ontology) == {
+        "WIDGET": {"definition": "A generic manufactured item.", "synonyms": ["gadget"]},
+    }
+
+
+def test_get_vocabulary_defaults_to_empty_dict():
+    assert get_vocabulary(_ontology()) == {}

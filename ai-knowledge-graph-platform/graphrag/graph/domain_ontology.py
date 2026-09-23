@@ -16,6 +16,9 @@ Domain ontology files define:
   inference_rules    — Datalog rules for ForwardChainingEngine
   exclusive_state_pairs — contradiction detection pairs
   functional_relations  — single-valued relation constraints
+  vocabulary         — optional {TERM: {definition, synonyms}} human-readable
+                        metadata for a type or relation name, exported as
+                        skos:definition/skos:altLabel by scripts/export_rdf.py
 """
 
 from __future__ import annotations
@@ -32,7 +35,7 @@ _SEMVER_RE = re.compile(r"^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$")
 _RELATION_RE = re.compile(r"^[A-Z][A-Z0-9_]{1,49}$")
 _ONTOLOGY_SECTIONS = {
     "type_hierarchy", "relation_rules", "inference_rules",
-    "exclusive_state_pairs", "functional_relations",
+    "exclusive_state_pairs", "functional_relations", "vocabulary",
 }
 
 
@@ -148,6 +151,23 @@ def validate_ontology_document(
             errors.append(f"inference_rules[{index}] needs name and relation")
         elif not _RELATION_RE.match(str(rule["relation"]).upper()):
             errors.append(f"inference_rules[{index}].relation is invalid")
+
+    vocabulary = ontology.get("vocabulary", {})
+    if not isinstance(vocabulary, dict):
+        errors.append("vocabulary must be a mapping")
+        vocabulary = {}
+    for term, entry in vocabulary.items():
+        if not isinstance(entry, dict):
+            errors.append(f"vocabulary.{term} must be a mapping")
+            continue
+        definition = entry.get("definition")
+        if definition is not None and not isinstance(definition, str):
+            errors.append(f"vocabulary.{term}.definition must be a string")
+        synonyms = entry.get("synonyms")
+        if synonyms is not None and (
+            not isinstance(synonyms, list) or not all(isinstance(s, str) for s in synonyms)
+        ):
+            errors.append(f"vocabulary.{term}.synonyms must be a list of strings")
 
     unknown_sections = set(ontology) - _ONTOLOGY_SECTIONS - {"ontology", "domain", "version", "migration_map"}
     # Unknown keys are warnings rather than errors to allow provenance fields.
@@ -341,6 +361,28 @@ def get_exclusive_state_pairs(ontology: dict) -> list[tuple[str, str]]:
 def get_functional_relations(ontology: dict) -> list[str]:
     """Extract functional (one-to-one) relation names."""
     return [str(r).upper() for r in ontology.get("functional_relations", [])]
+
+
+def get_vocabulary(ontology: dict) -> dict[str, dict]:
+    """
+    Extract the vocabulary section: human-readable definitions and synonyms
+    for a type or relation name, keyed the same way every other term in this
+    module is (uppercased) so it can be looked up with the same key used for
+    type_hierarchy/relation_rules.
+
+    Example YAML::
+
+        vocabulary:
+          AIRWORTHINESS_DIRECTIVE:
+            definition: "A legally enforceable regulation mandating ..."
+            synonyms: ["AD"]
+
+    Passed to ``OntologyRegistry.load()`` and read directly by
+    ``scripts/export_rdf.py`` to emit ``skos:definition``/``skos:altLabel``
+    on the exported type/relation concept.
+    """
+    vocabulary = ontology.get("vocabulary", {}) or {}
+    return {str(term).upper(): entry for term, entry in vocabulary.items() if isinstance(entry, dict)}
 
 
 def _as_upper_list(value) -> list[str]:

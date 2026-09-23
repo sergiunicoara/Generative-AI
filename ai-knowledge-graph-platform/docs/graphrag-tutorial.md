@@ -477,11 +477,14 @@ distinction is why the retired `multi_source` strategy was wrong (A135).
 - **FastAPI** (`api/main.py`): `/query` (async — publishes to RabbitMQ,
   poll for result), `/search` (sync semantic search, no LLM synthesis —
   §8.4), `/kg/sparql` (SPARQL 1.1, local snapshot or remote-backed — §8.4),
-  `/kg/conflicts`, `/kg/snapshots`, `/kpis/*`, `/demo` (interactive UI with
-  chain-of-thought trace steps). There is no dedicated
-  `/graph/entities/{id}/provenance` REST endpoint — per-edge provenance
-  (`source_doc_id`, `extraction_model`, `extracted_at`, …) is queried via
-  Cypher directly or through the SPARQL/RDF export.
+  `/kg/conflicts`, `/kg/snapshots`, `/kg/sources` (KGSource + mapping
+  CRUD via `SourceCatalogRepository`), `/kg/catalog/documents` and
+  `/kg/catalog/documents/{doc_id}` (read-only document metadata-envelope,
+  ACL, and ingestion-run-history — `api/routes/kg/catalog.py`), `/kpis/*`,
+  `/demo` (interactive UI with chain-of-thought trace steps). There is no
+  dedicated `/graph/entities/{id}/provenance` REST endpoint — per-edge
+  provenance (`source_doc_id`, `extraction_model`, `extracted_at`, …) is
+  queried via Cypher directly or through the SPARQL/RDF export.
 - **Workers**: consume the queue, run the five-stage retrieval pipeline, perform the separate LLM synthesis step, and write results to Redis.
 - Clean separation: API never touches Neo4j for queries — everything goes
   through the worker, so retrieval load can scale independently.

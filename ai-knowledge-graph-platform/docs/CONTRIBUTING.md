@@ -21,6 +21,7 @@ The existing records set the baseline:
 - [ADR-0009](adr/0009-agent-platform-trust-boundaries.md) — Agent platform trust boundaries
 - [ADR-0010](adr/0010-audience-bound-access-tokens.md) — Audience-bound access tokens for API and MCP
 - [ADR-0011](adr/0011-jwt-key-rotation-and-revocation.md) — JWT key rotation and token revocation
+- [ADR-0012](adr/0012-graphbackend-protocol-and-gremlin.md) — GraphBackend Protocol and a live-verified Gremlin (Neptune/Cosmos DB) backend
 
 ### When to write an ADR
 

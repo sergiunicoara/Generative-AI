@@ -449,6 +449,30 @@ the provider-neutral `SourceConnector.records()` protocol and emit
 `SourceEnvelope` records; credentials remain in deployment secret stores.
 Cataloged documents link to their source through `INGESTED_FROM`.
 
+`api/routes/kg/sources.py` exposes `KGSource`/`KGSourceMapping` CRUD (what
+sources exist and how they map into the graph). It does not expose
+*documents* themselves. `api/routes/kg/catalog.py`'s `GET
+/kg/catalog/documents` and `GET /kg/catalog/documents/{doc_id}` close that
+gap: a filtered, paginated document listing plus per-document detail —
+`MetadataEnvelope` fields (`collection`, `source_system`, `classification`,
+…) that `merge_document` already flattens onto the `Document` node, ACL
+fields, and `IngestionRunManifest` run history via the existing
+`(manifest)-[:INGESTS]->(document)` edge. Read-only, additive: no new node
+types, no new write path.
+
+### Graph backend abstraction (Gremlin)
+
+`Neo4jClient` remains the platform's only runtime backend — see
+[ADR-0001](adr/0001-property-graph-over-triple-store.md). `graphrag/graph/
+graph_backend.py` separately extracts `GraphBackend`, a `Protocol` covering
+`Neo4jClient`'s core entity/relation CRUD and 1-hop-retrieval methods (11 of
+its ~60), which `graphrag/graph/gremlin_client.py`'s `GremlinBackend`
+implements for Neptune/Cosmos DB's Gremlin API. This does not change what
+the running platform reads from or writes to — `GremlinBackend` is additive
+and inert unless `GREMLIN_URL` is explicitly configured. See
+[ADR-0012](adr/0012-graphbackend-protocol-and-gremlin.md) for the full
+decision, scope boundary, and live-verification status.
+
 ### Local relational-to-graph ingestion
 
 The repository includes a provider-neutral local reference path in

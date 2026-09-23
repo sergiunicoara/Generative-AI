@@ -30,8 +30,8 @@ The specification-to-implementation runner is documented in
   operator should take in each rule's annotations
 - `adr/` — architecture decisions, including the Context Graph decision trace,
   capability-gated Neo4j vector search, adaptive retrieval routing, agent
-  platform trust boundaries, audience-bound access tokens, and JWT key
-  rotation/revocation
+  platform trust boundaries, audience-bound access tokens, JWT key
+  rotation/revocation, and the GraphBackend Protocol / Gremlin backend
 
 Interview, outreach, and role-specific material is deliberately **not** kept in
 this repository — it was removed on 2026-08-13 (it had been committed under

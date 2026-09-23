@@ -314,6 +314,11 @@ The chunk-level `gnn_score` is the maximum cosine similarity between the query a
 
 ---
 
+### GraphBackend
+A `Protocol` (`graphrag/graph/graph_backend.py`) covering `Neo4jClient`'s core entity/relation CRUD and 1-hop-retrieval methods — not a new database, an interface `Neo4jClient` already satisfies structurally.
+
+**In this project:** Lets `graphrag/graph/gremlin_client.py`'s `GremlinBackend` (Neptune/Cosmos DB's Gremlin API) implement the same shape as an additive, optional backend. `Neo4jClient` remains the only backend the running platform actually reads from or writes to. See [ADR-0012](adr/0012-graphbackend-protocol-and-gremlin.md).
+
 ### GraphRAG
 Retrieval-Augmented Generation enhanced with a knowledge graph. Instead of (or in addition to) retrieving raw text chunks by semantic similarity, the system retrieves structured facts, entity relationships, and graph-derived context from a knowledge graph.
 
@@ -322,6 +327,11 @@ Retrieval-Augmented Generation enhanced with a knowledge graph. Instead of (or i
 **GraphRAG:** Query → vector search + graph traversal + inference + community summaries → structured context → LLM generates cited, reasoned answer
 
 **In this project:** The entire platform is a GraphRAG implementation. The retrieval path has five retrieval stages; final LLM synthesis is a separate sixth step. IRCoT is an iterative fallback layered over this path, not a fixed retrieval stage.
+
+### Gremlin
+The Apache TinkerPop graph-traversal language — a property-graph query language, the same category as Cypher, not RDF/SPARQL. The query interface AWS Neptune and Azure Cosmos DB's Gremlin API speak; Neo4j does not.
+
+**In this project:** `GremlinBackend` implements a Gremlin translation of `GraphBackend`'s core methods, live-verified against a real `tinkerpop/gremlin-server` container — not yet against Neptune or Cosmos DB themselves. See [ADR-0012](adr/0012-graphbackend-protocol-and-gremlin.md).
 
 ### Retrieval sufficiency
 
@@ -740,6 +750,13 @@ A Neo4j node that snapshots the ontology schema at a point in time, including a 
 A business metric record capturing query-level performance: latency, RAGAS scores, retrieval mode, model version.
 
 **In this project:** `graphrag/core/models.py: KPIEvent`. Written by `graphrag/business_matrix/kpi_tracker.py`. Viewed via `GET /kpis/summary` and the dashboard.
+
+---
+
+### Document catalog
+A read-only listing/detail API over document metadata already stored on the `Document` node — not a new metadata-management system. Distinct from the source catalog (`KGSource`/`KGSourceMapping`, "what sources exist"): this is "what documents exist and what's known about each one."
+
+**In this project:** `api/routes/kg/catalog.py`, `GET /kg/catalog/documents` (filtered/paginated list) and `GET /kg/catalog/documents/{doc_id}` (MetadataEnvelope fields, ACL, and `IngestionRunManifest` run history). No writes, no new node types.
 
 ---
 

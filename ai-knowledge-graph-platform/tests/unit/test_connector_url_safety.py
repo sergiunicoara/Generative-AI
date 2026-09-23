@@ -77,3 +77,22 @@ class TestErrorMessageNamesTheContext:
     def test_context_label_appears_in_the_error(self) -> None:
         with pytest.raises(UnsafeConnectorURLError, match="my-caller-label"):
             assert_safe_connector_url("file:///x", context="my-caller-label")
+
+
+class TestSchemesOverride:
+    """gremlin_client.GremlinBackend passes schemes={"ws", "wss"} -- Gremlin
+    Server connections are WebSocket, not HTTP. Confirms the override works
+    without loosening the default for every other caller."""
+
+    def test_ws_is_rejected_by_default_but_accepted_when_overridden(self) -> None:
+        with pytest.raises(UnsafeConnectorURLError):
+            assert_safe_connector_url("ws://gremlin-server:8182/gremlin", context="test")
+        assert_safe_connector_url(
+            "ws://gremlin-server:8182/gremlin", context="test", schemes=frozenset({"ws", "wss"}),
+        )  # must not raise
+
+    def test_http_is_rejected_when_only_ws_schemes_are_allowed(self) -> None:
+        with pytest.raises(UnsafeConnectorURLError):
+            assert_safe_connector_url(
+                "http://example.com", context="test", schemes=frozenset({"ws", "wss"}),
+            )

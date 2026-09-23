@@ -4,6 +4,7 @@ langchain-groq>=0.1.0
 
 # ── Graph processing ───────────────────────────────────────────────────────────
 neo4j>=5.20.0
+gremlinpython>=3.7.0
 graspologic>=3.3.0
 networkx>=3.3
 

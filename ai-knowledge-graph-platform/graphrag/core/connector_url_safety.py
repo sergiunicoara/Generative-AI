@@ -42,8 +42,10 @@ class UnsafeConnectorURLError(ValueError):
     """Raised when a connector-configured URL cannot be a valid HTTP(S) endpoint."""
 
 
-def assert_safe_connector_url(url: str, *, context: str) -> None:
-    """Raise ``UnsafeConnectorURLError`` unless ``url`` is a well-formed http(s) URL.
+def assert_safe_connector_url(
+    url: str, *, context: str, schemes: frozenset[str] | None = None,
+) -> None:
+    """Raise ``UnsafeConnectorURLError`` unless ``url`` is a well-formed URL.
 
     A no-op for a falsy ``url`` -- several call sites (``SourceSystem.uri``,
     for one) treat an empty string as "not configured", and rejecting that
@@ -52,19 +54,25 @@ def assert_safe_connector_url(url: str, *, context: str) -> None:
     ``context`` is a short, caller-supplied label (e.g. ``"TripleStoreTarget
     base_url"``) so the raised error identifies which configured URL failed,
     not just that URL validation failed somewhere.
+
+    ``schemes`` overrides the default http(s)-only allow-list -- every
+    existing caller omits it and keeps exactly today's behavior.
+    ``gremlin_client.GremlinBackend`` passes ``{"ws", "wss"}``, since Gremlin
+    Server connections are WebSocket, not HTTP.
     """
     if not url:
         return
+    allowed_schemes = schemes if schemes is not None else _ALLOWED_SCHEMES
     try:
         parts = urlsplit(url)
     except ValueError as exc:
         raise UnsafeConnectorURLError(f"{context}: {url!r} is not a parseable URL") from exc
 
     scheme = parts.scheme.lower()
-    if scheme not in _ALLOWED_SCHEMES:
+    if scheme not in allowed_schemes:
         raise UnsafeConnectorURLError(
             f"{context}: {url!r} uses scheme {parts.scheme!r}; "
-            f"only {sorted(_ALLOWED_SCHEMES)} are permitted"
+            f"only {sorted(allowed_schemes)} are permitted"
         )
     if not parts.netloc or not parts.hostname:
         raise UnsafeConnectorURLError(f"{context}: {url!r} has no host")

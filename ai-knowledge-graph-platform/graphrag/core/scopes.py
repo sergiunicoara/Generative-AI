@@ -28,15 +28,36 @@ FIXED_SCOPES = frozenset({
     "biz:approve",
 })
 
-# tenant:<name> is a family, not a fixed set -- one exists per tenant. Names
-# follow the same pattern already enforced for tenant path/query params
-# elsewhere in the codebase (lowercase alnum + hyphen/underscore).
-_TENANT_SCOPE_RE = re.compile(r"^tenant:[a-z0-9][a-z0-9_-]{0,63}$")
+# Single source of truth for "what is a valid tenant name" -- every other
+# tenant-name pattern in the codebase (api/routes/kg/knowledge.py's request-path
+# validator, graphrag/graph/triplestore.py's remote-SPARQL tenant binding) is
+# built from this one, so a name accepted in one place can never be rejected
+# (or normalized differently) in another.
+TENANT_NAME_PATTERN = r"[a-z0-9][a-z0-9_-]{0,63}"
+TENANT_NAME_RE = re.compile(rf"^{TENANT_NAME_PATTERN}$")
+
+# tenant:<name> is a family, not a fixed set -- one exists per tenant.
+_TENANT_SCOPE_RE = re.compile(rf"^tenant:{TENANT_NAME_PATTERN}$")
 
 
 def is_valid_scope(scope: str) -> bool:
     """True if `scope` is a recognized fixed scope or a well-formed tenant:<name>."""
     return scope in FIXED_SCOPES or bool(_TENANT_SCOPE_RE.fullmatch(scope))
+
+
+def tenant_from_scope(scope: str) -> str | None:
+    """The tenant name if `scope` is a well-formed tenant:<name> scope, else None.
+
+    Single parser for the convention this module owns -- api/auth/jwt.py and
+    graphrag/agents/tool_policy.py each used to hand-parse `tenant:` scopes
+    independently (one via removeprefix, the other via split(":", 1)), so a
+    future change to the convention (e.g. case-insensitive names) had two
+    call sites to update instead of one.
+    """
+    if not scope.startswith("tenant:"):
+        return None
+    name = scope[len("tenant:"):]
+    return name if TENANT_NAME_RE.fullmatch(name) else None
 
 
 def validate_scopes(scopes: list[str]) -> list[str]:

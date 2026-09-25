@@ -182,16 +182,24 @@ class TypeTaxonomy:
         parents.setdefault(child, set()).add(parent)
 
     def _children_of(self, node: str, tenant: str | None) -> set[str]:
-        result = set(self._children.get(node, set()))
-        if tenant is not None:
-            result |= self._tenant_children.get(tenant, {}).get(node, set())
-        return result
+        """Never mutated by any caller -- may return an internal set by
+        reference (no copy) when there's nothing tenant-specific to merge,
+        which is the common case during a transitive walk over a taxonomy
+        where only a few nodes carry a tenant extension.
+        """
+        base = self._children.get(node)
+        ext = self._tenant_children.get(tenant, {}).get(node) if tenant is not None else None
+        if not ext:
+            return base if base is not None else set()
+        return (base | ext) if base else ext
 
     def _parents_of(self, node: str, tenant: str | None) -> set[str]:
-        result = set(self._parents.get(node, set()))
-        if tenant is not None:
-            result |= self._tenant_parents.get(tenant, {}).get(node, set())
-        return result
+        """See _children_of -- same no-copy-when-no-extension contract."""
+        base = self._parents.get(node)
+        ext = self._tenant_parents.get(tenant, {}).get(node) if tenant is not None else None
+        if not ext:
+            return base if base is not None else set()
+        return (base | ext) if base else ext
 
     # ── Traversal helpers ──────────────────────────────────────────────────────
 

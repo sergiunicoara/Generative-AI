@@ -3,13 +3,12 @@ reification, property schema, external entity linking, multi-modal entities, and
 
 from __future__ import annotations
 
-import re
-
 import structlog
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from pydantic import BaseModel
 
 from api.auth.dependencies import get_tenant, require_scope
+from graphrag.core.scopes import TENANT_NAME_RE
 from graphrag.graph.corpus_revision import CorpusMutation
 from graphrag.graph.neo4j_client import get_neo4j
 
@@ -734,7 +733,10 @@ class SPARQLRequest(BaseModel):
     # The export location is server configuration, not request data.
 
 
-_TENANT_PATH_RE = re.compile(r"^[a-z0-9][a-z0-9_-]{0,63}$")
+# graphrag.core.scopes owns the canonical tenant-name pattern; kept as a
+# local alias so every existing _TENANT_PATH_RE.fullmatch(...) call site in
+# this file needs no change.
+_TENANT_PATH_RE = TENANT_NAME_RE
 
 
 @router.post(

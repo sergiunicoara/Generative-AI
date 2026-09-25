@@ -282,3 +282,30 @@ class TestDomainOntologyIntegration:
         rules = build_inference_rules_from_ontology(ontology)
         assert rules[0].note == ""
         assert rules[0].owner == ""
+
+
+class TestChildrenOfReturnsSafeToDiscard:
+    """_children_of/_parents_of may return an internal set by reference (no
+    copy) when there's no tenant extension to merge -- callers only ever
+    iterate/list() the result, never mutate it. This guards that contract:
+    if a future caller mutated the returned set, it would corrupt the
+    taxonomy's own adjacency map."""
+
+    def test_children_of_no_tenant_returns_live_reference_untouched_by_read(self):
+        t = _make_taxonomy(BASE_PAIRS)
+        before = set(t._children.get("AGENT", set()))
+
+        result = t._children_of("AGENT", tenant=None)
+        list(result)  # simulate every real caller's usage
+
+        assert t._children.get("AGENT") == before
+
+    def test_children_of_merges_tenant_extension_without_mutating_platform_set(self):
+        t = _make_taxonomy(BASE_PAIRS)
+        t._tenant_children.setdefault("acme", {})["AGENT"] = {"REGULATOR"}
+        platform_before = set(t._children.get("AGENT", set()))
+
+        merged = t._children_of("AGENT", tenant="acme")
+
+        assert merged == platform_before | {"REGULATOR"}
+        assert t._children.get("AGENT") == platform_before  # untouched

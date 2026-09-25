@@ -42,13 +42,13 @@ silently fail or behave unexpectedly.
 from __future__ import annotations
 
 import os
-import re
 from typing import Any, Protocol, runtime_checkable
 
 import httpx
 import structlog
 
 from graphrag.core.connector_url_safety import assert_safe_connector_url
+from graphrag.core.scopes import TENANT_NAME_RE
 from graphrag.graph.sparql_bridge import _reject_unsafe_sparql
 
 log = structlog.get_logger(__name__)
@@ -490,7 +490,11 @@ class RemoteSPARQLTenantNotMapped(ValueError):
     """A remote SPARQL endpoint is configured but not scoped to this tenant."""
 
 
-_TENANT_SEGMENT_RE = re.compile(r"[A-Za-z0-9_-]{1,64}")
+# graphrag.core.scopes owns the canonical tenant-name pattern; this used to
+# be a locally-defined regex (lowercase-only vs. this file's own looser
+# A-Za-z variant) that could accept a name knowledge.py's _TENANT_PATH_RE
+# would reject, or vice versa.
+_TENANT_SEGMENT_RE = TENANT_NAME_RE
 
 
 def _tenant_endpoint(endpoint: str, tenant: str) -> str:

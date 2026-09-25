@@ -50,6 +50,8 @@ from typing import TYPE_CHECKING, Any, Callable
 
 import structlog
 
+from graphrag.core.scopes import tenant_from_scope
+
 if TYPE_CHECKING:
     from graphrag.core.tenant_quota import TenantQuotaStore
 
@@ -135,12 +137,13 @@ def validate_args(arg_schema: dict[str, dict], args: dict, caller_scopes: list[s
         # is unsafe the moment that caller is an LLM agent rather than
         # a human/ops process. See tasks/lessons.md A149.
         if arg_name == "tenant" and value:
-            tenant_scopes = [s for s in caller_scopes if s.startswith("tenant:")]
-            if not tenant_scopes:
+            allowed_tenants = [
+                name for s in caller_scopes if (name := tenant_from_scope(s)) is not None
+            ]
+            if not allowed_tenants:
                 return ("no tenant scope granted — tools that accept a "
                         "'tenant' argument require an explicit "
                         "tenant:<name> scope")
-            allowed_tenants = [s.split(":", 1)[1] for s in tenant_scopes]
             if value not in allowed_tenants:
                 return (f"cross-tenant access denied: caller tenant(s) "
                         f"{allowed_tenants} cannot access tenant '{value}'")

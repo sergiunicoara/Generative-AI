@@ -77,6 +77,7 @@ from graphrag.core.resource_identifiers import (
     api_resource,
     canonical_resource_uri,
 )
+from graphrag.core.scopes import tenant_from_scope
 from graphrag.core.signing_keys import (
     accepted_algorithms,
     signing_key,
@@ -244,7 +245,7 @@ def _assert_issuer_scoped_claims(trusted, claims: dict) -> None:
             # (graphrag/agents/tool_policy.py) honours independently of the
             # tenant claim -- letting that token drive write/erase tools
             # against globex despite operating as acme everywhere else.
-            if scope.removeprefix("tenant:") != token_tenant:
+            if tenant_from_scope(scope) != token_tenant:
                 raise ValueError("Invalid token")
         elif scope not in trusted.max_scopes:
             raise ValueError("Invalid token")

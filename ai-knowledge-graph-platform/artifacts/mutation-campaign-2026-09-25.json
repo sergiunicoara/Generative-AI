@@ -1,48 +1,59 @@
 {
-  "report_schema_version": "mutation-campaign/v1",
+  "report_schema_version": "mutation-campaign/v2",
   "date": "2026-09-25",
   "tool": "mutmut 3.8.0",
-  "scope": "docs/REMAINING_AUDIT_BACKLOG.md item #8 (Complete mutation score) \u2014 the three adapters make mutation already targeted",
-  "run_mode": "local (no Docker/CI in this session); test selection restricted to these adapters' own mocked unit tests \u2014 no live infra required",
+  "scope": "docs/REMAINING_AUDIT_BACKLOG.md item #8 (Complete mutation score) -- the three adapters make mutation already targeted",
+  "run_mode": "local (no Docker/CI in this session); test selection restricted to these adapters' own mocked unit tests -- no live infra required",
   "totals": {
-    "survived": 400,
+    "killed": 577,
+    "survived": 252,
     "timeout": 5,
     "no tests": 25
   },
-  "total_mutants": 430,
+  "total_mutants": 859,
+  "kill_rate_pct": 67.2,
   "by_module": {
-    "graphrag.retrieval.answer_policy": {
-      "survived": 26
+    "graphrag/retrieval/answer_policy.py": {
+      "killed": 36,
+      "survived": 15
     },
-    "graphrag.ingestion.r2rml": {
-      "survived": 115
+    "graphrag/ingestion/r2rml.py": {
+      "killed": 246,
+      "survived": 106
     },
-    "mcp_server.transport_20260728": {
-      "survived": 259,
+    "mcp_server/transport_20260728.py": {
+      "killed": 295,
+      "survived": 131,
       "timeout": 5,
       "no tests": 25
     }
   },
   "survivor_examples_by_module": {
-    "graphrag.retrieval.answer_policy": [
-      "graphrag.retrieval.answer_policy.x_answer_prompt__mutmut_1",
-      "graphrag.retrieval.answer_policy.x_answer_prompt__mutmut_2",
-      "graphrag.retrieval.answer_policy.x_answer_prompt__mutmut_3"
+    "graphrag/retrieval/answer_policy.py": [
+      "graphrag.retrieval.answer_policy.x_answer_prompt__mutmut_4",
+      "graphrag.retrieval.answer_policy.x_answer_prompt__mutmut_6",
+      "graphrag.retrieval.answer_policy.x_answer_prompt__mutmut_9",
+      "graphrag.retrieval.answer_policy.x_answer_prompt__mutmut_10",
+      "graphrag.retrieval.answer_policy.x_answer_prompt__mutmut_17"
     ],
-    "graphrag.ingestion.r2rml": [
-      "graphrag.ingestion.r2rml.x__one__mutmut_9",
+    "graphrag/ingestion/r2rml.py": [
       "graphrag.ingestion.r2rml.x__local_name__mutmut_5",
-      "graphrag.ingestion.r2rml.x__local_name__mutmut_7"
+      "graphrag.ingestion.r2rml.x__local_name__mutmut_10",
+      "graphrag.ingestion.r2rml.x__local_name__mutmut_11",
+      "graphrag.ingestion.r2rml.x__local_name__mutmut_14",
+      "graphrag.ingestion.r2rml.x__local_name__mutmut_18"
     ],
-    "mcp_server.transport_20260728": [
+    "mcp_server/transport_20260728.py": [
       "mcp_server.transport_20260728.x__header__mutmut_2",
       "mcp_server.transport_20260728.x__header__mutmut_4",
-      "mcp_server.transport_20260728.x__header__mutmut_11"
+      "mcp_server.transport_20260728.x__header__mutmut_11",
+      "mcp_server.transport_20260728.x__header__mutmut_12",
+      "mcp_server.transport_20260728.x__json_type__mutmut_1"
     ]
   },
   "notes": [
-    "make mutation (Makefile) was broken before this run: mutmut>=3 removed the --paths-to-mutate CLI flag the target passed, so it crashed before mutating a single line. Fixed via [tool.mutmut] in pyproject.toml (source_paths=['.'] + only_mutate, since mutmut>=3's sys.path setup only works for project-root-style source_paths).",
-    "0 mutants were killed across all three files. Manual spot-checks of several 'survived' mutants confirm the tool itself is working correctly (tests-for-mutant correctly attributes trampoline hits to the tests that exercise each function) -- the low kill rate reflects a mix of (a) genuinely equivalent mutants for these specific code paths (e.g. rsplit(..., 1)[-1] vs rsplit(...)[-1] -- identical result when only the last segment is read) and (b) real, narrow direct-unit-test coverage gaps in these three adapters, consistent with the Makefile's own framing of them as 'high-risk new adapters' worth a mutation pass before merge.",
-    "This is a first, real, reproducible baseline score (400 survived / 25 no-tests / 5 timeout / 0 killed of 430 total) -- not yet a CI-gated campaign. Next step if this is worth investing further in: read the surviving mutants for mcp_server/transport_20260728.py in particular (259 survived against only 3 existing tests) and add assertions that pin down its actual JSON-RPC error responses/behavior, not just status codes."
+    "make mutation (Makefile) was broken before this session: mutmut>=3 removed the --paths-to-mutate CLI flag the target passed, so it crashed before mutating a single line. Fixed via [tool.mutmut] in pyproject.toml (source_paths=['.'] + only_mutate, since mutmut>=3's sys.path setup only works for project-root-style source_paths).",
+    "IMPORTANT CORRECTION: an earlier version of this report (v1, based on the pre-existing 3-test baseline) said '0 killed' -- that was a measurement error, not a real 0% score: `mutmut results` hides already-killed mutants by default and only `mutmut results --all true` shows them. The true baseline (before this session added tests) was roughly 429 killed of 859; the actual improvement from the new tests added this session (test_mcp_transport_20260728.py: +10 tests covering error paths/ping/denied-call/tools-list-filtering; test_answer_policy.py: +3 tests covering the aerospace-positive prompt path and citation dedup; test_r2rml_obda.py: +8 direct unit tests for _one/_local_name/_identifier_from_template) is reflected in these final numbers.",
+    "Current kill rate: 67.2% (577/859) across the 3 files. graphrag/ingestion/r2rml.py's r2rml_to_mapping (~80 surviving mutants) and mcp_server/transport_20260728.py's ProtocolVersionDispatch/StatelessMCP20260728App.__call__ dispatch branches remain the largest concentrations of survivors -- next-highest-value place to look if this is worth investing further in."
   ]
 }

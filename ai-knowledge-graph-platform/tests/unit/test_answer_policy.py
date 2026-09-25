@@ -29,3 +29,25 @@ def test_generic_policy_does_not_apply_aerospace_post_processing():
 
     assert answer == "The aircraft was unairworthy."
     assert citations == ["source"]
+
+
+def test_aerospace_answer_policy_includes_aerospace_specific_rules():
+    prompt = answer_prompt({"answer_policy": "aerospace_regulatory"})
+
+    assert "revision labels" in prompt
+    assert "doc_id" in prompt
+
+
+def test_answer_policy_defaults_to_generic_when_unset():
+    prompt = answer_prompt({})
+
+    assert "revision labels" not in prompt
+
+
+def test_generic_policy_deduplicates_citations_preserving_first_occurrence_order():
+    answer, citations = apply_answer_policy(
+        "answer", "context", "question",
+        ["b", "a", "b", "c", "a"], [], {"answer_policy": "generic"},
+    )
+
+    assert citations == ["b", "a", "c"]

@@ -140,7 +140,7 @@ this session had.
 the branch-protection endpoint (not just the GitHub MCP connector's current
 tool set), or a human doing it in Settings → Branches.
 
-### 8. Complete mutation score — real bug found and fixed 2026-09-25; first score recorded, not yet CI-gated
+### 8. Complete mutation score — real bug found and fixed 2026-09-25; baseline raised from ~50% to 67.2%, not yet CI-gated
 `make mutation` (opt-in Mutmut campaign) exists, but no measured score or
 CI-run report exists anywhere in the repo.
 **Found this session:** `make mutation` was not merely "never run" — it was
@@ -162,23 +162,34 @@ Makefile always targeted, plus `pytest_add_cli_args_test_selection` scoping
 the test run to those adapters' own mocked unit tests (no live infra needed
 — this also works in this session's no-Docker environment). `make mutation`
 now runs `mutmut run` (config-driven) followed by `mutmut results`.
-**First recorded score (this session, local run, not CI):** 430 mutants
-generated across the 3 files — **0 killed, 400 survived, 25 no-tests, 5
-timeout**. Manually spot-checked several survivors (`mutmut show
-<mutant>`): the tool and its test-to-mutant attribution are working
-correctly (`mutmut tests-for-mutant` correctly names the exact test that
-exercises each mutated function); the 0% kill rate reflects a mix of
-genuinely equivalent mutants for this code (e.g. `rsplit(x, 1)[-1]` vs.
-`rsplit(x)[-1]` — identical result when only the last segment is read) and
-real, narrow gaps in these adapters' direct unit tests — consistent with the
-Makefile's own framing of them as "high-risk new adapters" worth mutating
-before merge. Full breakdown and example diffs:
-`artifacts/mutation-campaign-2026-09-25.json`.
-**Still open:** this is a first baseline, not a CI-gated campaign, and the
-400 survivors haven't been triaged into "accept as equivalent" vs. "write a
-test that kills this" — `mcp_server/transport_20260728.py` alone has 259
-survivors against only 3 existing tests and is the highest-value place to
-look next.
+**Recorded score (this session, local run, not CI):** 859 mutants across the
+3 files — **577 killed, 252 survived, 25 no-tests, 5 timeout (67.2% kill
+rate)**. This session also added 21 unit tests targeting the weakest
+coverage found by the first pass: `tests/unit/test_mcp_transport_20260728.py`
+(+10, covering error-response branches, `ping`, a denied tool call, and
+`tools/list` entitlement filtering), `tests/unit/test_answer_policy.py` (+3,
+covering the aerospace-positive prompt path and citation dedup, both
+previously untested), `tests/unit/test_r2rml_obda.py` (+8, direct unit tests
+for the small `_one`/`_local_name`/`_identifier_from_template` helpers).
+Manually spot-checked several remaining survivors (`mutmut show <mutant>`):
+the tool and its test-to-mutant attribution work correctly (`mutmut
+tests-for-mutant` correctly names the exact test exercising each mutated
+function) — remaining survivors are a mix of genuinely equivalent mutants
+(e.g. `rsplit(x, 1)[-1]` vs. `rsplit(x)[-1]` — identical result when only the
+last segment is read) and real, narrower gaps. Full breakdown, per-module
+counts, and example diffs: `artifacts/mutation-campaign-2026-09-25.json`.
+**Correction:** an earlier revision of this entry reported "0 killed" from
+this session's very first run, before any new tests were added. That number
+was a measurement artifact, not a real result — `mutmut results` hides
+already-killed mutants by default; only `mutmut results --all true` shows
+them. The true pre-session baseline was roughly 429/859 killed (~50%), not
+0/430. Caught and corrected before this file was finalized.
+**Still open:** this is a first baseline, not a CI-gated campaign. The
+largest remaining concentrations of survivors are `graphrag/ingestion/r2rml.py`'s
+`r2rml_to_mapping` (~80 survivors, only exercised through full-mapping
+fixtures that tolerate many low-level mutations) and
+`mcp_server/transport_20260728.py`'s dispatch branches — the next-highest-value
+place to look if this is worth investing further in.
 
 ---
 

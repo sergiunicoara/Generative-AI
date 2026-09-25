@@ -2,8 +2,11 @@ from pathlib import Path
 
 import pytest
 
+from rdflib import Graph, Literal, URIRef
+
 from graphrag.ingestion.r2rml import (
-    FederatedOBDAIngestor, FederatedOBDASource, R2RMLMappingError, r2rml_to_mapping,
+    FederatedOBDAIngestor, FederatedOBDASource, R2RMLMappingError, _identifier_from_template,
+    _local_name, _one, r2rml_to_mapping,
 )
 from graphrag.ingestion.relational import RelationalGraphMapping
 
@@ -68,3 +71,57 @@ async def test_federation_preflights_all_sources_before_any_ingest():
     ])
     with pytest.raises(ValueError, match="one tenant"):
         await federation.ingest()
+
+
+class TestSmallR2RMLHelpers:
+    """Direct unit coverage for r2rml.py's small internal parsing helpers —
+    otherwise only exercised indirectly through full-mapping fixtures above,
+    which tolerate many mutations of these functions without ever hitting
+    their edge cases (see docs/REMAINING_AUDIT_BACKLOG.md item #8's
+    mutation-campaign follow-up)."""
+
+    def test_one_returns_the_single_value(self):
+        g = Graph()
+        s, p = URIRef("urn:s"), URIRef("urn:p")
+        g.add((s, p, Literal("only")))
+
+        assert _one(g, s, p, "thing") == Literal("only")
+
+    def test_one_raises_when_no_value(self):
+        g = Graph()
+        s, p = URIRef("urn:s"), URIRef("urn:p")
+
+        with pytest.raises(R2RMLMappingError, match="thing must occur exactly once"):
+            _one(g, s, p, "thing")
+
+    def test_one_raises_when_multiple_values(self):
+        g = Graph()
+        s, p = URIRef("urn:s"), URIRef("urn:p")
+        g.add((s, p, Literal("a")))
+        g.add((s, p, Literal("b")))
+
+        with pytest.raises(R2RMLMappingError, match="thing must occur exactly once"):
+            _one(g, s, p, "thing")
+
+    def test_local_name_takes_the_last_path_segment(self):
+        assert _local_name(URIRef("https://example.test/ns/Widget")) == "WIDGET"
+
+    def test_local_name_takes_the_fragment_when_present(self):
+        assert _local_name(URIRef("https://example.test/ns#Widget")) == "WIDGET"
+
+    def test_local_name_takes_the_last_slash_segment_within_the_fragment(self):
+        assert _local_name(URIRef("https://example.test/ns#group/Widget")) == "WIDGET"
+
+    def test_local_name_normalizes_non_alnum_runs_to_underscore(self):
+        assert _local_name(URIRef("https://example.test/ns#Work Order-2")) == "WORK_ORDER_2"
+
+    def test_local_name_raises_when_nothing_survives_normalization(self):
+        with pytest.raises(R2RMLMappingError, match="cannot derive a safe local name"):
+            _local_name(URIRef("https://example.test/ns#---"))
+
+    def test_identifier_from_template_extracts_the_column_name(self):
+        assert _identifier_from_template("ex:item/{item_id}", "subject template") == "item_id"
+
+    def test_identifier_from_template_rejects_a_template_without_a_placeholder(self):
+        with pytest.raises(R2RMLMappingError, match="exactly one identifier template"):
+            _identifier_from_template("ex:item/static", "subject template")

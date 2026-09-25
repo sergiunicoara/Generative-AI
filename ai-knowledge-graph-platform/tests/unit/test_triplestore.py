@@ -344,3 +344,42 @@ class TestRemoteSourceFromEnv:
         }):
             source = remote_sparql_source_from_env()
         assert source._auth == ("user", "pass")
+
+
+class TestRemoteSourceTenantScoping:
+    """A remote SPARQL store must never serve one tenant's triples to another."""
+
+    def test_tenant_placeholder_resolves_a_per_tenant_endpoint(self):
+        with patch.dict(os.environ, {
+            "GRAPHRAG_SPARQL_ENDPOINT": "http://store.example/namespace/{tenant}_kb/sparql",
+        }):
+            source = remote_sparql_source_from_env(tenant="acme")
+        assert source._query_url == "http://store.example/namespace/acme_kb/sparql"
+
+    def test_shared_endpoint_without_binding_refuses_every_tenant(self):
+        from graphrag.graph.triplestore import RemoteSPARQLTenantNotMapped
+
+        with patch.dict(os.environ, {"GRAPHRAG_SPARQL_ENDPOINT": "http://store.example/sparql"}):
+            os.environ.pop("GRAPHRAG_SPARQL_TENANT", None)
+            with pytest.raises(RemoteSPARQLTenantNotMapped):
+                remote_sparql_source_from_env(tenant="acme")
+
+    def test_shared_endpoint_serves_only_its_bound_tenant(self):
+        from graphrag.graph.triplestore import RemoteSPARQLTenantNotMapped
+
+        with patch.dict(os.environ, {
+            "GRAPHRAG_SPARQL_ENDPOINT": "http://store.example/sparql",
+            "GRAPHRAG_SPARQL_TENANT": "acme",
+        }):
+            assert remote_sparql_source_from_env(tenant="acme") is not None
+            with pytest.raises(RemoteSPARQLTenantNotMapped):
+                remote_sparql_source_from_env(tenant="globex")
+
+    def test_tenant_cannot_inject_url_segments(self):
+        from graphrag.graph.triplestore import RemoteSPARQLTenantNotMapped
+
+        with patch.dict(os.environ, {
+            "GRAPHRAG_SPARQL_ENDPOINT": "http://store.example/namespace/{tenant}/sparql",
+        }):
+            with pytest.raises(RemoteSPARQLTenantNotMapped):
+                remote_sparql_source_from_env(tenant="../other")

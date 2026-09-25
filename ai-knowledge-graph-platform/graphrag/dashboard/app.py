@@ -32,6 +32,8 @@ from __future__ import annotations
 
 import os
 import secrets
+import threading
+import time
 
 import dash
 import flask
@@ -62,7 +64,9 @@ app = dash.Dash(
     suppress_callback_exceptions=True,
     server=flask.Flask(__name__),
 )
-app.server.secret_key = os.getenv("GRAPHRAG_ADMIN_SECRET", secrets.token_hex(32))
+# `or`, not a getenv default: .env.example ships GRAPHRAG_ADMIN_SECRET= (empty),
+# and an empty secret makes every session write -- i.e. every login -- a 500.
+app.server.secret_key = os.getenv("GRAPHRAG_ADMIN_SECRET") or secrets.token_hex(32)
 
 # Inject Inter webfont + global polish (scrollbars, focus rings, canvas bg).
 app.index_string = """<!DOCTYPE html>
@@ -120,7 +124,8 @@ def _require_auth():
     path = flask.request.path
     if path in (_LOGIN_PATH, _LOGIN_POST) or any(path.startswith(p) for p in _STATIC_PFXS):
         return
-    if flask.request.headers.get("X-Admin-Token") == ADMIN_TOKEN:
+    header_token = flask.request.headers.get("X-Admin-Token")
+    if header_token is not None and secrets.compare_digest(header_token, ADMIN_TOKEN):
         return
     if flask.session.get("admin_authenticated"):
         return
@@ -151,12 +156,41 @@ border-radius:4px;cursor:pointer;font-size:15px}}
 </form></body></html>"""
 
 
+_LOGIN_MAX_FAILURES = 5
+_LOGIN_WINDOW_SECONDS = 300.0
+_login_failures: dict[str, list[float]] = {}
+_login_lock = threading.Lock()
+
+
+def _login_blocked(ip: str, now: float) -> bool:
+    with _login_lock:
+        recent = [t for t in _login_failures.get(ip, []) if now - t < _LOGIN_WINDOW_SECONDS]
+        if recent:
+            _login_failures[ip] = recent
+        else:
+            _login_failures.pop(ip, None)
+        return len(recent) >= _LOGIN_MAX_FAILURES
+
+
+def _record_login_failure(ip: str, now: float) -> None:
+    with _login_lock:
+        _login_failures.setdefault(ip, []).append(now)
+
+
 @app.server.route(_LOGIN_POST, methods=["POST"])
 def _login_submit():
+    ip = flask.request.remote_addr or "unknown"
+    now = time.monotonic()
+    if _login_blocked(ip, now):
+        log.warning("dashboard.login_rate_limited", ip=ip)
+        return flask.Response("Too many failed attempts. Try again later.", status=429)
     token = flask.request.form.get("token", "")
     if secrets.compare_digest(token, ADMIN_TOKEN):
+        with _login_lock:
+            _login_failures.pop(ip, None)
         flask.session["admin_authenticated"] = True
         return flask.redirect("/admin/")
+    _record_login_failure(ip, now)
     return flask.redirect(f"{_LOGIN_PATH}?error=1")
 
 

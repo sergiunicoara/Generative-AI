@@ -168,7 +168,7 @@ raw: str = await get_llm().generate(prompt, json_mode=True)
 from graphrag.core.llm_client import get_embedder
 vectors: list[list[float]] = await get_embedder().embed(texts)
 
-# Never call Groq SDK or google-genai directly outside llm_client.py
+# Never call a provider SDK (Groq, OpenAI, DeepSeek) directly outside llm_client.py
 ```
 
 ---

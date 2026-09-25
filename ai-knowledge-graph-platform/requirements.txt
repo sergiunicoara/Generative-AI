@@ -15,7 +15,6 @@ langchain-text-splitters>=0.2.0
 
 # ── Async messaging (RabbitMQ) ─────────────────────────────────────────────────
 aio-pika>=9.4.0
-pika>=1.3.2
 
 # ── Worker health server (graphrag/workers/health_server.py) ───────────────────
 # Direct dependency, not previously declared -- was only present in

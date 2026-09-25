@@ -193,6 +193,14 @@ class TestRemoteBackedReads:
 
         assert resp.status_code == 501
 
+    def test_shared_remote_endpoint_not_bound_to_caller_tenant_is_403(self, monkeypatch):
+        monkeypatch.setenv("GRAPHRAG_SPARQL_ENDPOINT", "http://store.example/sparql")
+        monkeypatch.setenv("GRAPHRAG_SPARQL_TENANT", "someone-else")
+
+        resp = _client(tenant="acme").post("/sparql", json={"query": "SELECT ?s WHERE { ?s ?p ?o }"})
+
+        assert resp.status_code == 403
+
     def test_local_snapshot_is_used_when_no_remote_endpoint_is_configured(self, tmp_path, monkeypatch):
         monkeypatch.setenv("GRAPHRAG_RDF_EXPORT_DIR", str(tmp_path))
         monkeypatch.delenv("GRAPHRAG_SPARQL_ENDPOINT", raising=False)

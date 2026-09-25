@@ -5,10 +5,19 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel
 
-from api.auth.dependencies import get_tenant, require_scope
+from api.auth.dependencies import get_current_user, get_tenant, require_scope
 from graphrag.graph.neo4j_client import get_neo4j
 
 router = APIRouter()
+
+
+def _erasure_actor(user: dict, body_value: str) -> str:
+    """Audit principal comes from the token; the body value is kept only as a note."""
+    principal = str(user.get("sub") or "unknown")
+    note = (body_value or "").strip()
+    if note and note != principal:
+        return f"{principal} (on behalf of {note[:120]})"
+    return principal
 
 
 # ── GDPR / Right-to-be-Forgotten ─────────────────────────────────────────────
@@ -28,33 +37,41 @@ class ForgetDocumentRequest(BaseModel):
 
 @router.post(
     "/gdpr/forget-entity",
-    dependencies=[Depends(require_scope("write"))],
+    dependencies=[Depends(require_scope("admin"))],
     summary="Permanently erase all data for a named entity (GDPR right-to-be-forgotten)",
 )
-async def gdpr_forget_entity(request: ForgetEntityRequest, tenant: str = Depends(get_tenant)):
+async def gdpr_forget_entity(
+    request: ForgetEntityRequest,
+    tenant: str = Depends(get_tenant),
+    user: dict = Depends(get_current_user),
+):
     from graphrag.graph.gdpr import GDPRService
     svc = GDPRService(get_neo4j())
     return await svc.forget_entity(
         entity_name=request.entity_name,
         entity_type=request.entity_type,
         tenant=tenant,
-        requested_by=request.requested_by,
+        requested_by=_erasure_actor(user, request.requested_by),
         request_id=request.request_id,
     )
 
 
 @router.post(
     "/gdpr/forget-document",
-    dependencies=[Depends(require_scope("write"))],
+    dependencies=[Depends(require_scope("admin"))],
     summary="Erase all data exclusively sourced from a document (GDPR erasure)",
 )
-async def gdpr_forget_document(request: ForgetDocumentRequest, tenant: str = Depends(get_tenant)):
+async def gdpr_forget_document(
+    request: ForgetDocumentRequest,
+    tenant: str = Depends(get_tenant),
+    user: dict = Depends(get_current_user),
+):
     from graphrag.graph.gdpr import GDPRService
     svc = GDPRService(get_neo4j())
     return await svc.forget_document(
         doc_id=request.doc_id,
         tenant=tenant,
-        requested_by=request.requested_by,
+        requested_by=_erasure_actor(user, request.requested_by),
         request_id=request.request_id,
     )
 

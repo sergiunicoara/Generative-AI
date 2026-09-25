@@ -52,7 +52,6 @@ from typing import Any
 
 import structlog
 
-from graphrag.core.llm_utils import safe_response_text
 from graphrag.core.provider_health import is_healthy, record_result
 
 log = structlog.get_logger(__name__)
@@ -238,98 +237,6 @@ class GroqLLM(BaseLLM):
                 if attempt < effective_max_retries:
                     await asyncio.sleep(_MIN_RETRY_WAIT)
                 # else fall through to re-raise
-
-        raise last_exc  # type: ignore[misc]
-
-
-# ── Gemini text-generation client (fallback) ─────────────────────────────────
-
-class GeminiLLM(BaseLLM):
-    """Async wrapper around Gemini generateContent — used as Groq rate-limit fallback.
-
-    Uses the same google-genai SDK and API key already wired for embeddings.
-    Supports JSON mode via ``response_mime_type="application/json"``.
-    Free tier: 1M tokens/day (10× Groq free tier) — enough for the full corpus.
-
-    Retries on 429 (quota) and 503 (overload) up to ``max_retries`` times,
-    honouring the ``retryDelay`` from the error when present.
-    """
-
-    _MAX_RETRIES = 5
-    _MIN_WAIT    = 10.0   # seconds
-    _MAX_WAIT    = 120.0  # seconds
-
-    def __init__(self, api_key: str, default_model: str):
-        from google import genai
-        self._client = genai.Client(api_key=api_key)
-        self._default_model = default_model
-
-    @staticmethod
-    def _parse_retry_delay(message: str) -> float:
-        """Extract seconds from Gemini error like 'retryDelay: 18s' or 'retry in Xs'."""
-        m = re.search(r"(?:retryDelay['\"]?\s*:\s*['\"]?|retry in\s+)(\d+(?:\.\d+)?)s",
-                      message, re.IGNORECASE)
-        if m:
-            return max(GeminiLLM._MIN_WAIT, min(GeminiLLM._MAX_WAIT, float(m.group(1))))
-        return GeminiLLM._MIN_WAIT
-
-    async def generate(
-        self,
-        prompt: str,
-        model: str | None = None,
-        json_mode: bool = False,
-        temperature: float = 0.0,
-        max_tokens: int | None = None,
-    ) -> str:
-        from google.genai import types as genai_types
-        from google.genai.errors import ClientError, ServerError
-
-        model = model or self._default_model
-        config_kwargs: dict[str, Any] = {
-            "temperature": temperature,
-            "response_mime_type": "application/json" if json_mode else "text/plain",
-        }
-        # Gemini's SDK names this max_output_tokens, not max_tokens.
-        if max_tokens is not None:
-            config_kwargs["max_output_tokens"] = max_tokens
-        config = genai_types.GenerateContentConfig(**config_kwargs)
-
-        loop = asyncio.get_running_loop()
-        last_exc: Exception | None = None
-
-        for attempt in range(1, self._MAX_RETRIES + 1):
-            try:
-                response = await loop.run_in_executor(
-                    None,
-                    lambda: self._client.models.generate_content(
-                        model=model,
-                        contents=prompt,
-                        config=config,
-                    ),
-                )
-                # safe_response_text() rather than `response.text or ""`:
-                # both survive a None text, but the helper also strips and
-                # logs the blocked/no-candidates case instead of silently
-                # returning an empty answer that looks like a real one.
-                return safe_response_text(response)
-
-            except (ClientError, ServerError) as exc:
-                status = getattr(exc, 'status_code', 0) or 0
-                if status in (429, 503):
-                    wait = self._parse_retry_delay(str(exc))
-                    log.warning(
-                        "llm_client.gemini_rate_limit",
-                        attempt=attempt,
-                        max_retries=self._MAX_RETRIES,
-                        wait_seconds=wait,
-                        model=model,
-                        status=status,
-                    )
-                    last_exc = exc
-                    if attempt < self._MAX_RETRIES:
-                        await asyncio.sleep(wait)
-                else:
-                    raise
 
         raise last_exc  # type: ignore[misc]
 
@@ -814,7 +721,6 @@ class FallbackLLM(BaseLLM):
 class OpenAIEmbedder:
     """Async wrapper around OpenAI text-embedding-3-large (3072d).
 
-    Drop-in replacement for GeminiEmbedder — same dimensions, same interface.
     Uses the openai SDK already installed in the project.
     Cost: ~$0.13/1M tokens (~$0.001 for the full 12-doc corpus).
     """
@@ -842,31 +748,6 @@ class OpenAIEmbedder:
     async def embed_text(self, text: str, task_type: str = "retrieval_document") -> list[float]:
         results = await self.embed([text])
         return results[0]
-
-
-# ── Gemini embedding client (kept for reference) ──────────────────────────────
-
-class GeminiEmbedder:
-    """Thin async wrapper around Gemini embed_content (kept for 3072-d vectors)."""
-
-    def __init__(self, api_key: str, model: str):
-        from google import genai
-        from google.genai import types as genai_types
-        self._client = genai.Client(api_key=api_key)
-        self._model = model
-        self._types = genai_types
-
-    async def embed(self, texts: list[str]) -> list[list[float]]:
-        loop = asyncio.get_running_loop()
-        response = await loop.run_in_executor(
-            None,
-            lambda: self._client.models.embed_content(
-                model=self._model,
-                contents=texts,
-                config=self._types.EmbedContentConfig(task_type="retrieval_document"),
-            ),
-        )
-        return [e.values for e in response.embeddings]
 
 
 # ── Singletons ────────────────────────────────────────────────────────────────
@@ -962,8 +843,6 @@ def get_fast_llm() -> FallbackLLM:
 def get_embedder() -> OpenAIEmbedder:
     """Return the embedder — OpenAI text-embedding-3-large (3072d).
 
-    Replaces GeminiEmbedder; same vector dimensions so the Neo4j schema
-    and all retrieval queries are unaffected.
     """
     global _embedder
     if _embedder is None:

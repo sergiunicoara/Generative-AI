@@ -937,20 +937,20 @@ Evaluation is sampled at **20%** of queries automatically. View results:
 
 ```bash
 pip install -r requirements-dev.txt
-pytest tests/unit/        # 794 tests, ~90s, no services required
+pytest tests/unit/        # 2537 tests, ~7 min with -n auto, no services required
 pytest tests/e2e/         # live Neo4j + Redis via testcontainers (needs Docker)
 make smoke-test           # unit tests + mock demo + API import check
 ```
 
-**812 tests across four tiers, ~56% line coverage of `graphrag/`.** Being precise about
+**2605 tests across four tiers (coverage last measured at ~56% of `graphrag/` when the suite was far smaller — re-measure before quoting).** Being precise about
 what that means, because the tier names oversell it:
 
 | Tier | Count | What it actually exercises |
 |------|-------|----------------------------|
-| `tests/unit/` | 794 | In-process logic with all I/O mocked. Strong where the logic is deterministic: `core/models`, `core/retry`, `core/provider_health`, `graph/owl_reasoner`, `graph/sparql_bridge`, `graph/review_queue`, `graph/corpus_revision` are at 100%; `graph/inference_engine` 96%, `retrieval/context_builder` 89%. |
-| `tests/integration/` | 34 | **Also AsyncMock** — the file docstrings say so outright. These are unit tests in a different folder, not integration tests. |
+| `tests/unit/` | 2537 | In-process logic with all I/O mocked. Strong where the logic is deterministic: `core/models`, `core/retry`, `core/provider_health`, `graph/owl_reasoner`, `graph/sparql_bridge`, `graph/review_queue`, `graph/corpus_revision` are at 100%; `graph/inference_engine` 96%, `retrieval/context_builder` 89%. |
+| `tests/integration/` | 35 | **Also AsyncMock** — the file docstrings say so outright. These are unit tests in a different folder, not integration tests. |
 | `tests/load/` | 5 | Concurrency *shape* against AsyncMock, not throughput. Not a performance benchmark. |
-| `tests/e2e/` | 5 | The only tier that runs real Cypher against a real Neo4j and a real Redis. Now runs in CI, which asserts it did not silently skip. |
+| `tests/e2e/` | 28 (12 files) | The only tier that runs real Cypher against a real Neo4j and a real Redis. Now runs in CI, which asserts it did not silently skip. |
 
 Known weak spots, stated rather than hidden: the I/O boundary is thin. `ingestion/chunker`
 (19%), `retrieval/bm25_search` (24%), `messaging/rabbitmq_client` (21%),

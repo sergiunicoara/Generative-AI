@@ -6,13 +6,18 @@
 # This is what orphaned the aerospace tenant data on 2026-06-10.
 name: ai-knowledge-graph-platform
 
+# Every published port is bound to 127.0.0.1: the credentials below
+# (graphrag_dev, Grafana admin/admin fallback) are local-dev only and must
+# never be reachable from another host. Containers still reach each other by
+# service name. Deployed environments use fly/ or deploy/kubernetes/, not this.
+
 services:
   neo4j:
     image: neo4j:5.20-community
     container_name: graphrag_neo4j
     ports:
-      - "7474:7474"   # HTTP browser
-      - "7687:7687"   # Bolt
+      - "127.0.0.1:7474:7474"   # HTTP browser
+      - "127.0.0.1:7687:7687"   # Bolt
     environment:
       NEO4J_AUTH: neo4j/graphrag_dev
       NEO4J_PLUGINS: '["apoc", "graph-data-science"]'
@@ -31,8 +36,8 @@ services:
     image: rabbitmq:3.13-management
     container_name: graphrag_rabbitmq
     ports:
-      - "5672:5672"    # AMQP
-      - "15672:15672"  # Management UI
+      - "127.0.0.1:5672:5672"    # AMQP
+      - "127.0.0.1:15672:15672"  # Management UI
     environment:
       RABBITMQ_DEFAULT_USER: graphrag
       RABBITMQ_DEFAULT_PASS: graphrag_dev
@@ -49,7 +54,7 @@ services:
     container_name: graphrag_redis
     command: redis-server --appendonly yes
     ports:
-      - "6379:6379"
+      - "127.0.0.1:6379:6379"
     volumes:
       - redis_data:/data
     healthcheck:
@@ -62,7 +67,7 @@ services:
     image: timescale/timescaledb:2.15.3-pg16
     container_name: graphrag_timescaledb
     ports:
-      - "5433:5432"
+      - "127.0.0.1:5433:5432"
     environment:
       POSTGRES_USER: graphrag
       POSTGRES_PASSWORD: graphrag_dev
@@ -114,7 +119,7 @@ services:
     container_name: graphrag_api
     command: uvicorn api.main:app --host 0.0.0.0 --port 8000 --reload
     ports:
-      - "8000:8000"
+      - "127.0.0.1:8000:8000"
     env_file: .env
     environment:
       NEO4J_URI: bolt://neo4j:7687
@@ -247,7 +252,7 @@ services:
     container_name: graphrag_dashboard
     command: python graphrag/business_matrix/dashboard_server.py
     ports:
-      - "8050:8050"
+      - "127.0.0.1:8050:8050"
     env_file: .env
     environment:
       KPI_DB_PATH: /data/kpis.db
@@ -261,7 +266,7 @@ services:
     image: prom/prometheus:v2.53.0
     container_name: graphrag_prometheus
     ports:
-      - "9090:9090"
+      - "127.0.0.1:9090:9090"
     command:
       - --config.file=/etc/prometheus/prometheus.yml
       - --storage.tsdb.path=/prometheus
@@ -287,7 +292,7 @@ services:
     image: grafana/grafana:11.1.0
     container_name: graphrag_grafana
     ports:
-      - "3000:3000"
+      - "127.0.0.1:3000:3000"
     environment:
       GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER:-admin}
       GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-admin}

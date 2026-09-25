@@ -19,7 +19,6 @@ aiosqlite>=0.20.0
 # for the same class of gap and why it went undiscovered until now.
 openai>=1.0.0
 groq>=0.9.0
-google-genai>=1.0.0
 
 # ── Graph scoring (graphrag/graph/gnn_scorer.py) ────────────────────────────────
 # Loads unconditionally via local_search.py's top-level import.

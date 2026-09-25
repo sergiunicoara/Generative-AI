@@ -235,7 +235,6 @@ class IngestionAgent(BaseGraphRAGAgent):
             # downstream (chunk write, relations, supersession) references them —
             # otherwise those writes target a document node that doesn't exist and
             # silently create a duplicate (see tasks/lessons.md A136).
-            original_id = doc.id
             canonical_id = await self._writer.write_document(doc)  # mutates doc.id in place
             for chunk in chunks:
                 # Carries source context into entity assertions without trusting a

@@ -154,6 +154,7 @@ class TestProductionSettings:
                         issuer="http://idp.partner.example",
                         jwks_uri="http://idp.partner.example/.well-known/jwks.json",
                         audiences=[api_resource()],
+                    allowed_tenants=["partner"],
                     ),
                 ],
             )
@@ -165,6 +166,7 @@ class TestProductionSettings:
                     issuer="https://idp.partner.example",
                     jwks_uri="https://idp.partner.example/.well-known/jwks.json",
                     audiences=[api_resource()],
+                    allowed_tenants=["partner"],
                 ),
             ],
         )
@@ -188,6 +190,7 @@ class TestTrustedIssuerAudienceScope:
                         issuer="https://idp.partner.example",
                         jwks_uri="https://idp.partner.example/.well-known/jwks.json",
                         audiences=["https://not-a-real-resource.example"],
+                        allowed_tenants=["partner"],
                     ),
                 ],
             )
@@ -215,10 +218,26 @@ class TestTrustedIssuerAudienceScope:
                     issuer="https://idp.partner.example",
                     jwks_uri="https://idp.partner.example/.well-known/jwks.json",
                     audiences=[mcp_resource()],
+                    allowed_tenants=["partner"],
                 ),
             ],
         )
         assert settings.jwt_trusted_issuers[0].audiences == [mcp_resource()]
+
+
+    def test_an_issuer_without_allowed_tenants_is_rejected(self):
+        with pytest.raises(ValidationError, match="must declare allowed_tenants"):
+            Settings(
+                _env_file=None,
+                env="development",
+                jwt_trusted_issuers=[
+                    TrustedIssuerConfig(
+                        issuer="https://idp.partner.example",
+                        jwks_uri="https://idp.partner.example/.well-known/jwks.json",
+                        audiences=[mcp_resource()],
+                    ),
+                ],
+            )
 
 
 class TestEnvFailClosedOnUnset:

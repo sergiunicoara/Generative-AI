@@ -540,7 +540,11 @@ class HybridRetriever:
                     result.model_dump(mode="json"),
                     source_query_id=query_id,
                     source_trace_id=trace_id,
-                    entities_used=list(result.citations),
+                    # Entity names, not citations: /kg/cache/invalidate is
+                    # keyed by entity name, and citations are document labels
+                    # that never matched it. Global-only answers have no local
+                    # entities; the corpus revision in cache_context guards those.
+                    entities_used=list(local_results.get("referenced_entities", [])),
                 )
                 result.cache_key = key
                 result.source_query_id = query_id
@@ -810,14 +814,19 @@ class HybridRetriever:
             # "Not fixed" #6.
             async def _record_turn(final_answer: str) -> None:
                 if self._use_session_ctx and self._session_ctx and session_id:
-                    await self._session_ctx.record_turn(
-                        session_id=session_id,
-                        question=question,
-                        answer=final_answer,
-                        referenced_entities=local_results.get("referenced_entities", []),
-                        referenced_chunks=local_results.get("referenced_chunks", []),
-                        tenant=tenant,
-                    )
+                    # Best-effort, like the trace below: the answer is already
+                    # computed, and raising here would requeue and re-run it.
+                    try:
+                        await self._session_ctx.record_turn(
+                            session_id=session_id,
+                            question=question,
+                            answer=final_answer,
+                            referenced_entities=local_results.get("referenced_entities", []),
+                            referenced_chunks=local_results.get("referenced_chunks", []),
+                            tenant=tenant,
+                        )
+                    except Exception as exc:
+                        log.warning("hybrid_retriever.record_turn_failed", error=str(exc)[:200])
 
             # ── Agentic fallback ───────────────────────────────────────────────────
             # If the hybrid answer is low-confidence, hand off to the iterative

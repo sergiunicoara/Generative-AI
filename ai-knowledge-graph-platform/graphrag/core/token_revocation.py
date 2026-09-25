@@ -232,14 +232,20 @@ async def get_revocation_store() -> TokenRevocationStore:
         if _store is None:
             import os
 
-            from graphrag.core.config import get_settings
+            from graphrag.core.config import get_settings, is_dev_env
 
             cfg = get_settings()
             redis_url = os.getenv("REDIS_URL") or cfg.retrieval.get("redis_url", "") or None
+            # Outside dev, a revocation that only one replica knows about is a
+            # revoked credential still honoured by the others -- fail closed
+            # unless the operator explicitly opts out.
+            strict = cfg.retrieval.get("jwt_revocation_strict")
+            if strict is None:
+                strict = not is_dev_env(cfg.env)
             candidate = TokenRevocationStore(
                 redis_url=redis_url,
                 ttl_seconds=cfg.jwt_revocation_ttl_seconds,
-                strict=bool(cfg.retrieval.get("jwt_revocation_strict", False)),
+                strict=bool(strict),
             )
             await candidate.connect()
             _store = candidate

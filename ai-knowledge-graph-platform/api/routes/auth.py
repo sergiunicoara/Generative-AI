@@ -7,7 +7,7 @@ M2M flow      : POST /auth/clients  (register)
 
 Security notes
 --------------
-- Cookie secure flag is driven by settings.env ("production" → secure=True).
+- Cookie secure flag is set in every env outside DEV_ENVS.
 - The `next` redirect parameter is validated to be a safe relative path to
   prevent open-redirect attacks.
 - M2M client registry is stored in Redis when available so all API worker
@@ -59,12 +59,12 @@ _GOOGLE_ISSUER = "https://accounts.google.com"
 # ── Helpers ────────────────────────────────────────────────────────────────────
 
 def _cookie_secure() -> bool:
-    """True in production so auth cookies are never sent over plain HTTP."""
+    """True outside named dev envs, so staging etc. never send auth cookies over plain HTTP."""
     try:
         from graphrag.core.config import get_settings
-        return get_settings().env == "production"
+        return not is_dev_env(get_settings().env)
     except Exception:  # noqa: BLE001
-        return False
+        return True
 
 
 def _safe_next(url: str | None, default: str = "/docs") -> str:

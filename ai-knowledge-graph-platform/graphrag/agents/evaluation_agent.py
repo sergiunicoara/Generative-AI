@@ -130,6 +130,7 @@ class EvaluationAgent(BaseGraphRAGAgent):
             result = EvalResult(
                 job_id=qr.query_id, query_id=qr.query_id,
                 faithfulness=initial.confidence,
+                computed_metrics=["faithfulness"],
                 judge_decision=initial.decision.value,
                 judge_confidence=initial.confidence,
                 judge_accept_threshold=thresholds.accept_threshold,
@@ -204,10 +205,10 @@ class EvaluationAgent(BaseGraphRAGAgent):
                     query_id=qr.query_id,
                     tenant=job.tenant,
                     latency_ms=qr.latency_ms,
-                    faithfulness=eval_result.faithfulness,
-                    answer_relevancy=eval_result.answer_relevancy,
-                    context_precision=eval_result.context_precision,
-                    context_recall=eval_result.context_recall,
+                    **{
+                        name: getattr(eval_result, name)
+                        for name in eval_result.computed_metrics
+                    },
                     retrieval_mode=qr.retrieval_mode,
                     model_version=qr.model_version,
                     judge_decision=eval_result.judge_decision,

@@ -429,3 +429,38 @@ class TestSemanticAnswerCacheKeyStability:
         assert seen_contexts[0].valid_at == "2020-01-01T00:00:00+00:00"
         assert seen_contexts[1].valid_at is None
         assert seen_contexts[0] != seen_contexts[1]
+
+
+class TestAnswerCacheIndexesEntityNames:
+    """/kg/cache/invalidate takes entity names, so cached answers must be
+    indexed by the entities retrieval used -- not by citation labels, which
+    never matched and made every invalidation report 0."""
+
+    async def test_cache_set_receives_referenced_entity_names(self) -> None:
+        from graphrag.core.models import CitationEvidence
+
+        hr = _make_hybrid_retriever({"semantic_answer_cache_enabled": True, "agentic_fallback": False})
+        hr._local.search = AsyncMock(return_value={
+            "chunks": [], "referenced_entities": ["Boeing 737", "FAA"],
+        })
+        hr._global.search = AsyncMock(return_value={})
+        hr._context_builder.build.return_value = (
+            "context", ["DocA"],
+            [CitationEvidence(source_id="DocA", source_label="DocA")],
+        )
+        hr._record_context_trace = AsyncMock(return_value="trace-1")
+
+        fake_neo4j = MagicMock()
+        fake_neo4j.get_corpus_state = AsyncMock(return_value={"revision": 1, "updating": False})
+        fake_cache = AsyncMock()
+        fake_cache.get = AsyncMock(return_value=None)
+        fake_cache.set = AsyncMock(return_value="cache-key")
+
+        with (
+            patch("graphrag.retrieval.hybrid_retriever.get_neo4j", return_value=fake_neo4j),
+            patch("graphrag.retrieval.hybrid_retriever.get_query_cache", AsyncMock(return_value=fake_cache)),
+        ):
+            await hr.retrieve_and_answer("question", mode="local", query_id="q1")
+
+        fake_cache.set.assert_awaited_once()
+        assert fake_cache.set.call_args.kwargs["entities_used"] == ["Boeing 737", "FAA"]

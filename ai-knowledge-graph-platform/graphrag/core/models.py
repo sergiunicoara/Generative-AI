@@ -478,6 +478,9 @@ class EvalResult(BaseModel):
     answer_relevancy: float = 0.0
     context_precision: float = 0.0
     context_recall: float = 0.0
+    # Which of the four quality metrics above were actually scored; the rest
+    # are placeholder 0.0s and must not be averaged into KPIs as real zeros.
+    computed_metrics: list[str] = Field(default_factory=list)
     judge_decision: str = "retrieve"
     judge_confidence: float = 0.0
     judge_accept_threshold: float = 0.9
@@ -505,10 +508,11 @@ class KPIEvent(BaseModel):
     tenant: str
     recorded_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     latency_ms: float
-    faithfulness: float = 0.0
-    answer_relevancy: float = 0.0
-    context_precision: float = 0.0
-    context_recall: float = 0.0
+    # None = not computed for this query (excluded from averages), not 0.0.
+    faithfulness: float | None = None
+    answer_relevancy: float | None = None
+    context_precision: float | None = None
+    context_recall: float | None = None
     cost_usd: float = 0.0
     retrieval_mode: str = "hybrid"
     model_version: str = ""

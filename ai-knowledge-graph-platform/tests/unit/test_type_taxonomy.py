@@ -155,6 +155,48 @@ class TestRegisterSubclass:
         assert "REGULATOR" in t._children.get("ORG", set())
 
 
+class TestTenantScopedTaxonomy:
+    """A tenant's registered subtype must not leak into another tenant's view."""
+
+    async def test_tenant_edge_visible_only_to_that_tenant(self):
+        neo4j = AsyncMock()
+        neo4j.run = AsyncMock(return_value=[])
+        t = _make_taxonomy(BASE_PAIRS)
+        t._neo4j = neo4j
+
+        await t.register_subclass("REGULATOR", "ORG", tenant="acme")
+
+        assert "REGULATOR" in t.expand_type("AGENT", tenant="acme")
+        assert "REGULATOR" not in t.expand_type("AGENT", tenant="globex")
+        assert "REGULATOR" not in t.expand_type("AGENT")
+        assert "REGULATOR" not in t._children.get("ORG", set())
+
+    async def test_tenant_edge_is_written_with_tenant_property(self):
+        neo4j = AsyncMock()
+        neo4j.run = AsyncMock(return_value=[])
+        t = _make_taxonomy(BASE_PAIRS)
+        t._neo4j = neo4j
+
+        await t.register_subclass("REGULATOR", "ORG", tenant="acme")
+
+        cypher = neo4j.run.call_args[0][0]
+        assert "SUBCLASS_OF {tenant: $tenant}" in cypher
+        assert neo4j.run.call_args.kwargs["tenant"] == "acme"
+
+    async def test_load_splits_platform_and_tenant_edges(self):
+        neo4j = AsyncMock()
+        neo4j.run = AsyncMock(side_effect=lambda *a, **k: [
+            {"child": "PERSON", "parent": "AGENT", "tenant": None},
+            {"child": "REGULATOR", "parent": "ORG", "tenant": "acme"},
+            {"child": "ORG", "parent": "AGENT", "tenant": None},
+        ])
+        t = TypeTaxonomy(neo4j)
+        await t.load()
+
+        assert "REGULATOR" in t.expand_type("AGENT", tenant="acme")
+        assert "REGULATOR" not in t.expand_type("AGENT", tenant="globex")
+
+
 # ── domain_ontology integration ───────────────────────────────────────────────
 
 class TestDomainOntologyIntegration:

@@ -63,6 +63,12 @@ class TrustedIssuerConfig(BaseModel):
     issuer: str
     jwks_uri: str
     audiences: list[str] = Field(default_factory=list)
+    # Closed allow-lists, same posture as ``audiences``: an external IdP's
+    # token may only name one of these tenants (its ``tenant`` claim and any
+    # ``tenant:<name>`` scope) and only these non-tenant scopes. Empty
+    # max_scopes means the issuer can authenticate but grant nothing.
+    allowed_tenants: list[str] = Field(default_factory=list)
+    max_scopes: list[str] = Field(default_factory=list)
 
 
 def resolve_tenant_config(base: dict, tenant: str = "default") -> dict:
@@ -212,7 +218,8 @@ class Settings(BaseSettings):
     # already used for cors_origins. Example:
     #   JWT_TRUSTED_ISSUERS='[{"issuer":"https://idp.partner.example",
     #     "jwks_uri":"https://idp.partner.example/.well-known/jwks.json",
-    #     "audiences":["https://api.graphrag.example"]}]'
+    #     "audiences":["https://api.graphrag.example"],
+    #     "allowed_tenants":["partner"], "max_scopes":["read"]}]'
     # See graphrag/core/issuer_trust.py for how these are consulted.
     jwt_trusted_issuers: list[TrustedIssuerConfig] = Field(default_factory=list)
     # How long a trusted issuer's fetched JWKS is cached before re-fetching.
@@ -272,6 +279,12 @@ class Settings(BaseSettings):
                         "declare at least one audience -- an issuer trusted "
                         "for no resource can never mint a usable token."
                     )
+                if not entry.allowed_tenants:
+                    raise ValueError(
+                        f"jwt_trusted_issuers entry for {entry.issuer!r} must "
+                        "declare allowed_tenants -- otherwise any tenant claim "
+                        "it mints would be trusted as-is."
+                    )
                 unknown = [a for a in entry.audiences if a not in hosted]
                 if unknown:
                     raise ValueError(
@@ -325,7 +338,10 @@ class Settings(BaseSettings):
                 raise ValueError(
                     "rabbitmq_url must not use local or development credentials in production."
                 )
-            if any(origin.startswith("http://") or "localhost" in origin for origin in self.cors_origins):
+            if any(
+                origin.strip() == "*" or not origin.startswith("https://") or "localhost" in origin
+                for origin in self.cors_origins
+            ):
                 raise ValueError(
                     "cors_origins must contain only approved HTTPS production origins."
                 )

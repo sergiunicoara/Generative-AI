@@ -11,7 +11,7 @@ api/routes/kg/sources.py covers KGSource+mappings, not documents).
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 
 from api.auth.dependencies import get_tenant, require_scope
 from graphrag.graph.neo4j_client import get_neo4j
@@ -29,8 +29,8 @@ async def list_catalog_documents(
     collection: str | None = None,
     classification: str | None = None,
     source_system: str | None = None,
-    limit: int = 50,
-    offset: int = 0,
+    limit: int = Query(50, ge=1, le=500),
+    offset: int = Query(0, ge=0, le=100_000),
 ):
     return await get_neo4j().get_documents_catalog(
         tenant=tenant, collection=collection, classification=classification,

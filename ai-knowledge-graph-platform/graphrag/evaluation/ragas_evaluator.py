@@ -12,6 +12,7 @@ Install Groq support: ``pip install langchain-groq``
 from __future__ import annotations
 
 import asyncio
+import math
 
 import structlog
 from datasets import Dataset
@@ -226,11 +227,17 @@ class RagasEvaluator:
             log.error("ragas_evaluator.error", error=str(exc), query_id=query_id)
             raise EvaluationError(str(exc)) from exc
 
+        scored: dict[str, float] = {}
+        for name in ("faithfulness", "answer_relevancy", "context_precision", "context_recall"):
+            value = result_dict.get(name)
+            if value is None:
+                continue
+            value = float(value)
+            if not math.isnan(value):
+                scored[name] = value
         return EvalResult(
             job_id=query_id,
             query_id=query_id,
-            faithfulness=float(result_dict.get("faithfulness", 0.0)),
-            answer_relevancy=float(result_dict.get("answer_relevancy", 0.0)),
-            context_precision=float(result_dict.get("context_precision", 0.0)),
-            context_recall=float(result_dict.get("context_recall", 0.0)),
+            computed_metrics=sorted(scored),
+            **scored,
         )

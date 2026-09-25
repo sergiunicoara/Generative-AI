@@ -89,6 +89,20 @@ GitHub MCP connector).
 CI-run report exists anywhere in the repo.
 **Needs:** a CI run of the mutation campaign and a recorded score.
 
+### 9. Apply the GKE hardening Terraform
+Dataplane V2, private nodes, authorized networks and Cloud NAT were added to
+`infra/terraform/` on 2026-09-25 (audit-2026-09-23 closure pass) but never
+`terraform validate`d or applied. Both the datapath and private-cluster
+settings force cluster replacement.
+**Needs:** Terraform CLI + GCP credentials, a replacement/migration plan, and
+`master_authorized_networks` filled in for CI/operator access.
+
+### 10. Upstream CVE fixes for `ragas` / `diskcache`
+PYSEC-2026-3046 (`ragas==0.4.3`) and PYSEC-2026-2447 (`diskcache==5.6.3`,
+pulled in only via `ragas`) have no fixed release yet — both pins are the
+latest versions. Evaluation pipeline only.
+**To close:** upgrade when a fix ships, then re-run the golden eval.
+
 ---
 
 ## Deliberately conditional (not real gaps, don't schedule)

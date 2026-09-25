@@ -19,6 +19,10 @@ Architecture
 - EntityType nodes in Neo4j connected by SUBCLASS_OF edges.
 - TypeTaxonomy manages the hierarchy and provides transitive-closure helpers.
 - Default hierarchy ships with the package; caller can extend it at runtime.
+- Tenancy: SUBCLASS_OF edges with no ``tenant`` property are the shared
+  platform hierarchy (the defaults below). ``register_subclass(..., tenant=)``
+  writes an edge tagged with that tenant, visible only in that tenant's view,
+  so one tenant's admin cannot reshape another tenant's type expansion.
 - Retrieval integration: expand_type(query_type) returns all subtypes so that
   vector search / BM25 / multi-hop traversal can include subtype entities
   without caller knowledge of the full type tree.
@@ -82,10 +86,12 @@ class TypeTaxonomy:
 
     def __init__(self, neo4j_client):
         self._neo4j = neo4j_client
-        # In-memory adjacency: parent → set of direct children
+        # Platform (shared) adjacency: parent → children, child → parents
         self._children:  dict[str, set[str]] = {}
-        # In-memory adjacency: child → set of direct parents
         self._parents:   dict[str, set[str]] = {}
+        # Tenant-scoped extensions layered on top of the platform hierarchy
+        self._tenant_children: dict[str, dict[str, set[str]]] = {}
+        self._tenant_parents:  dict[str, dict[str, set[str]]] = {}
         self._loaded = False
 
     # ── Bootstrap ──────────────────────────────────────────────────────────────
@@ -113,16 +119,16 @@ class TypeTaxonomy:
         # Pull full hierarchy from Neo4j (includes any previously persisted additions)
         rows = await self._neo4j.run(
             """
-            MATCH (child:EntityType)-[:SUBCLASS_OF]->(parent:EntityType)
-            RETURN child.name AS child, parent.name AS parent
+            MATCH (child:EntityType)-[r:SUBCLASS_OF]->(parent:EntityType)
+            RETURN child.name AS child, parent.name AS parent, r.tenant AS tenant
             """
         )
         self._children.clear()
         self._parents.clear()
+        self._tenant_children.clear()
+        self._tenant_parents.clear()
         for row in rows:
-            c, p = row["child"], row["parent"]
-            self._children.setdefault(p, set()).add(c)
-            self._parents.setdefault(c, set()).add(p)
+            self._index(row["child"], row["parent"], row.get("tenant"))
 
         self._loaded = True
         log.info(
@@ -132,27 +138,66 @@ class TypeTaxonomy:
         )
 
     async def register_subclass(
-        self, child: str, parent: str
+        self, child: str, parent: str, tenant: str | None = None,
     ) -> None:
-        """Add a new SUBCLASS_OF edge at runtime and update in-memory index."""
+        """Add a SUBCLASS_OF edge and update the in-memory index.
+
+        With ``tenant`` the edge belongs to that tenant only; without it the
+        edge joins the shared platform hierarchy (offline/bootstrap use only --
+        never reachable from a tenant-scoped API caller).
+        """
         child  = child.upper()
         parent = parent.upper()
-        await self._neo4j.run(
-            """
-            MERGE (c:EntityType {name: $child})
-            MERGE (p:EntityType {name: $parent})
-            MERGE (c)-[:SUBCLASS_OF]->(p)
-            """,
-            child=child,
-            parent=parent,
-        )
-        self._children.setdefault(parent, set()).add(child)
-        self._parents.setdefault(child,  set()).add(parent)
-        log.info("type_taxonomy.subclass_registered", child=child, parent=parent)
+        if tenant is None:
+            await self._neo4j.run(
+                """
+                MERGE (c:EntityType {name: $child})
+                MERGE (p:EntityType {name: $parent})
+                MERGE (c)-[:SUBCLASS_OF]->(p)
+                """,
+                child=child,
+                parent=parent,
+            )
+        else:
+            await self._neo4j.run(
+                """
+                MERGE (c:EntityType {name: $child})
+                MERGE (p:EntityType {name: $parent})
+                MERGE (c)-[:SUBCLASS_OF {tenant: $tenant}]->(p)
+                """,
+                child=child,
+                parent=parent,
+                tenant=tenant,
+            )
+        self._index(child, parent, tenant)
+        log.info("type_taxonomy.subclass_registered", child=child, parent=parent, tenant=tenant)
+
+    def _index(self, child: str, parent: str, tenant: str | None) -> None:
+        if tenant is None:
+            children, parents = self._children, self._parents
+        else:
+            children = self._tenant_children.setdefault(tenant, {})
+            parents = self._tenant_parents.setdefault(tenant, {})
+        children.setdefault(parent, set()).add(child)
+        parents.setdefault(child, set()).add(parent)
+
+    def _children_of(self, node: str, tenant: str | None) -> set[str]:
+        result = set(self._children.get(node, set()))
+        if tenant is not None:
+            result |= self._tenant_children.get(tenant, {}).get(node, set())
+        return result
+
+    def _parents_of(self, node: str, tenant: str | None) -> set[str]:
+        result = set(self._parents.get(node, set()))
+        if tenant is not None:
+            result |= self._tenant_parents.get(tenant, {}).get(node, set())
+        return result
 
     # ── Traversal helpers ──────────────────────────────────────────────────────
 
-    def get_subtypes(self, type_name: str, transitive: bool = True) -> list[str]:
+    def get_subtypes(
+        self, type_name: str, transitive: bool = True, tenant: str | None = None,
+    ) -> list[str]:
         """
         Return all subtypes of ``type_name``.
 
@@ -163,17 +208,19 @@ class TypeTaxonomy:
         """
         type_name = type_name.upper()
         if transitive:
-            return list(self._transitive_children(type_name))
-        return list(self._children.get(type_name, set()))
+            return list(self._transitive_children(type_name, tenant))
+        return list(self._children_of(type_name, tenant))
 
-    def get_ancestors(self, type_name: str, transitive: bool = True) -> list[str]:
+    def get_ancestors(
+        self, type_name: str, transitive: bool = True, tenant: str | None = None,
+    ) -> list[str]:
         """Return all ancestor types of ``type_name``."""
         type_name = type_name.upper()
         if transitive:
-            return list(self._transitive_parents(type_name))
-        return list(self._parents.get(type_name, set()))
+            return list(self._transitive_parents(type_name, tenant))
+        return list(self._parents_of(type_name, tenant))
 
-    def expand_type(self, type_name: str) -> list[str]:
+    def expand_type(self, type_name: str, tenant: str | None = None) -> list[str]:
         """
         Return ``type_name`` plus all of its transitive subtypes.
 
@@ -184,13 +231,15 @@ class TypeTaxonomy:
             taxonomy.expand_type("AGENT") → ["AGENT", "PERSON", "ORG"]
         """
         type_name = type_name.upper()
-        return [type_name] + self.get_subtypes(type_name)
+        return [type_name] + self.get_subtypes(type_name, tenant=tenant)
 
-    def is_subclass_of(self, child: str, parent: str) -> bool:
+    def is_subclass_of(self, child: str, parent: str, tenant: str | None = None) -> bool:
         """Return True if ``child`` is a (transitive) subclass of ``parent``."""
-        return parent.upper() in self._transitive_parents(child.upper())
+        return parent.upper() in self._transitive_parents(child.upper(), tenant)
 
-    def least_common_ancestor(self, type_a: str, type_b: str) -> str | None:
+    def least_common_ancestor(
+        self, type_a: str, type_b: str, tenant: str | None = None,
+    ) -> str | None:
         """
         Return the most-specific common ancestor of two types.
 
@@ -198,13 +247,13 @@ class TypeTaxonomy:
         "MANAGER" both reduce to "PERSON" you can safely merge without
         type clash.
         """
-        a_ancestors = {type_a.upper()} | self._transitive_parents(type_a.upper())
-        b_ancestors = {type_b.upper()} | self._transitive_parents(type_b.upper())
+        a_ancestors = {type_a.upper()} | self._transitive_parents(type_a.upper(), tenant)
+        b_ancestors = {type_b.upper()} | self._transitive_parents(type_b.upper(), tenant)
         common = a_ancestors & b_ancestors
         if not common:
             return None
         # Prefer the most-specific: pick the one with the most ancestors
-        return max(common, key=lambda t: len(self._transitive_parents(t)))
+        return max(common, key=lambda t: len(self._transitive_parents(t, tenant)))
 
     # ── Neo4j query integration ────────────────────────────────────────────────
 
@@ -222,7 +271,9 @@ class TypeTaxonomy:
         of querying by a single entity type so that the full type hierarchy
         is respected.
         """
-        types = self.expand_type(type_name) if include_subtypes else [type_name.upper()]
+        types = (
+            self.expand_type(type_name, tenant=tenant) if include_subtypes else [type_name.upper()]
+        )
         return await self._neo4j.run(
             """
             UNWIND $types AS t
@@ -240,36 +291,39 @@ class TypeTaxonomy:
             limit=limit,
         )
 
-    async def get_schema(self) -> list[dict]:
-        """Return the full SUBCLASS_OF graph from Neo4j for inspection."""
+    async def get_schema(self, tenant: str) -> list[dict]:
+        """Return the platform hierarchy plus ``tenant``'s own extensions."""
         return await self._neo4j.run(
             """
-            MATCH (child:EntityType)-[:SUBCLASS_OF]->(parent:EntityType)
-            RETURN child.name AS child, parent.name AS parent
+            MATCH (child:EntityType)-[r:SUBCLASS_OF]->(parent:EntityType)
+            WHERE r.tenant IS NULL OR r.tenant = $tenant
+            RETURN child.name AS child, parent.name AS parent,
+                   CASE WHEN r.tenant IS NULL THEN 'platform' ELSE 'tenant' END AS scope
             ORDER BY parent.name, child.name
-            """
+            """,
+            tenant=tenant,
         )
 
     # ── Private helpers ────────────────────────────────────────────────────────
 
-    def _transitive_children(self, root: str) -> set[str]:
+    def _transitive_children(self, root: str, tenant: str | None = None) -> set[str]:
         visited: set[str] = set()
-        stack = list(self._children.get(root, set()))
+        stack = list(self._children_of(root, tenant))
         while stack:
             node = stack.pop()
             if node not in visited:
                 visited.add(node)
-                stack.extend(self._children.get(node, set()))
+                stack.extend(self._children_of(node, tenant))
         return visited
 
-    def _transitive_parents(self, node: str) -> set[str]:
+    def _transitive_parents(self, node: str, tenant: str | None = None) -> set[str]:
         visited: set[str] = set()
-        stack = list(self._parents.get(node, set()))
+        stack = list(self._parents_of(node, tenant))
         while stack:
             p = stack.pop()
             if p not in visited:
                 visited.add(p)
-                stack.extend(self._parents.get(p, set()))
+                stack.extend(self._parents_of(p, tenant))
         return visited
 
 

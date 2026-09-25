@@ -461,7 +461,7 @@ class Neo4jClient:
                    d.source_system AS source_system, d.classification AS classification,
                    d.content_type AS content_type, d.authority_level AS authority_level,
                    d.ingested_at AS ingested_at, d.status AS status
-            ORDER BY d.ingested_at DESC
+            ORDER BY d.ingested_at DESC, d.id ASC
             SKIP $offset LIMIT $limit
             """,
             **params,

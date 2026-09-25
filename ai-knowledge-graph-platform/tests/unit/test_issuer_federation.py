@@ -72,7 +72,13 @@ def _external_token(private_key, *, iss: str, aud: str, kid: str | None = "ext-k
     return pyjwt.encode(payload, private_key, algorithm="RS256", headers=headers)
 
 
-def _patch_trusted_issuers(monkeypatch, *, audiences: list[str]) -> None:
+def _patch_trusted_issuers(
+    monkeypatch,
+    *,
+    audiences: list[str],
+    allowed_tenants: list[str] = ("aerospace",),
+    max_scopes: list[str] = ("read",),
+) -> None:
     """Make this deployment trust TRUSTED_ISSUER, scoped to `audiences`.
 
     Patches `graphrag.core.config.get_settings` -- issuer_trust.trusted_issuers()
@@ -89,7 +95,10 @@ def _patch_trusted_issuers(monkeypatch, *, audiences: list[str]) -> None:
 
     class _FakeSettings:
         jwt_trusted_issuers = [
-            TrustedIssuerConfig(issuer=TRUSTED_ISSUER, jwks_uri=TRUSTED_JWKS_URI, audiences=audiences),
+            TrustedIssuerConfig(
+                issuer=TRUSTED_ISSUER, jwks_uri=TRUSTED_JWKS_URI, audiences=audiences,
+                allowed_tenants=list(allowed_tenants), max_scopes=list(max_scopes),
+            ),
         ]
         jwt_issuer_jwks_cache_ttl_seconds = 300
 
@@ -221,6 +230,37 @@ class TestExternalIssuerTrust:
         await decode_access_token_async(second)
 
         assert len(calls) == 1
+
+
+class TestIssuerScopedTenantAndScopes:
+    """A trusted IdP may only mint tokens for its allowed tenants and scopes."""
+
+    async def _decode(self, monkeypatch, **claims):
+        _patch_trusted_issuers(monkeypatch, audiences=[mcp_resource()])
+        private_key, public_key = _external_keypair()
+        _seed_cache(monkeypatch, document=_jwks_document_for(public_key))
+        token = _external_token(private_key, iss=TRUSTED_ISSUER, aud=mcp_resource(), **claims)
+        return await decode_access_token_async(token, audience=mcp_resource())
+
+    async def test_allowed_tenant_and_scope_verify(self, monkeypatch):
+        claims = await self._decode(monkeypatch, scope="read tenant:aerospace")
+        assert claims["tenant"] == "aerospace"
+
+    async def test_tenant_claim_outside_allow_list_is_rejected(self, monkeypatch):
+        with pytest.raises(ValueError):
+            await self._decode(monkeypatch, tenant="banking")
+
+    async def test_missing_tenant_claim_is_rejected(self, monkeypatch):
+        with pytest.raises(ValueError):
+            await self._decode(monkeypatch, tenant=None)
+
+    async def test_tenant_scope_outside_allow_list_is_rejected(self, monkeypatch):
+        with pytest.raises(ValueError):
+            await self._decode(monkeypatch, scope="read tenant:banking")
+
+    async def test_scope_above_max_scopes_is_rejected(self, monkeypatch):
+        with pytest.raises(ValueError):
+            await self._decode(monkeypatch, scope="read admin")
 
 
 class TestSyncColdCache:

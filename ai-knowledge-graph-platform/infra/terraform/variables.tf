@@ -33,6 +33,21 @@ variable "max_nodes" {
   default     = 9
 }
 
+variable "master_ipv4_cidr_block" {
+  description = "RFC1918 /28 for the private GKE control plane peering range."
+  type        = string
+  default     = "172.16.0.32/28"
+}
+
+variable "master_authorized_networks" {
+  description = "CIDRs allowed to reach the GKE control plane endpoint (e.g. CI runners, operator VPN). Empty = no public access."
+  type = list(object({
+    cidr_block   = string
+    display_name = string
+  }))
+  default = []
+}
+
 variable "backup_retention_days" {
   description = "Days to retain tenant graph backup objects in Cloud Storage."
   type        = number

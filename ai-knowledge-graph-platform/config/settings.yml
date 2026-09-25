@@ -163,11 +163,11 @@ retrieval:
   # stream of distinct queries into unbounded process memory.
   semantic_answer_cache_max_memory_entries: 2048
   # true = refuse to start, and refuse requests, when the token revocation
-  # deny-list is unreachable. Default false is the safer trade: a Redis outage
-  # then means recently-revoked tokens are honoured until it returns, rather
-  # than every request being denied. Turn it on where honouring a revoked
-  # credential is worse than an outage.
-  jwt_revocation_strict: false
+  # deny-list is unreachable. Unset (the default) means strict everywhere
+  # outside DEV_ENVS and lenient in dev, so a multi-replica deployment never
+  # silently honours a credential revoked on another replica. Set false
+  # explicitly only where an outage is worse than honouring a revoked token.
+  # jwt_revocation_strict: false
   # ── GNN scoring (after multi-hop traversal) ───────────────────────────────
   gnn_enabled: true        # GCN/GAT graph-propagated re-scoring
   gnn_type: gat            # "gcn" (Kipf & Welling 2017) | "gat" (Veličković 2018)

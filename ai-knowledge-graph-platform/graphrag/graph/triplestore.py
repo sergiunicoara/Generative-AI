@@ -42,6 +42,7 @@ silently fail or behave unexpectedly.
 from __future__ import annotations
 
 import os
+import re
 from typing import Any, Protocol, runtime_checkable
 
 import httpx
@@ -485,8 +486,45 @@ class TripleStoreTarget:
         return response.status_code
 
 
-def remote_sparql_source_from_env() -> RemoteSPARQLEndpoint | None:
+class RemoteSPARQLTenantNotMapped(ValueError):
+    """A remote SPARQL endpoint is configured but not scoped to this tenant."""
+
+
+_TENANT_SEGMENT_RE = re.compile(r"[A-Za-z0-9_-]{1,64}")
+
+
+def _tenant_endpoint(endpoint: str, tenant: str) -> str:
+    """Resolve the endpoint a given tenant may query, or refuse.
+
+    ``{tenant}`` in GRAPHRAG_SPARQL_ENDPOINT gives each tenant its own
+    namespace/repository (e.g. ``.../bigdata/namespace/{tenant}_kb/sparql``) --
+    physical isolation, which a query-rewrite scope could never guarantee
+    against arbitrary user SPARQL. A placeholder-free endpoint is a single
+    shared store, so it may serve exactly one tenant, named by
+    GRAPHRAG_SPARQL_TENANT; every other tenant is refused rather than handed
+    that tenant's triples.
+    """
+    if not _TENANT_SEGMENT_RE.fullmatch(tenant):
+        raise RemoteSPARQLTenantNotMapped(f"invalid tenant for remote SPARQL: {tenant!r}")
+    if "{tenant}" in endpoint:
+        return endpoint.replace("{tenant}", tenant)
+    bound = os.getenv("GRAPHRAG_SPARQL_TENANT", "").strip()
+    if bound and bound == tenant:
+        return endpoint
+    raise RemoteSPARQLTenantNotMapped(
+        f"remote SPARQL endpoint is not scoped to tenant {tenant!r}; use a "
+        "{tenant} placeholder in GRAPHRAG_SPARQL_ENDPOINT or bind the shared "
+        "endpoint with GRAPHRAG_SPARQL_TENANT"
+    )
+
+
+def remote_sparql_source_from_env(tenant: str | None = None) -> RemoteSPARQLEndpoint | None:
     """Build a RemoteSPARQLEndpoint from GRAPHRAG_SPARQL_* env vars, or None.
+
+    With ``tenant``, the endpoint is resolved for that tenant (see
+    ``_tenant_endpoint``) and RemoteSPARQLTenantNotMapped is raised when the
+    configured store isn't scoped to it. Without ``tenant``, this only answers
+    "is a remote store configured at all" and must not be used to query.
 
     Mirrors api/limiter.py's ``_storage_uri()`` pattern: read from the process
     environment only, return None (not raise) when unset, so a deployment
@@ -505,6 +543,8 @@ def remote_sparql_source_from_env() -> RemoteSPARQLEndpoint | None:
     endpoint = os.getenv("GRAPHRAG_SPARQL_ENDPOINT", "").strip()
     if not endpoint:
         return None
+    if tenant is not None:
+        endpoint = _tenant_endpoint(endpoint, tenant)
     auth_raw = os.getenv("GRAPHRAG_SPARQL_AUTH", "").strip()
     auth = _auth_from_env(auth_raw) if auth_raw else None
     log.info(
@@ -517,6 +557,7 @@ def remote_sparql_source_from_env() -> RemoteSPARQLEndpoint | None:
 
 __all__ = [
     "RemoteSPARQLEndpoint",
+    "RemoteSPARQLTenantNotMapped",
     "SPARQLSource",
     "TripleStoreTarget",
     "remote_sparql_source_from_env",

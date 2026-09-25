@@ -1,5 +1,6 @@
 resource "google_project_service" "required" {
   for_each = toset([
+    "compute.googleapis.com",
     "container.googleapis.com",
     "secretmanager.googleapis.com",
     "artifactregistry.googleapis.com",
@@ -70,7 +71,48 @@ resource "google_container_cluster" "primary" {
   networking_mode = "VPC_NATIVE"
   ip_allocation_policy {}
 
+  # Dataplane V2 enforces Kubernetes NetworkPolicy natively; without it
+  # deploy/kubernetes/network-policy.yaml is accepted but never enforced.
+  # NOTE: changing datapath_provider or private_cluster_config on an existing
+  # cluster forces replacement -- plan a migration, don't apply blindly.
+  datapath_provider = "ADVANCED_DATAPATH"
+
+  private_cluster_config {
+    enable_private_nodes    = true
+    enable_private_endpoint = false
+    master_ipv4_cidr_block  = var.master_ipv4_cidr_block
+  }
+
+  # Public control-plane endpoint is reachable only from these CIDRs.
+  master_authorized_networks_config {
+    dynamic "cidr_blocks" {
+      for_each = var.master_authorized_networks
+      content {
+        cidr_block   = cidr_blocks.value.cidr_block
+        display_name = cidr_blocks.value.display_name
+      }
+    }
+  }
+
   depends_on = [google_project_service.required]
+}
+
+# Private nodes have no external IPs; Cloud NAT gives pods egress to the LLM
+# provider and IdP JWKS endpoints without exposing the nodes themselves.
+resource "google_compute_router" "nat" {
+  name    = "${var.cluster_name}-nat-router"
+  region  = var.region
+  network = "default"
+
+  depends_on = [google_project_service.required]
+}
+
+resource "google_compute_router_nat" "nat" {
+  name                               = "${var.cluster_name}-nat"
+  router                             = google_compute_router.nat.name
+  region                             = var.region
+  nat_ip_allocate_option             = "AUTO_ONLY"
+  source_subnetwork_ip_ranges_to_nat = "ALL_SUBNETWORKS_ALL_IP_RANGES"
 }
 
 resource "google_container_node_pool" "application" {

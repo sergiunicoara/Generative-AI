@@ -124,15 +124,18 @@ class SubclassRegisterRequest(BaseModel):
 @router.post(
     "/taxonomy/register",
     dependencies=[Depends(require_scope("admin"))],
-    summary="Add a SUBCLASS_OF edge to the entity type hierarchy",
+    summary="Add a SUBCLASS_OF edge to this tenant's entity type hierarchy",
 )
-async def register_subclass(request: SubclassRegisterRequest):
+async def register_subclass(request: SubclassRegisterRequest, tenant: str = Depends(get_tenant)):
     from graphrag.graph.type_taxonomy import get_type_taxonomy
     tax = get_type_taxonomy(get_neo4j())
     if not tax._loaded:
         await tax.load()
-    await tax.register_subclass(child=request.child, parent=request.parent)
-    return {"status": "registered", "child": request.child.upper(), "parent": request.parent.upper()}
+    await tax.register_subclass(child=request.child, parent=request.parent, tenant=tenant)
+    return {
+        "status": "registered", "child": request.child.upper(),
+        "parent": request.parent.upper(), "tenant": tenant,
+    }
 
 
 @router.get(
@@ -140,15 +143,15 @@ async def register_subclass(request: SubclassRegisterRequest):
     dependencies=[Depends(require_scope("read"))],
     summary="Return a type and all its subtypes (for query expansion)",
 )
-async def expand_type(type_name: str):
+async def expand_type(type_name: str, tenant: str = Depends(get_tenant)):
     from graphrag.graph.type_taxonomy import get_type_taxonomy
     tax = get_type_taxonomy(get_neo4j())
     if not tax._loaded:
         await tax.load()
     return {
         "type": type_name.upper(),
-        "expanded": tax.expand_type(type_name),
-        "ancestors": tax.get_ancestors(type_name),
+        "expanded": tax.expand_type(type_name, tenant=tenant),
+        "ancestors": tax.get_ancestors(type_name, tenant=tenant),
     }
 
 
@@ -157,12 +160,12 @@ async def expand_type(type_name: str):
     dependencies=[Depends(require_scope("read"))],
     summary="Return the full SUBCLASS_OF graph",
 )
-async def taxonomy_schema():
+async def taxonomy_schema(tenant: str = Depends(get_tenant)):
     from graphrag.graph.type_taxonomy import get_type_taxonomy
     tax = get_type_taxonomy(get_neo4j())
     if not tax._loaded:
         await tax.load()
-    return await tax.get_schema()
+    return await tax.get_schema(tenant=tenant)
 
 
 @router.get(
@@ -787,7 +790,10 @@ async def sparql_query(http_request: Request, tenant: str = Depends(get_tenant))
         parse_sparql_query_request,
         serialize_typed_result,
     )
-    from graphrag.graph.triplestore import remote_sparql_source_from_env
+    from graphrag.graph.triplestore import (
+        RemoteSPARQLTenantNotMapped,
+        remote_sparql_source_from_env,
+    )
 
     if not _TENANT_PATH_RE.fullmatch(tenant):
         raise HTTPException(status_code=403, detail="Invalid tenant")
@@ -795,7 +801,11 @@ async def sparql_query(http_request: Request, tenant: str = Depends(get_tenant))
     query, namespaces = await parse_sparql_query_request(http_request)
     accept = negotiate_accept(http_request.headers.get("accept", ""))
 
-    remote = remote_sparql_source_from_env()
+    try:
+        remote = remote_sparql_source_from_env(tenant=tenant)
+    except RemoteSPARQLTenantNotMapped as exc:
+        log.warning("kg.sparql.remote_tenant_not_mapped", tenant=tenant)
+        raise HTTPException(status_code=403, detail="Remote SPARQL store is not scoped to this tenant") from exc
     if remote is not None:
         try:
             if accept == SPARQL_RESULTS_JSON:

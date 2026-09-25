@@ -77,6 +77,8 @@ class TrustedIssuer:
     issuer: str
     jwks_uri: str
     audiences: frozenset[str]
+    allowed_tenants: frozenset[str] = frozenset()
+    max_scopes: frozenset[str] = frozenset()
 
 
 def trusted_issuers() -> dict[str, TrustedIssuer]:
@@ -101,6 +103,8 @@ def trusted_issuers() -> dict[str, TrustedIssuer]:
             issuer=issuer,
             jwks_uri=entry.jwks_uri,
             audiences=frozenset(entry.audiences),
+            allowed_tenants=frozenset(entry.allowed_tenants),
+            max_scopes=frozenset(entry.max_scopes),
         )
     return result
 

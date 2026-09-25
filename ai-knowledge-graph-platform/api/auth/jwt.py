@@ -51,7 +51,7 @@ local keys just because a key happens to verify. That fall-through would
 defeat the entire point of naming an issuer at all.
 
 A trusted external issuer's tokens are further restricted to the specific
-audience(s) it was configured for (``_assert_issuer_scoped_audience``), even
+audience(s) it was configured for (``_assert_issuer_scoped_claims``), even
 when the caller only asked for a generic decode -- a compromised or
 misconfigured external issuer must not be able to mint a token for a resource
 outside its configured scope, even a resource this deployment genuinely hosts.
@@ -211,7 +211,7 @@ def _is_self_issued(iss: str | None) -> bool:
         return False
 
 
-def _assert_issuer_scoped_audience(trusted, claims: dict) -> None:
+def _assert_issuer_scoped_claims(trusted, claims: dict) -> None:
     """Restrict an externally-issued token to that issuer's configured scope.
 
     Enforced unconditionally, even when the caller only asked for a generic
@@ -223,6 +223,17 @@ def _assert_issuer_scoped_audience(trusted, claims: dict) -> None:
     declared = _token_audiences(claims)
     if not declared or not declared.issubset(trusted.audiences):
         raise ValueError("Invalid token")
+    # Same closed-allow-list rule for tenant and scope: otherwise a trusted
+    # IdP could mint a token for any tenant, with admin, and it would be
+    # honoured as-is.
+    if claims.get("tenant") not in trusted.allowed_tenants:
+        raise ValueError("Invalid token")
+    for scope in str(claims.get("scope") or "").split():
+        if scope.startswith("tenant:"):
+            if scope.removeprefix("tenant:") not in trusted.allowed_tenants:
+                raise ValueError("Invalid token")
+        elif scope not in trusted.max_scopes:
+            raise ValueError("Invalid token")
 
 
 def decode_access_token(
@@ -290,7 +301,7 @@ def decode_access_token(
     if claims is None:
         raise ValueError("Invalid token")
     if trusted is not None:
-        _assert_issuer_scoped_audience(trusted, claims)
+        _assert_issuer_scoped_claims(trusted, claims)
     if audience is not None:
         _assert_audience(claims, audience, strict=strict)
     return claims

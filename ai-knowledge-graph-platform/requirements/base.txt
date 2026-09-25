@@ -10,6 +10,15 @@ tenacity>=8.3.0
 aio-pika>=9.4.0
 sqlalchemy>=2.0.30
 aiosqlite>=0.20.0
+# SQLAlchemy's asyncio engine (create_async_engine, used by kpi_store.py,
+# timescale_kpi_store.py, governance_store.py, ingestion/relational.py) needs
+# this at import time. Same gap as aiohttp/openai/groq below: only ever
+# present in requirements.lock as a transitive pull-in, never declared
+# directly, so a clean install from this subset raised ModuleNotFoundError
+# the first time an async session was actually opened -- caught by CI's
+# clean-install job importing the real ASGI app, not by any test (every test
+# mocks the session).
+greenlet>=3.0.0
 
 # ── LLM clients (graphrag/core/llm_client.py) ───────────────────────────────────
 # Direct dependencies of every worker that calls get_llm()/get_fast_llm()/

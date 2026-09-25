@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
 from api.auth.dependencies import get_current_user, get_tenant, require_scope
@@ -12,8 +12,24 @@ router = APIRouter()
 
 
 def _erasure_actor(user: dict, body_value: str) -> str:
-    """Audit principal comes from the token; the body value is kept only as a note."""
-    principal = str(user.get("sub") or "unknown")
+    """Audit principal comes from the token; the body value is kept only as a note.
+
+    Erasure is only reachable via `require_scope("admin")`, so a token that
+    satisfies the scope check but carries no `sub` (plausible for an M2M/
+    service-account token -- neither `decode_access_token` nor `require_scope`
+    mandates one) would otherwise erase GDPR data while the audit trail
+    records the actor as the literal string "unknown", defeating the reason
+    this function exists. A GDPR erasure with no identifiable actor is itself
+    a compliance gap, not just a data-quality one -- fail closed instead.
+    """
+    subject = user.get("sub")
+    if not subject:
+        raise HTTPException(
+            status_code=403,
+            detail="This token carries no identifiable subject (sub claim); "
+                   "GDPR erasure requires an auditable actor.",
+        )
+    principal = str(subject)
     note = (body_value or "").strip()
     if note and note != principal:
         return f"{principal} (on behalf of {note[:120]})"

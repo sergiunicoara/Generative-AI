@@ -226,11 +226,25 @@ def _assert_issuer_scoped_claims(trusted, claims: dict) -> None:
     # Same closed-allow-list rule for tenant and scope: otherwise a trusted
     # IdP could mint a token for any tenant, with admin, and it would be
     # honoured as-is.
-    if claims.get("tenant") not in trusted.allowed_tenants:
+    token_tenant = claims.get("tenant")
+    if token_tenant not in trusted.allowed_tenants:
         raise ValueError("Invalid token")
     for scope in str(claims.get("scope") or "").split():
         if scope.startswith("tenant:"):
-            if scope.removeprefix("tenant:") not in trusted.allowed_tenants:
+            # A self-issued M2M client can legitimately hold more than one
+            # tenant:<name> scope -- register_client() only grants them by
+            # intersecting against an already-authorized local admin's own
+            # scopes, a real authorization step. An external issuer has no
+            # such step: allowed_tenants only bounds which tenants it may
+            # EVER touch across all its tokens, not what one token may
+            # combine. Without pinning every tenant:<name> scope to this
+            # token's own tenant claim, an issuer trusted for several
+            # tenants could mint a single token claiming tenant "acme" but
+            # scoped tenant:globex, which ToolPolicy's cross-tenant guard
+            # (graphrag/agents/tool_policy.py) honours independently of the
+            # tenant claim -- letting that token drive write/erase tools
+            # against globex despite operating as acme everywhere else.
+            if scope.removeprefix("tenant:") != token_tenant:
                 raise ValueError("Invalid token")
         elif scope not in trusted.max_scopes:
             raise ValueError("Invalid token")

@@ -136,16 +136,30 @@ def _authenticated_subject(request: Request) -> str:
     return str(subject) if subject else ""
 
 
-def client_address(request: Request) -> str:
-    """The real client IP, given a declared proxy depth."""
+def resolve_client_ip(direct_addr: str | None, forwarded_for: str) -> str:
+    """The real client IP given a declared proxy depth, from primitives.
+
+    Framework-agnostic on purpose: `client_address` below wraps this for
+    Starlette's `Request`; `graphrag/dashboard/app.py`'s Flask/WSGI login
+    endpoint calls it directly, so both sit behind the same
+    GRAPHRAG_TRUSTED_PROXIES-gated `X-Forwarded-For` trust decision instead
+    of one of them trusting the client-writable header unconditionally (or
+    not at all, which is just as wrong behind a real proxy).
+    """
     hops = _trusted_proxy_hops()
     if hops:
-        forwarded = request.headers.get("x-forwarded-for", "")
-        chain = [part.strip() for part in forwarded.split(",") if part.strip()]
+        chain = [part.strip() for part in forwarded_for.split(",") if part.strip()]
         if len(chain) >= hops:
             return chain[-hops]
+    return direct_addr or "unknown"
+
+
+def client_address(request: Request) -> str:
+    """The real client IP, given a declared proxy depth."""
     client = getattr(request, "client", None)
-    return getattr(client, "host", None) or "unknown"
+    return resolve_client_ip(
+        getattr(client, "host", None), request.headers.get("x-forwarded-for", ""),
+    )
 
 
 def client_key(request: Request) -> str:

@@ -51,6 +51,14 @@ class ReferenceEvaluator:
             answer_relevancy=_coverage(answer_tokens, question_tokens),
             context_precision=precision,
             context_recall=_coverage(reference_tokens, context_tokens),
+            # Unconditionally computes all four, unlike RagasEvaluator which
+            # can skip a metric -- without this, evaluation_agent.py's
+            # KPIEvent(**{name: getattr(...) for name in computed_metrics})
+            # silently drops every real score this evaluator produces,
+            # recording them as unscored `None` instead. This is the RAGAS
+            # fallback path (ragas_fallback_to_reference), so the loss lands
+            # exactly during the outage windows KPI visibility matters most.
+            computed_metrics=["faithfulness", "answer_relevancy", "context_precision", "context_recall"],
             evaluation_source="reference",
         )
 

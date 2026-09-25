@@ -189,7 +189,89 @@ class TestSessionTurnFailureDoesNotFailTheAnswer:
         hr._session_ctx.record_turn = AsyncMock(side_effect=RuntimeError("redis down"))
         hr._session_ctx.get_context = AsyncMock(return_value="")
 
-        result = await hr.retrieve_and_answer("question", mode="local", session_id="s1")
+        # test_hybrid_retriever.py's autouse LLM-patch fixture only applies to
+        # tests in that module; this test lives elsewhere and imports the
+        # helper without it, so without this patch it hits a real provider --
+        # passed locally with API keys configured, failed in CI with none.
+        mock_llm = AsyncMock()
+        mock_llm.generate = AsyncMock(return_value="A confident answer.")
+        with patch("graphrag.retrieval.hybrid_retriever.get_llm", return_value=mock_llm):
+            result = await hr.retrieve_and_answer("question", mode="local", session_id="s1")
 
         assert result.answer
         hr._session_ctx.record_turn.assert_awaited()
+
+
+class TestAdminLoginTrustedProxyIp:
+    def test_uses_forwarded_for_only_with_trusted_proxies_configured(self, monkeypatch):
+        import graphrag.dashboard.app as dash_app
+
+        monkeypatch.setattr(dash_app, "ADMIN_TOKEN", "correct-token")
+        monkeypatch.setattr(dash_app, "_login_failures", {})
+        client = dash_app.app.server.test_client()
+
+        monkeypatch.setenv("GRAPHRAG_TRUSTED_PROXIES", "1")
+        for _ in range(dash_app._LOGIN_MAX_FAILURES):
+            client.post(
+                "/admin/_login", data={"token": "wrong"},
+                headers={"X-Forwarded-For": "203.0.113.9"},
+            )
+        assert "203.0.113.9" in dash_app._login_failures
+        blocked = client.post(
+            "/admin/_login", data={"token": "correct-token"},
+            headers={"X-Forwarded-For": "203.0.113.9"},
+        )
+        assert blocked.status_code == 429
+        # A different real client behind the same proxy is unaffected.
+        other = client.post(
+            "/admin/_login", data={"token": "correct-token"},
+            headers={"X-Forwarded-For": "203.0.113.99"},
+        )
+        assert other.status_code == 302
+
+    def test_untrusted_forwarded_for_is_ignored(self, monkeypatch):
+        import graphrag.dashboard.app as dash_app
+
+        monkeypatch.setattr(dash_app, "ADMIN_TOKEN", "correct-token")
+        monkeypatch.setattr(dash_app, "_login_failures", {})
+        monkeypatch.delenv("GRAPHRAG_TRUSTED_PROXIES", raising=False)
+        client = dash_app.app.server.test_client()
+
+        for i in range(dash_app._LOGIN_MAX_FAILURES):
+            client.post(
+                "/admin/_login", data={"token": "wrong"},
+                headers={"X-Forwarded-For": f"1.1.1.{i}"},  # would forge a fresh bucket if trusted
+            )
+        assert list(dash_app._login_failures) != [f"1.1.1.{i}" for i in range(dash_app._LOGIN_MAX_FAILURES)]
+        assert len(dash_app._login_failures) == 1  # all 5 attempts collapsed into one real-IP bucket
+
+
+class TestAdminLoginFailuresBounded:
+    def test_dict_does_not_grow_past_the_cap(self, monkeypatch):
+        import graphrag.dashboard.app as dash_app
+
+        monkeypatch.setattr(dash_app, "_LOGIN_FAILURES_MAX_TRACKED_IPS", 3)
+        monkeypatch.setattr(dash_app, "_login_failures", {})
+
+        now = 1000.0
+        for i in range(5):
+            dash_app._record_login_failure(f"ip-{i}", now + i)
+
+        assert len(dash_app._login_failures) == 3
+        assert "ip-0" not in dash_app._login_failures  # oldest evicted first
+        assert "ip-4" in dash_app._login_failures
+
+
+class TestGdprErasureRequiresIdentifiableActor:
+    def test_token_without_sub_is_rejected_not_recorded_as_unknown(self):
+        from api.routes.kg import compliance
+
+        app = FastAPI()
+        app.include_router(compliance.router)
+        app.dependency_overrides[get_current_user] = lambda: {
+            "scope": "read write admin", "tenant": "acme",
+        }
+        client = TestClient(app)
+
+        resp = client.post("/gdpr/forget-document", json={"doc_id": "d1"})
+        assert resp.status_code == 403

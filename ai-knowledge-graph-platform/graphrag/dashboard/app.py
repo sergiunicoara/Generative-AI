@@ -158,6 +158,15 @@ border-radius:4px;cursor:pointer;font-size:15px}}
 
 _LOGIN_MAX_FAILURES = 5
 _LOGIN_WINDOW_SECONDS = 300.0
+# Bounds total memory under a distributed-address flood (many single-attempt
+# IPs, each too sparse to trip its own 5-in-5min bucket): once full, the
+# oldest-failing IP is evicted to make room rather than growing forever. Not
+# Redis-backed: this deployment runs uvicorn as a single process (no
+# `--workers N` anywhere in docker-compose.yml/Dockerfile/fly/), so a
+# per-process store is currently correct, not a degraded fallback -- revisit
+# if that ever changes, the same way api/limiter.py's AsyncRateLimiter would
+# need to be bridged into this synchronous Flask/WSGI handler.
+_LOGIN_FAILURES_MAX_TRACKED_IPS = 10_000
 _login_failures: dict[str, list[float]] = {}
 _login_lock = threading.Lock()
 
@@ -174,12 +183,22 @@ def _login_blocked(ip: str, now: float) -> bool:
 
 def _record_login_failure(ip: str, now: float) -> None:
     with _login_lock:
+        if ip not in _login_failures and len(_login_failures) >= _LOGIN_FAILURES_MAX_TRACKED_IPS:
+            oldest_ip = min(_login_failures, key=lambda k: _login_failures[k][0])
+            _login_failures.pop(oldest_ip, None)
         _login_failures.setdefault(ip, []).append(now)
 
 
 @app.server.route(_LOGIN_POST, methods=["POST"])
 def _login_submit():
-    ip = flask.request.remote_addr or "unknown"
+    # Trusted-proxy-aware, same rule the API's own rate limiter applies
+    # (api/limiter.py) -- GRAPHRAG_TRUSTED_PROXIES gates X-Forwarded-For so a
+    # client can't forge a fresh bucket per request by varying the header.
+    from api.limiter import resolve_client_ip
+
+    ip = resolve_client_ip(
+        flask.request.remote_addr, flask.request.headers.get("X-Forwarded-For", ""),
+    )
     now = time.monotonic()
     if _login_blocked(ip, now):
         log.warning("dashboard.login_rate_limited", ip=ip)

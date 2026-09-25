@@ -235,8 +235,8 @@ class TestExternalIssuerTrust:
 class TestIssuerScopedTenantAndScopes:
     """A trusted IdP may only mint tokens for its allowed tenants and scopes."""
 
-    async def _decode(self, monkeypatch, **claims):
-        _patch_trusted_issuers(monkeypatch, audiences=[mcp_resource()])
+    async def _decode(self, monkeypatch, *, allowed_tenants=("aerospace",), **claims):
+        _patch_trusted_issuers(monkeypatch, audiences=[mcp_resource()], allowed_tenants=allowed_tenants)
         private_key, public_key = _external_keypair()
         _seed_cache(monkeypatch, document=_jwks_document_for(public_key))
         token = _external_token(private_key, iss=TRUSTED_ISSUER, aud=mcp_resource(), **claims)
@@ -261,6 +261,27 @@ class TestIssuerScopedTenantAndScopes:
     async def test_scope_above_max_scopes_is_rejected(self, monkeypatch):
         with pytest.raises(ValueError):
             await self._decode(monkeypatch, scope="read admin")
+
+    async def test_tenant_scope_naming_a_different_tenant_than_the_claim_is_rejected(self, monkeypatch):
+        """An issuer trusted for MULTIPLE tenants must not be able to mint one
+        token whose tenant:<name> scope names a different tenant than its own
+        `tenant` claim -- ToolPolicy's cross-tenant guard
+        (graphrag/agents/tool_policy.py) derives its allow-list purely from
+        tenant:<name> scopes, independent of the `tenant` claim, so such a
+        token would drive write/erase tools against the OTHER tenant despite
+        operating as the claimed tenant everywhere else. allowed_tenants only
+        bounds which tenants an issuer may ever touch across all its tokens,
+        not what any single token may combine -- unlike a self-issued M2M
+        client, which only ever gets extra tenant: scopes by intersection
+        against an already-authorized local admin (api/routes/auth.py's
+        register_client)."""
+        with pytest.raises(ValueError):
+            await self._decode(
+                monkeypatch,
+                allowed_tenants=("aerospace", "automotive"),
+                tenant="aerospace",
+                scope="read tenant:automotive",
+            )
 
 
 class TestSyncColdCache:

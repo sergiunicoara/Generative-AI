@@ -1075,6 +1075,27 @@ class Neo4jClient:
             log.info("neo4j.stale_chunks_deleted", doc_id=doc_id, deleted=deleted)
         return deleted
 
+    async def document_has_evidence(self, doc_id: str, tenant: str = "default") -> bool:
+        """Whether any chunk already exists for this document id.
+
+        Used to decide whether a write must reconcile stale evidence before
+        writing fresh extraction results — including a same-payload retry of
+        a previously failed attempt, which keeps the same document id across
+        redeliveries and so cannot be detected via write_document's id
+        remapping alone (see docs/archive/audits/audit-2026-09-23.md, "Not
+        fixed" #3). Must be called before this run's own write_chunks, or it
+        will just see this run's own chunks.
+        """
+        rows = await self.run(
+            """
+            MATCH (c:Chunk {document_id: $doc_id, tenant: $tenant})
+            RETURN count(c) > 0 AS has_evidence
+            """,
+            doc_id=doc_id,
+            tenant=tenant,
+        )
+        return bool(rows[0]["has_evidence"]) if rows else False
+
     async def reconcile_document_evidence(self, doc_id: str, tenant: str = "default") -> dict[str, int]:
         """Remove a document's old mentions and relation provenance.
 
@@ -1108,12 +1129,27 @@ class Neo4jClient:
         updated_rows = await self.run(
             """
             MATCH ()-[r:RELATES_TO {tenant: $tenant}]-()
-            WHERE $doc_id IN coalesce(r.source_doc_ids, [r.source_doc_id])
-            WITH r, [source IN coalesce(r.source_doc_ids, [r.source_doc_id])
-                     WHERE source <> $doc_id] AS remaining_sources
-            WHERE size(remaining_sources) > 0
+            WITH r, coalesce(r.source_doc_ids, [r.source_doc_id]) AS all_sources,
+                 coalesce(r.doc_confidences, []) AS all_confs
+            WHERE $doc_id IN all_sources
+            // Keep only the indices whose source document is not the one
+            // being reconciled, so source_doc_ids and doc_confidences stay
+            // index-aligned as entries are removed together.
+            WITH r, all_sources, all_confs,
+                 [i IN range(0, size(all_sources) - 1) WHERE all_sources[i] <> $doc_id] AS keep_idx
+            WHERE size(keep_idx) > 0
+            WITH r, keep_idx,
+                 [i IN keep_idx | all_sources[i]] AS remaining_sources,
+                 [i IN keep_idx |
+                    CASE WHEN i < size(all_confs) THEN all_confs[i] ELSE coalesce(r.confidence, 0.0) END
+                 ] AS remaining_confs
             SET r.source_doc_ids = remaining_sources,
-                r.source_doc_id = remaining_sources[0]
+                r.source_doc_id = remaining_sources[0],
+                r.doc_confidences = remaining_confs,
+                // Recompute from what's actually left, not the stale
+                // aggregate that included the reconciled document's
+                // contribution — see audit-2026-09-23.md, "Not fixed" #2.
+                r.confidence = 1.0 - reduce(acc = 1.0, c IN remaining_confs | acc * (1.0 - c))
             RETURN count(*) AS retained_relations
             """,
             doc_id=doc_id,
@@ -1358,7 +1394,17 @@ class Neo4jClient:
             // Snapshot the contributing-document list BEFORE the SET below
             // rewrites it, so the confidence guard tests the pre-update state
             // rather than depending on SET clause evaluation order.
-            WITH r, coalesce(r.source_doc_ids, []) AS prior_docs
+            WITH r, coalesce(r.source_doc_ids, []) AS prior_docs,
+                 coalesce(r.doc_confidences, []) AS prior_confs
+            // Legacy relations may carry fewer doc_confidences entries than
+            // source_doc_ids (written before per-document tracking existed) —
+            // backfill any gap with the current aggregate so a relation
+            // self-heals on its next write instead of going null.
+            WITH r, prior_docs,
+                 [i IN range(0, size(prior_docs) - 1) |
+                    CASE WHEN i < size(prior_confs) THEN prior_confs[i]
+                         ELSE coalesce(r.confidence, $confidence) END
+                 ] AS prior_confs_padded
             SET r.weight           = $weight,
                 r.extracted_at     = $extracted_at,
                 r.source_doc_id    = $source_doc_id,
@@ -1375,18 +1421,27 @@ class Neo4jClient:
                     WHEN $source_doc_id IN prior_docs THEN prior_docs
                     ELSE prior_docs + [$source_doc_id]
                 END,
-                // Bayesian accumulation treats each contributing document as an
-                // INDEPENDENT observation. Re-ingesting a document is not a new
-                // observation, so it must not raise confidence: without this
-                // guard, ingesting the same unchanged file at 0.8 twice yields
-                // 0.96, then 0.992 — silent corruption that compounds on every
-                // re-run. The source_doc_ids write directly above was already
-                // guarded against the same repeat; confidence simply wasn't.
+                // Per-document confidence log, index-aligned with
+                // source_doc_ids, so confidence is a pure function of the
+                // edge's CURRENT provenance rather than an incremental total
+                // that reconcile_document_evidence can never reverse (see
+                // audit-2026-09-23.md, "Not fixed" #2 — repeated
+                // reconcile+re-merge cycles used to inflate confidence
+                // without bound because removing a document from
+                // source_doc_ids never undid its earlier contribution).
+                r.doc_confidences  = CASE
+                    WHEN $source_doc_id IN prior_docs THEN prior_confs_padded
+                    ELSE prior_confs_padded + [$confidence]
+                END,
+                // Re-ingesting a document is not a new independent
+                // observation, so a repeat contributes no change; a genuinely
+                // new document folds in via 1 - Π(1 - c_i) recomputed from
+                // the full current contribution list — not the previous
+                // aggregate — so add/remove cycles stay bounded correctly.
                 // See docs/context_graph_gap_plan.md F2.
                 r.confidence       = CASE
-                    WHEN r.confidence IS NULL              THEN $confidence
-                    WHEN $source_doc_id IN prior_docs      THEN r.confidence
-                    ELSE 1.0 - (1.0 - r.confidence) * (1.0 - $confidence)
+                    WHEN $source_doc_id IN prior_docs THEN r.confidence
+                    ELSE 1.0 - reduce(acc = 1.0, c IN prior_confs_padded + [$confidence] | acc * (1.0 - c))
                 END
             """,
             src_name=src_name,
@@ -1451,7 +1506,16 @@ class Neo4jClient:
             // Snapshot the contributing-document list BEFORE the SET below
             // rewrites it, so the confidence guard tests the pre-update state
             // rather than depending on SET clause evaluation order.
-            WITH r, row, coalesce(r.source_doc_ids, []) AS prior_docs
+            WITH r, row, coalesce(r.source_doc_ids, []) AS prior_docs,
+                 coalesce(r.doc_confidences, []) AS prior_confs
+            // Legacy relations may carry fewer doc_confidences entries than
+            // source_doc_ids — backfill any gap with the current aggregate so
+            // a relation self-heals on its next write. See merge_relation.
+            WITH r, row, prior_docs,
+                 [i IN range(0, size(prior_docs) - 1) |
+                    CASE WHEN i < size(prior_confs) THEN prior_confs[i]
+                         ELSE coalesce(r.confidence, row.confidence) END
+                 ] AS prior_confs_padded
             SET r.weight           = row.weight,
                 r.extracted_at     = row.extracted_at,
                 r.source_doc_id    = row.source_doc_id,
@@ -1465,13 +1529,20 @@ class Neo4jClient:
                     WHEN row.source_doc_id IN prior_docs THEN prior_docs
                     ELSE prior_docs + [row.source_doc_id]
                 END,
+                // Per-document confidence log — see merge_relation for why
+                // this replaced incremental Bayesian accumulation.
+                r.doc_confidences  = CASE
+                    WHEN row.source_doc_id IN prior_docs THEN prior_confs_padded
+                    ELSE prior_confs_padded + [row.confidence]
+                END,
                 // Re-ingesting a document is not an independent observation,
-                // so it must not raise confidence. See the identical guard in
-                // merge_relation and docs/context_graph_gap_plan.md F2.
+                // so it must not raise confidence. A genuinely new document
+                // folds in via a full recompute over current contributions.
+                // See the identical guard in merge_relation and
+                // docs/context_graph_gap_plan.md F2.
                 r.confidence       = CASE
-                    WHEN r.confidence IS NULL             THEN row.confidence
-                    WHEN row.source_doc_id IN prior_docs  THEN r.confidence
-                    ELSE 1.0 - (1.0 - r.confidence) * (1.0 - row.confidence)
+                    WHEN row.source_doc_id IN prior_docs THEN r.confidence
+                    ELSE 1.0 - reduce(acc = 1.0, c IN prior_confs_padded + [row.confidence] | acc * (1.0 - c))
                 END,
                 r.chunk_span_start = row.span_start,
                 r.chunk_span_end   = row.span_end,

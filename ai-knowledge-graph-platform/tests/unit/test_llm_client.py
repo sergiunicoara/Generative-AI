@@ -432,3 +432,53 @@ class TestGetLlmDefaultHasFallback:
         assert llm._secondary._primary_name == "deepseek"
 
         llm_client_module._llm = None
+
+
+class TestSdkClientsDisableTheirOwnRetries:
+    """docs/archive/audits/audit-2026-09-23.md, "Not fixed" #9: the Groq/
+    OpenAI SDK clients default to their own internal retries (2 by default,
+    i.e. 3 raw HTTP attempts) on top of this module's own retry/fail-fast
+    loop. A GroqLLM(max_retries=1) "fail fast" primary was still making 3
+    HTTP attempts under the hood before that one app-level attempt returned.
+    max_retries=0 on the SDK client makes this module's own retry counters
+    the only source of retry behavior."""
+
+    def test_groq_client_constructed_with_max_retries_zero(self):
+        from graphrag.core.llm_client import GroqLLM
+
+        with patch("groq.Groq") as MockGroq:
+            GroqLLM(api_key="k", default_model="m")
+
+        assert MockGroq.call_args.kwargs["max_retries"] == 0
+
+    def test_deepseek_openai_client_constructed_with_max_retries_zero(self):
+        from graphrag.core.llm_client import DeepSeekLLM
+
+        with patch("openai.OpenAI") as MockOpenAI:
+            DeepSeekLLM(api_key="k")
+
+        assert MockOpenAI.call_args.kwargs["max_retries"] == 0
+
+    def test_cerebras_openai_client_constructed_with_max_retries_zero(self):
+        from graphrag.core.llm_client import CerebrasLLM
+
+        with patch("openai.OpenAI") as MockOpenAI:
+            CerebrasLLM(api_key="k")
+
+        assert MockOpenAI.call_args.kwargs["max_retries"] == 0
+
+    def test_openrouter_openai_client_constructed_with_max_retries_zero(self):
+        from graphrag.core.llm_client import OpenRouterLLM
+
+        with patch("openai.OpenAI") as MockOpenAI:
+            OpenRouterLLM(api_key="k")
+
+        assert MockOpenAI.call_args.kwargs["max_retries"] == 0
+
+    def test_embedder_openai_client_constructed_with_max_retries_zero(self):
+        from graphrag.core.llm_client import OpenAIEmbedder
+
+        with patch("openai.OpenAI") as MockOpenAI:
+            OpenAIEmbedder(api_key="k")
+
+        assert MockOpenAI.call_args.kwargs["max_retries"] == 0

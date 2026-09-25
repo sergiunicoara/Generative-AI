@@ -153,13 +153,13 @@ class IngestionValidator:
         rows = await self._neo4j.run(
             """
             MATCH (e:Entity {tenant: $tenant})-[r:RELATES_TO {tenant: $tenant}]-()
-            WITH e.name AS entity, count(r) AS degree
-            WITH collect({entity: entity, degree: degree}) AS all_nodes,
+            WITH e.name AS entity, e.type AS entity_type, count(r) AS degree
+            WITH collect({entity: entity, entity_type: entity_type, degree: degree}) AS all_nodes,
                  avg(toFloat(degree))                      AS mean_degree
             UNWIND all_nodes AS node
             WITH node, mean_degree
             WHERE node.degree > mean_degree * $multiplier
-            RETURN node.entity AS entity, node.degree AS degree, mean_degree
+            RETURN node.entity AS entity, node.entity_type AS entity_type, node.degree AS degree, mean_degree
             LIMIT 20
             """,
             tenant=tenant,
@@ -169,6 +169,7 @@ class IngestionValidator:
             {
                 "type": "degree_anomaly",
                 "entity": r["entity"],
+                "entity_type": r["entity_type"],
                 "degree": r["degree"],
                 "mean_degree": round(r["mean_degree"], 1),
             }

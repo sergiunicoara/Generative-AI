@@ -799,18 +799,25 @@ class HybridRetriever:
             if not budget["within_budget"]:
                 log.warning("hybrid_retriever.budget_exceeded", **budget)
 
-            # ── Record session turn with the real answer ───────────────────────────
-            # Done here (not in local_search) so the stored turn always reflects the
-            # actual answer shown to the user, making follow-up enrichment faithful.
-            if self._use_session_ctx and self._session_ctx and session_id and local_results:
-                await self._session_ctx.record_turn(
-                    session_id=session_id,
-                    question=question,
-                    answer=answer,
-                    referenced_entities=local_results.get("referenced_entities", []),
-                    referenced_chunks=local_results.get("referenced_chunks", []),
-                    tenant=tenant,
-                )
+            # ── Record session turn with the real, FINAL answer ─────────────────────
+            # Must run once, right before whichever branch actually returns, using
+            # that branch's answer — not here, before the agentic fallback below has
+            # a chance to replace `answer` with a different one. Recording here (as
+            # this used to) persisted the pre-fallback answer even when the agentic
+            # branch went on to override it, and was skipped entirely in `global`
+            # mode (where `local_results` is always {}, so `and local_results` was
+            # always falsy). See docs/archive/audits/audit-2026-09-23.md,
+            # "Not fixed" #6.
+            async def _record_turn(final_answer: str) -> None:
+                if self._use_session_ctx and self._session_ctx and session_id:
+                    await self._session_ctx.record_turn(
+                        session_id=session_id,
+                        question=question,
+                        answer=final_answer,
+                        referenced_entities=local_results.get("referenced_entities", []),
+                        referenced_chunks=local_results.get("referenced_chunks", []),
+                        tenant=tenant,
+                    )
 
             # ── Agentic fallback ───────────────────────────────────────────────────
             # If the hybrid answer is low-confidence, hand off to the iterative
@@ -892,18 +899,28 @@ class HybridRetriever:
                             if result.retrieval_trajectory else "agentic_fallback"
                         ),
                     )
-                trace_id = await self._record_context_trace(
-                    question=question, answer=result.answer, tenant=tenant, query_id=query_id,
-                    mode=result.retrieval_mode, model_version=result.model_version,
-                    local_results=local_results, cache_context=cache_context,
-                    valid_at=valid_at, transaction_at=transaction_at,
-                    session_id=session_id, correlation_id=correlation_id,
-                    conflict_count=len(conflicts),
-                )
+                try:
+                    trace_id = await self._record_context_trace(
+                        question=question, answer=result.answer, tenant=tenant, query_id=query_id,
+                        mode=result.retrieval_mode, model_version=result.model_version,
+                        local_results=local_results, cache_context=cache_context,
+                        valid_at=valid_at, transaction_at=transaction_at,
+                        session_id=session_id, correlation_id=correlation_id,
+                        conflict_count=len(conflicts),
+                    )
+                except Exception as exc:
+                    # Optional lineage/eval side effect — must not fail an
+                    # already-completed answer, or (via the RabbitMQ consumer's
+                    # exception-triggers-requeue path) re-run the whole paid LLM
+                    # pipeline for a query that already succeeded. See
+                    # audit-2026-09-23.md, "Not fixed" #7.
+                    log.warning("hybrid_retriever.record_context_trace_failed", error=str(exc)[:200])
+                    trace_id = None
                 # The agentic retriever can add evidence not represented in
                 # local_results yet. Do not cache it until that complete evidence
                 # set is available to the governed trace.
                 result.source_trace_id = trace_id or ""
+                await _record_turn(result.answer)
                 try:
                     await self._adaptive_router.observe(
                         tenant=tenant, question=question, mode=mode,
@@ -952,15 +969,20 @@ class HybridRetriever:
             )
             if query_id:
                 result.query_id = query_id
-            trace_id = await self._record_context_trace(
-                question=question, answer=answer, tenant=tenant, query_id=query_id,
-                mode=mode, model_version=self._model_version, local_results=local_results,
-                cache_context=cache_context,
-                valid_at=valid_at, transaction_at=transaction_at,
-                session_id=session_id, correlation_id=correlation_id,
-                conflict_count=len(conflicts),
-            )
+            try:
+                trace_id = await self._record_context_trace(
+                    question=question, answer=answer, tenant=tenant, query_id=query_id,
+                    mode=mode, model_version=self._model_version, local_results=local_results,
+                    cache_context=cache_context,
+                    valid_at=valid_at, transaction_at=transaction_at,
+                    session_id=session_id, correlation_id=correlation_id,
+                    conflict_count=len(conflicts),
+                )
+            except Exception as exc:
+                log.warning("hybrid_retriever.record_context_trace_failed", error=str(exc)[:200])
+                trace_id = None
             await _store_governed_result(result, trace_id)
+            await _record_turn(answer)
             try:
                 await self._adaptive_router.observe(
                     tenant=tenant, question=question, mode=mode,

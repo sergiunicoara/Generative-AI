@@ -151,7 +151,12 @@ class GroqLLM(BaseLLM):
 
     def __init__(self, api_key: str, default_model: str, max_retries: int = _MAX_RETRIES):
         from groq import Groq
-        self._client = Groq(api_key=api_key, timeout=self._TIMEOUT)
+        # max_retries=0: this app's own retry loop (self._max_retries below) is
+        # the sole retry source. Left at the SDK default (2), a "fail fast"
+        # self._max_retries=1 primary (see FallbackLLM) still made 3 raw HTTP
+        # attempts with SDK-internal backoff before one app-level attempt
+        # returned, defeating fail-fast. See audit-2026-09-23.md, "Not fixed" #9.
+        self._client = Groq(api_key=api_key, timeout=self._TIMEOUT, max_retries=0)
         self._default_model = default_model
         self._max_retries = max_retries
 
@@ -359,7 +364,7 @@ class DeepSeekLLM(BaseLLM):
     def __init__(self, api_key: str, default_model: str = _DEFAULT_MODEL,
                  max_retries: int = _MAX_RETRIES):
         from openai import OpenAI
-        self._client = OpenAI(api_key=api_key, base_url=self._BASE_URL, timeout=self._TIMEOUT)
+        self._client = OpenAI(api_key=api_key, base_url=self._BASE_URL, timeout=self._TIMEOUT, max_retries=0)
         self._default_model = default_model
         self._max_retries = max_retries
 
@@ -452,7 +457,7 @@ class CerebrasLLM(BaseLLM):
     def __init__(self, api_key: str, default_model: str = _DEFAULT_MODEL,
                  max_retries: int = _MAX_RETRIES):
         from openai import OpenAI
-        self._client = OpenAI(api_key=api_key, base_url=self._BASE_URL, timeout=self._TIMEOUT)
+        self._client = OpenAI(api_key=api_key, base_url=self._BASE_URL, timeout=self._TIMEOUT, max_retries=0)
         self._default_model = default_model
         self._max_retries = max_retries
 
@@ -559,7 +564,7 @@ class OpenRouterLLM(BaseLLM):
     def __init__(self, api_key: str, default_model: str = _DEFAULT_MODEL,
                  max_retries: int = _MAX_RETRIES):
         from openai import OpenAI
-        self._client = OpenAI(api_key=api_key, base_url=self._BASE_URL, timeout=self._TIMEOUT)
+        self._client = OpenAI(api_key=api_key, base_url=self._BASE_URL, timeout=self._TIMEOUT, max_retries=0)
         self._default_model = default_model
         self._max_retries = max_retries
 
@@ -820,7 +825,7 @@ class OpenAIEmbedder:
 
     def __init__(self, api_key: str, model: str = "text-embedding-3-large"):
         from openai import OpenAI
-        self._client = OpenAI(api_key=api_key, timeout=self._TIMEOUT)
+        self._client = OpenAI(api_key=api_key, timeout=self._TIMEOUT, max_retries=0)
         self._model = model
 
     async def embed(self, texts: list[str]) -> list[list[float]]:

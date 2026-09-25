@@ -222,15 +222,28 @@ class QuarantineService:
         for issue in validation_report.get("issues", []):
             if issue["type"] == "degree_anomaly":
                 entity_name = issue.get("entity", "")
-                if entity_name:
-                    await self.quarantine_entity(
-                        entity_name=entity_name,
-                        entity_type="UNKNOWN",
-                        reason=f"degree_anomaly:degree={issue.get('degree')}",
-                        flagged_by="ingestion_validator",
-                        tenant=tenant,
+                entity_type = issue.get("entity_type")
+                if not entity_name:
+                    continue
+                if not entity_type:
+                    # quarantine_entity's MATCH is keyed on (name, type, tenant) --
+                    # a wrong/missing type silently matches nothing, so this must
+                    # not be counted as a success (see
+                    # docs/archive/audits/audit-2026-09-23.md, "Not fixed" #5).
+                    log.warning(
+                        "quarantine.auto_quarantine_missing_entity_type",
+                        doc_id=doc_id,
+                        entity=entity_name,
                     )
-                    count += 1
+                    continue
+                await self.quarantine_entity(
+                    entity_name=entity_name,
+                    entity_type=entity_type,
+                    reason=f"degree_anomaly:degree={issue.get('degree')}",
+                    flagged_by="ingestion_validator",
+                    tenant=tenant,
+                )
+                count += 1
         if count:
             log.warning(
                 "quarantine.auto_quarantine",

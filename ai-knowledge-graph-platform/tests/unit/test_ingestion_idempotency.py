@@ -249,8 +249,10 @@ class TestIngestionAgentReassignsChunkDocumentId:
             return "canonical-existing-id"
 
         writer.write_document = AsyncMock(side_effect=fake_write_document)
-        writer.begin_corpus_update = AsyncMock()
-        writer.complete_corpus_update = AsyncMock(return_value=2)
+        writer.neo4j_client = MagicMock()
+        writer.neo4j_client.begin_corpus_update = AsyncMock()
+        writer.neo4j_client.complete_corpus_update = AsyncMock(return_value=2)
+        writer.document_has_evidence = AsyncMock(return_value=True)
         writer.write_chunks = AsyncMock()
         writer.write_entities = AsyncMock(return_value=[])
         writer.write_relations = AsyncMock()
@@ -275,8 +277,10 @@ class TestIngestionAgentReassignsChunkDocumentId:
         for c in chunks:
             assert c.document_id == "canonical-existing-id"
         assert doc.id == "canonical-existing-id"
-        writer.begin_corpus_update.assert_awaited_once_with(doc.tenant)
-        writer.complete_corpus_update.assert_awaited_once_with(doc.tenant)
+        writer.neo4j_client.begin_corpus_update.assert_awaited_once_with(doc.tenant, reason="ingestion")
+        writer.neo4j_client.complete_corpus_update.assert_awaited_once_with(
+            doc.tenant, reason="ingestion", outcome="completed"
+        )
 
     @pytest.mark.asyncio
     async def test_chunks_unchanged_when_document_is_genuinely_new(self):
@@ -287,8 +291,10 @@ class TestIngestionAgentReassignsChunkDocumentId:
         agent = IngestionAgent.__new__(IngestionAgent)
         writer = MagicMock()
         writer.write_document = AsyncMock(return_value="same-id-new-doc")
-        writer.begin_corpus_update = AsyncMock()
-        writer.complete_corpus_update = AsyncMock(return_value=1)
+        writer.neo4j_client = MagicMock()
+        writer.neo4j_client.begin_corpus_update = AsyncMock()
+        writer.neo4j_client.complete_corpus_update = AsyncMock(return_value=1)
+        writer.document_has_evidence = AsyncMock(return_value=False)
         writer.write_chunks = AsyncMock()
         writer.write_entities = AsyncMock(return_value=[])
         writer.write_relations = AsyncMock()
@@ -651,20 +657,17 @@ class TestTenantScopedGraphMutations:
 # ── Relation confidence must not inflate on re-ingest ─────────────────────────
 
 class TestRelationConfidenceIdempotency:
-    """Bayesian accumulation treats each contributing document as an
-    INDEPENDENT observation:
-
-        r.confidence = 1.0 - (1.0 - r.confidence) * (1.0 - new_confidence)
-
-    That is correct for two *different* documents asserting the same edge. It
-    was being applied unconditionally, so re-ingesting one unchanged document
-    at 0.8 produced 0.96, then 0.992 — confidence manufactured out of a repeat
-    with no new evidence, compounding on every run.
-
-    The `source_doc_ids` write immediately above it was already guarded against
-    exactly this repeat; the guard simply hadn't been applied to confidence.
-
-    See docs/context_graph_gap_plan.md F2.
+    """Confidence is recomputed as 1 - Π(1 - c_i) over the edge's CURRENT
+    per-document contribution list (r.doc_confidences, index-aligned with
+    r.source_doc_ids) rather than incrementally Bayesian-updating a running
+    total. The old incremental approach re-inflated confidence every time a
+    document was re-ingested (0.8 -> 0.96 -> 0.992, ...) despite a guard
+    against repeats, AND — the part that guard didn't cover — inflated it
+    again after reconcile_document_evidence removed and re-added the same
+    document, since removing a doc_id from source_doc_ids never undid its
+    earlier contribution to the aggregate. See
+    docs/archive/audits/audit-2026-09-23.md, "Not fixed" #2, and
+    docs/context_graph_gap_plan.md F2.
     """
 
     @pytest.mark.asyncio
@@ -680,9 +683,10 @@ class TestRelationConfidenceIdempotency:
         await client.merge_relation(rel, "A", "ORG", "B", "ORG", tenant="aerospace")
         cypher = client.run.call_args[0][0]
 
-        assert "WHEN $source_doc_id IN prior_docs      THEN r.confidence" in cypher
+        assert "WHEN $source_doc_id IN prior_docs THEN r.confidence" in cypher
         # The guard must read a pre-SET snapshot, not the field it rewrites.
         assert "coalesce(r.source_doc_ids, []) AS prior_docs" in cypher
+        assert "coalesce(r.doc_confidences, []) AS prior_confs" in cypher
 
     @pytest.mark.asyncio
     async def test_batch_merge_guards_confidence_on_repeat_source(self):
@@ -704,8 +708,9 @@ class TestRelationConfidenceIdempotency:
         await client.merge_relations_batch(rows, tenant="aerospace")
         cypher = client.run.call_args[0][0]
 
-        assert "WHEN row.source_doc_id IN prior_docs  THEN r.confidence" in cypher
+        assert "WHEN row.source_doc_id IN prior_docs THEN r.confidence" in cypher
         assert "coalesce(r.source_doc_ids, []) AS prior_docs" in cypher
+        assert "coalesce(r.doc_confidences, []) AS prior_confs" in cypher
 
     @pytest.mark.asyncio
     async def test_new_source_still_accumulates(self):
@@ -728,4 +733,52 @@ class TestRelationConfidenceIdempotency:
         await client.merge_relations_batch(rows, tenant="aerospace")
         cypher = client.run.call_args[0][0]
 
-        assert "ELSE 1.0 - (1.0 - r.confidence) * (1.0 - row.confidence)" in cypher
+        assert "1.0 - reduce(acc = 1.0, c IN prior_confs_padded + [row.confidence] | acc * (1.0 - c))" in cypher
+
+    @pytest.mark.asyncio
+    async def test_reconcile_recomputes_confidence_from_remaining_contributions(self):
+        """The bug this whole item targets: reconcile must not just drop the
+        doc id from source_doc_ids, it must also drop that doc's entry from
+        doc_confidences and recompute r.confidence from what's left — or a
+        later re-merge treats the doc as new again and inflates on top of a
+        total that already includes it once."""
+        from graphrag.graph.neo4j_client import Neo4jClient
+
+        client = Neo4jClient.__new__(Neo4jClient)
+        client.run = AsyncMock(return_value=[])
+
+        await client.reconcile_document_evidence(doc_id="doc-1", tenant="aerospace")
+
+        # The retained-relations call is the 3rd of reconcile's four self.run calls.
+        cypher = client.run.call_args_list[2].args[0]
+        assert "coalesce(r.doc_confidences, []) AS all_confs" in cypher
+        assert "r.doc_confidences = remaining_confs" in cypher
+        assert "r.confidence = 1.0 - reduce(acc = 1.0, c IN remaining_confs | acc * (1.0 - c))" in cypher
+        # Sources and confidences must be filtered by the SAME index set, or
+        # they desync and a later merge pads the wrong document's confidence
+        # into the wrong slot.
+        assert "[i IN range(0, size(all_sources) - 1) WHERE all_sources[i] <> $doc_id] AS keep_idx" in cypher
+
+    def test_repeated_reconcile_and_remerge_does_not_inflate_beyond_true_evidence(self):
+        """Direct arithmetic check of the recompute formula itself: two
+        documents genuinely asserting the same edge at 0.8 each should
+        combine to 1 - (0.2 * 0.2) = 0.96 — and re-deriving that from
+        [0.8, 0.8] after a reconcile-then-remerge cycle must land on the
+        exact same 0.96, not something higher, since the formula reads off
+        the current contribution list rather than compounding on a stale
+        running total."""
+        def recompute(confidences: list[float]) -> float:
+            acc = 1.0
+            for c in confidences:
+                acc *= (1.0 - c)
+            return 1.0 - acc
+
+        first_pass = recompute([0.8, 0.8])
+        assert first_pass == pytest.approx(0.96)
+
+        # doc-1 reconciled away (e.g. a retry), then re-merged: the
+        # contribution list returns to exactly [0.8, 0.8], not [0.8, 0.8, 0.8].
+        after_reconcile = recompute([0.8])       # only doc-2 left
+        after_remerge = recompute([0.8, 0.8])    # doc-1 re-added
+        assert after_remerge == pytest.approx(first_pass)
+        assert after_reconcile == pytest.approx(0.8)

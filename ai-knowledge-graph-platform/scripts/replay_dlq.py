@@ -2,12 +2,18 @@
 """Replay messages sitting in a RabbitMQ dead-letter queue back onto their
 original work queue.
 
-Requires the DLQ envelope to carry ``original_body_b64`` (added when the
-consumer sends a message to its DLQ after exhausting retries --
-graphrag/messaging/rabbitmq_client.py's ``consume()``). Older DLQ messages
-written before that field existed only have a truncated ``payload_summary``
-and cannot be replayed -- this script reports and skips those rather than
-guessing at a reconstructed body.
+Replays two kinds of dead-lettered message:
+
+1. Our own consumer's DLQ envelope, carrying ``original_body_b64`` (added
+   when the consumer sends a message to its DLQ after exhausting retries --
+   graphrag/messaging/rabbitmq_client.py's ``consume()``).
+2. A message RabbitMQ itself dead-lettered (e.g. TTL expiry) before it ever
+   reached that consumer path -- the broker attaches an ``x-death`` header
+   and leaves the body untouched, so that body is replayed as-is.
+
+A message with neither an envelope nor an ``x-death`` header cannot be
+replayed -- this script reports and skips those rather than guessing at a
+reconstructed body.
 
 Usage
 -----
@@ -86,35 +92,56 @@ async def replay(queue_name: str, dry_run: bool, limit: int | None) -> int:
 
             try:
                 envelope = json.loads(message.body)
-            except Exception as exc:  # noqa: BLE001
-                print(f"  ERROR  unparseable DLQ envelope (message_id={message.message_id}): {exc}")
-                errors += 1
-                seen_requeued_bodies.add(message.body)
-                await message.nack(requeue=True)  # leave it in the DLQ, don't lose it
-                continue
+                if not isinstance(envelope, dict):
+                    envelope = None
+            except Exception:  # noqa: BLE001
+                envelope = None
 
-            original_b64 = envelope.get("original_body_b64")
-            msg_id = envelope.get("message_id", "?")
-            if not original_b64:
-                print(f"  SKIP   message_id={msg_id}: no original_body_b64 "
-                      f"(written before replay support existed) -- payload_summary={envelope.get('payload_summary')}")
+            original_b64 = envelope.get("original_body_b64") if envelope else None
+            x_death = (message.headers or {}).get("x-death")
+
+            if original_b64:
+                # Our own consumer's DLQ envelope (graphrag/messaging/rabbitmq_client.py
+                # after retries are exhausted).
+                msg_id = envelope.get("message_id", "?")
+                try:
+                    original_body = base64.b64decode(original_b64)
+                except Exception as exc:  # noqa: BLE001
+                    print(f"  ERROR  message_id={msg_id}: base64 decode failed: {exc}")
+                    errors += 1
+                    seen_requeued_bodies.add(message.body)
+                    await message.nack(requeue=True)
+                    continue
+                reason = envelope.get("error", "")[:80]
+                reason_label = f"original_reason={envelope.get('exception_type')}: {reason}"
+                headers = dict(envelope.get("original_headers") or {})
+                priority = envelope.get("original_priority") or 0
+                correlation_id = envelope.get("original_correlation_id")
+            elif x_death:
+                # RabbitMQ itself dead-lettered this message (e.g. TTL expiry) --
+                # it never passed through our consumer's DLQ-envelope producer, so
+                # the body IS the original payload, untouched, with an x-death
+                # header recording why the broker moved it. Previously this whole
+                # class of message fell through to "no original_body_b64 (written
+                # before replay support existed)" and was skipped forever -- see
+                # docs/archive/audits/audit-2026-09-23.md, "Not fixed" #4.
+                msg_id = message.message_id or "?"
+                original_body = message.body
+                death = x_death[0] if isinstance(x_death, list) and x_death else {}
+                reason_label = f"broker_dead_letter reason={death.get('reason', '?')}"
+                headers = dict(message.headers or {})
+                headers.pop("x-death", None)
+                priority = message.priority or 0
+                correlation_id = message.correlation_id
+            else:
+                print(f"  SKIP   message_id={message.message_id or '?'}: no original_body_b64 "
+                      f"and no x-death header (unreplayable envelope)")
                 skipped += 1
                 seen_requeued_bodies.add(message.body)
                 await message.nack(requeue=True)  # leave it for manual triage
                 continue
 
-            try:
-                original_body = base64.b64decode(original_b64)
-            except Exception as exc:  # noqa: BLE001
-                print(f"  ERROR  message_id={msg_id}: base64 decode failed: {exc}")
-                errors += 1
-                seen_requeued_bodies.add(message.body)
-                await message.nack(requeue=True)
-                continue
-
-            reason = envelope.get("error", "")[:80]
-            print(f"  {'WOULD REPLAY' if dry_run else 'REPLAY'}  message_id={msg_id}  "
-                  f"original_reason={envelope.get('exception_type')}: {reason}")
+            print(f"  {'WOULD REPLAY' if dry_run else 'REPLAY'}  message_id={msg_id}  {reason_label}")
 
             if dry_run:
                 seen_requeued_bodies.add(message.body)
@@ -122,16 +149,15 @@ async def replay(queue_name: str, dry_run: bool, limit: int | None) -> int:
                 replayed += 1
                 continue
 
-            headers = dict(envelope.get("original_headers") or {})
             headers.pop("x-retry-count", None)  # give it a clean retry budget on replay
             headers.pop("x-last-error", None)
             headers.pop("x-exception-type", None)
             replay_msg = Message(
                 original_body,
                 delivery_mode=DeliveryMode.PERSISTENT,
-                priority=envelope.get("original_priority") or 0,
+                priority=priority,
                 headers=headers or None,
-                correlation_id=envelope.get("original_correlation_id"),
+                correlation_id=correlation_id,
             )
             await channel.default_exchange.publish(replay_msg, routing_key=queue_name)
             await message.ack()  # only remove from the DLQ once safely republished -- never

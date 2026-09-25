@@ -231,6 +231,9 @@ class GraphWriter:
         await self._neo4j.delete_stale_chunks(doc_id, keep_count=len(chunks), tenant=tenant)
         log.info("graph_writer.chunks_merged", count=len(chunks))
 
+    async def document_has_evidence(self, doc_id: str, tenant: str) -> bool:
+        return await self._neo4j.document_has_evidence(doc_id, tenant=tenant)
+
     async def reconcile_document_evidence(self, doc_id: str, tenant: str) -> dict:
         """Remove evidence supplied by a document before replacing its content."""
         return await self._neo4j.reconcile_document_evidence(doc_id, tenant=tenant)

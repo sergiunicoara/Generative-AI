@@ -104,15 +104,18 @@ class KPITracker:
             row = agg.one()
 
             # Real p50 / p95 — fetch latency values and compute in Python.
-            # SQLite has no PERCENTILE_CONT.  Capped at 10 000 rows (ordered
-            # by latency so the cap is stable for percentile computation) to
-            # bound memory use at high query volumes.  The recorded_at index
-            # ensures the WHERE filter doesn't require a full table scan.
+            # SQLite has no PERCENTILE_CONT. The recorded_at index ensures the
+            # WHERE filter doesn't require a full table scan. Deliberately NOT
+            # capped: `ORDER BY latency_ms LIMIT N` here previously kept only
+            # the N fastest rows once a tenant/window exceeded that count,
+            # silently biasing p50/p95 low over the truncated low-latency
+            # subset instead of the true distribution — see
+            # docs/archive/audits/audit-2026-09-23.md, "Not fixed" #10. This
+            # is a monitoring dashboard read once per page refresh; a row-count
+            # cap belongs on window_days, not on a silent latency-ordered slice.
             lat_result = await session.execute(
                 select(KPIEventRow.latency_ms)
                 .where(KPIEventRow.recorded_at >= since, KPIEventRow.tenant == tenant)
-                .order_by(KPIEventRow.latency_ms)
-                .limit(10_000)
             )
             latencies = [r[0] for r in lat_result.all() if r[0] is not None]
             p50 = _percentile(latencies, 0.50)

@@ -71,11 +71,36 @@ class QueryConsumer:
             msg = QueryMessage(**payload)
             from graphrag.observability.correlation import correlation_context
             from graphrag.observability.tracing import trace_span
-            with correlation_context(msg.correlation_id), trace_span(
-                "query.consume", query_id=msg.query_id, tenant=msg.tenant,
-                correlation_id=msg.correlation_id,
-            ):
-                result = await agent.run(msg)
+            from graphrag.retrieval.result_store import get_result_store
+            try:
+                with correlation_context(msg.correlation_id), trace_span(
+                    "query.consume", query_id=msg.query_id, tenant=msg.tenant,
+                    correlation_id=msg.correlation_id,
+                ):
+                    result = await agent.run(msg)
+            except Exception as exc:
+                # Without this, a failed query stays "queued" until the result
+                # store's TTL expires, then 404s with no error ever surfaced to
+                # the polling client — even after retries are exhausted and the
+                # message is DLQ'd for good. See
+                # docs/archive/audits/audit-2026-09-23.md, "Not fixed" #8. The
+                # RabbitMQ consume loop still owns retry/DLQ decisions, so this
+                # re-raises after recording state — a later successful retry
+                # overwrites this with "completed" as normal.
+                try:
+                    await _persist_final_result(get_result_store(), msg.query_id, {
+                        "status": "failed",
+                        "query_id": msg.query_id,
+                        "tenant": msg.tenant,
+                        "error": str(exc)[:500],
+                        "exception_type": type(exc).__name__,
+                    })
+                except Exception as store_exc:
+                    log.warning(
+                        "query_consumer.failed_status_persist_failed",
+                        error=str(store_exc)[:200],
+                    )
+                raise
 
             # Persist result via Redis-backed ResultStore so the API process
             # (a separate container) can read it. Preserve any progress steps
@@ -83,7 +108,6 @@ class QueryConsumer:
             # Retries transient failures (_persist_final_result); if Redis is
             # still down after that, this raises and the message is nacked
             # rather than acked as if the result had been delivered.
-            from graphrag.retrieval.result_store import get_result_store
             _store = get_result_store()
             await _persist_final_result(_store, msg.query_id, {
                 "status":     "completed",
@@ -111,15 +135,23 @@ class QueryConsumer:
                 "policy_reason_code": result.policy_reason_code,
             })
 
-            # Async RAGAS evaluation on sampled queries
+            # Async RAGAS evaluation on sampled queries. Best-effort: this
+            # query already completed and its result is already persisted
+            # above, so a failure here must not raise — an unhandled
+            # exception here would make the RabbitMQ consume loop treat this
+            # as a failed delivery and requeue the whole (already-paid-for)
+            # query pipeline. See audit-2026-09-23.md, "Not fixed" #7.
             if random.random() < eval_sample_rate:
-                eval_job = EvalJob(
-                    query_result=result,
-                    ground_truth=msg.ground_truth,
-                    tenant=msg.tenant,
-                    correlation_id=msg.correlation_id,
-                )
-                await publish_eval_job(eval_job)
+                try:
+                    eval_job = EvalJob(
+                        query_result=result,
+                        ground_truth=msg.ground_truth,
+                        tenant=msg.tenant,
+                        correlation_id=msg.correlation_id,
+                    )
+                    await publish_eval_job(eval_job)
+                except Exception as exc:
+                    log.warning("query_consumer.eval_job_publish_failed", error=str(exc)[:200])
 
         await mq.consume(QUERY_EXCHANGE, QUERY_QUEUE, QUERY_ROUTING_KEY, handle)
 

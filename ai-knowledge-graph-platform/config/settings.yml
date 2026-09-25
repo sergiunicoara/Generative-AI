@@ -219,6 +219,19 @@ retrieval:
                                       # open, unresolved Conflict node (see
                                       # ContradictionDetector) instead of letting it
                                       # silently state a disputed fact as settled
+  conflict_relevance_filter_enabled: true  # scope conflict lookups to entities in
+                                      # the chunks actually ranked into context,
+                                      # not every entity reachable in the broader
+                                      # pre-rerank retrieval pool (see
+                                      # HybridRetriever._filter_question_relevant_conflicts
+                                      # and docs/REMAINING_AUDIT_BACKLOG.md item #2).
+                                      # This is the fix for the exact miscalibration
+                                      # that made retrieval_sufficiency_abstain_enabled
+                                      # unsafe (7/10 -> 2/10 on automotive, see
+                                      # comment below on that flag) — abstention
+                                      # itself stays off pending a full golden-eval
+                                      # re-validation pass this flag alone cannot
+                                      # substitute for.
   feedback_ranking_enabled: true     # blend tenant-scoped citation feedback into final ranking
   feedback_ranking_weight: 0.10      # conservative signal; retrieval evidence remains dominant
   # Explicit HTML/SharePoint/Markdown document topology. Only source-observed

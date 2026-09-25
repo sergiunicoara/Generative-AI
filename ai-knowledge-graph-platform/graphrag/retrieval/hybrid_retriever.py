@@ -170,6 +170,61 @@ class HybridRetriever:
         except Exception as exc:
             log.warning("hybrid_retriever.feedback_ranking_failed", error=str(exc)[:200])
 
+    async def _filter_question_relevant_conflicts(
+        self, conflicts: list[dict], local_results: dict, cfg: dict, *,
+        tenant: str, valid_at: str | None, transaction_at: str | None,
+    ) -> list[dict]:
+        """Narrow open conflicts to ones touching the evidence actually used.
+
+        `get_open_conflicts_for_entities` is queried against
+        `local_results["referenced_entities"]` — every entity neighboring
+        *any* retrieved chunk, before top-k/rerank narrows that pool down to
+        what actually reaches the synthesis context. Left unfiltered, a
+        conflict about an entity that never survives into the answer's
+        context still unconditionally flags `unresolved_conflict` — this is
+        the exact miscalibration documented in
+        docs/REMAINING_AUDIT_BACKLOG.md ("Question-relevant conflict
+        calibration"): enabling `retrieval_sufficiency_abstain_enabled` on
+        top of this unfiltered signal collapsed the automotive golden set
+        7/10 -> 2/10, because that corpus is deliberately seeded with
+        ground-truth contradictions unrelated to most questions asked of it.
+
+        Re-scopes the entity lookup to the chunks that will actually be
+        ranked into context (the same `final_score` ordering ContextBuilder
+        itself sorts by, taken generously wide to also cover its additive
+        hop/link slots) rather than the full pre-rerank retrieval pool.
+        Additive and disableable (`conflict_relevance_filter_enabled`): if it
+        ever needs to be pulled, the prior unfiltered behavior is one config
+        flag away.
+        """
+        if not cfg.get("conflict_relevance_filter_enabled", True):
+            return conflicts
+        budget = (
+            int(cfg.get("rerank_top_k", 5))
+            + int(cfg.get("context_hop_reserved_slots", 0))
+            + int(local_results.get("document_link_context_slots", 1))
+        )
+        ranked_chunks = sorted(
+            local_results.get("chunks", []),
+            key=lambda c: c.get("final_score", c.get("rerank_score", c.get("score", 0))),
+            reverse=True,
+        )
+        top_chunk_ids = [
+            c["chunk_id"] for c in ranked_chunks[:max(budget, 1)] if c.get("chunk_id")
+        ]
+        if not top_chunk_ids:
+            return []
+        relevant_rows = await get_neo4j().get_entity_neighbors(
+            top_chunk_ids, tenant=tenant, as_of=valid_at, transaction_at=transaction_at,
+        )
+        relevant_entities = {row.get("entity") for row in relevant_rows if row.get("entity")}
+        if not relevant_entities:
+            return []
+        return [
+            c for c in conflicts
+            if c.get("src") in relevant_entities or c.get("tgt") in relevant_entities
+        ]
+
     async def _record_context_trace(
         self, *, question: str, answer: str, tenant: str, query_id: str,
         mode: str, model_version: str, local_results: dict,
@@ -669,9 +724,14 @@ class HybridRetriever:
             if cfg.get("conflict_annotation_enabled", True):
                 referenced_entities = local_results.get("referenced_entities", [])
                 if referenced_entities:
-                    conflicts = await self._contradiction.get_open_conflicts_for_entities(
+                    candidate_conflicts = await self._contradiction.get_open_conflicts_for_entities(
                         referenced_entities, tenant=tenant
                     )
+                    if candidate_conflicts:
+                        conflicts = await self._filter_question_relevant_conflicts(
+                            candidate_conflicts, local_results, cfg,
+                            tenant=tenant, valid_at=valid_at, transaction_at=transaction_at,
+                        )
                     if conflicts:
                         await _step(f"⚠️ {len(conflicts)} unresolved conflict(s) flagged")
 

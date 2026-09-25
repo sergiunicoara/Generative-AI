@@ -81,6 +81,7 @@ def _make_local_search(cfg_overrides: dict | None = None) -> LocalSearch:
         ls._cfg = base_cfg
         ls._neo4j = AsyncMock()
         ls._neo4j.get_chunk_filenames = AsyncMock(return_value={})
+        ls._neo4j.get_chunk_valid_from = AsyncMock(return_value={})
         ls._neo4j.get_pagerank_by_entity_names = AsyncMock(return_value={})
         ls._embedder = AsyncMock()
         ls._bm25 = AsyncMock()
@@ -347,3 +348,43 @@ class TestLocalSearchPipelineFlags:
         result = await ls.search("test")
 
         assert [c["chunk_id"] for c in result["chunks"]] == ["c1", "c3", "c4"]
+
+
+class TestChunkValidFromWiring:
+    """CitationEvidence.valid_from needs a real per-chunk timestamp source
+    (docs/REMAINING_AUDIT_BACKLOG.md, "Defensible evidence and provenance").
+    LocalSearch attaches it as `_valid_from` for ContextBuilder to read.
+    """
+
+    async def test_valid_from_attached_when_neo4j_has_it(self):
+        ls = _make_local_search({"gnn_enabled": False})
+        c1 = _chunk("c1")
+        ls._embedder.embed_text = AsyncMock(return_value=[0.1] * 768)
+        ls._neo4j.vector_search_chunks = AsyncMock(return_value=[c1])
+        ls._bm25.search = AsyncMock(return_value=[c1])
+        ls._reranker.rerank = AsyncMock(return_value=[c1])
+        ls._neo4j.get_multihop_chunks = AsyncMock(return_value=[])
+        ls._neo4j.get_entity_neighbors = AsyncMock(return_value=[])
+        ls._neo4j.get_chunk_valid_from = AsyncMock(return_value={"c1": "2024-01-02T00:00:00Z"})
+
+        result = await ls.search("test")
+
+        assert result["chunks"][0]["_valid_from"] == "2024-01-02T00:00:00Z"
+
+    async def test_valid_from_lookup_failure_does_not_break_search(self):
+        """Fails open like the document-names lookup it sits beside — a
+        timestamp enrichment error must never take down a query."""
+        ls = _make_local_search({"gnn_enabled": False})
+        c1 = _chunk("c1")
+        ls._embedder.embed_text = AsyncMock(return_value=[0.1] * 768)
+        ls._neo4j.vector_search_chunks = AsyncMock(return_value=[c1])
+        ls._bm25.search = AsyncMock(return_value=[c1])
+        ls._reranker.rerank = AsyncMock(return_value=[c1])
+        ls._neo4j.get_multihop_chunks = AsyncMock(return_value=[])
+        ls._neo4j.get_entity_neighbors = AsyncMock(return_value=[])
+        ls._neo4j.get_chunk_valid_from = AsyncMock(side_effect=RuntimeError("boom"))
+
+        result = await ls.search("test")
+
+        assert result["chunks"][0]["chunk_id"] == "c1"
+        assert "_valid_from" not in result["chunks"][0]

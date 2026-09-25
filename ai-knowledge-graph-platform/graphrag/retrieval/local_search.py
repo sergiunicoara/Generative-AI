@@ -644,6 +644,18 @@ class LocalSearch:
         chunk_filenames = await self._neo4j.get_chunk_filenames(
             all_ids, tenant=tenant, access_context=access_context,
         )
+        # Source document's bitemporal valid_from, so ContextBuilder can
+        # populate CitationEvidence.valid_from — see get_chunk_valid_from's
+        # docstring. Fails open like the document-names lookup above: a
+        # missing timestamp just leaves the evidence entry's valid_from unset,
+        # never blocks the query.
+        try:
+            chunk_valid_from = await self._neo4j.get_chunk_valid_from(
+                all_ids, tenant=tenant, access_context=access_context,
+            )
+        except Exception as exc:  # noqa: BLE001 — cosmetic enrichment, never fatal
+            log.warning("local_search.chunk_valid_from_failed", error=str(exc)[:160])
+            chunk_valid_from = {}
         needs_source_labels = _needs_source_labels(enriched_question)
         for chunk in all_chunks:
             filename = chunk_filenames.get(chunk["chunk_id"])
@@ -651,6 +663,9 @@ class LocalSearch:
                 chunk["_doc_name"] = filename.replace(".txt", "")
                 if needs_source_labels:
                     chunk["source"] = filename
+            valid_from = chunk_valid_from.get(chunk["chunk_id"])
+            if valid_from:
+                chunk["_valid_from"] = valid_from
 
         # Step 6 — entity context
         entities = await self._neo4j.get_entity_neighbors(

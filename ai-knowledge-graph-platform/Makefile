@@ -73,7 +73,10 @@ test-fuzz:     ## Run property/fuzz invariants for protocol, mapping, and tenant
 	$(PYTEST) tests/unit/test_property_invariants.py tests/unit/test_new_surface_invariants.py -q
 
 mutation:      ## Mutate high-risk new adapters; inspect surviving mutants before merge
-	$(PYTHON) -m mutmut run --paths-to-mutate graphrag/retrieval/answer_policy.py,mcp_server/transport_20260728.py,graphrag/ingestion/r2rml.py
+	# mutmut>=3 reads which files to mutate from [tool.mutmut] in pyproject.toml
+	# (the --paths-to-mutate CLI flag this used to pass was removed upstream).
+	$(PYTHON) -m mutmut run
+	$(PYTHON) -m mutmut results
 
 # ── Lint ───────────────────────────────────────────────────────────────────────
 

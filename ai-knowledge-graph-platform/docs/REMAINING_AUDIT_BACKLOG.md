@@ -1,5 +1,12 @@
 # Remaining Audit Backlog
 
+**Updated 2026-09-25** — see the dated addendum at the end of this file for
+what changed in this session and what remains genuinely blocked in a
+coding-only environment with no Docker daemon (this session verified that
+directly: `dockerd`/`service docker start` both fail here, so the full dev
+stack — Neo4j/Redis/RabbitMQ — and any testcontainers-backed e2e test cannot
+run).
+
 **As of:** 2026-09-22. Consolidates every still-open, worth-implementing item
 from the two live audit trails in this repo:
 [docs/IMPLEMENTATION_AUDIT.md](IMPLEMENTATION_AUDIT.md) (code-level, 2026-09-21/22)
@@ -26,23 +33,67 @@ wasn't up in the session that built it.
 **To close:** bring up the full dev stack, run the aerospace golden eval
 with `include_superseded=False` forced, confirm no regression against the
 A128 baseline (esp. AUT-03), then flip the default.
+**Still blocked as of 2026-09-25:** confirmed directly this session — this
+environment has no Docker daemon (`dockerd`/`service docker start` both
+fail: "Operation not permitted" / no socket), so the dev stack cannot be
+brought up here. Left untouched rather than flipping the default blind.
 
-### 2. Question-relevant conflict calibration
+### 2. Question-relevant conflict calibration — mechanism closed 2026-09-25, re-validation still pending
 `sufficiency.py`'s abstention gate is a binary global disqualifier — any
 open `Conflict` node reachable in retrieved context blocks the answer, even
 when unrelated to the question. Enabling it as-is previously collapsed the
 automotive golden set 7/10 → 2/10. Currently disabled by default, correctly.
-**To close:** make the conflict signal question-relevant (does a
-conflicting claim appear in the ranked evidence actually used?) and/or a
-graded penalty instead of a binary gate, then re-validate against the
-golden set before enabling.
+**Closed this session:** the root cause was that `HybridRetriever` fetched
+conflicts against `local_results["referenced_entities"]` — the entity
+neighborhood of *every* retrieved chunk, before top-k/rerank narrows that
+pool down to what the LLM actually sees — so a conflict about an entity that
+never survives into the answer's context still unconditionally set
+`reason_code="unresolved_conflict"`. Added
+`HybridRetriever._filter_question_relevant_conflicts()`
+(`graphrag/retrieval/hybrid_retriever.py`): re-scopes the entity lookup to
+the chunks that will actually be ranked into context (the same `final_score`
+ordering `ContextBuilder` sorts by, generously widened to also cover its
+additive hop/link slots), and drops any conflict whose `src`/`tgt` isn't
+among them. Gated by `conflict_relevance_filter_enabled` (default `true`,
+config/settings.yml) so the prior unfiltered behavior is one flag away.
+Unit-tested in `tests/unit/test_hybrid_retriever.py::TestQuestionRelevantConflictFiltering`
+against the exact NEG-01/NEG-02-shaped scenario (a conflict entity outside
+vs. inside the top-k context).
+**Still open:** this was built and unit-tested with mocks, not re-validated
+against the aerospace/automotive golden evals — this session's environment
+has no Docker daemon, so the dev stack (Neo4j/Redis/RabbitMQ) required by
+`scripts/run_golden_eval.py`/`run_automotive_eval.py` could not be brought
+up. `retrieval_sufficiency_abstain_enabled` therefore correctly stays
+disabled by default until someone with a working dev stack re-runs both
+golden sets and confirms this filter actually fixes the automotive
+collapse without regressing aerospace, then flips it on.
 
-### 3. Defensible evidence and provenance
+### 3. Defensible evidence and provenance — closed 2026-09-25
 `QueryResult.citations` is a flat `list[str]` — no graph path, per-citation
 confidence, or timestamp. Answers can't surface "claim + source + timestamp
 + path + confidence."
-**To close:** needs its own migration plan — this is a public API change
-that breaks every eval script's citation-recall scoring, not a quick patch.
+**Prior state (as of 2026-09-22):** `QueryResult.evidence: list[CitationEvidence]`
+already existed as an additive sibling to `citations` (source_id, source_label,
+path, confidence) — but `valid_from` was defined on the model and never once
+set anywhere it was constructed (`context_builder.py`, `agentic_retriever.py`),
+so every evidence entry's timestamp was silently always `None`. That was the
+one genuinely still-open piece of "claim + source + timestamp + path +
+confidence" — `path`/`confidence` were already real.
+**Closed this session:** added `Neo4jClient.get_chunk_valid_from()`
+(`graphrag/graph/neo4j_client.py`) — a per-chunk lookup of the source
+document's bitemporal `valid_from`, mirroring the existing
+`get_chunk_filenames()` pattern (same access-predicate interpolation, same
+fails-open-on-error behavior). Wired into `LocalSearch.search()`
+(`graphrag/retrieval/local_search.py`) as `chunk["_valid_from"]`, and
+`ContextBuilder.build()` (`graphrag/retrieval/context_builder.py`) now reads
+it into `CitationEvidence.valid_from` for both the primary and
+hop-reserved/link-slot chunk evidence paths. No API shape change — `citations`
+is untouched, `evidence` gains real data in a field it already had. Unit
+tests: `tests/unit/test_context_builder.py` (valid_from present/absent),
+`tests/unit/test_local_search.py::TestChunkValidFromWiring` (wiring +
+fails-open on lookup failure), `tests/unit/test_document_link_topology.py`
+(regression guard for the same "missing `f`-string prefix" Cypher-interpolation
+bug class this codebase has hit before on sibling queries).
 
 ---
 
@@ -78,13 +129,56 @@ CI (`.github/workflows/ci.yml`) runs on push/PR to `main`, but whether
 GitHub's branch-protection rule actually *requires* it to pass before merge
 is unverified — this is a GitHub repo-settings toggle, not a file in the
 repo.
-**Needs:** authenticated `gh`/GitHub API access (`gh auth login` or the
-GitHub MCP connector).
+**Checked 2026-09-25, still blocked:** this session had the GitHub MCP
+connector attached to this repo, but its tool surface (list/get PRs, issues,
+commits, branches, files, reviews) has no branch-protection read/write
+endpoint — checking or setting this needs either `gh api
+repos/:owner/:repo/branches/main/protection` with a token that has repo
+admin scope, or the GitHub web UI (Settings → Branches), neither of which
+this session had.
+**Needs:** repo-admin-scoped `gh`/GitHub REST API access specifically for
+the branch-protection endpoint (not just the GitHub MCP connector's current
+tool set), or a human doing it in Settings → Branches.
 
-### 8. Complete mutation score
+### 8. Complete mutation score — real bug found and fixed 2026-09-25; first score recorded, not yet CI-gated
 `make mutation` (opt-in Mutmut campaign) exists, but no measured score or
 CI-run report exists anywhere in the repo.
-**Needs:** a CI run of the mutation campaign and a recorded score.
+**Found this session:** `make mutation` was not merely "never run" — it was
+broken. It called `mutmut run --paths-to-mutate <3 files>`, but
+`requirements-dev.txt` pins `mutmut>=3.2.0`, and mutmut 3.x removed the
+`--paths-to-mutate` CLI flag entirely (config-file only now, `source_paths`
+in `[tool.mutmut]`). The command crashed with `FileNotFoundError` before
+mutating a single line, for anyone who ran it since that pin landed. A
+first, naive fix (`source_paths` = the 3 files directly) crashed differently
+(`ModuleNotFoundError: No module named 'graphrag.core'`): mutmut 3.x's
+`setup_source_paths()` strips the real source tree from `sys.path` and only
+re-adds it under `mutants/` for the conventional root names `.`/`src`/`source`
+— pointing `source_paths` at individual files leaves everything *outside*
+those files unimportable once the real tree is stripped.
+**Fixed:** `pyproject.toml`'s new `[tool.mutmut]` uses `source_paths = ["."]`
+(so the whole repo mirrors correctly into `mutants/` and imports resolve)
+with `only_mutate` restricting actual mutation to the same 3 adapters the
+Makefile always targeted, plus `pytest_add_cli_args_test_selection` scoping
+the test run to those adapters' own mocked unit tests (no live infra needed
+— this also works in this session's no-Docker environment). `make mutation`
+now runs `mutmut run` (config-driven) followed by `mutmut results`.
+**First recorded score (this session, local run, not CI):** 430 mutants
+generated across the 3 files — **0 killed, 400 survived, 25 no-tests, 5
+timeout**. Manually spot-checked several survivors (`mutmut show
+<mutant>`): the tool and its test-to-mutant attribution are working
+correctly (`mutmut tests-for-mutant` correctly names the exact test that
+exercises each mutated function); the 0% kill rate reflects a mix of
+genuinely equivalent mutants for this code (e.g. `rsplit(x, 1)[-1]` vs.
+`rsplit(x)[-1]` — identical result when only the last segment is read) and
+real, narrow gaps in these adapters' direct unit tests — consistent with the
+Makefile's own framing of them as "high-risk new adapters" worth mutating
+before merge. Full breakdown and example diffs:
+`artifacts/mutation-campaign-2026-09-25.json`.
+**Still open:** this is a first baseline, not a CI-gated campaign, and the
+400 survivors haven't been triaged into "accept as equivalent" vs. "write a
+test that kills this" — `mcp_server/transport_20260728.py` alone has 259
+survivors against only 3 existing tests and is the highest-value place to
+look next.
 
 ---
 
@@ -99,3 +193,34 @@ CI-run report exists anywhere in the repo.
   isn't used in production.
 - Runner-up entity-resolution candidate ranking at query time (persistence
   is already done, just not surfaced live) — no current consumer.
+
+---
+
+## 2026-09-25 session addendum
+
+This session's environment has no Docker daemon and no repo-admin-scoped
+GitHub API access — both verified directly (see items #1, #2, #7 above), not
+assumed from the original doc's framing. Work was scoped to what a
+coding-only session can actually close or meaningfully advance:
+
+- **Closed:** item #3 (defensible evidence and provenance) — the
+  `CitationEvidence.valid_from` timestamp, the one field of the "claim +
+  source + timestamp + path + confidence" shape that had no data source
+  until now.
+- **Mechanism closed, re-validation still pending:** item #2
+  (question-relevant conflict calibration) — the exact miscalibration
+  described in this doc (conflicts scoped to the full pre-rerank retrieval
+  pool instead of the evidence actually used) is fixed and unit-tested, but
+  not re-run against the golden evals (no Docker here). Abstention stays
+  disabled by default until that validation happens.
+- **Real bug found and fixed, first score recorded:** item #8's `make
+  mutation` was silently broken (not just "never run") since the
+  `mutmut>=3.2.0` pin — fixed, and a first baseline mutation score is now
+  recorded in `artifacts/mutation-campaign-2026-09-25.json`.
+- **Confirmed still blocked, more precisely than before:** item #1 (no
+  Docker to run the golden eval), item #7 (the GitHub MCP connector's tool
+  set has no branch-protection endpoint, distinct from "no `gh` at all").
+- **Not attempted:** items #4, #5, #6 — unchanged from the prior write-up;
+  genuinely need real load infrastructure, a billed full golden-set run, and
+  an external IdP / DR drill respectively, none of which a coding session
+  can manufacture.

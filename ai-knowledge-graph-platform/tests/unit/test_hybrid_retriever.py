@@ -341,3 +341,76 @@ class TestStructuredEvidence:
 
         assert result.citations == []
         assert result.evidence == []
+
+
+class TestQuestionRelevantConflictFiltering:
+    """docs/REMAINING_AUDIT_BACKLOG.md item #2 ("Question-relevant conflict
+    calibration"): a conflict about an entity that never reaches the
+    top-ranked answer context must not disqualify an otherwise unrelated
+    answer — the exact miscalibration that collapsed the automotive golden
+    set 7/10 -> 2/10 the one time abstention was enabled on top of it.
+    """
+
+    async def test_conflict_on_an_entity_outside_top_k_context_is_dropped(self) -> None:
+        # budget = rerank_top_k(1) + context_hop_reserved_slots(0, unset) +
+        # document_link_context_slots(1, unset) = 2 ranked chunks considered —
+        # c3 is deliberately ranked below that cutoff.
+        hr = _make_hybrid_retriever({"rerank_top_k": 1})
+        local_results = {
+            "chunks": [
+                {"chunk_id": "c1", "final_score": 0.9},
+                {"chunk_id": "c2", "final_score": 0.5},
+                {"chunk_id": "c3", "final_score": 0.1},
+            ],
+        }
+        conflicts = [{"src": "Acme Corp", "tgt": "Acme Inc", "relation": "employs", "conflict_type": "headcount"}]
+        neo4j = MagicMock()
+        neo4j.get_entity_neighbors = AsyncMock(return_value=[{"entity": "Widget A"}])
+
+        with patch("graphrag.retrieval.hybrid_retriever.get_neo4j", return_value=neo4j):
+            filtered = await hr._filter_question_relevant_conflicts(
+                conflicts, local_results, hr._cfg,
+                tenant="t1", valid_at=None, transaction_at=None,
+            )
+
+        assert filtered == []
+        awaited_chunk_ids = neo4j.get_entity_neighbors.call_args.args[0]
+        assert awaited_chunk_ids == ["c1", "c2"]  # not c3, the lowest-ranked chunk
+
+    async def test_conflict_on_an_entity_inside_top_k_context_is_kept(self) -> None:
+        hr = _make_hybrid_retriever({"rerank_top_k": 1})
+        local_results = {"chunks": [{"chunk_id": "c1", "final_score": 0.9}]}
+        conflicts = [{"src": "Acme Corp", "tgt": "Acme Inc", "relation": "employs", "conflict_type": "headcount"}]
+        neo4j = MagicMock()
+        neo4j.get_entity_neighbors = AsyncMock(return_value=[{"entity": "Acme Corp"}])
+
+        with patch("graphrag.retrieval.hybrid_retriever.get_neo4j", return_value=neo4j):
+            filtered = await hr._filter_question_relevant_conflicts(
+                conflicts, local_results, hr._cfg,
+                tenant="t1", valid_at=None, transaction_at=None,
+            )
+
+        assert filtered == conflicts
+
+    async def test_disabled_flag_returns_conflicts_unfiltered(self) -> None:
+        """The pre-existing unfiltered behavior stays one config flag away."""
+        hr = _make_hybrid_retriever({"conflict_relevance_filter_enabled": False})
+        conflicts = [{"src": "Acme Corp", "tgt": "Acme Inc"}]
+
+        filtered = await hr._filter_question_relevant_conflicts(
+            conflicts, {"chunks": []}, hr._cfg,
+            tenant="t1", valid_at=None, transaction_at=None,
+        )
+
+        assert filtered == conflicts
+
+    async def test_no_ranked_chunks_means_no_conflicts_survive(self) -> None:
+        hr = _make_hybrid_retriever()
+        conflicts = [{"src": "Acme Corp", "tgt": "Acme Inc"}]
+
+        filtered = await hr._filter_question_relevant_conflicts(
+            conflicts, {"chunks": []}, hr._cfg,
+            tenant="t1", valid_at=None, transaction_at=None,
+        )
+
+        assert filtered == []

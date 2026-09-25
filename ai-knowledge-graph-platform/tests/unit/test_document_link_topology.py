@@ -146,6 +146,34 @@ async def test_get_chunk_filenames_interpolates_the_access_predicate() -> None:
 
 
 @pytest.mark.asyncio
+async def test_get_chunk_valid_from_interpolates_the_access_predicate_and_filters_null() -> None:
+    """Same regression class as test_get_chunk_filenames_... (the missing-`f`
+    bug), guarded up front for this newer sibling query (added for
+    docs/REMAINING_AUDIT_BACKLOG.md's "Defensible evidence and provenance"
+    item) rather than only after a live run finds it."""
+    client = _client([])
+
+    await client.get_chunk_valid_from(["chunk-1"], tenant="legal")
+
+    cypher = client.run.await_args.args[0]
+    assert "{document_access_predicate" not in cypher
+    assert "d.valid_from IS NOT NULL" in cypher
+    assert "toString(d.valid_from)" in cypher
+
+
+@pytest.mark.asyncio
+async def test_get_chunk_valid_from_omits_chunks_without_a_timestamp() -> None:
+    client = _client([
+        {"chunk_id": "chunk-1", "valid_from": "2024-01-02T00:00:00Z"},
+        {"chunk_id": "chunk-2", "valid_from": None},
+    ])
+
+    result = await client.get_chunk_valid_from(["chunk-1", "chunk-2"], tenant="legal")
+
+    assert result == {"chunk-1": "2024-01-02T00:00:00Z"}
+
+
+@pytest.mark.asyncio
 async def test_get_best_chunk_for_document_interpolates_the_access_predicate() -> None:
     """Same regression class as test_get_chunk_filenames_...: this query also
     had an un-prefixed triple-quoted string, so both `{document_access_predicate('d')}`

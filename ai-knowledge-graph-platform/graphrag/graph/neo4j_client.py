@@ -1745,6 +1745,38 @@ class Neo4jClient:
         )
         return {r["chunk_id"]: r["filename"] for r in rows if r.get("filename")}
 
+    async def get_chunk_valid_from(
+        self, chunk_ids: list[str], tenant: str = "default", access_context: AccessContext | None = None,
+    ) -> dict[str, str]:
+        """Map chunk_id -> source document's bitemporal `valid_from`, if set.
+
+        Populates `CitationEvidence.valid_from` (see context_builder.py) —
+        the one field of the "claim + source + timestamp + path + confidence"
+        evidence shape that had no data source until this method existed
+        (docs/REMAINING_AUDIT_BACKLOG.md, "Defensible evidence and
+        provenance"). `toString()` handles both a real Cypher `datetime`
+        (documents written after the A177 write-side fix) and a legacy plain
+        string (documents written before it) uniformly; returns nothing for a
+        chunk whose document has no `valid_from` set at all, rather than
+        fabricating one.
+        """
+        if not chunk_ids:
+            return {}
+        rows = await self.run(
+            f"""
+            MATCH (c:Chunk)-[:PART_OF]->(d:Document)
+            WHERE c.id IN $chunk_ids
+              AND (c.tenant = $tenant)
+              AND d.valid_from IS NOT NULL
+              {document_access_predicate('d')}
+            RETURN c.id AS chunk_id, toString(d.valid_from) AS valid_from
+            """,
+            chunk_ids=chunk_ids,
+            tenant=tenant,
+            **self._content_access_params(access_context),
+        )
+        return {r["chunk_id"]: r["valid_from"] for r in rows if r.get("valid_from")}
+
     async def get_linked_document_chunks(
         self,
         seed_chunk_ids: list[str],

@@ -526,6 +526,23 @@ class TestContextBuilderEvidence:
         )
         assert evidence[0].confidence is None
 
+    def test_chunk_evidence_carries_valid_from_when_neo4j_has_it(self):
+        chunks = [{
+            "chunk_id": "c1", "text": "text", "final_score": 0.87,
+            "_doc_name": "DocA", "_valid_from": "2024-01-02T00:00:00Z",
+        }]
+        _, _, evidence = ContextBuilder().build(
+            _local(chunks), {}, top_k=1, return_evidence=True,
+        )
+        assert evidence[0].valid_from == "2024-01-02T00:00:00Z"
+
+    def test_chunk_evidence_has_no_valid_from_when_neo4j_lacks_it(self):
+        chunks = [{"chunk_id": "c1", "text": "text", "final_score": 0.87, "_doc_name": "DocA"}]
+        _, _, evidence = ContextBuilder().build(
+            _local(chunks), {}, top_k=1, return_evidence=True,
+        )
+        assert evidence[0].valid_from is None
+
     def test_document_link_edge_evidence_has_traversal_path_no_confidence(self):
         local = _local([])
         local["document_link_edges"] = [{"src": "DocA", "tgt": "DocB"}]

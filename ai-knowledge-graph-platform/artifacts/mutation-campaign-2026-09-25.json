@@ -1,0 +1,48 @@
+{
+  "report_schema_version": "mutation-campaign/v1",
+  "date": "2026-09-25",
+  "tool": "mutmut 3.8.0",
+  "scope": "docs/REMAINING_AUDIT_BACKLOG.md item #8 (Complete mutation score) \u2014 the three adapters make mutation already targeted",
+  "run_mode": "local (no Docker/CI in this session); test selection restricted to these adapters' own mocked unit tests \u2014 no live infra required",
+  "totals": {
+    "survived": 400,
+    "timeout": 5,
+    "no tests": 25
+  },
+  "total_mutants": 430,
+  "by_module": {
+    "graphrag.retrieval.answer_policy": {
+      "survived": 26
+    },
+    "graphrag.ingestion.r2rml": {
+      "survived": 115
+    },
+    "mcp_server.transport_20260728": {
+      "survived": 259,
+      "timeout": 5,
+      "no tests": 25
+    }
+  },
+  "survivor_examples_by_module": {
+    "graphrag.retrieval.answer_policy": [
+      "graphrag.retrieval.answer_policy.x_answer_prompt__mutmut_1",
+      "graphrag.retrieval.answer_policy.x_answer_prompt__mutmut_2",
+      "graphrag.retrieval.answer_policy.x_answer_prompt__mutmut_3"
+    ],
+    "graphrag.ingestion.r2rml": [
+      "graphrag.ingestion.r2rml.x__one__mutmut_9",
+      "graphrag.ingestion.r2rml.x__local_name__mutmut_5",
+      "graphrag.ingestion.r2rml.x__local_name__mutmut_7"
+    ],
+    "mcp_server.transport_20260728": [
+      "mcp_server.transport_20260728.x__header__mutmut_2",
+      "mcp_server.transport_20260728.x__header__mutmut_4",
+      "mcp_server.transport_20260728.x__header__mutmut_11"
+    ]
+  },
+  "notes": [
+    "make mutation (Makefile) was broken before this run: mutmut>=3 removed the --paths-to-mutate CLI flag the target passed, so it crashed before mutating a single line. Fixed via [tool.mutmut] in pyproject.toml (source_paths=['.'] + only_mutate, since mutmut>=3's sys.path setup only works for project-root-style source_paths).",
+    "0 mutants were killed across all three files. Manual spot-checks of several 'survived' mutants confirm the tool itself is working correctly (tests-for-mutant correctly attributes trampoline hits to the tests that exercise each function) -- the low kill rate reflects a mix of (a) genuinely equivalent mutants for these specific code paths (e.g. rsplit(..., 1)[-1] vs rsplit(...)[-1] -- identical result when only the last segment is read) and (b) real, narrow direct-unit-test coverage gaps in these three adapters, consistent with the Makefile's own framing of them as 'high-risk new adapters' worth a mutation pass before merge.",
+    "This is a first, real, reproducible baseline score (400 survived / 25 no-tests / 5 timeout / 0 killed of 430 total) -- not yet a CI-gated campaign. Next step if this is worth investing further in: read the surviving mutants for mcp_server/transport_20260728.py in particular (259 survived against only 3 existing tests) and add assertions that pin down its actual JSON-RPC error responses/behavior, not just status codes."
+  ]
+}

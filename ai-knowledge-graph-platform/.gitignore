@@ -13,6 +13,11 @@ results/ragas_reports/
 .ruff_cache/
 .coverage
 htmlcov/
+# `make mutation` (mutmut>=3) mirrors the whole repo into mutants/ to mutate
+# graphrag/retrieval/answer_policy.py, mcp_server/transport_20260728.py, and
+# graphrag/ingestion/r2rml.py in place — generated, not source.
+mutants/
+.mutmut-cache
 infra/terraform/.terraform/
 infra/terraform/*.tfstate
 infra/terraform/*.tfstate.*

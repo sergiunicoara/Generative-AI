@@ -205,6 +205,7 @@ class ContextBuilder:
             evidence.append(CitationEvidence(
                 source_id=citation, source_label=citation, path=f"[{citation}]",
                 confidence=_chunk_confidence(chunk),
+                valid_from=chunk.get("_valid_from"),
             ))
 
         # A topology-reached document can be relevant precisely because it was
@@ -229,6 +230,7 @@ class ContextBuilder:
                 evidence.append(CitationEvidence(
                     source_id=citation, source_label=citation, path=f"[{citation}]",
                     confidence=_chunk_confidence(chunk),
+                    valid_from=chunk.get("_valid_from"),
                 ))
                 link_slots -= 1
 

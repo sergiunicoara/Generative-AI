@@ -27,6 +27,41 @@ ignore = ["E501"]          # line length is not enforced; see CONTRIBUTING
 # logging and worker modules, so their imports intentionally follow setup.
 "workers/*.py"     = ["E402"]
 
+[tool.mutmut]
+# mutmut>=3 dropped the `--paths-to-mutate` CLI flag `make mutation` used to
+# pass (config-file only now — see mutmut.configuration._load_config), which
+# meant the target had been silently broken (crashes before running a single
+# mutant) since the mutmut>=3.2.0 pin in requirements-dev.txt landed — not
+# merely "never run in CI" (docs/REMAINING_AUDIT_BACKLOG.md item #8).
+#
+# source_paths must be a project-root-style path ("." / "src" / "source") —
+# mutmut's setup_source_paths() only re-adds sys.path entries under those
+# three conventional names after stripping the real source tree, so pointing
+# source_paths directly at individual files (tried first) leaves every
+# import of anything *outside* those files unresolvable (e.g.
+# `graphrag.core` from conftest.py) once the real tree is stripped. Mutation
+# itself is still scoped to these three high-risk adapters via only_mutate.
+source_paths = ["."]
+only_mutate = [
+    "graphrag/retrieval/answer_policy.py",
+    "mcp_server/transport_20260728.py",
+    "graphrag/ingestion/r2rml.py",
+]
+# Scope the campaign to these adapters' own fast, mocked unit tests rather
+# than mutmut's default of the whole suite: the full suite includes
+# testcontainers-backed e2e tests that need a live Docker daemon, which
+# turns "run the mutation campaign" into a second, undocumented
+# infrastructure dependency on top of the mutation tooling itself.
+pytest_add_cli_args_test_selection = [
+    "tests/unit/test_answer_policy.py",
+    "tests/unit/test_mcp_transport_20260728.py",
+    "tests/unit/test_gleif_r2rml.py",
+    "tests/unit/test_ingest_r2rml.py",
+    "tests/unit/test_r2rml_obda.py",
+    "tests/unit/test_r2rml_rdf_materialization.py",
+    "tests/unit/test_rml_rdf_materialization.py",
+]
+
 [tool.pytest.ini_options]
 asyncio_mode        = "auto"          # no need for @pytest.mark.asyncio on every test
 asyncio_default_fixture_loop_scope = "function"

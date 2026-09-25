@@ -1,10 +1,14 @@
+import pytest
 from starlette.testclient import TestClient
 from starlette.applications import Starlette
 from starlette.routing import Mount
 
 from mcp_server.identity import CallerIdentity
 from mcp_server.registry import DeniedCapabilityCall
-from mcp_server.transport_20260728 import HEADER_MISMATCH, MCP_PROTOCOL_VERSION, StatelessMCP20260728App
+from mcp_server.transport_20260728 import (
+    HEADER_MISMATCH, MCP_PROTOCOL_VERSION, ProtocolVersionDispatch, StatelessMCP20260728App,
+    _header, _json_type, _tool_schema,
+)
 
 
 class _Spec:
@@ -212,3 +216,126 @@ def test_20260728_tools_list_omits_entries_denied_at_resolve_time(monkeypatch):
 
     assert response.status_code == 200
     assert response.json()["result"]["tools"] == []
+
+
+def test_header_lookup_is_case_insensitive():
+    scope = {"headers": [(b"mcp-protocol-version", b"2026-07-28")]}
+
+    assert _header(scope, b"mcp-protocol-version") == "2026-07-28"
+
+
+def test_header_lookup_defaults_to_empty_string_when_absent():
+    scope = {"headers": [(b"content-type", b"application/json")]}
+
+    assert _header(scope, b"mcp-protocol-version") == ""
+
+
+def test_json_type_maps_known_python_types():
+    assert _json_type(str) == "string"
+    assert _json_type(int) == "integer"
+    assert _json_type(float) == "number"
+    assert _json_type(bool) == "boolean"
+
+
+def test_json_type_defaults_to_string_for_an_unmapped_type():
+    assert _json_type(list) == "string"
+    assert _json_type(None) == "string"
+
+
+class _MultiArgSpec:
+    qualified_name = "kg.multi@1.0.0"
+    title = "Multi"
+    arg_schema = {
+        "question": {"type": str, "required": True},
+        "top_k": {"type": int, "required": False},
+        "tenant": {"type": str, "required": True},
+    }
+
+
+def test_tool_schema_excludes_tenant_and_reports_required_fields():
+    schema = _tool_schema(_MultiArgSpec())
+
+    assert set(schema["properties"].keys()) == {"question", "top_k"}
+    assert schema["properties"]["question"] == {"type": "string"}
+    assert schema["properties"]["top_k"] == {"type": "integer"}
+    assert schema["required"] == ["question"]
+    assert schema["additionalProperties"] is False
+
+
+def test_tool_schema_omits_required_key_when_nothing_is_required():
+    class _Spec:
+        arg_schema = {"limit": {"type": int}}
+
+    schema = _tool_schema(_Spec())
+
+    assert "required" not in schema
+
+
+async def _collect_body(*chunks: bytes, disconnect: bool = False) -> bytes:
+    messages = [
+        {"type": "http.request", "body": chunk, "more_body": i < len(chunks) - 1}
+        for i, chunk in enumerate(chunks)
+    ]
+    if disconnect:
+        messages.append({"type": "http.disconnect"})
+    remaining = list(messages)
+
+    async def receive():
+        return remaining.pop(0)
+
+    return await StatelessMCP20260728App._body(receive)
+
+
+@pytest.mark.asyncio
+async def test_body_assembles_multiple_chunks_across_more_body_messages():
+    body = await _collect_body(b"hello, ", b"world")
+
+    assert body == b"hello, world"
+
+
+@pytest.mark.asyncio
+async def test_body_returns_empty_bytes_on_disconnect_before_completion():
+    body = await _collect_body(disconnect=True)
+
+    assert body == b""
+
+
+@pytest.mark.asyncio
+async def test_protocol_version_dispatch_routes_modern_requests_to_modern_app(monkeypatch):
+    monkeypatch.setattr(
+        CallerIdentity, "current",
+        classmethod(lambda cls: CallerIdentity(subject="agent", tenant="acme", authenticated=True)),
+    )
+    dispatch = ProtocolVersionDispatch(legacy_app=None)
+    dispatch.modern_app.registry = _Registry()
+    scope = {
+        "type": "http", "method": "POST",
+        "headers": [(b"mcp-protocol-version", MCP_PROTOCOL_VERSION.encode()), (b"mcp-method", b"ping")],
+    }
+    body_sent = [{"type": "http.request", "body": b'{"jsonrpc": "2.0", "id": 1, "method": "ping"}', "more_body": False}]
+    sent = []
+
+    async def receive():
+        return body_sent.pop(0)
+
+    async def send(message):
+        sent.append(message)
+
+    await dispatch(scope, receive, send)
+
+    assert sent[0]["status"] == 200
+
+
+@pytest.mark.asyncio
+async def test_protocol_version_dispatch_routes_legacy_requests_to_the_legacy_app():
+    calls = []
+
+    async def legacy_app(scope, receive, send):
+        calls.append(scope)
+
+    dispatch = ProtocolVersionDispatch(legacy_app=legacy_app)
+    scope = {"type": "http", "method": "POST", "headers": []}
+
+    await dispatch(scope, None, None)
+
+    assert calls == [scope]

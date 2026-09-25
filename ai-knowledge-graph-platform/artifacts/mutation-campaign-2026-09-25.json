@@ -1,31 +1,31 @@
 {
-  "report_schema_version": "mutation-campaign/v2",
+  "report_schema_version": "mutation-campaign/v3",
   "date": "2026-09-25",
   "tool": "mutmut 3.8.0",
   "scope": "docs/REMAINING_AUDIT_BACKLOG.md item #8 (Complete mutation score) -- the three adapters make mutation already targeted",
   "run_mode": "local (no Docker/CI in this session); test selection restricted to these adapters' own mocked unit tests -- no live infra required",
   "totals": {
-    "killed": 577,
-    "survived": 252,
-    "timeout": 5,
-    "no tests": 25
+    "killed": 667,
+    "survived": 187,
+    "timeout": 1,
+    "no tests": 4
   },
   "total_mutants": 859,
-  "kill_rate_pct": 67.2,
+  "kill_rate_pct": 77.6,
   "by_module": {
     "graphrag/retrieval/answer_policy.py": {
       "killed": 36,
       "survived": 15
     },
     "graphrag/ingestion/r2rml.py": {
-      "killed": 246,
-      "survived": 106
+      "killed": 269,
+      "survived": 83
     },
     "mcp_server/transport_20260728.py": {
-      "killed": 295,
-      "survived": 131,
-      "timeout": 5,
-      "no tests": 25
+      "killed": 362,
+      "survived": 89,
+      "timeout": 1,
+      "no tests": 4
     }
   },
   "survivor_examples_by_module": {
@@ -47,13 +47,42 @@
       "mcp_server.transport_20260728.x__header__mutmut_2",
       "mcp_server.transport_20260728.x__header__mutmut_4",
       "mcp_server.transport_20260728.x__header__mutmut_11",
-      "mcp_server.transport_20260728.x__header__mutmut_12",
-      "mcp_server.transport_20260728.x__json_type__mutmut_1"
+      "mcp_server.transport_20260728.x__tool_schema__mutmut_20",
+      "mcp_server.transport_20260728.x__tool_schema__mutmut_21"
     ]
   },
+  "history": [
+    {
+      "stage": "pre-session baseline (3 pre-existing tests)",
+      "killed": 429,
+      "survived": 400,
+      "no_tests": 25,
+      "timeout": 5,
+      "total": 859,
+      "kill_rate_pct": 49.9
+    },
+    {
+      "stage": "+21 tests (round 1: transport error paths, aerospace prompt, r2rml helpers)",
+      "killed": 577,
+      "survived": 252,
+      "no_tests": 25,
+      "timeout": 5,
+      "total": 859,
+      "kill_rate_pct": 67.2
+    },
+    {
+      "stage": "+18 tests (round 2: transport dispatch/_body/_tool_schema, r2rml error paths and field assertions)",
+      "killed": 667,
+      "survived": 187,
+      "no_tests": 4,
+      "timeout": 1,
+      "total": 859,
+      "kill_rate_pct": 77.6
+    }
+  ],
   "notes": [
     "make mutation (Makefile) was broken before this session: mutmut>=3 removed the --paths-to-mutate CLI flag the target passed, so it crashed before mutating a single line. Fixed via [tool.mutmut] in pyproject.toml (source_paths=['.'] + only_mutate, since mutmut>=3's sys.path setup only works for project-root-style source_paths).",
-    "IMPORTANT CORRECTION: an earlier version of this report (v1, based on the pre-existing 3-test baseline) said '0 killed' -- that was a measurement error, not a real 0% score: `mutmut results` hides already-killed mutants by default and only `mutmut results --all true` shows them. The true baseline (before this session added tests) was roughly 429 killed of 859; the actual improvement from the new tests added this session (test_mcp_transport_20260728.py: +10 tests covering error paths/ping/denied-call/tools-list-filtering; test_answer_policy.py: +3 tests covering the aerospace-positive prompt path and citation dedup; test_r2rml_obda.py: +8 direct unit tests for _one/_local_name/_identifier_from_template) is reflected in these final numbers.",
-    "Current kill rate: 67.2% (577/859) across the 3 files. graphrag/ingestion/r2rml.py's r2rml_to_mapping (~80 surviving mutants) and mcp_server/transport_20260728.py's ProtocolVersionDispatch/StatelessMCP20260728App.__call__ dispatch branches remain the largest concentrations of survivors -- next-highest-value place to look if this is worth investing further in."
+    "An earlier revision of this report said '0 killed' from the very first run -- a measurement error, not a real result: `mutmut results` hides already-killed mutants by default; only `mutmut results --all true` shows them. Corrected once caught; see 'history' above for the real progression.",
+    "39 unit tests were added across two rounds this session, raising the kill rate from a ~49.9% pre-existing baseline to 77.6%. Remaining survivors concentrate in graphrag/ingestion/r2rml.py's r2rml_to_mapping (partially exercised only through full-mapping fixtures) and a residual set of narrower branches in mcp_server/transport_20260728.py and FederatedOBDAIngestor.validate -- next-highest-value place to look if this is worth investing further in."
   ]
 }

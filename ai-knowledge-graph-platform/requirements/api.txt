@@ -12,6 +12,11 @@ a2wsgi>=1.10.0
 itsdangerous>=2.2.0
 mcp>=1.8.0,<2.0
 
+# ── Retrieval (api/routes/search.py -> hybrid_retriever -> local_search ->
+# retrieval/reranker.py imports CrossEncoder at module level) ─────────────────
+# torch is already pulled in by easyocr below, so this adds little size.
+sentence-transformers>=3.0.0
+
 # ── Graph layer deps (imported transitively via graphrag.graph.*) ──────────────
 networkx>=3.3
 numpy>=1.26.0

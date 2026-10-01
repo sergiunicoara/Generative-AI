@@ -48,7 +48,8 @@ async def enforce_tenant_quota(tenant: str = Depends(get_tenant)) -> str:
     Checked *before* the work runs: an over-quota tenant should be refused
     cheaply, not after consuming the LLM and graph capacity it has no budget
     for. Consumption is recorded separately, after the work completes, because
-    the true cost is not known in advance — see `record_tenant_usage`.
+    the true cost is not known in advance — see
+    `graphrag.core.tenant_quota.record_tenant_usage`.
     """
     from graphrag.core.tenant_quota import get_quota_store
 
@@ -66,25 +67,3 @@ async def enforce_tenant_quota(tenant: str = Depends(get_tenant)) -> str:
         raise TenantQuotaExceeded(verdict)
     await store.consume(tenant, requests=1.0)
     return tenant
-
-
-async def record_tenant_usage(tenant: str, *, cost_usd: float) -> None:
-    """Record realised spend against `tenant`'s window.
-
-    Called after the work completes, from the worker that actually spent the
-    money. A tenant can therefore overshoot its cost ceiling by at most the
-    cost of requests already in flight when it crossed; bounding that exactly
-    would need a reservation protocol, and the overshoot self-corrects within
-    the window.
-    """
-    if not cost_usd:
-        return
-    from graphrag.core.tenant_quota import get_quota_store
-
-    try:
-        store = await get_quota_store()
-        await store.consume(tenant, requests=0.0, cost_usd=cost_usd)
-    except Exception as exc:  # noqa: BLE001
-        # Quota accounting must never fail a request whose work already
-        # succeeded; the money is spent either way.
-        log.warning("quota.usage_record_failed", tenant=tenant, error=str(exc))

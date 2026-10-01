@@ -10,6 +10,14 @@ tenacity>=8.3.0
 aio-pika>=9.4.0
 sqlalchemy>=2.0.30
 aiosqlite>=0.20.0
+# KPI_BACKEND=timescale (docker-compose.yml, deploy/kubernetes/configmap.yaml)
+# builds a postgresql+asyncpg:// engine in kpi_store.py, which every service
+# that records or reads KPIs (api, query, evaluation, dashboard) imports.
+asyncpg>=0.29.0
+# graphrag/graph/alias_registry.py swallows the ImportError and silently skips
+# its fuzzy stage -- used by ingestion (graph_writer) and query
+# (context_builder, agentic_retriever) alike. See requirements.txt:95.
+rapidfuzz>=3.9.0
 # SQLAlchemy's asyncio engine (create_async_engine, used by kpi_store.py,
 # timescale_kpi_store.py, governance_store.py, ingestion/relational.py) needs
 # this at import time. Same gap as aiohttp/openai/groq below: only ever

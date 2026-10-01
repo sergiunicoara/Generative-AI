@@ -299,7 +299,7 @@ def _finish(
 
 
 def _schedule_tenant_usage_record(tenant: str, cost_usd: float) -> None:
-    """Fire-and-forget quota update: api/quota.py's record_tenant_usage is
+    """Fire-and-forget quota update: tenant_quota.record_tenant_usage is
     async, but _finish() runs synchronously inside llm_call_span's `finally`
     (itself entered from FallbackLLM.generate, an async def) -- there is a
     live event loop, just not one this sync function can await on directly.
@@ -307,7 +307,7 @@ def _schedule_tenant_usage_record(tenant: str, cost_usd: float) -> None:
     record_tenant_usage's own docstring, so best-effort scheduling is an
     accepted trade-off, not a silent correctness gap.
     """
-    from api.quota import record_tenant_usage
+    from graphrag.core.tenant_quota import record_tenant_usage
 
     try:
         asyncio.create_task(record_tenant_usage(tenant, cost_usd=cost_usd))

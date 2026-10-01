@@ -135,6 +135,33 @@ jobs:
       - name: Import the real ASGI app with only production dependencies installed
         run: python -c "import api.main; print('OK:', api.main.app.title)"
 
+  service-images:
+    name: Service image deps (${{ matrix.service }})
+    # The Dockerfile (and so every Fly/k8s/compose image) installs
+    # requirements/${SERVICE}.txt, NOT the monolithic requirements.txt that
+    # clean-install and every other job here install -- so a package declared
+    # only in the monolith passed all of CI and still shipped a broken image.
+    # That is exactly how the API image, the dashboard image and every
+    # worker's paid-LLM-call path were broken while CI stayed green
+    # (docs/archive/audits/audit-2026-10-01.md). This installs ONLY one
+    # service's subset and imports what that container actually starts.
+    runs-on: ubuntu-latest
+    env:
+      ENV: test
+    strategy:
+      fail-fast: false
+      matrix:
+        service: [api, dashboard, ingestion, query, evaluation, workers, backup]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install only this service's requirements subset
+        run: pip install -r requirements/${{ matrix.service }}.txt
+      - name: Import this service's entry points and run a paid LLM-call span
+        run: python scripts/verify_service_imports.py ${{ matrix.service }}
+
   lint:
     name: Lint
     runs-on: ubuntu-latest

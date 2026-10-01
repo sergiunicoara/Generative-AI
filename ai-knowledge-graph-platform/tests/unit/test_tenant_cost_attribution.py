@@ -1,6 +1,6 @@
 """Tenant-aware cost aggregation (docs/IMPLEMENTATION_AUDIT.md item #5).
 
-api/quota.py's record_tenant_usage() existed with zero callers, and every
+tenant_quota.record_tenant_usage() existed with zero callers, and every
 CostEvent emitted from genai_telemetry._finish() -- the only place with a
 real, non-zero per-call cost -- hardcoded tenant="". These tests guard the
 fix: a tenant_context() published around retrieval must reach both the
@@ -88,7 +88,7 @@ class TestFinishTenantAttribution:
 class TestScheduleTenantUsageRecord:
     def test_invokes_record_tenant_usage(self):
         async def run():
-            with patch("api.quota.record_tenant_usage") as mock_usage:
+            with patch("graphrag.core.tenant_quota.record_tenant_usage") as mock_usage:
                 genai_telemetry._schedule_tenant_usage_record("acme", 0.42)
                 await asyncio.sleep(0)  # let the scheduled task run
             return mock_usage

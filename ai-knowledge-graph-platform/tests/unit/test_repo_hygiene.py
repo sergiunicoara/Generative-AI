@@ -46,3 +46,44 @@ class TestNoDeadInProjectCiWorkflow:
             "renamed or moved, update this test alongside it rather than "
             "deleting the check."
         )
+
+
+class TestEveryServiceSubsetIsCoveredByTheImageCheck:
+    """Every requirements/<service>.txt becomes a container image (Dockerfile
+    installs requirements/${SERVICE}.txt), and CI's service-images job only
+    verifies the services named in scripts/verify_service_imports.py. A new
+    subset added without an entry here would ship unverified -- the exact gap
+    that let the API, dashboard and worker images break while CI stayed green
+    (docs/archive/audits/audit-2026-10-01.md)."""
+
+    def test_script_covers_every_requirements_subset(self):
+        import importlib.util
+
+        spec = importlib.util.spec_from_file_location(
+            "verify_service_imports", PROJECT_ROOT / "scripts" / "verify_service_imports.py",
+        )
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+
+        subsets = {p.stem for p in (PROJECT_ROOT / "requirements").glob("*.txt")} - {"base"}
+        assert subsets == set(module.SERVICE_ENTRY_POINTS), (
+            "requirements/*.txt and scripts/verify_service_imports.py disagree on the service set"
+        )
+
+    def test_ci_matrix_matches_the_script(self):
+        import importlib.util
+
+        import yaml
+
+        spec = importlib.util.spec_from_file_location(
+            "verify_service_imports", PROJECT_ROOT / "scripts" / "verify_service_imports.py",
+        )
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+
+        workflow = yaml.safe_load(
+            (REPO_ROOT / ".github" / "workflows" / "ai-knowledge-graph-platform-ci.yml")
+            .read_text(encoding="utf-8")
+        )
+        matrix = workflow["jobs"]["service-images"]["strategy"]["matrix"]["service"]
+        assert set(matrix) == set(module.SERVICE_ENTRY_POINTS)

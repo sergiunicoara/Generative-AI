@@ -343,6 +343,30 @@ async def get_quota_store() -> TenantQuotaStore:
     return _store
 
 
+async def record_tenant_usage(tenant: str, *, cost_usd: float) -> None:
+    """Record realised spend against `tenant`'s window.
+
+    Called after the work completes, from the worker that actually spent the
+    money. A tenant can therefore overshoot its cost ceiling by at most the
+    cost of requests already in flight when it crossed; bounding that exactly
+    would need a reservation protocol, and the overshoot self-corrects within
+    the window.
+
+    Lives here rather than in api/quota.py because the caller is
+    graphrag/observability/genai_telemetry.py, which runs inside every worker
+    image -- none of which install the web framework api/quota.py imports.
+    """
+    if not cost_usd:
+        return
+    try:
+        store = await get_quota_store()
+        await store.consume(tenant, requests=0.0, cost_usd=cost_usd)
+    except Exception as exc:  # noqa: BLE001
+        # Quota accounting must never fail a request whose work already
+        # succeeded; the money is spent either way.
+        log.warning("quota.usage_record_failed", tenant=tenant, error=str(exc))
+
+
 async def close_quota_store() -> None:
     """Close and reset the process singleton when it was initialized."""
     global _store, _store_lock

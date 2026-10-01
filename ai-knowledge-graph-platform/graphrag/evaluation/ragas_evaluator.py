@@ -15,7 +15,6 @@ import asyncio
 import math
 
 import structlog
-from datasets import Dataset
 
 from graphrag.core.config import get_settings
 from graphrag.core.exceptions import EvaluationError
@@ -174,6 +173,12 @@ class RagasEvaluator:
         if not contexts:
             log.warning("ragas_evaluator.no_contexts", query_id=query_id)
             return EvalResult(job_id=query_id, query_id=query_id)
+
+        # Imported here, not at module level: graphrag/evaluation/__init__.py is
+        # imported by api/routes/evaluation.py, so a top-level import made the
+        # API image (which never runs RAGAS) need datasets + pyarrow just to
+        # start. Only the evaluation/workers images install it.
+        from datasets import Dataset
 
         dataset = Dataset.from_dict(
             {

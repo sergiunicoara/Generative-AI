@@ -222,7 +222,7 @@ class TestQuotaDependency:
         assert int(excinfo.value.headers["Retry-After"]) >= 1
 
     async def test_usage_recording_never_fails_completed_work(self, monkeypatch):
-        from api.quota import record_tenant_usage
+        from graphrag.core.tenant_quota import record_tenant_usage
 
         async def _explode():
             raise ConnectionError("quota store gone")

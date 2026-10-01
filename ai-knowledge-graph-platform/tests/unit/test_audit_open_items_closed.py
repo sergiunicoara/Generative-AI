@@ -275,3 +275,77 @@ class TestGdprErasureRequiresIdentifiableActor:
 
         resp = client.post("/gdpr/forget-document", json={"doc_id": "d1"})
         assert resp.status_code == 403
+
+
+class TestGdprErasureInvalidatesCachedAnswers:
+    """Regression for audit-2026-10-01.md H3. Erasure used to touch neither the
+    corpus revision nor the answer cache, so a question answered before the
+    erasure kept being served -- raw chunk text included -- until the cache
+    TTL expired."""
+
+    def _service(self):
+        from graphrag.graph.gdpr import GDPRService
+
+        neo4j = MagicMock()
+        neo4j.run = AsyncMock(return_value=[])
+        neo4j.begin_corpus_update = AsyncMock()
+        neo4j.complete_corpus_update = AsyncMock(return_value=7)
+        return GDPRService(neo4j), neo4j
+
+    async def test_forget_entity_brackets_the_erasure_in_a_corpus_mutation(self):
+        svc, neo4j = self._service()
+        order: list[str] = []
+        neo4j.begin_corpus_update.side_effect = lambda *a, **k: order.append("begin")
+        neo4j.complete_corpus_update.side_effect = lambda *a, **k: order.append("complete") or 7
+        neo4j.run.side_effect = lambda *a, **k: order.append("run") or []
+
+        with patch("graphrag.retrieval.query_cache.get_query_cache", AsyncMock()):
+            await svc.forget_entity("J. Doe", "PERSON", "acme")
+
+        assert order[0] == "begin" and order[-1] == "complete"
+        assert "run" in order[1:-1]
+        neo4j.begin_corpus_update.assert_awaited_once_with("acme", reason="gdpr_erasure")
+        neo4j.complete_corpus_update.assert_awaited_once_with(
+            "acme", reason="gdpr_erasure", outcome="completed",
+        )
+
+    async def test_forget_document_brackets_the_erasure_in_a_corpus_mutation(self):
+        svc, neo4j = self._service()
+        with patch("graphrag.retrieval.query_cache.get_query_cache", AsyncMock()):
+            await svc.forget_document("doc-1", "acme")
+        neo4j.begin_corpus_update.assert_awaited_once_with("acme", reason="gdpr_erasure")
+        neo4j.complete_corpus_update.assert_awaited_once()
+
+    async def test_failed_erasure_still_advances_the_revision(self):
+        """CorpusMutation finalizes on the exception path too -- half-erased
+        data must not stay behind cached answers from before it."""
+        svc, neo4j = self._service()
+        neo4j.run.side_effect = RuntimeError("neo4j down")
+        with pytest.raises(RuntimeError):
+            await svc.forget_entity("J. Doe", "PERSON", "acme")
+        neo4j.complete_corpus_update.assert_awaited_once_with(
+            "acme", reason="gdpr_erasure", outcome="failed",
+        )
+
+    async def test_tenants_cached_answers_are_evicted_not_left_to_expire(self):
+        svc, _neo4j = self._service()
+        cache = MagicMock()
+        cache.flush_tenant = AsyncMock(return_value=3)
+        with patch("graphrag.retrieval.query_cache.get_query_cache", AsyncMock(return_value=cache)):
+            await svc.forget_document("doc-1", "acme")
+        cache.flush_tenant.assert_awaited_once_with(tenant="acme")
+
+    async def test_cache_outage_does_not_fail_an_erasure_that_already_happened(self):
+        svc, _neo4j = self._service()
+        with patch(
+            "graphrag.retrieval.query_cache.get_query_cache",
+            AsyncMock(side_effect=ConnectionError("redis down")),
+        ):
+            report = await svc.forget_document("doc-1", "acme")
+        assert report["status"] in {"complete", "completed"}
+
+    async def test_missing_tenant_is_rejected_before_any_corpus_state_changes(self):
+        svc, neo4j = self._service()
+        with pytest.raises(ValueError, match="tenant is required"):
+            await svc.forget_entity("J. Doe", "PERSON", "")
+        neo4j.begin_corpus_update.assert_not_awaited()

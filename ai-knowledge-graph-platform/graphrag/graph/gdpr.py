@@ -45,6 +45,7 @@ from uuid import uuid4
 import structlog
 
 from graphrag.core.tenancy import require_tenant
+from graphrag.graph.corpus_revision import CorpusMutation
 
 log = structlog.get_logger(__name__)
 
@@ -80,9 +81,67 @@ class GDPRService:
     def __init__(self, neo4j_client):
         self._neo4j = neo4j_client
 
-    # ── Entity erasure ─────────────────────────────────────────────────────────
+    # ── Public entry points ────────────────────────────────────────────────────
+    #
+    # Erasure changes what retrieval can return, so it is a corpus mutation:
+    # it must advance the corpus revision (every cached answer is keyed on it,
+    # so older entries become unreachable) and hold cache reads off while it
+    # runs. Without this, a question answered before the erasure kept being
+    # served -- raw chunk text included -- until the cache TTL expired.
+    # Wrapped here, not in the routes, so every caller gets it
+    # (audit-2026-10-01.md, H3).
 
     async def forget_entity(
+        self,
+        entity_name: str,
+        entity_type: str,
+        tenant: str,
+        requested_by: str = "dpo",
+        request_id: str = "",
+    ) -> dict:
+        """Erase all data for a named entity. See `_forget_entity` for the steps."""
+        tenant = require_tenant(tenant)
+        async with CorpusMutation(self._neo4j, tenant, reason="gdpr_erasure"):
+            report = await self._forget_entity(
+                entity_name, entity_type, tenant, requested_by, request_id,
+            )
+        await self._evict_cached_answers(tenant)
+        return report
+
+    async def forget_document(
+        self,
+        doc_id: str,
+        tenant: str,
+        requested_by: str = "dpo",
+        request_id: str = "",
+    ) -> dict:
+        """Erase data sourced exclusively from a document. See `_forget_document`."""
+        tenant = require_tenant(tenant)
+        async with CorpusMutation(self._neo4j, tenant, reason="gdpr_erasure"):
+            report = await self._forget_document(doc_id, tenant, requested_by, request_id)
+        await self._evict_cached_answers(tenant)
+        return report
+
+    async def _evict_cached_answers(self, tenant: str) -> None:
+        """Delete the tenant's cached answers rather than leave them to expire.
+
+        The revision bump already makes them unreachable; this removes the
+        stored text itself (a cached QueryResult carries the raw chunk
+        contexts). Best-effort: a cache outage must not fail an erasure that
+        has already happened, but it is logged because stored-but-unreachable
+        personal data is still stored.
+        """
+        try:
+            from graphrag.retrieval.query_cache import get_query_cache
+
+            cache = await get_query_cache()
+            await cache.flush_tenant(tenant=tenant)
+        except Exception as exc:  # noqa: BLE001
+            log.warning("gdpr.cache_eviction_failed", tenant=tenant, error=str(exc)[:200])
+
+    # ── Entity erasure ─────────────────────────────────────────────────────────
+
+    async def _forget_entity(
         self,
         entity_name: str,
         entity_type: str,
@@ -243,7 +302,7 @@ class GDPRService:
 
     # ── Document erasure ───────────────────────────────────────────────────────
 
-    async def forget_document(
+    async def _forget_document(
         self,
         doc_id: str,
         tenant: str,

@@ -242,6 +242,15 @@ class IngestionAgent(BaseGraphRAGAgent):
                 # ingestion; this also covers older queued documents and custom
                 # connectors that construct chunks directly.
                 chunk.metadata.setdefault("source_system", doc.metadata_envelope.source_system)
+                # Repoint unconditionally: the chunks carry this run's fresh uuid4,
+                # which matches no Document node whenever write_document resolved
+                # to an existing id. This must NOT depend on prior graph evidence
+                # (an earlier ingest can leave a Document with no chunks -- an
+                # empty file, or a crash before write_chunks), or those chunks are
+                # written under a document_id with no Document node and the next
+                # re-ingest violates the chunk_id uniqueness constraint
+                # (audit-2026-10-01.md, H2).
+                chunk.document_id = canonical_id
             # A retry that lands under the same canonical id as a prior attempt
             # (same-payload retry, or a genuine re-ingest) may have left partial
             # evidence from that earlier write — gate reconcile on prior graph
@@ -252,8 +261,6 @@ class IngestionAgent(BaseGraphRAGAgent):
             )
             is_reingest = has_prior_evidence
             if is_reingest:
-                for c in chunks:
-                    c.document_id = canonical_id
                 # Existing chunks keep stable identities across re-ingestion. Clear
                 # their old mentions and this document's relation evidence before
                 # writing the newly extracted evidence, so facts that disappeared

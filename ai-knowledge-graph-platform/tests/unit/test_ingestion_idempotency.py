@@ -283,6 +283,61 @@ class TestIngestionAgentReassignsChunkDocumentId:
         )
 
     @pytest.mark.asyncio
+    async def test_chunks_repointed_even_when_the_existing_document_has_no_evidence_yet(self):
+        """Repointing and reconciling answer different questions. Repointing
+        depends only on whether write_document remapped the id -- the chunks
+        were built with this run's fresh uuid4, which matches no Document node
+        whenever the file already exists. Reconciling depends on whether the
+        graph holds evidence from an earlier attempt.
+
+        They diverge when the earlier ingest left a Document but no chunks (an
+        empty file, or a crash between write_document and write_chunks). Gating
+        the repoint on prior evidence wrote those chunks under a document_id
+        with no Document node: no PART_OF edge, invisible to tombstone and
+        supersession filters, and -- because Chunk.id is a deterministic uuid5
+        under a UNIQUE constraint -- the NEXT re-ingest of that file violated
+        the constraint and dead-lettered permanently."""
+        from graphrag.agents.ingestion_agent import IngestionAgent
+
+        agent = IngestionAgent.__new__(IngestionAgent)
+        writer = MagicMock()
+
+        async def fake_write_document(doc):
+            doc.id = "canonical-existing-id"
+            return "canonical-existing-id"
+
+        writer.write_document = AsyncMock(side_effect=fake_write_document)
+        writer.neo4j_client = MagicMock()
+        writer.neo4j_client.begin_corpus_update = AsyncMock()
+        writer.neo4j_client.complete_corpus_update = AsyncMock(return_value=2)
+        writer.document_has_evidence = AsyncMock(return_value=False)
+        writer.write_chunks = AsyncMock()
+        writer.write_entities = AsyncMock(return_value=[])
+        writer.write_relations = AsyncMock()
+        writer.reconcile_document_evidence = AsyncMock(return_value={})
+        writer.validate_and_check_cycles = AsyncMock(return_value={
+            "validation": {"total_issues": 0}, "new_conflicts": 0,
+        })
+        writer.mark_document_ingest_complete = AsyncMock()
+        agent._writer = writer
+
+        doc = _make_document(id="fresh-uuid-this-run")
+        chunks = [_make_chunk("fresh-uuid-this-run", chunk_index=i) for i in range(3)]
+
+        from unittest.mock import patch
+        with patch("graphrag.agents.ingestion_agent.get_settings") as mock_settings:
+            mock_settings.return_value.wikidata_linking_enabled = False
+            await agent.write({
+                "job_id": "job-1", "doc": doc, "chunks": chunks,
+                "extraction_results": [([], []) for _ in chunks],
+            })
+
+        for c in chunks:
+            assert c.document_id == "canonical-existing-id"
+        # Nothing to reconcile: no earlier evidence exists.
+        writer.reconcile_document_evidence.assert_not_awaited()
+
+    @pytest.mark.asyncio
     async def test_chunks_unchanged_when_document_is_genuinely_new(self):
         """No-op path: a brand-new document keeps its generated id, so chunks
         must NOT be touched (they're already correct)."""

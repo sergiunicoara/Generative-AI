@@ -91,6 +91,12 @@ base64-encoded values (or apply an equivalent ExternalSecret), and replace each
 `PROJECT_ID` in `service-account.yaml`; Terraform binds this Kubernetes service
 account to the GCP workload identity.
 
+In `deploy/kubernetes/configmap.yaml`, also replace the `REPLACE_ME` values for
+`GRAPHRAG_API_RESOURCE`, `GRAPHRAG_MCP_RESOURCE` and `CORS_ORIGINS`. Every pod
+runs with `ENV=production`, where settings validation rejects a non-HTTPS or
+missing `CORS_ORIGINS`, so leaving it unset crash-loops the API, MCP and worker
+pods at startup.
+
 ```bash
 kubectl apply -f /secure/path/graphrag-secrets.yaml
 kubectl apply -k deploy/kubernetes

@@ -4,6 +4,11 @@
 #   Neo4j, RabbitMQ, Redis, API, ingestion worker, query worker,
 #   evaluation worker, admin dashboard, business KPI dashboard.
 #
+# Every published port is bound to 127.0.0.1: the credentials in this file
+# (dev passwords, Redis with no auth -- Redis holds the M2M client registry)
+# are local-only and must never be reachable from another host. Containers
+# still reach each other by service name.
+#
 # Usage:
 #   docker compose -f compose.dev.yaml up
 #   docker compose -f compose.dev.yaml up api ingestion_worker   # subset
@@ -56,8 +61,8 @@ services:
     image: neo4j:5.20-community
     container_name: dev_neo4j
     ports:
-      - "7474:7474"   # browser UI
-      - "7687:7687"   # Bolt
+      - "127.0.0.1:7474:7474"   # browser UI
+      - "127.0.0.1:7687:7687"   # Bolt
     environment:
       NEO4J_AUTH: neo4j/graphrag_dev
       NEO4J_PLUGINS: '["apoc", "graph-data-science"]'
@@ -76,7 +81,7 @@ services:
     image: timescale/timescaledb:2.15.3-pg16
     container_name: dev_timescaledb
     ports:
-      - "5434:5432"
+      - "127.0.0.1:5434:5432"
     environment:
       POSTGRES_USER: graphrag
       POSTGRES_PASSWORD: graphrag_dev
@@ -93,8 +98,8 @@ services:
     image: rabbitmq:3.13-management
     container_name: dev_rabbitmq
     ports:
-      - "5672:5672"
-      - "15672:15672"   # management UI
+      - "127.0.0.1:5672:5672"
+      - "127.0.0.1:15672:15672"   # management UI
     environment:
       RABBITMQ_DEFAULT_USER: graphrag
       RABBITMQ_DEFAULT_PASS: graphrag_dev
@@ -110,7 +115,7 @@ services:
     image: redis:7-alpine
     container_name: dev_redis
     ports:
-      - "6379:6379"
+      - "127.0.0.1:6379:6379"
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 5s
@@ -128,7 +133,7 @@ services:
     container_name: dev_api
     command: uvicorn api.main:app --host 0.0.0.0 --port 8000 --reload
     ports:
-      - "8000:8000"
+      - "127.0.0.1:8000:8000"
     env_file: .env
     environment:
       <<: *worker-env
@@ -152,7 +157,7 @@ services:
     container_name: dev_mcp
     command: python -m mcp_server.remote
     ports:
-      - "8002:8002"
+      - "127.0.0.1:8002:8002"
     env_file: .env
     environment:
       <<: *worker-env
@@ -198,7 +203,7 @@ services:
     container_name: dev_query_worker
     command: python workers/query_worker.py
     ports:
-      - "8082:8082"   # GET /ready health probe
+      - "127.0.0.1:8082:8082"   # GET /ready health probe
     env_file: .env
     environment:
       <<: *worker-env
@@ -223,7 +228,7 @@ services:
     container_name: dev_evaluation_worker
     command: python workers/evaluation_worker.py
     ports:
-      - "8083:8083"   # GET /ready health probe
+      - "127.0.0.1:8083:8083"   # GET /ready health probe
     env_file: .env
     environment:
       <<: *worker-env
@@ -242,7 +247,7 @@ services:
     container_name: dev_admin_dashboard
     command: uvicorn api.main:app --host 0.0.0.0 --port 8001 --reload
     ports:
-      - "8001:8001"
+      - "127.0.0.1:8001:8001"
     env_file: .env
     environment:
       <<: *worker-env
@@ -262,7 +267,7 @@ services:
     container_name: dev_dashboard
     command: python graphrag/business_matrix/dashboard_server.py
     ports:
-      - "8050:8050"
+      - "127.0.0.1:8050:8050"
     env_file: .env
     environment:
       <<: *worker-env

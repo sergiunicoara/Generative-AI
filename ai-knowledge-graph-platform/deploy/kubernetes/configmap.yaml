@@ -22,4 +22,10 @@ data:
   # client. Canonical form: absolute https URI, no query, no fragment, no
   # trailing slash.
   GRAPHRAG_API_RESOURCE: REPLACE_ME_https://api.example.com
+  # Browser origins allowed to call the API. Required: every pod runs with
+  # ENV=production, and Settings refuses to load there unless this is a JSON
+  # list of https:// origins (the localhost default fails validation), so a
+  # missing or still-REPLACE_ME value crash-loops api, mcp and the workers at
+  # startup rather than serving with a wrong policy.
+  CORS_ORIGINS: '["REPLACE_ME_https://app.example.com"]'
   GRAPHRAG_MCP_RESOURCE: REPLACE_ME_https://mcp.example.com/mcp

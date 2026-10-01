@@ -10,6 +10,8 @@ surface for an agent than a broken stdio connection or a Python traceback.
 
 from __future__ import annotations
 
+import hashlib
+import json
 import os
 from contextvars import ContextVar, Token
 from dataclasses import dataclass, field
@@ -45,9 +47,33 @@ class CallerIdentity:
     authenticated: bool = False
     groups: tuple[str, ...] = ()
     groups_resolved: bool = False
+    issuer: str = ""
 
     def has_scope(self, scope: str) -> bool:
         return scope in self.scopes
+
+    def session_binding(self) -> str:
+        """Stable fingerprint of everything an MCP session's authority rests on.
+
+        The Streamable HTTP session manager records which principal created a
+        session and refuses any other principal's requests for it -- but only
+        when the transport tells it who the caller is (``scope["user"]``).
+        Tool handlers run in the session's own server task, which snapshots
+        its context when the session is created, so a session carries its
+        creator's identity for its whole life. Binding the session to this
+        fingerprint means it can only ever be used by a caller whose tenant,
+        subject, issuer, scopes and groups are all identical -- a token that
+        differs in any of them gets "Session not found" and must initialize
+        its own session, instead of silently inheriting someone else's.
+        """
+        canonical = json.dumps(
+            [
+                self.tenant, self.subject, self.issuer,
+                sorted(self.scopes), list(self.groups),
+            ],
+            separators=(",", ":"),
+        )
+        return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
 
     @classmethod
     def anonymous(cls) -> "CallerIdentity":
@@ -123,6 +149,7 @@ class CallerIdentity:
             authenticated=True,
             groups=groups,
             groups_resolved=groups_resolved,
+            issuer=str(claims.get("iss") or ""),
         )
 
     @classmethod

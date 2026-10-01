@@ -24,6 +24,9 @@ from starlette.responses import JSONResponse
 from starlette.routing import Mount, Route
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
+from mcp.server.auth.middleware.bearer_auth import AuthenticatedUser
+from mcp.server.auth.provider import AccessToken
+
 from graphrag.core.resource_identifiers import mcp_resource
 from graphrag.observability.correlation import correlation_context
 from graphrag.observability.agent_telemetry import transport_context
@@ -162,6 +165,18 @@ class RemoteMCPAuthMiddleware:
             )
             return
 
+        # The SDK only binds a session to its creator when scope["user"] is an
+        # AuthenticatedUser; without it every session's owner is None and any
+        # valid token can drive any Mcp-Session-Id, running tools as whoever
+        # created the session (audit-2026-10-01.md, H1). The raw bearer token
+        # is deliberately not placed in the scope.
+        scope["user"] = AuthenticatedUser(AccessToken(
+            token="",
+            client_id=identity.session_binding(),
+            scopes=sorted(identity.scopes),
+            subject=identity.subject,
+            claims={"iss": identity.issuer} if identity.issuer else None,
+        ))
         identity_token = CallerIdentity.bind_request(identity)
         body = await self._read_bounded_body(receive)
         if body is None:

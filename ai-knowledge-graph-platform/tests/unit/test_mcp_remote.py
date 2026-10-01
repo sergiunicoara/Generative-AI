@@ -110,3 +110,71 @@ class TestRemoteMCPAuth:
 
         assert denied.status_code == 403
         assert allowed.status_code == 200
+
+
+class TestSessionsAreBoundToTheirCreator:
+    """Regression for audit-2026-10-01.md H1: the Streamable HTTP session
+    manager only refuses a different caller's use of a session when the
+    transport sets scope["user"]. This middleware never did, so every
+    session's owner was None and any valid token could send tool calls to any
+    Mcp-Session-Id -- which then ran as the session's CREATOR, since tool
+    handlers run in the session's server task. Exercised against the real SDK
+    session manager, not a stub."""
+
+    _INITIALIZE = {
+        "jsonrpc": "2.0", "id": 1, "method": "initialize",
+        "params": {
+            "protocolVersion": "2025-03-26", "capabilities": {},
+            "clientInfo": {"name": "pytest", "version": "0"},
+        },
+    }
+    _HEADERS = {"Accept": "application/json, text/event-stream", "Content-Type": "application/json"}
+
+    @staticmethod
+    def _claims(token: str) -> dict:
+        return {
+            "alice-token": {"sub": "alice", "tenant": "acme", "scope": "read", "type": "m2m",
+                            "iss": "https://issuer-a.example"},
+            "bob-token": {"sub": "bob", "tenant": "globex", "scope": "read", "type": "m2m",
+                          "iss": "https://issuer-a.example"},
+            # Same subject and tenant as alice, but wider scopes.
+            "alice-admin-token": {"sub": "alice", "tenant": "acme", "scope": "read admin",
+                                  "type": "m2m", "iss": "https://issuer-a.example"},
+            # Same subject, tenant and scopes as alice, different issuer.
+            "alice-other-issuer-token": {"sub": "alice", "tenant": "acme", "scope": "read",
+                                         "type": "m2m", "iss": "https://issuer-b.example"},
+        }[token]
+
+    def _call(self, client, token: str, session_id: str | None, body: dict):
+        headers = {**self._HEADERS, "Authorization": f"Bearer {token}"}
+        if session_id:
+            headers["Mcp-Session-Id"] = session_id
+        return client.post("/mcp", json=body, headers=headers)
+
+    def test_only_the_creating_identity_can_use_a_session(self):
+        async def fake_decode(token, **_kwargs):
+            return self._claims(token)
+
+        with patch("mcp_server.identity.decode_access_token_async", side_effect=fake_decode), \
+             patch("graphrag.core.token_revocation.get_revocation_store") as store:
+            store.return_value.is_revoked = _async_false
+            with TestClient(create_remote_app(), base_url="http://localhost:8001") as client:
+                created = self._call(client, "alice-token", None, self._INITIALIZE)
+                assert created.status_code == 200, created.text
+                session_id = created.headers["mcp-session-id"]
+
+                follow_up = {"jsonrpc": "2.0", "id": 2, "method": "tools/list", "params": {}}
+                # Anyone else -- a different tenant/subject, the same subject
+                # with wider scopes, or the same identity from another issuer --
+                # is told the session does not exist.
+                for intruder in ("bob-token", "alice-admin-token", "alice-other-issuer-token"):
+                    resp = self._call(client, intruder, session_id, follow_up)
+                    assert resp.status_code == 404, (intruder, resp.status_code, resp.text)
+
+                # The creator is not locked out.
+                owner = self._call(client, "alice-token", session_id, follow_up)
+                assert owner.status_code != 404, owner.text
+
+
+async def _async_false(_claims) -> bool:
+    return False

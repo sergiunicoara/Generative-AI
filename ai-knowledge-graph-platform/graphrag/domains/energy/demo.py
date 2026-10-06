@@ -100,14 +100,27 @@ class EnergyDemoService:
         self._publisher = DatasetPublisher(SHAPES_PATH)
         self._governance_store = governance_store
         self._include_invalid_fixture = include_invalid_fixture
-        candidate = await self._build_graph()
-        self._publish(candidate)
         self._durable_report: PublicationReport | None = None
         if governance_store is not None:
-            report = await governance_store.publish(self.tenant, self._publisher.current_report, self.graph)
-            _stored_report, self.graph = await governance_store.current(self.tenant)
-            self._durable_report = report
+            if await governance_store.active_version_id(self.tenant) is not None:
+                self._durable_report, self.graph = await governance_store.current(self.tenant)
+                return self
+        candidate = await self._build_graph()
+        self._publish(candidate)
+        if governance_store is not None:
+            await governance_store.publish(self.tenant, self._publisher.current_report, self.graph)
+            self._durable_report, self.graph = await governance_store.current(self.tenant)
         return self
+
+    async def refresh_durable(self) -> None:
+        """Keep this worker's serving graph aligned with the shared active version."""
+        if self._governance_store is None:
+            return
+        active = await self._governance_store.active_version_id(self.tenant)
+        if active is None:
+            raise RuntimeError("Energy graph has no active published version")
+        if self._durable_report is None or self._durable_report.version_id != active:
+            self._durable_report, self.graph = await self._governance_store.current(self.tenant)
 
     def _publish(self, candidate: Graph) -> None:
         # SHACL as a publication gate: the candidate graph is staged,
@@ -258,8 +271,7 @@ class EnergyDemoService:
         if self._governance_store is None:
             return self.rollback(version_id)
         report = await self._governance_store.rollback(self.tenant, version_id)
-        _stored_report, self.graph = await self._governance_store.current(self.tenant)
-        self._durable_report = report
+        self._durable_report, self.graph = await self._governance_store.current(self.tenant)
         return report
 
     def validate_candidate(self) -> dict[str, Any]:

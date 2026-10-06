@@ -14,6 +14,7 @@ def register(registry: CapabilityRegistry) -> None:
         kind="read",
         risk="safe",
         fn=lookup_entity,
+        required_scopes=("read",),
         arg_schema={
             "name": {"type": str, "required": True},
             "tenant": {"type": str},

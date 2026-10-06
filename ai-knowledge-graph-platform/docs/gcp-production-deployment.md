@@ -91,6 +91,15 @@ base64-encoded values (or apply an equivalent ExternalSecret), and replace each
 `PROJECT_ID` in `service-account.yaml`; Terraform binds this Kubernetes service
 account to the GCP workload identity.
 
+Set `ENERGY_GOVERNANCE_DB_URL` in the secret to a shared async PostgreSQL URL
+(`postgresql+asyncpg://...`). Kubernetes will refuse to start the API pod if
+this required secret key is missing. Published RDF blobs use `/data/energy/published` on the
+`energy-published-rdf` claim. Before applying Kustomize, provision a storage
+class that supports `ReadWriteMany` across API replicas and set
+`storageClassName` in `energy-published-rdf-pvc.yaml` when your cluster has no
+default RWX class. Back up both the database and the blob volume together;
+the database stores blob paths and publication pointers.
+
 In `deploy/kubernetes/configmap.yaml`, also replace the `REPLACE_ME` values for
 `GRAPHRAG_API_RESOURCE`, `GRAPHRAG_MCP_RESOURCE` and `CORS_ORIGINS`. Every pod
 runs with `ENV=production`, where settings validation rejects a non-HTTPS or

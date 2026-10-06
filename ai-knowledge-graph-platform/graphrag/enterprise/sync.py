@@ -13,6 +13,7 @@ from uuid import uuid4
 from graphrag.core.config import get_settings
 from graphrag.core.models import Document
 from graphrag.enterprise.models import SyncChange, SyncChangeType
+from graphrag.graph.corpus_revision import CorpusMutation
 from graphrag.graph.neo4j_client import get_neo4j
 from graphrag.messaging.publishers import publish_document
 
@@ -82,20 +83,21 @@ class ContentSyncService:
     ) -> dict:
         """Full-review reconciliation: soft-delete missing source items only."""
         await self._ensure_source(source_id, tenant)
-        rows = await self._neo4j.run(
-            """
-            MATCH (d:Document {tenant: $tenant, source_id: $source_id})
-            WHERE coalesce(d.external_id, '') <> ''
-              AND NOT d.external_id IN $discovered_external_ids
-              AND coalesce(d.is_deleted, false) = false
-            SET d.is_deleted = true, d.deleted_at = datetime(),
-                d.sync_tombstone_reason = 'full_reconciliation'
-            RETURN count(d) AS tombstoned
-            """,
-            source_id=source_id,
-            tenant=tenant,
-            discovered_external_ids=sorted(set(discovered_external_ids)),
-        )
+        async with CorpusMutation(self._neo4j, tenant, "content_sync_reconcile"):
+            rows = await self._neo4j.run(
+                """
+                MATCH (d:Document {tenant: $tenant, source_id: $source_id})
+                WHERE coalesce(d.external_id, '') <> ''
+                  AND NOT d.external_id IN $discovered_external_ids
+                  AND coalesce(d.is_deleted, false) = false
+                SET d.is_deleted = true, d.deleted_at = datetime(),
+                    d.sync_tombstone_reason = 'full_reconciliation'
+                RETURN count(d) AS tombstoned
+                """,
+                source_id=source_id,
+                tenant=tenant,
+                discovered_external_ids=sorted(set(discovered_external_ids)),
+            )
         tombstoned = int(rows[0].get("tombstoned", 0)) if rows else 0
         interval = int(get_settings().content_sync.get("full_review_interval_seconds", 604800))
         await self._neo4j.run(
@@ -155,13 +157,14 @@ class ContentSyncService:
         )
 
     async def _tombstone_external_ids(self, source_id: str, external_ids: list[str], tenant: str) -> int:
-        rows = await self._neo4j.run(
-            """
-            MATCH (d:Document {tenant: $tenant, source_id: $source_id})
-            WHERE d.external_id IN $external_ids AND coalesce(d.is_deleted, false) = false
-            SET d.is_deleted = true, d.deleted_at = datetime(), d.sync_tombstone_reason = 'delta_delete'
-            RETURN count(d) AS tombstoned
-            """,
-            source_id=source_id, tenant=tenant, external_ids=external_ids,
-        )
+        async with CorpusMutation(self._neo4j, tenant, "content_sync_delete"):
+            rows = await self._neo4j.run(
+                """
+                MATCH (d:Document {tenant: $tenant, source_id: $source_id})
+                WHERE d.external_id IN $external_ids AND coalesce(d.is_deleted, false) = false
+                SET d.is_deleted = true, d.deleted_at = datetime(), d.sync_tombstone_reason = 'delta_delete'
+                RETURN count(d) AS tombstoned
+                """,
+                source_id=source_id, tenant=tenant, external_ids=external_ids,
+            )
         return int(rows[0].get("tombstoned", 0)) if rows else 0

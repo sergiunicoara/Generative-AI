@@ -4,11 +4,15 @@ from __future__ import annotations
 
 import asyncio
 import multiprocessing
+from dataclasses import replace
 from pathlib import Path
+from unittest.mock import patch
 
 import pytest
+from rdflib import Graph, Literal
+from rdflib.namespace import RDFS
 
-from graphrag.domains.energy.demo import EnergyDemoService
+from graphrag.domains.energy.demo import ASSET, EnergyDemoService
 from graphrag.domains.energy.evidence_requests import EvidenceRequestError, EvidenceRequestService
 from graphrag.domains.energy.governance_store import GovernanceStore, WorkflowConflictError
 from graphrag.domains.energy.workflow import (
@@ -46,6 +50,37 @@ async def test_publication_and_workflow_survive_a_store_restart(tmp_path: Path):
     assert len(graph) == report.published_triple_count
     assert await restored.current("WO-9001") == (APPROVED, transition.object_version)
     await restarted.close()
+
+
+async def test_rollback_refreshes_other_worker_and_restart_keeps_active_version(tmp_path: Path):
+    store, first_worker, _workflow = await _runtime(tmp_path)
+    try:
+        initial_id = first_worker.publication_report().version_id
+        site = ASSET["north-sea-wind-farm"]
+        revised = Graph()
+        revised += first_worker.graph
+        revised.set((site, RDFS.label, Literal("Revised source label")))
+        await store.publish(
+            first_worker.tenant,
+            replace(first_worker.publication_report(), version_id="revised-version"),
+            revised,
+        )
+        second_worker = await EnergyDemoService.create(governance_store=store)
+        assert str(second_worker.graph.value(site, RDFS.label)) == "Revised source label"
+
+        rolled_back = await first_worker.rollback_durable(initial_id)
+        await second_worker.refresh_durable()
+        assert second_worker.publication_report().version_id == rolled_back.version_id
+        assert str(second_worker.graph.value(site, RDFS.label)) == "North Sea Demonstration Wind Farm"
+
+        with patch.object(EnergyDemoService, "_build_graph", side_effect=AssertionError("startup rebuilt source")):
+            restarted_worker = await EnergyDemoService.create(governance_store=store)
+        assert restarted_worker.publication_report().version_id == rolled_back.version_id
+        assert (await store.active_version_id(first_worker.tenant)) == rolled_back.version_id
+    finally:
+        await store.close()
+
+
 
 
 async def test_idempotency_replays_original_response_and_rejects_argument_reuse(tmp_path: Path):

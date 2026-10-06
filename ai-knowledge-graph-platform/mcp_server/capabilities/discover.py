@@ -18,6 +18,7 @@ def register(registry: CapabilityRegistry) -> None:
         kind="read",
         risk="safe",
         fn=_discover,
+        required_scopes=("read",),
         arg_schema={},
         dry_run_ok=True,
         pass_identity=True,

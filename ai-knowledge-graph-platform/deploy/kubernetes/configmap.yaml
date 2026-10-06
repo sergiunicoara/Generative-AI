@@ -10,6 +10,7 @@ data:
   PYTHONPATH: /app
   KPI_BACKEND: timescale
   QUERY_RESULT_TTL_SECONDS: "3600"
+  ENERGY_GOVERNANCE_BLOB_ROOT: /data/energy/published
   GRAPHRAG_RATE_LIMIT_INGEST: 20/minute
   GRAPHRAG_RATE_LIMIT_QUERY: 60/minute
   # Rate-limit counters are shared across replicas through REDIS_URL (set in

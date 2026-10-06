@@ -455,6 +455,7 @@ class LocalSearch:
                 semantic_weight=sem_weight,
                 per_seed_cap=traversal_policy.per_seed_cap,
                 total_cap=traversal_policy.total_cap,
+                include_superseded=include_superseded,
             )
             log.info(
                 "local_search.multihop.done",

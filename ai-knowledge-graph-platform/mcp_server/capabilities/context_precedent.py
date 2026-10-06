@@ -28,6 +28,7 @@ def register(registry: CapabilityRegistry) -> None:
         kind="read",
         risk="moderate",
         fn=_find_precedents,
+        required_scopes=("read",),
         arg_schema={
             "policy_version_id": {"type": str, "required": True},
             "tenant": {"type": str},

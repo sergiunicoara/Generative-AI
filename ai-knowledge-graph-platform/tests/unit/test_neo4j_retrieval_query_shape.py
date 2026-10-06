@@ -40,6 +40,7 @@ async def test_multihop_interpolates_depth_tenant_temporal_and_semantic_score() 
         tenant="acme",
         query_embedding=[0.1, 0.2],
         semantic_weight=0.5,
+        include_superseded=False,
     )
 
     cypher = client.run.await_args.args[0]
@@ -52,6 +53,13 @@ async def test_multihop_interpolates_depth_tenant_temporal_and_semantic_score() 
     assert "ALL(r IN relationships(path) WHERE r.tenant = $tenant)" in cypher
     assert "vector.similarity.cosine" in cypher
     assert client.run.await_args.kwargs["sem_w"] == 0.5
+    assert "MATCH (neighbor_chunk)-[:PART_OF]->(d:Document {tenant: $tenant})" in cypher
+    assert cypher.index("coalesce(d.is_deleted, false) = false") < cypher.index("LIMIT $per_seed_cap")
+    assert "d.superseded_by IS NULL" in cypher
+    assert "d.valid_from <= datetime($as_of)" in cypher
+    assert "d.recorded_at, d.created_at" in cypher
+    assert client.run.await_args.kwargs["include_superseded"] is False
+    assert client.run.await_args.kwargs["as_of"] == "2026-01-01"
 
 
 # include_superseded defaults to True (include, today's pre-existing

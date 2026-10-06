@@ -328,8 +328,10 @@ class GraphWriter:
         """
         Write entities with alias resolution and embedding deduplication.
 
-        Returns the list of entities as actually written (some may be
-        redirected to canonical entities found via alias resolution).
+        Returns only entities merged as graph nodes. Alias-resolved input
+        mentions are redirected in place (their original ids and canonical
+        identities remain available to callers building relation endpoints),
+        but are omitted from the return value.
         """
         tenant = chunk.tenant
         await self._ensure_registry(tenant)
@@ -574,6 +576,8 @@ class GraphWriter:
         to_merge_rows: list[dict] = []
         to_audit_rows: list[dict] = []
         for rel in relations:
+            # Look up extraction-local ids, including mentions redirected to
+            # existing canonical nodes by write_entities().
             src = entity_map.get(rel.source_entity_id)
             tgt = entity_map.get(rel.target_entity_id)
             if not (src and tgt):

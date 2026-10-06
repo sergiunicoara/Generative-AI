@@ -51,7 +51,7 @@ def register(registry: CapabilityRegistry) -> None:
         kind="read",
         risk="safe",
         fn=_graph_stats,
-        required_scopes=(),
+        required_scopes=("read",),
         arg_schema={"tenant": {"type": str}},
         legacy_aliases=("graph_stats",),
     ))

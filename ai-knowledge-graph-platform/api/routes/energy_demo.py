@@ -46,10 +46,11 @@ def _capability_diagnostics() -> dict:
     return {"status": "ok", "message": "Generated capability diagnostics loaded.", **metadata, "version": str(payload.get("version", "generated")), "diagnostics": diagnostics}
 
 
-def get_energy_service(request: Request) -> EnergyDemoService:
+async def get_energy_service(request: Request) -> EnergyDemoService:
     service = getattr(request.app.state, "energy_demo_service", None)
     if service is None:
         raise HTTPException(status_code=503, detail="Energy demo is starting")
+    await service.refresh_durable()
     return service
 
 

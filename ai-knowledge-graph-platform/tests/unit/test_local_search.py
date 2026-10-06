@@ -120,6 +120,19 @@ class TestLocalSearchPipelineFlags:
         assert ls._neo4j.get_multihop_chunks.await_args.kwargs["as_of"] == "2025-01-01T00:00:00+00:00"
         assert ls._neo4j.get_entity_neighbors.await_args.kwargs["transaction_at"] == "2025-02-01T00:00:00+00:00"
 
+    async def test_multihop_passes_supersession_policy_to_document_filter(self):
+        ls = _make_local_search({"gnn_enabled": False})
+        ls._embedder.embed_text = AsyncMock(return_value=[0.1] * 768)
+        ls._neo4j.vector_search_chunks = AsyncMock(return_value=[_chunk("c1")])
+        ls._bm25.search = AsyncMock(return_value=[_chunk("c1")])
+        ls._reranker.rerank = AsyncMock(return_value=[_chunk("c1")])
+        ls._neo4j.get_multihop_chunks = AsyncMock(return_value=[])
+        ls._neo4j.get_entity_neighbors = AsyncMock(return_value=[])
+
+        await ls.search("current source evidence", include_superseded=False)
+
+        assert ls._neo4j.get_multihop_chunks.await_args.kwargs["include_superseded"] is False
+
     async def test_zero_hops_skips_graph_traversal(self):
         ls = _make_local_search({"gnn_enabled": False, "multihop_depth": 0})
         ls._embedder.embed_text = AsyncMock(return_value=[0.1] * 768)

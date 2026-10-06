@@ -556,8 +556,12 @@ class Neo4jClient:
     async def begin_relational_ingest_run(
         self, tenant: str, source_id: str, run_id: str, lease_seconds: int,
     ) -> bool:
-        """Claim the ingest lease for (tenant, source_id), or refuse if
-        another run already holds an unexpired one.
+        """Claim the ingest lease and invalidate the completion marker
+        atomically, or refuse if another run holds an unexpired lease.
+
+        `row_hashes_json` remains the last completed snapshot until completion.
+        `was_complete_on_claim` lets this run skip an unchanged snapshot, while
+        a retry after a partial write sees false and must replay it.
 
         Same "a write that doesn't match performs no mutation" discipline
         as the business-write StaleVersionError guard
@@ -569,14 +573,16 @@ class Neo4jClient:
             """
             MERGE (c:RelationalSourceCheckpoint {tenant: $tenant, source_id: $source_id})
             ON CREATE SET c.ingest_complete = false, c.row_hashes_json = '{}'
-            WITH c,
+            WITH c, coalesce(c.ingest_complete, false) AS was_complete,
                  (c.lease_run_id IS NULL
                   OR c.lease_expires_at IS NULL
                   OR c.lease_expires_at < datetime()
                   OR c.lease_run_id = $run_id) AS claimable
             FOREACH (_ IN CASE WHEN claimable THEN [1] ELSE [] END |
               SET c.lease_run_id = $run_id,
-                  c.lease_expires_at = datetime() + duration({seconds: $lease_seconds}))
+                  c.lease_expires_at = datetime() + duration({seconds: $lease_seconds}),
+                  c.was_complete_on_claim = was_complete,
+                  c.ingest_complete = false)
             RETURN claimable
             """,
             tenant=tenant, source_id=source_id, run_id=run_id, lease_seconds=lease_seconds,
@@ -585,16 +591,15 @@ class Neo4jClient:
 
     async def get_relational_source_state(self, tenant: str, source_id: str) -> dict | None:
         """The last checkpoint for (tenant, source_id), or None if this
-        source has never been ingested. `row_hashes` is only meaningful
-        when `ingest_complete` is True — a checkpoint from a crashed run
-        must never be trusted as "this is what's currently in the graph,"
-        same reasoning get_document_states() already documents for the
-        document path."""
+        source has never been ingested. `row_hashes` remains the last
+        completed snapshot during a run; `was_complete_on_claim` controls
+        whether the current run may skip an unchanged snapshot."""
         rows = await self.run(
             """
             MATCH (c:RelationalSourceCheckpoint {tenant: $tenant, source_id: $source_id})
             RETURN coalesce(c.row_hashes_json, '{}') AS row_hashes_json,
                    coalesce(c.ingest_complete, false) AS ingest_complete,
+                   coalesce(c.was_complete_on_claim, false) AS was_complete_on_claim,
                    c.lease_run_id AS run_id,
                    c.lease_expires_at AS lease_expires_at
             """,
@@ -606,6 +611,7 @@ class Neo4jClient:
         return {
             "row_hashes": json.loads(row["row_hashes_json"] or "{}"),
             "ingest_complete": bool(row["ingest_complete"]),
+            "was_complete_on_claim": bool(row["was_complete_on_claim"]),
             "run_id": row["run_id"],
             "lease_expires_at": row["lease_expires_at"],
         }
@@ -624,6 +630,7 @@ class Neo4jClient:
             MATCH (c:RelationalSourceCheckpoint {tenant: $tenant, source_id: $source_id})
             WHERE c.lease_run_id = $run_id
             SET c.ingest_complete = true,
+                c.was_complete_on_claim = null,
                 c.row_hashes_json = $row_hashes_json,
                 c.completed_at = datetime(),
                 c.lease_run_id = null,
@@ -2162,6 +2169,7 @@ class Neo4jClient:
         semantic_weight: float = 0.0,
         per_seed_cap: int = 200,
         total_cap: int = 500,
+        include_superseded: bool = True,
     ) -> list[dict]:
         """
         Multi-hop graph traversal with temporal filtering and path quality scoring.
@@ -2224,7 +2232,7 @@ class Neo4jClient:
             UNWIND $chunk_ids AS cid
             CALL {{
                 WITH cid
-                MATCH (c:Chunk {{id: cid}})-[:MENTIONS]->(e:Entity)
+                MATCH (c:Chunk {{id: cid, tenant: $tenant}})-[:MENTIONS]->(e:Entity)
                 WHERE coalesce(e.quarantined, false) = false
                 MATCH path = (e)-[:RELATES_TO*1..{hops}]-(neighbor:Entity)
                 WHERE coalesce(neighbor.quarantined, false) = false {temporal_filter} {transaction_filter} {tenant_filter}
@@ -2232,6 +2240,15 @@ class Neo4jClient:
                 MATCH (neighbor_chunk:Chunk)-[:MENTIONS]->(neighbor)
                 WHERE NOT neighbor_chunk.id IN $chunk_ids
                   AND (neighbor_chunk.tenant = $tenant)
+                MATCH (neighbor_chunk)-[:PART_OF]->(d:Document {{tenant: $tenant}})
+                WHERE coalesce(d.is_deleted, false) = false
+                  AND ($include_superseded OR d.superseded_by IS NULL)
+                  AND ($as_of IS NULL OR (
+                    (d.valid_from IS NULL OR d.valid_from <= datetime($as_of))
+                    AND (d.valid_to IS NULL OR d.valid_to > datetime($as_of))))
+                  AND ($transaction_at IS NULL OR (
+                    coalesce(d.recorded_at, d.created_at) IS NULL
+                    OR coalesce(d.recorded_at, d.created_at) <= datetime($transaction_at)))
                 RETURN DISTINCT
                     neighbor_chunk.id   AS chunk_id,
                     neighbor_chunk.text AS text,
@@ -2256,8 +2273,9 @@ class Neo4jClient:
             tenant=tenant,
             per_seed_cap=per_seed_cap,
             total_cap=total_cap,
-            **({"as_of": as_of} if as_of else {}),
-            **({"transaction_at": transaction_at} if transaction_at else {}),
+            as_of=as_of,
+            transaction_at=transaction_at,
+            include_superseded=include_superseded,
             **({"query_emb": query_embedding, "sem_w": float(semantic_weight)}
                if use_semantic else {}),
         )

@@ -157,12 +157,16 @@ class TestLookupEntity:
 class TestCapabilityRegistryWiring:
     def test_graph_stats_registered_with_legacy_alias(self):
         registry = build_registry()
-        spec = registry.resolve("graph_stats", CallerIdentity.anonymous())
+        spec = registry.resolve("graph_stats", CallerIdentity.from_claims(
+            {"sub": "reader", "tenant": "aerospace", "scope": "read"},
+        ))
         assert spec.qualified_name == "kg.graph.stats@1.0.0"
 
     def test_facts_query_registered_re_admitting_orphaned_tool(self):
         registry = build_registry()
-        spec = registry.resolve("kg.facts.query@1.0.0", CallerIdentity.anonymous())
+        spec = registry.resolve("kg.facts.query@1.0.0", CallerIdentity.from_claims(
+            {"sub": "reader", "tenant": "aerospace", "scope": "read"},
+        ))
         assert spec.fn is query_graph_facts_impl
 
     async def test_graph_stats_denies_cross_tenant_caller(self):
@@ -179,7 +183,7 @@ class TestCapabilityRegistryWiring:
         registry = build_registry()
         result = await registry.call("graph_stats", {}, CallerIdentity.anonymous())
         assert isinstance(result, DeniedCapabilityCall)
-        assert result.reason == "unauthenticated"
+        assert result.reason == "missing_scope"
 
     async def test_context_precedent_capability_is_tenant_bound(self):
         registry = build_registry()

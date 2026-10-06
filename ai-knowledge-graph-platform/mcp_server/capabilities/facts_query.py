@@ -24,7 +24,7 @@ def register(registry: CapabilityRegistry) -> None:
         kind="read",
         risk="safe",
         fn=query_graph_facts,
-        required_scopes=(),
+        required_scopes=("read",),
         arg_schema={
             "question": {"type": str, "required": True},
             "tenant": {"type": str},

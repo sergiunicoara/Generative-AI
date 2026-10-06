@@ -4,6 +4,7 @@ namespace: graphrag
 resources:
   - namespace.yaml
   - configmap.yaml
+  - energy-published-rdf-pvc.yaml
   - service-account.yaml
   - api.yaml
   - mcp.yaml

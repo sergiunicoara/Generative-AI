@@ -37,6 +37,11 @@ spec:
           env:
             - name: TMPDIR
               value: /tmp
+            - name: ENERGY_GOVERNANCE_DB_URL
+              valueFrom:
+                secretKeyRef:
+                  name: graphrag-secrets
+                  key: ENERGY_GOVERNANCE_DB_URL
           readinessProbe:
             httpGet: {path: /health/ready, port: http}
             initialDelaySeconds: 15
@@ -55,9 +60,14 @@ spec:
           volumeMounts:
             - name: tmp
               mountPath: /tmp
+            - name: energy-published-rdf
+              mountPath: /data/energy
       volumes:
         - name: tmp
           emptyDir: {}
+        - name: energy-published-rdf
+          persistentVolumeClaim:
+            claimName: energy-published-rdf
 ---
 apiVersion: v1
 kind: Service

@@ -4,17 +4,18 @@ from __future__ import annotations
 
 import asyncio
 from contextlib import asynccontextmanager
+from dataclasses import replace
 from datetime import datetime, timezone
 from pathlib import Path
 
 import pytest
 from fastapi import FastAPI
-from rdflib import RDF, Graph, URIRef
+from rdflib import RDF, RDFS, Graph, Literal, URIRef
 from starlette.testclient import TestClient
 
 from api.auth.dependencies import get_current_user
 from api.routes import energy_demo as energy_demo_routes
-from graphrag.domains.energy.demo import EnergyDemoService
+from graphrag.domains.energy.demo import ASSET, EnergyDemoService
 from graphrag.domains.energy.evidence_requests import EvidenceRequestService
 from graphrag.domains.energy.governance_store import GovernanceStore
 from graphrag.domains.energy.publication import PublicationReport
@@ -59,6 +60,37 @@ def test_publication_and_quarantine_read_the_lifespan_published_version(tmp_path
     assert publication.status_code == 200
     assert publication.json()["published_triple_count"] > 0
     assert quarantine.json()["quarantined_records"] == []
+
+
+def test_routes_refresh_active_rdf_after_another_worker_publishes_and_rolls_back(tmp_path: Path):
+    async def change_active_version(rollback_to: str | None = None):
+        store = GovernanceStore(
+            f"sqlite+aiosqlite:///{(tmp_path / 'governance.sqlite').as_posix()}",
+            blob_root=tmp_path / "published",
+        )
+        await store.open()
+        try:
+            if rollback_to is not None:
+                return await store.rollback("energy-demo", rollback_to)
+            report, graph = await store.current("energy-demo")
+            revised = Graph()
+            revised += graph
+            revised.set((ASSET["north-sea-wind-farm"], RDFS.label, Literal("Other worker revision")))
+            return await store.publish(
+                "energy-demo", replace(report, version_id="other-worker-revision"), revised,
+            )
+        finally:
+            await store.close()
+
+    with _client(tmp_path) as client:
+        original = client.get("/energy-demo/publication").json()["version_id"]
+        revised = asyncio.run(change_active_version())
+        assert client.get("/energy-demo/publication").json()["version_id"] == revised.version_id
+        assert "Other worker revision" in client.get("/energy-demo/rdf").json()["data"]
+
+        restored = asyncio.run(change_active_version(original))
+        assert client.get("/energy-demo/publication").json()["version_id"] == restored.version_id
+        assert "Other worker revision" not in client.get("/energy-demo/rdf").json()["data"]
 
 
 def test_capability_diagnostics_is_authenticated_tenant_scoped_and_read_only(tmp_path: Path):

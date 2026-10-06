@@ -156,12 +156,16 @@ class TestLiveBitemporalAsOfFiltering:
                 """
                 MATCH (expired:Entity {name: "Expired", tenant: $tenant})
                 MATCH (current:Entity {name: "Current", tenant: $tenant})
+                CREATE (d:Document {id: $document_id, tenant: $tenant, is_deleted: false})
                 CREATE (ec:Chunk {id: $expired_chunk, tenant: $tenant, text: "expired hop"})
                 CREATE (cc:Chunk {id: $current_chunk, tenant: $tenant, text: "current hop"})
                 CREATE (ec)-[:MENTIONS]->(expired)
                 CREATE (cc)-[:MENTIONS]->(current)
+                CREATE (ec)-[:PART_OF]->(d)
+                CREATE (cc)-[:PART_OF]->(d)
                 """,
                 tenant=tenant,
+                document_id=f"document-{tenant}",
                 expired_chunk=f"expired-hop-{tenant}",
                 current_chunk=f"current-hop-{tenant}",
             )
@@ -172,6 +176,37 @@ class TestLiveBitemporalAsOfFiltering:
 
             hop_chunk_ids = {r["chunk_id"] for r in rows}
             assert hop_chunk_ids == {f"current-hop-{tenant}"}
+
+            await client.run(
+                "MATCH (d:Document {id: $id, tenant: $tenant}) SET d.is_deleted = true",
+                id=f"document-{tenant}", tenant=tenant,
+            )
+            assert await client.get_multihop_chunks(
+                [f"chunk-{tenant}"], as_of="2025-06-01T00:00:00Z", tenant=tenant,
+            ) == []
+
+            await client.run(
+                """MATCH (d:Document {id: $id, tenant: $tenant})
+                   SET d.is_deleted = false, d.valid_from = datetime('2027-01-01T00:00:00Z')""",
+                id=f"document-{tenant}", tenant=tenant,
+            )
+            assert await client.get_multihop_chunks(
+                [f"chunk-{tenant}"], as_of="2025-06-01T00:00:00Z", tenant=tenant,
+            ) == []
+
+            await client.run(
+                """MATCH (d:Document {id: $id, tenant: $tenant})
+                   SET d.valid_from = null, d.superseded_by = 'revision-2'""",
+                id=f"document-{tenant}", tenant=tenant,
+            )
+            assert await client.get_multihop_chunks(
+                [f"chunk-{tenant}"], as_of="2025-06-01T00:00:00Z",
+                tenant=tenant, include_superseded=False,
+            ) == []
+            assert {r["chunk_id"] for r in await client.get_multihop_chunks(
+                [f"chunk-{tenant}"], as_of="2025-06-01T00:00:00Z",
+                tenant=tenant, include_superseded=True,
+            )} == {f"current-hop-{tenant}"}
         finally:
             await client.run("MATCH (n {tenant: $tenant}) DETACH DELETE n", tenant=tenant)
             await driver.close()

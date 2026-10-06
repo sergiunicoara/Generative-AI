@@ -552,8 +552,11 @@ class RelationalGraphIngestor:
             metadata={"source_id": mapping.source_id, "mapping_version": mapping.version},
         )
         await self.graph_writer.write_chunks([chunk])
-        written = await self.graph_writer.write_entities(entities, chunk)
-        entity_map = {entity.id: entity for entity in written}
+        await self.graph_writer.write_entities(entities, chunk)
+        # GraphWriter redirects alias mentions in place but omits them from
+        # its returned list of newly merged nodes. Relations still refer to
+        # the source-row ids, so retain every input mention as an endpoint.
+        entity_map = {entity.id: entity for entity in entities}
         await self.graph_writer.write_relations(relations, entity_map, doc_id=document_id, tenant=mapping.tenant)
         return report
 
@@ -570,10 +573,8 @@ class RelationalGraphIngestor:
         — concurrent-run protection: a second call for the same source
         while a lease is held raises `ConcurrentIngestError` immediately,
         no partial read or write. Then diffs this run's rows against the
-        last *completed* checkpoint (row-level upsert/delete detection — an
-        incomplete checkpoint from a crashed run is never trusted, same
-        reasoning `Neo4jClient.get_document_states()` already documents for
-        the document path), writes the current full row set (MERGE-
+        last completed row-hash snapshot (row-level upsert/delete detection),
+        writes the current full row set (MERGE-
         idempotent, so this is correct on any change, not just an unchanged
         one — see the module docstring's "Out of scope" note on why this
         isn't a selective/minimal write), tombstones entities whose row
@@ -581,8 +582,8 @@ class RelationalGraphIngestor:
         the lease.
 
         Crash recovery and replay: a crash anywhere after the lease is
-        acquired leaves it claimed but the checkpoint's `ingest_complete`
-        unchanged — deliberately not released on error (fail-safe, not
+        acquired leaves it claimed with `ingest_complete=false` — deliberately
+        not released on error (fail-safe, not
         fail-open: an immediate retry racing the same broken state is worse
         than a bounded wait). The next call's lease acquisition succeeds
         once `lease_seconds` elapses and safely replays the whole sequence
@@ -612,14 +613,13 @@ class RelationalGraphIngestor:
         current_hash = compute_relational_snapshot_hash(built.payload + built.relation_payload)
 
         previous_state = await neo4j.get_relational_source_state(mapping.tenant, mapping.source_id)
-        previous_row_hashes = (
-            previous_state["row_hashes"]
-            if previous_state is not None and previous_state["ingest_complete"]
-            else {}
-        )
+        # Claiming the lease marks the run incomplete but preserves the last
+        # completed hashes, including deleted rows that a retry must tombstone.
+        previous_row_hashes = previous_state["row_hashes"] if previous_state is not None else {}
         diff = diff_rows(previous_row_hashes, built.row_hashes)
 
-        if not diff.upserted and not diff.deleted and previous_state is not None and previous_state["ingest_complete"]:
+        if (not diff.upserted and not diff.deleted and previous_state is not None
+                and previous_state.get("was_complete_on_claim", previous_state["ingest_complete"])):
             # Row-level diff subsumes the whole-snapshot check ingest() uses
             # -- nothing changed and nothing disappeared, so this is exactly
             # ingest()'s should_skip_ingest() condition, just derived from
@@ -680,8 +680,8 @@ class RelationalGraphIngestor:
             metadata={"source_id": mapping.source_id, "mapping_version": mapping.version},
         )
         await self.graph_writer.write_chunks([chunk])
-        written = await self.graph_writer.write_entities(built.entities, chunk)
-        entity_map = {entity.id: entity for entity in written}
+        await self.graph_writer.write_entities(built.entities, chunk)
+        entity_map = {entity.id: entity for entity in built.entities}
         await self.graph_writer.write_relations(
             built.relations, entity_map, doc_id=document_id, tenant=mapping.tenant,
         )

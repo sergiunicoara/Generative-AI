@@ -41,6 +41,7 @@ def register(registry: CapabilityRegistry) -> None:
         kind="read",
         risk="moderate",
         fn=_answer_query,
+        required_scopes=("read",),
         pass_identity=True,
         arg_schema={
             "question": {"type": str, "required": True},

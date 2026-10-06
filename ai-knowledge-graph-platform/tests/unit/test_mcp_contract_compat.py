@@ -51,19 +51,32 @@ class TestContractSnapshotMatchesGoldenFile:
 
 class TestBackwardCompatibleReadCapabilities:
     """graph_stats is the compatibility-adapter proof case (Wave 4): same
-    wire name, same signature, resolvable by an unauthenticated caller
-    (existence + shape don't require entitlement -- only invocation does)."""
+    wire name and signature, with read entitlement required for resolution."""
 
     def test_graph_stats_resolvable_under_legacy_bare_name(self):
         registry = build_registry()
-        spec = registry.resolve("graph_stats", CallerIdentity.anonymous())
+        spec = registry.resolve("graph_stats", CallerIdentity.from_claims(
+            {"sub": "reader", "tenant": "aerospace", "scope": "read"},
+        ))
         assert spec.qualified_name == "kg.graph.stats@1.0.0"
         assert spec.arg_schema.keys() == {"tenant"}
 
     def test_query_graph_facts_resolvable_under_qualified_name(self):
         registry = build_registry()
-        spec = registry.resolve("kg.facts.query@1.0.0", CallerIdentity.anonymous())
-        assert spec.required_scopes == ()
+        spec = registry.resolve("kg.facts.query@1.0.0", CallerIdentity.from_claims(
+            {"sub": "reader", "tenant": "aerospace", "scope": "read"},
+        ))
+        assert spec.required_scopes == ("read",)
+
+    def test_every_read_capability_requires_read_scope(self):
+        registry = build_registry()
+        no_read = CallerIdentity.from_claims(
+            {"sub": "worker", "tenant": "aerospace", "scope": "biz:write"},
+        )
+        for spec in registry.contract_snapshot():
+            if spec["kind"] == "read":
+                assert "read" in spec["required_scopes"]
+                assert registry.resolve(spec["qualified_name"], no_read).reason == "missing_scope"
 
 
 class TestWriteCapabilityRequiresBizWriteScope:

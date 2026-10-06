@@ -104,7 +104,11 @@ class GovernanceStore:
         else:
             database = ROOT / "artifacts" / "energy" / "governance.sqlite"
             self.db_url = f"sqlite+aiosqlite:///{database.as_posix()}"
-        self.blob_root = blob_root or ROOT / "artifacts" / "energy" / "published"
+        configured_blob_root = os.getenv("ENERGY_GOVERNANCE_BLOB_ROOT")
+        self.blob_root = blob_root or (
+            Path(configured_blob_root) if configured_blob_root
+            else ROOT / "artifacts" / "energy" / "published"
+        )
         self._is_sqlite = self.db_url.startswith("sqlite")
         if self._is_sqlite:
             database_path = self.db_url.split("///", 1)[-1]
@@ -223,6 +227,13 @@ class GovernanceStore:
             raise PublicationRollbackError("no version has been published yet")
         graph = await asyncio.to_thread(read_graph, Path(row["blob_path"]), json.loads(row["prefixes_json"]))
         return _report_from_json(row["report_json"]), graph
+
+    async def active_version_id(self, tenant: str) -> str | None:
+        """Read the shared active pointer without parsing its RDF blob."""
+        async with self._engine.connect() as connection:
+            return (await connection.execute(text("""
+                SELECT version_id FROM energy_active_versions WHERE tenant = :tenant
+            """), {"tenant": tenant})).scalar_one_or_none()
 
     async def history(self, tenant: str) -> list[PublicationReport]:
         async with self._engine.connect() as connection:

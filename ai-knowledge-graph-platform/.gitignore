@@ -62,3 +62,5 @@ artifacts/energy/governance.sqlite
 artifacts/energy-demo-e2e-sap.sqlite
 # Scraped third-party content (names + full post text) -- local research only
 research/linkedin_group/
+
+reports/

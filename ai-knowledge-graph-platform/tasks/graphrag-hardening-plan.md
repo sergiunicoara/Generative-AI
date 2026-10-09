@@ -160,7 +160,9 @@ one focused commit. Order is chosen so each phase only depends on earlier ones.
 - Risks: strict gating can reject data that used to ingest. Mitigation: severities - only BLOCKING stops a batch; first release ships WARNING for rules with no prior enforcement and a per-tenant strictness setting.
 - Accept: no BLOCKING-invalid record is written; every rejection is queryable with rule IDs.
 
-#### Phase 1 trace notes (2026-10-09, read-only; implementation not started)
+#### Phase 1 status: implemented (see docs/graph-validation.md); live-Neo4j parts CI-only
+
+#### Phase 1 trace notes (2026-10-09)
 - Step 0 done in `acb3bdf` (shared schema loader; manual edge state survives re-merge).
 - Gate insertion point: `IngestionAgent.write` (`ingestion_agent.py:207`); the full batch
   (`extracted["extraction_results"]`, per-chunk `(entities, relations)`) is in memory before

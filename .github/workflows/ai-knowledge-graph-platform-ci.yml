@@ -71,13 +71,22 @@ jobs:
         run: python scripts/verify_energy_clean_snapshot.py
 
       - name: Run unit tests
-        run: python -m pytest tests/unit/ -v --tb=short
+        run: python -m pytest tests/unit/ -v --tb=short --junitxml=reports/junit-unit.xml
 
       - name: Run integration tests
-        run: python -m pytest tests/integration/ -v --tb=short
+        run: python -m pytest tests/integration/ -v --tb=short --junitxml=reports/junit-integration.xml
 
       - name: Run load tests
-        run: python -m pytest tests/load/ -v --tb=short
+        run: python -m pytest tests/load/ -v --tb=short --junitxml=reports/junit-load.xml
+
+      # JUnit results include the graph-validation suite (tests/unit/test_publication_gate.py).
+      - name: Upload JUnit reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: junit-reports
+          path: ai-knowledge-graph-platform/reports/junit-*.xml
+          if-no-files-found: ignore
 
       - name: Validate evaluation datasets
         run: python scripts/validate_eval_datasets.py

@@ -47,6 +47,7 @@ from graphrag.graph.ontology_proposals import OntologyProposalService
 from graphrag.graph.pagerank import PageRankComputer
 from graphrag.graph.quarantine import QuarantineService
 from graphrag.graph.review_queue import ReviewQueueService
+from graphrag.graph.validation.batch import RejectedRecord, relation_key, relation_payload
 from graphrag.enterprise.access import normalise_policy
 
 log = structlog.get_logger(__name__)
@@ -87,6 +88,15 @@ class GraphWriter:
         self._ontology_loaded_tenants: set[str] = set()
         self._ontology_tenant        = "default"
         self._cfg                    = get_settings()
+        # Relations refused after alias resolution (post-resolution domain/range,
+        # unresolvable endpoints). The publication gate drains these into the
+        # durable quarantine so no refusal is silent.
+        self._rejections: list[RejectedRecord] = []
+
+    def drain_rejections(self) -> list[RejectedRecord]:
+        out = getattr(self, "_rejections", [])  # writers built via __new__ in tests
+        self._rejections = []
+        return out
 
     @property
     def neo4j_client(self):
@@ -559,6 +569,15 @@ class GraphWriter:
 
     # ── Relations ──────────────────────────────────────────────────────────────
 
+    def _reject(self, rel: Relation, entity_map: dict[str, Entity], rule_id: str, message: str) -> None:
+        if not hasattr(self, "_rejections"):  # writers built via __new__ in tests
+            self._rejections = []
+        self._rejections.append(RejectedRecord(
+            record_kind="relation", record_key=relation_key(rel, entity_map),
+            rule_ids=[rule_id], messages=[message],
+            payload=relation_payload(rel, entity_map), chunk_id=rel.source_chunk_id,
+        ))
+
     async def write_relations(
         self,
         relations: list[Relation],
@@ -581,6 +600,7 @@ class GraphWriter:
             src = entity_map.get(rel.source_entity_id)
             tgt = entity_map.get(rel.target_entity_id)
             if not (src and tgt):
+                self._reject(rel, entity_map, "REL-REF-001", "endpoint not in this batch")
                 continue
 
             # Resolve aliases for src and tgt names within this tenant.
@@ -620,6 +640,8 @@ class GraphWriter:
                     detail=f"{src_type}:{src_name}-{rel.relation}->{tgt_type}:{tgt_name}",
                     source_doc_id=doc_id,
                 )
+                self._reject(rel, entity_map, "REL-DOMAIN-002",
+                             f"{src_type}-{rel.relation}->{tgt_type}")
                 log.warning(
                     "graph_writer.relation_skipped",
                     src=src_name,

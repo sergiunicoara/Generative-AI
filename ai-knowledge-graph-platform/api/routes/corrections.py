@@ -11,6 +11,9 @@ POST /corrections/conflict/resolve      Mark a Conflict node as resolved
 GET  /corrections/conflicts             List open conflicts
 GET  /corrections/quarantined           List quarantined entities
 GET  /corrections/over-merges          List over-merge candidates
+GET  /corrections/quarantine/records    Records refused by the publication gate
+GET  /corrections/quarantine/summary    Quarantine counts by status, rule, source
+POST /corrections/quarantine/records/{id}/retry   Re-validate (corrected) record, publish if valid
 """
 
 from __future__ import annotations
@@ -24,6 +27,7 @@ from graphrag.graph.entity_splitter import EntitySplitter
 from graphrag.graph.quarantine import QuarantineService
 from graphrag.graph.contradiction_detector import ContradictionDetector
 from graphrag.graph.corpus_revision import CorpusMutation
+from graphrag.graph.validation import PublicationGate
 
 router = APIRouter()
 
@@ -67,6 +71,12 @@ class EdgeOverrideRequest(BaseModel):
     confidence: float = 1.0
     override_by: str = "admin"
     note: str = ""
+
+
+class QuarantineRetryRequest(BaseModel):
+    # Corrected record payload; omit to retry the stored payload unchanged
+    # (e.g. after the ontology or an endpoint entity was fixed).
+    payload: dict | None = None
 
 
 class ConflictResolveRequest(BaseModel):
@@ -310,3 +320,56 @@ async def list_over_merges(top_n: int = 20, tenant: str = Depends(get_tenant)):
     neo4j = get_neo4j()
     splitter = EntitySplitter(neo4j)
     return await splitter.detect_over_merges(top_n=top_n, tenant=tenant)
+
+
+# ── Publication-gate quarantine ───────────────────────────────────────────────
+
+@router.get(
+    "/quarantine/records",
+    dependencies=[Depends(require_scope("read"))],
+    summary="List records refused by the publication gate",
+)
+async def list_quarantine_records(
+    status: str | None = "QUARANTINED",
+    rule_id: str | None = None,
+    limit: int = 100,
+    tenant: str = Depends(get_tenant),
+):
+    gate = PublicationGate(get_neo4j())
+    return await gate.store.list(tenant=tenant, status=status, rule_id=rule_id, limit=limit)
+
+
+@router.get(
+    "/quarantine/summary",
+    dependencies=[Depends(require_scope("read"))],
+    summary="Quarantine counts by status, rule and source",
+)
+async def quarantine_summary(tenant: str = Depends(get_tenant)):
+    return await PublicationGate(get_neo4j()).store.summary(tenant=tenant)
+
+
+@router.post(
+    "/quarantine/records/{record_id}/retry",
+    dependencies=[Depends(require_scope("write"))],
+    summary="Re-validate a quarantined record and publish it if it now passes",
+)
+async def retry_quarantine_record(
+    record_id: str,
+    request: QuarantineRetryRequest,
+    tenant: str = Depends(get_tenant),
+):
+    from graphrag.ingestion.graph_writer import GraphWriter
+
+    neo4j = get_neo4j()
+    writer = GraphWriter(changed_by="quarantine_retry", neo4j_client=neo4j)
+    await writer.ensure_ontology_schema(tenant)
+    gate = PublicationGate(neo4j)
+    try:
+        return await gate.retry(
+            tenant=tenant, record_id=record_id, writer=writer,
+            corrected=request.payload, registry=getattr(writer, "_ontology", None),
+        )
+    except LookupError:
+        raise HTTPException(status_code=404, detail="quarantined record not found")
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc))

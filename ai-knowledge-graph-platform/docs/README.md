@@ -16,6 +16,7 @@ The specification-to-implementation runner is documented in
 - `mcp-operations.md` — authenticated remote MCP deployment and incident response
 - `local-evidence-runbook.md` — reproducible local MCP, retrieval, write, cost, and load evidence
 - `public-local-evaluation-report.md` — bounded results from the checked-in synthetic local run
+- `graph-validation.md` — publication gate, validation rules, quarantine
 - `entity-resolution.md`, `ontology-model.md`, `ontology-governance.md`,
   `cypher-patterns.md` — focused KG references
 - `enterprise-content-governance.md` — provider-neutral ACL, SharePoint sync,

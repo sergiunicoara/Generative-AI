@@ -234,6 +234,11 @@ class OntologyRegistry:
         return self._loaded
 
     @property
+    def allowed_types(self) -> frozenset[str]:
+        """Entity types this tenant's ontology accepts (empty before load)."""
+        return frozenset(getattr(self, "_allowed_types", ()) or ())
+
+    @property
     def version_id(self) -> str:
         """Active tenant-scoped ontology version, or an empty value before load."""
         return self._version_id

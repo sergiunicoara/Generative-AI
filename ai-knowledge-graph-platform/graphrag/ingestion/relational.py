@@ -351,6 +351,52 @@ class TabularSourceConnector(Protocol):
     async def read_table(self, table: str) -> list[dict[str, Any]]: ...
 
 
+async def _publication_gate_check(graph_writer, entities, relations, *, tenant: str, source_id: str) -> None:
+    """Relational batches are all-or-nothing: any BLOCKING rule rejects the run.
+
+    Rejected records are quarantined (with rule ids and payload) before the
+    error is raised, so the refusal is observable and retryable.
+    """
+    from graphrag.core.config import get_settings
+    from graphrag.graph.validation import PublicationGate, validate_batch
+    from graphrag.graph.validation import metrics as gate_metrics
+
+    if not get_settings().ingestion.get("publication_gate_enabled", True):
+        return
+    result = validate_batch(entities, relations, tenant=tenant, source="relational_ingestion",
+                            chunk_id=f"relational:{source_id}")
+    gate_metrics.record_report(result.report)
+    if not result.rejected:
+        return
+    gate = PublicationGate(graph_writer.neo4j_client, source="relational_ingestion")
+    doc = Document(filename=f"relational://{source_id}", source_path=f"relational://{source_id}",
+                   raw_text="", tenant=tenant)
+    await gate.quarantine(result.rejected, doc=doc, document_id="")
+    gate_metrics.record_batch("rejected")
+    rules = sorted({rid for r in result.rejected for rid in r.rule_ids})
+    raise ValueError(
+        f"relational mapping rejected by validation rules: {', '.join(rules)} "
+        f"({len(result.rejected)} records quarantined)"
+    )
+
+
+async def _quarantine_writer_rejections(graph_writer, *, tenant: str, source_id: str, document_id: str) -> None:
+    drain = getattr(graph_writer, "drain_rejections", None)
+    late = drain() if callable(drain) else []
+    if not isinstance(late, list) or not late:
+        return
+    from graphrag.core.config import get_settings
+
+    if not get_settings().ingestion.get("publication_gate_enabled", True):
+        return
+    from graphrag.graph.validation import PublicationGate
+
+    gate = PublicationGate(graph_writer.neo4j_client, source="relational_ingestion")
+    doc = Document(filename=f"relational://{source_id}", source_path=f"relational://{source_id}",
+                   raw_text="", tenant=tenant)
+    await gate.quarantine(late, doc=doc, document_id=document_id)
+
+
 class RelationalGraphIngestor:
     """Validate and persist mapped relational rows through ``GraphWriter``."""
 
@@ -506,6 +552,8 @@ class RelationalGraphIngestor:
         report.shacl_conforms = conforms
         if not conforms:
             raise ValueError("relational mapping rejected by SHACL: " + shacl_report)
+        await _publication_gate_check(self.graph_writer, entities, relations,
+                                      tenant=mapping.tenant, source_id=mapping.source_id)
 
         # A Document.source_id is a real foreign-key-like graph contract: make
         # the source and immutable mapping version durable before the document
@@ -558,6 +606,8 @@ class RelationalGraphIngestor:
         # the source-row ids, so retain every input mention as an endpoint.
         entity_map = {entity.id: entity for entity in entities}
         await self.graph_writer.write_relations(relations, entity_map, doc_id=document_id, tenant=mapping.tenant)
+        await _quarantine_writer_rejections(self.graph_writer, tenant=mapping.tenant,
+                                            source_id=mapping.source_id, document_id=document_id)
         return report
 
     async def ingest_incremental(
@@ -643,6 +693,8 @@ class RelationalGraphIngestor:
         report.shacl_conforms = conforms
         if not conforms:
             raise ValueError("relational mapping rejected by SHACL: " + shacl_report)
+        await _publication_gate_check(self.graph_writer, built.entities, built.relations,
+                                      tenant=mapping.tenant, source_id=mapping.source_id)
 
         catalog = SourceCatalogRepository(neo4j)
         await catalog.upsert_source(SourceSystem(
@@ -685,6 +737,8 @@ class RelationalGraphIngestor:
         await self.graph_writer.write_relations(
             built.relations, entity_map, doc_id=document_id, tenant=mapping.tenant,
         )
+        await _quarantine_writer_rejections(self.graph_writer, tenant=mapping.tenant,
+                                            source_id=mapping.source_id, document_id=document_id)
 
         deleted_entity_ids = []
         for key in diff.deleted:

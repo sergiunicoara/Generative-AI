@@ -105,3 +105,8 @@ CREATE INDEX ontology_proposal_status IF NOT EXISTS FOR (p:OntologyProposal) ON 
 -- it just stops being the merge key.
 CREATE INDEX doc_natural IF NOT EXISTS FOR (d:Document) ON (d.tenant, d.filename);
 CREATE INDEX chunk_tenant_natural IF NOT EXISTS FOR (c:Chunk) ON (c.tenant, c.document_id, c.chunk_index);
+
+-- Publication gate quarantine (docs/graph-validation.md). Records refused by a
+-- BLOCKING validation rule; never labelled :Entity, so no retrieval sees them.
+CREATE CONSTRAINT quarantined_record_tenant_id IF NOT EXISTS FOR (q:QuarantinedRecord) REQUIRE (q.tenant, q.id) IS UNIQUE;
+CREATE INDEX quarantined_record_status IF NOT EXISTS FOR (q:QuarantinedRecord) ON (q.tenant, q.status);

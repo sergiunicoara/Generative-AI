@@ -25,6 +25,7 @@ from graphrag.ingestion.intelligence import (
 from graphrag.enterprise.lineage import LineageService
 from graphrag.enterprise.metadata_governance import MetadataGovernanceService
 from graphrag.graph.corpus_revision import CorpusMutation
+from graphrag.graph.validation import PublicationGate, PublicationRejected
 
 log = structlog.get_logger(__name__)
 
@@ -37,6 +38,8 @@ class IngestionAgent(BaseGraphRAGAgent):
         self._artifact_extractor = IntelligenceArtifactExtractor(self._model())
         self._metadata_governance = MetadataGovernanceService(self._writer.neo4j_client)
         self._lineage = LineageService(self._writer.neo4j_client)
+        # None when ingestion.publication_gate_enabled is false (legacy path).
+        self._publication_gate = PublicationGate.from_settings(self._writer.neo4j_client)
         super().__init__("ingestion_agent")
 
     def _model(self) -> str:
@@ -220,6 +223,29 @@ class IngestionAgent(BaseGraphRAGAgent):
         if metadata_governance is not None:
             await metadata_governance.validate(doc.metadata_envelope, doc.tenant)
 
+        # Publication gate (plan D1): validate the whole extracted batch in
+        # memory before any graph write. BLOCKING records are withheld and
+        # quarantined below; a BLOCKING document-level rule rejects the batch.
+        extraction_results = extracted["extraction_results"]
+        gate = getattr(self, "_publication_gate", None)
+        staged = None
+        quarantined = 0
+        if gate is not None:
+            try:
+                staged = await gate.stage(
+                    doc, chunks, extraction_results, manifest,
+                    registry=getattr(self._writer, "_ontology", None),
+                )
+            except PublicationRejected as exc:
+                if manifest is not None:
+                    manifest.status = "failed"
+                    manifest.error = str(exc)[:300]
+                    manifest.completed_at = datetime.now(timezone.utc)
+                    manifest.integrity_hash = manifest.compute_integrity_hash()
+                    await self._writer.write_ingestion_manifest(manifest)
+                raise
+            extraction_results = staged.extraction_results
+
         # Cache readers fail open to live retrieval while this tenant is being
         # mutated. The revision is advanced only after all writes and checks
         # below complete, so no answer can be cached against a partial ingest.
@@ -274,6 +300,10 @@ class IngestionAgent(BaseGraphRAGAgent):
                 manifest.integrity_hash = manifest.compute_integrity_hash()
                 await self._writer.write_ingestion_manifest(manifest)
 
+            if staged is not None and staged.rejected:
+                await gate.quarantine(staged.rejected, doc=doc, document_id=doc.id, manifest=manifest)
+                quarantined += len(staged.rejected)
+
             # 2. Write chunks to Neo4j
             await self._writer.write_chunks(chunks)
             if metadata_governance is not None:
@@ -312,7 +342,7 @@ class IngestionAgent(BaseGraphRAGAgent):
             all_artifacts = []
             explicit_aliases = 0
             ontology_proposals = 0
-            for index, (chunk, (entities, relations)) in enumerate(zip(chunks, extracted["extraction_results"])):
+            for index, (chunk, (entities, relations)) in enumerate(zip(chunks, extraction_results)):
                 entity_map = {e.id: e for e in entities}
 
                 proposal_payload = list(chunk.metadata.get("ontology_proposals", []))
@@ -350,6 +380,14 @@ class IngestionAgent(BaseGraphRAGAgent):
                 all_entities.extend(entities)
                 all_relations.extend(relations)
                 all_artifacts.extend(artifacts)
+
+            # Always drain (even with the gate off) so a long-lived writer
+            # never accumulates refusals across documents.
+            drain = getattr(self._writer, "drain_rejections", None)
+            late = drain() if callable(drain) else []
+            if gate is not None and isinstance(late, list) and late:
+                await gate.quarantine(late, doc=doc, document_id=doc.id, manifest=manifest)
+                quarantined += len(late)
 
             maintenance_report = await self._writer.validate_and_check_cycles(
                 doc_id=doc.id,
@@ -390,6 +428,8 @@ class IngestionAgent(BaseGraphRAGAgent):
         # deliberately written last: retries of interrupted messages must
         # re-run safely rather than skipping a half-written document.
         await self._writer.mark_document_ingest_complete(doc.id, tenant=doc.tenant)
+        if gate is not None:
+            PublicationGate.published(manifest, quarantined)
         if manifest is not None:
             manifest.status = "completed"
             manifest.completed_at = datetime.now(timezone.utc)
@@ -431,6 +471,8 @@ class IngestionAgent(BaseGraphRAGAgent):
             "structured_tables": len(structured_tables),
             "wikidata_links": wikidata_links,
             "maintenance": maintenance_report,
+            "quarantined": quarantined,
+            "validation": staged.report.counts() if staged is not None else None,
             "corpus_revision": corpus_revision,
             "lineage_reviews": lineage_reviews,
             "obligation_reviews": obligation_reviews,

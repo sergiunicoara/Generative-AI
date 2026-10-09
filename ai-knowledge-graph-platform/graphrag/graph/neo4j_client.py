@@ -9,7 +9,7 @@ from collections.abc import Awaitable, Callable
 from typing import TypeVar
 
 import structlog
-from neo4j import AsyncGraphDatabase, AsyncDriver
+from neo4j import READ_ACCESS, AsyncGraphDatabase, AsyncDriver
 
 from graphrag.observability.operational_metrics import (
     record_graph_query, set_graph_pool,
@@ -124,6 +124,20 @@ class Neo4jClient:
         try:
             with record_graph_query():
                 async with self._driver.session() as session:
+                    result = await session.run(cypher, parameters=params)
+                    return [record.data() async for record in result]
+        finally:
+            self._in_flight -= 1
+            set_graph_pool(self._in_flight, self.MAX_CONNECTION_POOL_SIZE)
+
+    @with_retry(exceptions=(TransientError, ServiceUnavailable), max_attempts=3)
+    async def run_read(self, cypher: str, **params) -> list[dict]:
+        """Like ``run`` but in a READ-access session: the server refuses writes."""
+        self._in_flight += 1
+        set_graph_pool(self._in_flight, self.MAX_CONNECTION_POOL_SIZE)
+        try:
+            with record_graph_query():
+                async with self._driver.session(default_access_mode=READ_ACCESS) as session:
                     result = await session.run(cypher, parameters=params)
                     return [record.data() async for record in result]
         finally:

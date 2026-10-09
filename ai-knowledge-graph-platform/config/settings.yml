@@ -39,6 +39,7 @@ ingestion:
   review_fuzzy_min: 70               # lower bound of fuzzy "ambiguous" band (70–84 queued)
   review_embedding_min: 0.85         # lower bound of embedding "ambiguous" band (0.85–0.92 queued)
   # ── Ingestion validation (graph poisoning prevention) ───────────────────────
+  publication_gate_enabled: true    # validate each batch BEFORE writing; BLOCKING records are quarantined (docs/graph-validation.md)
   validate_after_ingestion: true    # run graph health check after every doc
   auto_remove_self_loops: true      # delete self-referencing edges automatically
   detect_cycles_after_ingestion: true

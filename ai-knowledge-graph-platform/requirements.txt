@@ -27,6 +27,13 @@ aiohttp>=3.14.3
 # ── Evaluation ─────────────────────────────────────────────────────────────────
 ragas>=0.2.0
 datasets>=5.0.1
+# pyarrow 26 dropped NumPy 1.x ("pyarrow requires NumPy 2.0 or newer") while
+# graspologic caps numpy<2, so an unpinned resolve picks numpy 1.26.4 + pyarrow
+# 26 and `import datasets` -- reached through sentence-transformers' training
+# modules whenever datasets is installed -- raises ImportError. That broke
+# `import api.main` and the whole test/E2E install in the 2026-10-09 nightly
+# with no code change. Lift the cap once graspologic supports NumPy 2.
+pyarrow>=21.0.0,<26
 
 # ── API & Dashboard ────────────────────────────────────────────────────────────
 fastapi>=0.141.1

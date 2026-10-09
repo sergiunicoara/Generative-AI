@@ -110,3 +110,11 @@ CREATE INDEX chunk_tenant_natural IF NOT EXISTS FOR (c:Chunk) ON (c.tenant, c.do
 -- BLOCKING validation rule; never labelled :Entity, so no retrieval sees them.
 CREATE CONSTRAINT quarantined_record_tenant_id IF NOT EXISTS FOR (q:QuarantinedRecord) REQUIRE (q.tenant, q.id) IS UNIQUE;
 CREATE INDEX quarantined_record_status IF NOT EXISTS FOR (q:QuarantinedRecord) ON (q.tenant, q.status);
+
+-- Schema registry (docs/schema-registry.md). The version MERGE key is
+-- (tenant, dataset, content_hash); legacy OntologyVersion rows have no
+-- content_hash/dataset_id and are not constrained by it.
+CREATE CONSTRAINT schema_version_key IF NOT EXISTS FOR (o:OntologyVersion) REQUIRE (o.tenant, o.dataset_id, o.content_hash) IS UNIQUE;
+CREATE CONSTRAINT dataset_key IF NOT EXISTS FOR (d:Dataset) REQUIRE (d.tenant, d.id) IS UNIQUE;
+CREATE CONSTRAINT validation_profile_key IF NOT EXISTS FOR (p:ValidationProfile) REQUIRE (p.tenant, p.content_hash) IS UNIQUE;
+CREATE INDEX schema_version_active IF NOT EXISTS FOR (o:OntologyVersion) ON (o.tenant, o.dataset_id, o.active);

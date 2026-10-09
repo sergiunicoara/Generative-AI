@@ -65,7 +65,42 @@ _PROMPT_VERSION = "hybrid-answer-v3"
 _ANSWER_PROMPT = BASE_ANSWER_PROMPT
 
 
+# Fallback label for tenants/datasets with no registered schema version.
 _ONTOLOGY_VERSION = "platform/v1"
+
+
+_SCHEMA_LOOKUP_TIMEOUT_S = 2.0
+_SCHEMA_LOOKUP_BACKOFF_S = 30.0
+_schema_lookup_failed_until = 0.0
+
+
+async def _resolve_schema_version(tenant: str) -> str:
+    """Active schema-registry version label for this tenant (provenance + cache key).
+
+    Never raises and never stalls a query: the lookup is time-boxed, and after a
+    failure it is skipped for a backoff window (the label then degrades to the
+    legacy constant rather than blocking every query on an unreachable registry).
+    """
+    global _schema_lookup_failed_until
+    now = time.monotonic()
+    if now < _schema_lookup_failed_until:
+        return _ONTOLOGY_VERSION
+    try:
+        from graphrag.core.config import get_settings
+        from graphrag.graph.schema_registry import SchemaRegistry, dataset_id_for
+
+        dataset_id = dataset_id_for(tenant, get_settings().ontology or {})
+        label = await asyncio.wait_for(
+            SchemaRegistry(get_neo4j()).active_label(tenant, dataset_id),
+            timeout=_SCHEMA_LOOKUP_TIMEOUT_S,
+        )
+        return label or _ONTOLOGY_VERSION
+    except Exception as exc:  # noqa: BLE001 - provenance must not fail a query
+        _schema_lookup_failed_until = time.monotonic() + _SCHEMA_LOOKUP_BACKOFF_S
+        log.warning("hybrid_retriever.schema_version_unavailable", error=str(exc)[:120])
+        return _ONTOLOGY_VERSION
+
+
 _NON_SEMANTIC_RETRIEVAL_KEYS = {
     "redis_url",
     "query_result_ttl_seconds",
@@ -179,6 +214,7 @@ class HybridRetriever:
         session_id: str = "",
         correlation_id: str = "",
         conflict_count: int = 0,
+        schema_version: str = _ONTOLOGY_VERSION,
     ) -> str | None:
         """Persist the evidence-backed query decision for API/worker queries.
 
@@ -310,7 +346,7 @@ class HybridRetriever:
             model_provider="configured",
             model_version=model_version, prompt_version=_PROMPT_VERSION,
             retrieval_mode=mode, retrieval_config=retrieval_config, task_input=question,
-            ontology_version=_ONTOLOGY_VERSION, valid_from=now, valid_to=later,
+            ontology_version=schema_version, valid_from=now, valid_to=later,
             transaction_from=now, transaction_to=later,
         ).with_integrity_hash()
         evaluation = evaluate_policy(
@@ -484,6 +520,7 @@ class HybridRetriever:
 
             answer_cache = None
             cache_context = None
+            schema_version = await _resolve_schema_version(tenant)
             if (
                 query_id
                 and not session_id
@@ -499,7 +536,7 @@ class HybridRetriever:
                             model_route=get_generation_route(),
                             prompt_version=_PROMPT_VERSION,
                             retrieval_config=_cache_retrieval_config(cfg),
-                            ontology_version=_ONTOLOGY_VERSION,
+                            ontology_version=schema_version,
                             valid_at=requested_valid_at,
                             transaction_at=transaction_at,
                             access_fingerprint=(access_context.fingerprint if acl_enforced else "tenant-default"),
@@ -915,7 +952,7 @@ class HybridRetriever:
                         local_results=local_results, cache_context=cache_context,
                         valid_at=valid_at, transaction_at=transaction_at,
                         session_id=session_id, correlation_id=correlation_id,
-                        conflict_count=len(conflicts),
+                        conflict_count=len(conflicts), schema_version=schema_version,
                     )
                 except Exception as exc:
                     # Optional lineage/eval side effect — must not fail an
@@ -957,6 +994,7 @@ class HybridRetriever:
                 latency_ms=latency_ms,
                 retrieval_mode=mode,
                 model_version=self._model_version,
+                schema_version=schema_version,
                 valid_at=valid_at,
                 transaction_at=transaction_at,
                 correlation_id=correlation_id,
@@ -985,7 +1023,7 @@ class HybridRetriever:
                     cache_context=cache_context,
                     valid_at=valid_at, transaction_at=transaction_at,
                     session_id=session_id, correlation_id=correlation_id,
-                    conflict_count=len(conflicts),
+                    conflict_count=len(conflicts), schema_version=schema_version,
                 )
             except Exception as exc:
                 log.warning("hybrid_retriever.record_context_trace_failed", error=str(exc)[:200])

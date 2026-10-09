@@ -96,6 +96,14 @@ async def lifespan(app: FastAPI):
             impact="POST /ingest and POST /query will return 503 until broker is reachable",
         )
 
+    # Schema drift: ontology files vs the active registered schema version.
+    # Read-only and non-fatal; enforcement happens at ingestion (OntologyRegistry.load).
+    try:
+        from graphrag.graph.schema_registry import startup_drift_check
+        await startup_drift_check()
+    except Exception as exc:
+        log.warning("startup.schema_drift_check_failed", error=str(exc)[:120])
+
     log.info("startup.complete")
     try:
         yield

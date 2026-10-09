@@ -23,6 +23,7 @@ from __future__ import annotations
 import hashlib
 import json
 import re
+from pathlib import Path
 from typing import TYPE_CHECKING
 from uuid import uuid4
 
@@ -79,6 +80,7 @@ class OntologyRegistry:
         self._relation_rationale: dict[str, dict] = {}  # relation -> {note, owner}
         self._version_id: str = ""
         self._loaded: bool = False
+        self._identity = None  # SchemaIdentity of the last load()
 
     def add_domain_range_rules(self, rules: dict) -> None:
         """
@@ -124,9 +126,15 @@ class OntologyRegistry:
                  relations=len(rules),
                  total_domain_rules=len(self._domain_rules))
 
-    async def load(self, entity_types: list[str]) -> None:
-        """Load registry from settings, domain ontology, and seed Neo4j OntologyVersion."""
+    def _load_definitions(self, entity_types: list[str]) -> tuple[dict | None, str, dict]:
+        """Read settings and the tenant's ontology YAML into this registry (no I/O to Neo4j).
+
+        Returns (ontology document or None, source uri, ontology settings).
+        """
         self._allowed_types = set(entity_types)
+        ontology_doc: dict | None = None
+        source_uri = ""
+        onto_cfg: dict = {}
 
         # Load migration map + domain ontology path from settings
         try:
@@ -155,6 +163,11 @@ class OntologyRegistry:
             if full_path:
                 ontology  = load_domain_ontology(full_path)
                 if ontology:
+                    ontology_doc = ontology
+                    try:
+                        source_uri = str(Path(full_path).resolve().relative_to(ROOT)).replace("\\", "/")
+                    except ValueError:
+                        source_uri = str(full_path)
                     assert_valid_ontology(ontology, source=str(full_path))
                     self.add_domain_range_rules(get_relation_rules(ontology))
                     self._vocabulary.update(get_vocabulary(ontology))
@@ -168,6 +181,48 @@ class OntologyRegistry:
         except (AttributeError, KeyError, TypeError) as exc:
             log.warning("ontology_registry.config_load_error", error=str(exc))
             self._migration_map = {}
+        return ontology_doc, source_uri, onto_cfg
+
+    def _build_identity(self, ontology_doc: dict | None, source_uri: str, onto_cfg: dict):
+        from graphrag.core.config import ROOT as _ROOT
+        from graphrag.graph import schema_registry as sr
+
+        meta = (ontology_doc or {}).get("ontology") or {}
+        prof_hash = sr.profile_hash(_ROOT / "ontology" / "shapes")
+        return sr.SchemaIdentity(
+            tenant=self._tenant,
+            dataset_id=sr.dataset_id_for(self._tenant, onto_cfg),
+            name=str(meta.get("id") or f"{self._tenant}-ontology"),
+            version=str(meta.get("version") or "0.0.0"),
+            content_hash=sr.compute_content_hash(
+                allowed_types=self._allowed_types,
+                domain_rules=self._domain_rules,
+                builtin_rules=_RELATION_RULES,
+                vocabulary=self._vocabulary,
+                migration_map=self._migration_map,
+                ontology_doc=ontology_doc,
+                profile_hash_=prof_hash,
+            ),
+            profile_hash=prof_hash,
+            source_uri=source_uri,
+            types=tuple(sorted(self._allowed_types)),
+        )
+
+    async def check_schema_drift(self, entity_types: list[str]) -> dict:
+        """Compare the schema the files define now with the active registered version.
+        Read-only: registers and activates nothing."""
+        from graphrag.graph.schema_registry import SchemaRegistry
+
+        doc, uri, cfg = self._load_definitions(entity_types)
+        identity = self._build_identity(doc, uri, cfg)
+        result = await SchemaRegistry(self._neo4j).check(identity)
+        result["label"] = identity.label
+        result["dataset_id"] = identity.dataset_id
+        return result
+
+    async def load(self, entity_types: list[str]) -> None:
+        """Load registry from settings, domain ontology, and register the schema version."""
+        ontology_doc, source_uri, onto_cfg = self._load_definitions(entity_types)
 
         # Load known relation types from existing graph, scoped to this
         # tenant. Unscoped, this fed _known_relations from every tenant's
@@ -185,36 +240,38 @@ class OntologyRegistry:
         )
         self._known_relations = {r["rel"] for r in rows if r.get("rel")}
 
-        # Compute version hash from current allowed types
-        schema_hash = hashlib.sha256(json.dumps({
-            "types": sorted(self._allowed_types),
-            "domain_rules": {
-                relation: sorted(f"{source}:{target}" for source, target in pairs)
-                for relation, pairs in sorted(self._domain_rules.items())
-            },
-        }, sort_keys=True).encode()).hexdigest()[:16]
+        # Register the effective schema (plan Phase 2): any change to types,
+        # rules, vocabulary, migration map, ontology YAML or SHACL profile is a
+        # new SchemaVersion, keyed (tenant, dataset, hash) so two tenants with
+        # byte-identical ontologies keep separate governance histories
+        # (docs/context_graph_gap_plan.md F13).
+        from graphrag.graph import schema_registry as sr
 
-        # Upsert OntologyVersion node. Keyed on (schema_hash, tenant) rather
-        # than schema_hash alone: two tenants that happen to load a
-        # byte-identical ontology are still separate governance histories —
-        # keying on the hash alone would silently merge them into one shared
-        # OntologyVersion node the moment their schemas matched.
-        # See docs/context_graph_gap_plan.md F13.
-        result = await self._neo4j.run(
-            """
-            MERGE (o:OntologyVersion {schema_hash: $hash, tenant: $tenant})
-            ON CREATE SET o.id           = $id,
-                          o.entity_types = $types,
-                          o.created_at   = datetime(),
-                          o.active       = true
-            RETURN o.id AS version_id
-            """,
-            hash=schema_hash,
-            tenant=self._tenant,
-            id=str(uuid4()),
-            types=entity_types,
-        )
-        self._version_id = result[0]["version_id"] if result else ""
+        identity = self._build_identity(ontology_doc, source_uri, onto_cfg)
+        mode = str((onto_cfg.get("schema_registry") or {}).get("mode") or sr.AUTO).lower()
+        schema_registry = sr.SchemaRegistry(self._neo4j)
+        if mode == sr.ENFORCE:
+            try:
+                await schema_registry.enforce(identity, mode=mode)
+            except sr.SchemaError:
+                sr.record_drift("blocked")
+                raise
+        result = await schema_registry.register_and_activate(identity)
+        self._identity = identity
+        version_id = result["version_id"]
+        self._version_id = version_id
+        prior = [h for h in result["prior_hashes"] if h != identity.content_hash]
+        if prior and not result["was_active"]:
+            outcome = "rollback" if not result["created"] else "version_change"
+            sr.record_drift(outcome)
+            log.warning("ontology_registry.schema_drift", tenant=self._tenant, dataset=identity.dataset_id,
+                        outcome=outcome, active=identity.label, previous=[h[:12] for h in prior])
+            await self.record_schema_event(
+                event_type="schema_drift",
+                detail=f"{outcome}: {','.join(h[:12] for h in prior)} -> {identity.content_hash[:12]}",
+            )
+        else:
+            sr.record_drift("match")
         self._loaded = True
         log.info(
             "ontology_registry.loaded",
@@ -232,6 +289,15 @@ class OntologyRegistry:
         ``registry._loaded`` directly.
         """
         return self._loaded
+
+    @property
+    def schema_label(self) -> str | None:
+        """``name@version#hash12`` of the schema this registry loaded, for provenance."""
+        return self._identity.label if self._identity else None
+
+    @property
+    def schema_identity(self):
+        return self._identity
 
     @property
     def allowed_types(self) -> frozenset[str]:

@@ -349,7 +349,8 @@ class TestOntologyVersionScopedByTenant:
         await registry.load(["ORG"])
 
         merge_call = neo4j.run.await_args_list[1]
-        assert "MERGE (o:OntologyVersion {schema_hash: $hash, tenant: $tenant})" in merge_call.args[0]
+        assert ("MERGE (o:OntologyVersion:SchemaVersion {tenant: $tenant, dataset_id: $dataset_id,"
+                in merge_call.args[0])
         assert merge_call.kwargs["tenant"] == "acme"
 
     async def test_two_tenants_with_identical_ontology_get_separate_versions(self):

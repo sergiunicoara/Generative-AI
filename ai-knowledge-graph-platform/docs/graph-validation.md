@@ -130,6 +130,6 @@ identifiers go to structured logs (`publication_gate.*`).
 - The extractor's own SHACL check (when the ontology registry is loaded) still
   drops a whole chunk on violation before the gate sees it, recording only an
   `OntologyEvent`. Moving that into per-record quarantine is future work.
-- Schema version on quarantine rows is `null` until Phase 2 (schema registry).
+- Reports, run manifests and quarantine rows carry the active schema version (`docs/schema-registry.md`); `null` when the tenant has no registered schema.
 - Quarantine Cypher has not been run against a live Neo4j locally (no Docker
   daemon); it is covered by mocks here and needs the CI e2e job.

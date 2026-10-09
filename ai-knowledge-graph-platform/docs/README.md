@@ -17,6 +17,7 @@ The specification-to-implementation runner is documented in
 - `local-evidence-runbook.md` — reproducible local MCP, retrieval, write, cost, and load evidence
 - `public-local-evaluation-report.md` — bounded results from the checked-in synthetic local run
 - `graph-validation.md` — publication gate, validation rules, quarantine
+- `schema-registry.md` — versioned schemas, drift detection, schema provenance
 - `entity-resolution.md`, `ontology-model.md`, `ontology-governance.md`,
   `cypher-patterns.md` — focused KG references
 - `enterprise-content-governance.md` — provider-neutral ACL, SharePoint sync,

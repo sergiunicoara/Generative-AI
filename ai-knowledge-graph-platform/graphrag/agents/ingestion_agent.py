@@ -262,6 +262,13 @@ class IngestionAgent(BaseGraphRAGAgent):
             # otherwise those writes target a document node that doesn't exist and
             # silently create a duplicate (see tasks/lessons.md A136).
             canonical_id = await self._writer.write_document(doc)  # mutates doc.id in place
+            # Stamp which registered schema version this document was ingested under.
+            # Optional: test doubles of the writer predate it.
+            stamp = getattr(self._writer, "stamp_document_schema_version", None)
+            if callable(stamp):
+                stamped = stamp(canonical_id, doc.tenant, getattr(self._writer, "_ontology", None))
+                if isawaitable(stamped):
+                    await stamped
             for chunk in chunks:
                 # Carries source context into entity assertions without trusting a
                 # client-supplied query value. Chunker already sets this for normal
@@ -301,7 +308,8 @@ class IngestionAgent(BaseGraphRAGAgent):
                 await self._writer.write_ingestion_manifest(manifest)
 
             if staged is not None and staged.rejected:
-                await gate.quarantine(staged.rejected, doc=doc, document_id=doc.id, manifest=manifest)
+                await gate.quarantine(staged.rejected, doc=doc, document_id=doc.id, manifest=manifest,
+                                      schema_version=staged.schema_version)
                 quarantined += len(staged.rejected)
 
             # 2. Write chunks to Neo4j
@@ -386,7 +394,8 @@ class IngestionAgent(BaseGraphRAGAgent):
             drain = getattr(self._writer, "drain_rejections", None)
             late = drain() if callable(drain) else []
             if gate is not None and isinstance(late, list) and late:
-                await gate.quarantine(late, doc=doc, document_id=doc.id, manifest=manifest)
+                await gate.quarantine(late, doc=doc, document_id=doc.id, manifest=manifest,
+                                      schema_version=staged.schema_version if staged else None)
                 quarantined += len(late)
 
             maintenance_report = await self._writer.validate_and_check_cycles(

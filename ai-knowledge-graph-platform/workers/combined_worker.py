@@ -48,6 +48,11 @@ async def _ensure_schema():
             await client.run(stmt)
         except Exception as e:
             log.warning("combined_worker.schema_warn", error=str(e)[:120])
+    try:
+        from graphrag.graph.schema_registry import startup_drift_check
+        await startup_drift_check(client)
+    except Exception as e:
+        log.warning("combined_worker.schema_drift_check_failed", error=str(e)[:120])
     log.info("combined_worker.schema_ready")
 
 

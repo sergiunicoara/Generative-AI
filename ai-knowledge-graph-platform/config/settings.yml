@@ -349,6 +349,14 @@ ontology:
   # Leave empty ("") for the general-purpose ontology.
   # Example: config/ontologies/aerospace_regulatory.yml
   domain_ontology_path: ""
+  # Versioned schema registry (docs/schema-registry.md).
+  #   mode: auto     - a changed schema is recorded as drift and activated (default, legacy behaviour)
+  #   mode: enforce  - ingestion refuses to run when the schema defined by the files is not the
+  #                    active registered version; activate with scripts/schema_registry.py
+  #   datasets:      - optional {tenant: dataset}; defaults to one dataset per tenant
+  schema_registry:
+    mode: auto
+    datasets: {}
   migration_map:                    # old_relation: new_relation
     IS_CEO: CEO_OF
     FOUNDED_BY_PERSON: FOUNDED_BY

@@ -41,10 +41,18 @@ class StagedBatch:
     extraction_results: list[tuple[list[Entity], list[Relation]]]
     rejected: list[RejectedRecord] = field(default_factory=list)
     report: ValidationReport | None = None
+    schema_version: str | None = None
+
+
+def schema_label(registry) -> str | None:
+    """Schema-registry label of the loaded ontology, or None (also for test doubles)."""
+    label = getattr(registry, "schema_label", None)
+    return label if isinstance(label, str) and label else None
 
 
 def set_state(manifest: IngestionRunManifest | None, state: PublicationState,
-              report: ValidationReport | None = None, quarantined: int | None = None) -> None:
+              report: ValidationReport | None = None, quarantined: int | None = None,
+              schema_version: str | None = None) -> None:
     if manifest is None:
         return
     entry = dict(manifest.stage_metrics.get("publication", {}))
@@ -57,6 +65,8 @@ def set_state(manifest: IngestionRunManifest | None, state: PublicationState,
         entry["records_checked"] = report.records_checked
     if quarantined is not None:
         entry["quarantined"] = quarantined
+    if schema_version:
+        entry["schema_version"] = schema_version
     manifest.stage_metrics["publication"] = entry
 
 
@@ -115,8 +125,10 @@ class PublicationGate:
     ) -> StagedBatch:
         """Validate the whole batch in memory. Raises PublicationRejected
         (after quarantining the document) when a document-level rule blocks."""
-        set_state(manifest, PublicationState.STAGED)
+        version = schema_label(registry)
+        set_state(manifest, PublicationState.STAGED, schema_version=version)
         report = validate_document(doc, chunks, source=self.source)
+        report.schema_version = version
         report.extend(await check_supersedes(
             self._neo4j, tenant=doc.tenant, document_key=doc.filename or doc.id,
             supersedes=list(doc.supersedes or []), source=self.source,
@@ -130,8 +142,10 @@ class PublicationGate:
                     "id", "filename", "source_path", "tenant", "content_hash",
                     "valid_from", "valid_to", "supersedes", "authority_level"}),
             )]
-            await self.quarantine(rejected, doc=doc, document_id="", manifest=manifest)
-            set_state(manifest, PublicationState.REJECTED, report, quarantined=1)
+            await self.quarantine(rejected, doc=doc, document_id="", manifest=manifest,
+                                  schema_version=version)
+            set_state(manifest, PublicationState.REJECTED, report, quarantined=1,
+                      schema_version=version)
             metrics.record_report(report)
             metrics.record_batch("rejected")
             log.warning("publication_gate.document_rejected", tenant=doc.tenant,
@@ -146,17 +160,20 @@ class PublicationGate:
             filtered.append((result.entities, result.relations))
             rejected.extend(result.rejected)
             report.extend(result.report)
-        set_state(manifest, PublicationState.VALIDATED, report, quarantined=len(rejected))
+        set_state(manifest, PublicationState.VALIDATED, report, quarantined=len(rejected),
+                  schema_version=version)
         metrics.record_report(report)
-        return StagedBatch(filtered, rejected, report)
+        return StagedBatch(filtered, rejected, report, version)
 
     async def quarantine(self, records: list[RejectedRecord], *, doc: Document, document_id: str,
-                         manifest: IngestionRunManifest | None = None) -> list[str]:
+                         manifest: IngestionRunManifest | None = None,
+                         schema_version: str | None = None) -> list[str]:
         if not records:
             return []
         ids = await self._store.save(
             records, tenant=doc.tenant, source=self.source, document_id=document_id,
             document_key=doc.filename or doc.id, manifest_id=manifest.id if manifest else "",
+            schema_version=schema_version,
         )
         for kind in {r.record_kind for r in records}:
             metrics.record_quarantined(kind, sum(1 for r in records if r.record_kind == kind))

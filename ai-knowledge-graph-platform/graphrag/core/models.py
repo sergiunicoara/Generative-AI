@@ -432,6 +432,9 @@ class QueryResult(BaseModel):
     latency_ms: float = 0.0
     retrieval_mode: str = "hybrid"
     model_version: str = ""
+    # Active schema-registry version the answer was produced under
+    # (``name@version#hash12``); ``platform/v1`` when none is registered.
+    schema_version: str = ""
     cache_hit: bool = False
     cache_key: str = ""
     source_query_id: str = ""

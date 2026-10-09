@@ -93,6 +93,18 @@ class GraphWriter:
         # durable quarantine so no refusal is silent.
         self._rejections: list[RejectedRecord] = []
 
+    async def stamp_document_schema_version(self, doc_id: str, tenant: str, registry=None) -> None:
+        """Record the active schema version on the Document (reproducibility)."""
+        identity = getattr(registry, "schema_identity", None)
+        label = getattr(identity, "label", None)
+        if not isinstance(label, str) or not label:
+            return
+        await self._neo4j.run(
+            "MATCH (d:Document {id: $id, tenant: $tenant}) "
+            "SET d.schema_version = $label, d.schema_content_hash = $hash",
+            id=doc_id, tenant=tenant, label=label, hash=identity.content_hash,
+        )
+
     def drain_rejections(self) -> list[RejectedRecord]:
         out = getattr(self, "_rejections", [])  # writers built via __new__ in tests
         self._rejections = []

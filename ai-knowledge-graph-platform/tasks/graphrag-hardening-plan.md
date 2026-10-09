@@ -160,6 +160,36 @@ one focused commit. Order is chosen so each phase only depends on earlier ones.
 - Risks: strict gating can reject data that used to ingest. Mitigation: severities - only BLOCKING stops a batch; first release ships WARNING for rules with no prior enforcement and a per-tenant strictness setting.
 - Accept: no BLOCKING-invalid record is written; every rejection is queryable with rule IDs.
 
+#### Phase 1 trace notes (2026-10-09, read-only; implementation not started)
+- Step 0 done in `acb3bdf` (shared schema loader; manual edge state survives re-merge).
+- Gate insertion point: `IngestionAgent.write` (`ingestion_agent.py:207`); the full batch
+  (`extracted["extraction_results"]`, per-chunk `(entities, relations)`) is in memory before
+  `CorpusMutation` (L229). `doc.id` becomes canonical only at L238 (`write_document`), so
+  quarantine records must be written after it or keyed on filename+content_hash.
+- Relational ingest (`relational.py` `ingest`/`ingest_incremental`) calls `GraphWriter`
+  directly, bypassing the agent: put the gate in a pure function both paths call.
+- Dropping an entity must also drop/quarantine every relation referencing its
+  extraction-local `Entity.id`, or `write_relations` silently skips them (graph_writer.py:583).
+- Endpoint domain/range is only final after alias resolution (graph_writer.py:598-632):
+  the pre-write gate checks extracted types; the post-resolution check stays in place but
+  must record a quarantine row instead of only logging `relation_skipped`.
+- Reusable: `SemanticMutationValidator.validate_node/validate_relation`
+  (`semantic_model/runtime.py:50`, returns violations, unwired in prod);
+  `PropertySchemaValidator._check_props` (pure); `OntologyRegistry.validate_relation_triplet`;
+  `SHACLValidator.validate_relational_batch_report` (focus_node ends in the record id).
+- Gaps to fix in the gate: `Relation` has no `tenant` and no confidence bounds
+  (`models.py:237-256`); ingestion shapes accept empty strings; shape keys are blank-node ids.
+- Durable quarantine: no SQL/alembic in this project. Use a Neo4j `:QuarantinedRecord`
+  linked to `IngestionRunManifest` (persisted via `neo4j_client.upsert_ingestion_manifest:1007`);
+  existing `QuarantineService.quarantine_entity` cannot log pre-write rejects (MATCH-gated).
+- Validation counts go in `manifest.stage_metrics["validation"]` (scalars only).
+- Metrics pattern: inline `Counter(...) if Counter else None` (`shacl_validator.py:68-87`).
+- Setting: `config/settings.yml` `ingestion.publication_gate_enabled`, read via
+  `get_settings().ingestion.get(...)`.
+- CI: monorepo `.github/workflows/ai-knowledge-graph-platform-ci.yml` L74 — add
+  `--junitxml` + `actions/upload-artifact@v4`.
+- Agent writer calls must use the `getattr`/`isawaitable` pattern (test doubles).
+
 ### Phase 2 - Versioned schema registry (D2)
 - Files: `ontology_registry.py`, `domain_ontology.py`, new `graphrag/graph/schema_registry.py`, `schema.cypher` (unique on `(schema_hash, tenant)` - currently missing), startup hook in the API/workers, ingestion stamp on Document + validation reports + `QueryResult` + cache key.
 - Tests: activation/deactivation/version change/hash mismatch/rollback; idempotent init; tenant isolation; per-dataset (not prefix-glob) selection.

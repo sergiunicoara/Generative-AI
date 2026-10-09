@@ -326,14 +326,10 @@ async def ingest_all(
         # and it guards against a fresh/recreated Neo4j volume where e.g.
         # chunk_embeddings / chunk_fulltext are missing, which silently breaks
         # vector + BM25 retrieval after an otherwise-successful ingestion.
-        schema_path = Path(__file__).parents[1] / "graphrag" / "graph" / "schema.cypher"
+        from graphrag.graph.schema_statements import load_schema_statements
+
         applied = 0
-        for stmt in schema_path.read_text(encoding="utf-8").split(";"):
-            stmt = "\n".join(
-                line for line in stmt.splitlines() if not line.strip().startswith("--")
-            ).strip()
-            if not stmt:
-                continue
+        for stmt in load_schema_statements():
             try:
                 await neo4j.run(stmt)
                 applied += 1

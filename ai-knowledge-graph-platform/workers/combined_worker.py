@@ -26,10 +26,9 @@ log = structlog.get_logger(__name__)
 
 async def _ensure_schema():
     """Wait for Neo4j and initialize schema using the global connection pool."""
-    from pathlib import Path
     from graphrag.graph.neo4j_client import get_neo4j
-    schema_path = Path(__file__).parents[1] / "graphrag" / "graph" / "schema.cypher"
-    statements = schema_path.read_text(encoding="utf-8").split(";")
+    from graphrag.graph.schema_statements import load_schema_statements
+    statements = load_schema_statements()
 
     for attempt in range(30):
         try:
@@ -45,12 +44,10 @@ async def _ensure_schema():
 
     client = get_neo4j()
     for stmt in statements:
-        stmt = stmt.strip()
-        if stmt and not stmt.startswith("--"):
-            try:
-                await client.run(stmt)
-            except Exception as e:
-                log.warning("combined_worker.schema_warn", error=str(e)[:120])
+        try:
+            await client.run(stmt)
+        except Exception as e:
+            log.warning("combined_worker.schema_warn", error=str(e)[:120])
     log.info("combined_worker.schema_ready")
 
 

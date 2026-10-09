@@ -1,11 +1,11 @@
 """Initialize Neo4j constraints and vector indexes (idempotent)."""
 
 import asyncio
-from pathlib import Path
 
 from neo4j import AsyncGraphDatabase
 
 from graphrag.core.config import get_settings
+from graphrag.graph.schema_statements import load_schema_statements
 
 
 async def main():
@@ -14,17 +14,8 @@ async def main():
         cfg.neo4j_uri, auth=(cfg.neo4j_user, cfg.neo4j_password)
     )
 
-    schema_path = Path(__file__).parents[1] / "graphrag" / "graph" / "schema.cypher"
-    statements = schema_path.read_text(encoding="utf-8").split(";")
-
     async with driver.session() as session:
-        for stmt in statements:
-            # Strip comment lines (a fragment may start with a comment
-            # followed by the actual DDL statement on the next line)
-            lines = [ln for ln in stmt.splitlines() if not ln.strip().startswith("--")]
-            stmt = "\n".join(lines).strip()
-            if not stmt:
-                continue
+        for stmt in load_schema_statements():
             try:
                 result = await session.run(stmt)
                 await result.consume()  # DDL is lazy — must consume to execute

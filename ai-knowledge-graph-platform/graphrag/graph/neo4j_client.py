@@ -5,7 +5,6 @@ from __future__ import annotations
 import hashlib
 import json
 from datetime import datetime, timezone
-from pathlib import Path
 from collections.abc import Awaitable, Callable
 from typing import TypeVar
 
@@ -28,6 +27,7 @@ from graphrag.core.models import (
     StructuredTable,
 )
 from graphrag.core.retry import with_retry
+from graphrag.graph.schema_statements import load_schema_statements
 from graphrag.enterprise.access import access_params, document_access_predicate, link_access_predicate
 from graphrag.enterprise.models import AccessContext, DocumentLink, normalise_document_url
 
@@ -161,20 +161,12 @@ class Neo4jClient:
             modern_server = int(version.split(".", 1)[0]) >= 2026
         except ValueError:
             modern_server = False
-        schema_cypher = Path(__file__).parent / "schema.cypher"
-        raw = schema_cypher.read_text()
-        for fragment in raw.split(";"):
-            # Strip comment lines per-fragment (A59: never check the whole fragment
-            # for "--" — that skips CREATE statements that follow a comment line)
-            lines = [line for line in fragment.splitlines()
-                     if not line.strip().startswith("--")]
-            stmt = "\n".join(lines).strip()
+        for stmt in load_schema_statements():
             if modern_server and stmt.startswith("CREATE VECTOR INDEX"):
                 continue
-            if stmt:
-                result = await self.run(stmt)
-                # Consume result so DDL actually executes (A58)
-                _ = result
+            result = await self.run(stmt)
+            # Consume result so DDL actually executes (A58)
+            _ = result
         if modern_server:
             modern_indexes = {
                 "chunk_embeddings": "FOR (n:Chunk) ON n.embedding WITH [n.tenant]",
@@ -1402,12 +1394,16 @@ class Neo4jClient:
             // rewrites it, so the confidence guard tests the pre-update state
             // rather than depending on SET clause evaluation order.
             WITH r, coalesce(r.source_doc_ids, []) AS prior_docs,
-                 coalesce(r.doc_confidences, []) AS prior_confs
+                 coalesce(r.doc_confidences, []) AS prior_confs,
+                 // Manual overrides and lifecycle transitions survive re-ingest.
+                 (r.confidence_state IN ['APPROVED', 'RETRACTED', 'DISPUTED'] OR r.source_type = 'manual') AS locked,
+                 r.confidence_state AS prior_state, r.source_type AS prior_type,
+                 r.valid_from AS prior_vf, r.valid_to AS prior_vt
             // Legacy relations may carry fewer doc_confidences entries than
             // source_doc_ids (written before per-document tracking existed) —
             // backfill any gap with the current aggregate so a relation
             // self-heals on its next write instead of going null.
-            WITH r, prior_docs,
+            WITH r, prior_docs, locked, prior_state, prior_type, prior_vf, prior_vt,
                  [i IN range(0, size(prior_docs) - 1) |
                     CASE WHEN i < size(prior_confs) THEN prior_confs[i]
                          ELSE coalesce(r.confidence, $confidence) END
@@ -1415,11 +1411,11 @@ class Neo4jClient:
             SET r.weight           = $weight,
                 r.extracted_at     = $extracted_at,
                 r.source_doc_id    = $source_doc_id,
-                r.source_type      = $source_type,
+                r.source_type      = CASE WHEN prior_type = 'manual' THEN prior_type ELSE $source_type END,
                 r.constraint_type  = $constraint_type,
-                r.confidence_state = $confidence_state,
-                r.valid_from       = datetime($valid_from),
-                r.valid_to         = datetime($valid_to),
+                r.confidence_state = CASE WHEN locked AND prior_state IS NOT NULL THEN prior_state ELSE $confidence_state END,
+                r.valid_from       = CASE WHEN locked AND prior_vf IS NOT NULL THEN prior_vf ELSE datetime($valid_from) END,
+                r.valid_to         = CASE WHEN locked OR $valid_to IS NULL THEN prior_vt ELSE datetime($valid_to) END,
                 r.tenant           = $tenant,
                 // Accumulate all contributing document IDs as a list so that
                 // contradiction detection can see every source even after
@@ -1514,11 +1510,15 @@ class Neo4jClient:
             // rewrites it, so the confidence guard tests the pre-update state
             // rather than depending on SET clause evaluation order.
             WITH r, row, coalesce(r.source_doc_ids, []) AS prior_docs,
-                 coalesce(r.doc_confidences, []) AS prior_confs
+                 coalesce(r.doc_confidences, []) AS prior_confs,
+                 // Manual overrides and lifecycle transitions survive re-ingest.
+                 (r.confidence_state IN ['APPROVED', 'RETRACTED', 'DISPUTED'] OR r.source_type = 'manual') AS locked,
+                 r.confidence_state AS prior_state, r.source_type AS prior_type,
+                 r.valid_from AS prior_vf, r.valid_to AS prior_vt
             // Legacy relations may carry fewer doc_confidences entries than
             // source_doc_ids — backfill any gap with the current aggregate so
             // a relation self-heals on its next write. See merge_relation.
-            WITH r, row, prior_docs,
+            WITH r, row, prior_docs, locked, prior_state, prior_type, prior_vf, prior_vt,
                  [i IN range(0, size(prior_docs) - 1) |
                     CASE WHEN i < size(prior_confs) THEN prior_confs[i]
                          ELSE coalesce(r.confidence, row.confidence) END
@@ -1526,11 +1526,11 @@ class Neo4jClient:
             SET r.weight           = row.weight,
                 r.extracted_at     = row.extracted_at,
                 r.source_doc_id    = row.source_doc_id,
-                r.source_type      = row.source_type,
+                r.source_type      = CASE WHEN prior_type = 'manual' THEN prior_type ELSE row.source_type END,
                 r.constraint_type  = row.constraint_type,
-                r.confidence_state = row.confidence_state,
-                r.valid_from       = datetime(row.valid_from),
-                r.valid_to         = datetime(row.valid_to),
+                r.confidence_state = CASE WHEN locked AND prior_state IS NOT NULL THEN prior_state ELSE row.confidence_state END,
+                r.valid_from       = CASE WHEN locked AND prior_vf IS NOT NULL THEN prior_vf ELSE datetime(row.valid_from) END,
+                r.valid_to         = CASE WHEN locked OR row.valid_to IS NULL THEN prior_vt ELSE datetime(row.valid_to) END,
                 r.tenant           = $tenant,
                 r.source_doc_ids   = CASE
                     WHEN row.source_doc_id IN prior_docs THEN prior_docs

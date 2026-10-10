@@ -44,15 +44,33 @@ async def test_temporal_queries_apply_valid_and_transaction_cutoffs():
     await store.as_of_statements("vt", "tt", tenant="t")
     call = neo4j.run.await_args
     assert "Statement" in call.args[0]
-    assert "stmt.recorded_at <= $tt" in call.args[0]
+    assert "stmt.recorded_at <= datetime($tt)" in call.args[0]
     assert call.kwargs["tenant"] == "t"
 
     await store.as_of_authority("vt", "tt", tenant="t")
     call = neo4j.run.await_args
     assert "authority_level" in call.args[0]
-    assert "d.recorded_at <= $tt" in call.args[0]
+    assert "d.recorded_at <= datetime($tt)" in call.args[0]
 
     await store.as_of_supersessions("tt", tenant="t")
     call = neo4j.run.await_args
     assert "SUPERSEDES" in call.args[0]
     assert call.kwargs["tt"] == "tt"
+
+
+async def test_every_temporal_comparison_wraps_the_parameter_in_datetime():
+    """Stored valid_from / recorded_at are datetimes; comparing them with a raw string parameter
+    evaluates to null in Neo4j and silently drops the row."""
+    import re
+
+    neo4j = MagicMock()
+    neo4j.run = AsyncMock(return_value=[])
+    store = BitemporalStore(neo4j)
+    await store.as_of_entities("2024-01-01T00:00:00", "2024-06-01T00:00:00", tenant="t")
+    await store.as_of_statements("2024-01-01T00:00:00", "2024-06-01T00:00:00", tenant="t")
+    await store.as_of_authority("2024-01-01T00:00:00", "2024-06-01T00:00:00", tenant="t")
+    await store.as_of_supersessions("2024-06-01T00:00:00", tenant="t")
+    await store.transaction_diff("2024-01-01T00:00:00", "2024-06-01T00:00:00", tenant="t")
+    bare = re.compile(r"(?:<=|>=|<|>)\s+\$(?:vt|tt|tt_from|tt_to)")
+    for call in neo4j.run.await_args_list:
+        assert not bare.search(call.args[0]), call.args[0]

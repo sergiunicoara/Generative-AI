@@ -413,6 +413,10 @@ class GraphWriter:
                     await self._enqueue_safe(entity, canonical, chunk, tenant)
                 entity.resolution_status = "needs_review"
                 entity.resolution_method = canonical.match_type
+                entity.resolution_candidates = [
+                    (canonical.candidate[0], canonical.candidate[1], float(canonical.score)),
+                    *[tuple(r) for r in getattr(canonical, "runner_ups", ())],
+                ]
                 canonical = None
             if canonical and (canonical[0] != entity.name or canonical[1] != entity.type):
                 log.info(
@@ -507,6 +511,7 @@ class GraphWriter:
                     )
                     entity.resolution_status = "needs_review"
                     entity.resolution_method = "embedding"
+                    entity.resolution_candidates = [(soft_name, soft_type, float(soft_sim))]
                     # fall through — fail open, create new entity anyway
 
             # 3. Genuinely new entity — queue for batched write below.
@@ -550,6 +555,20 @@ class GraphWriter:
             written.append(entity)
 
         merge_results = await self._neo4j.merge_entities_batch(to_merge, tenant=tenant)
+
+        # Persist what each needs_review entity nearly merged into (audit only; best effort).
+        for entity in to_merge:
+            if entity.resolution_status != "needs_review" or not entity.resolution_candidates:
+                continue
+            try:
+                await self._neo4j.set_entity_resolution_metadata(
+                    name=entity.name, type=entity.type, tenant=tenant,
+                    resolution_status="needs_review", resolution_method=entity.resolution_method,
+                    resolution_score=entity.resolution_candidates[0][2],
+                    runner_ups=list(entity.resolution_candidates),
+                )
+            except Exception as exc:  # noqa: BLE001 - audit data must never fail ingestion
+                log.warning("graph_writer.candidate_persist_failed", error=str(exc))
 
         # Evict any cached embeddings for entities just (re)written — merge_entities_batch's
         # ON MATCH SET only overwrites e.embedding when a non-empty new embedding is

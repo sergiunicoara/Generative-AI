@@ -220,6 +220,9 @@ class Entity(BaseModel):
     # for any caller that never routes through that resolution logic.
     resolution_status: str = ""       # "auto_resolved" | "needs_review" | "created_new"
     resolution_method: str = ""       # "exact" | "fuzzy" | "embedding" | "new"
+    # Transient: (name, type, score) candidates a needs_review entity nearly merged into.
+    # Persisted by GraphWriter after the entity write; not part of the stored entity row.
+    resolution_candidates: list[tuple[str, str, float]] = Field(default_factory=list, exclude=True)
 
     @property
     def canonical_identity(self) -> tuple[str, str] | None:

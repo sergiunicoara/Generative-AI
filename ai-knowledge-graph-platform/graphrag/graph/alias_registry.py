@@ -39,6 +39,9 @@ class AmbiguousMatch:
     candidate: tuple[str, str]   # (canonical_name, canonical_type)
     score: float                 # rapidfuzz ratio (fuzzy) or cosine similarity (embedding)
     match_type: str              # "fuzzy" | "embedding"
+    # Other candidates above the review threshold that scored below ``candidate``:
+    # (name, type, score) tuples, kept so a reviewer can see what else it nearly matched.
+    runner_ups: tuple = ()
 
 
 class ResolvedMatch(NamedTuple):
@@ -442,7 +445,14 @@ class AliasRegistry:
                     candidate=best_match[0],
                     score=best_score,
                 )
-                return AmbiguousMatch(candidate=best_match, score=float(best_score), match_type="fuzzy")
+                scored_candidates.sort(key=lambda item: item[0], reverse=True)
+                ambiguous_runner_ups = tuple(
+                    (name, type_, float(score))
+                    for score, (name, type_) in scored_candidates
+                    if (name, type_) != best_match
+                )[:2]
+                return AmbiguousMatch(candidate=best_match, score=float(best_score), match_type="fuzzy",
+                                      runner_ups=ambiguous_runner_ups)
         except ImportError:
             pass  # rapidfuzz not installed — skip fuzzy step
 

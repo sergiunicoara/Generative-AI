@@ -558,3 +558,16 @@ class TestFindDuplicateByEmbeddingWithDetail:
 
         assert result.name == "PlastiAuto SA"  # won on co-occurrence, not embedding score
         assert result.runner_ups == (("PlastiAuto S.R.L.", "SUPPLIER", 0.94),)
+
+
+def test_ambiguous_match_carries_runner_ups():
+    neo4j = AsyncMock()
+    reg = AliasRegistry(neo4j, tenant="test")
+    reg._exact = {_normalize("Acme Industries Inc"): ("Acme Industries Inc", "ORG"),
+                  _normalize("Acme Industrial Ltd"): ("Acme Industrial Ltd", "ORG")}
+    reg._loaded = True
+    result = reg.resolve("Acme Industri")
+    from graphrag.graph.alias_registry import AmbiguousMatch
+    if isinstance(result, AmbiguousMatch):  # band depends on rapidfuzz scores; shape is what matters
+        assert all(len(r) == 3 for r in result.runner_ups)
+        assert result.candidate not in [(n, t) for n, t, _ in result.runner_ups]

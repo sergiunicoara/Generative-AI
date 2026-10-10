@@ -219,6 +219,44 @@ class TestWriteEntities:
         assert batched_entities[0].resolution_status == "needs_review"
         assert batched_entities[0].resolution_method == "fuzzy"
 
+    async def test_needs_review_entity_persists_the_candidates_it_nearly_merged_into(self):
+        writer = _build_writer()
+        writer._cfg.ingestion = {"review_queue_enabled": True}
+        chunk = _make_chunk()
+
+        from graphrag.graph.alias_registry import AmbiguousMatch
+        mock_registry = MagicMock()
+        mock_registry.resolve = MagicMock(return_value=AmbiguousMatch(
+            candidate=("Acme Industries Inc", "ORG"), score=81.0, match_type="fuzzy",
+            runner_ups=(("Acme Industrial", "ORG", 76.0),)))
+        mock_registry.find_duplicate_by_embedding = AsyncMock(return_value=None)
+        mock_registry._exact = {}
+        writer._neo4j.merge_entities_batch = AsyncMock(return_value=[])
+        writer._neo4j.merge_mentions_batch = AsyncMock()
+        writer._neo4j.set_entity_resolution_metadata = AsyncMock()
+
+        with patch.object(writer, "_get_registry", return_value=mock_registry),              patch.object(writer, "_ensure_registry", AsyncMock()),              patch.object(writer, "_enqueue_safe", AsyncMock()):
+            await writer.write_entities([_make_entity("Acme Industri")], chunk)
+
+        kw = writer._neo4j.set_entity_resolution_metadata.await_args.kwargs
+        assert kw["resolution_status"] == "needs_review"
+        assert [r[0] for r in kw["runner_ups"]] == ["Acme Industries Inc", "Acme Industrial"]
+
+    async def test_candidate_persistence_failure_does_not_fail_ingestion(self):
+        writer = _build_writer()
+        writer._cfg.ingestion = {"review_queue_enabled": True}
+        from graphrag.graph.alias_registry import AmbiguousMatch
+        mock_registry = MagicMock()
+        mock_registry.resolve = MagicMock(return_value=AmbiguousMatch(
+            candidate=("Acme Industries Inc", "ORG"), score=81.0, match_type="fuzzy"))
+        mock_registry.find_duplicate_by_embedding = AsyncMock(return_value=None)
+        mock_registry._exact = {}
+        writer._neo4j.merge_entities_batch = AsyncMock(return_value=[])
+        writer._neo4j.merge_mentions_batch = AsyncMock()
+        writer._neo4j.set_entity_resolution_metadata = AsyncMock(side_effect=RuntimeError("down"))
+        with patch.object(writer, "_get_registry", return_value=mock_registry),              patch.object(writer, "_ensure_registry", AsyncMock()),              patch.object(writer, "_enqueue_safe", AsyncMock()):
+            await writer.write_entities([_make_entity("Acme Industri")], _make_chunk())
+
     async def test_same_name_different_type_redirected_to_canonical(self):
         """Same name re-extracted under a different type must redirect to the
         first-registered (name, type) canonical, not create a duplicate node."""

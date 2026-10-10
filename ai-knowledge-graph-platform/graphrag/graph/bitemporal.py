@@ -104,10 +104,10 @@ class BitemporalStore:
             WHERE (e.tenant = $tenant)
               AND coalesce(e.quarantined, false) = false
               // Valid-time filter (treat NULL as always valid)
-              AND (e.valid_from IS NULL OR e.valid_from <= $vt)
-              AND (e.valid_to   IS NULL OR e.valid_to   >  $vt)
+              AND (e.valid_from IS NULL OR e.valid_from <= datetime($vt))
+              AND (e.valid_to   IS NULL OR e.valid_to   > datetime($vt))
               // Transaction-time filter (treat NULL as recorded at epoch)
-              AND (e.recorded_at IS NULL OR e.recorded_at <= $tt)
+              AND (e.recorded_at IS NULL OR e.recorded_at <= datetime($tt))
             RETURN e.name        AS name,
                    e.type        AS type,
                    e.description AS description,
@@ -137,9 +137,9 @@ class BitemporalStore:
             """
             MATCH (s:Entity)-[r:RELATES_TO]->(t:Entity)
             WHERE (r.tenant = $tenant)
-              AND (r.valid_from  IS NULL OR r.valid_from  <= $vt)
-              AND (r.valid_to    IS NULL OR r.valid_to    >  $vt)
-              AND (r.recorded_at IS NULL OR r.recorded_at <= $tt)
+              AND (r.valid_from  IS NULL OR r.valid_from  <= datetime($vt))
+              AND (r.valid_to    IS NULL OR r.valid_to    > datetime($vt))
+              AND (r.recorded_at IS NULL OR r.recorded_at <= datetime($tt))
               AND coalesce(s.quarantined, false) = false
               AND coalesce(t.quarantined, false) = false
             RETURN s.name             AS src,
@@ -174,9 +174,9 @@ class BitemporalStore:
             """
             MATCH (s:Entity)-[:SUBJECT_OF]->(stmt:Statement)-[:OBJECT_OF]->(t:Entity)
             WHERE (stmt.tenant = $tenant)
-              AND (stmt.valid_from IS NULL OR stmt.valid_from <= $vt)
-              AND (stmt.valid_to   IS NULL OR stmt.valid_to   >  $vt)
-              AND (stmt.recorded_at IS NULL OR stmt.recorded_at <= $tt)
+              AND (stmt.valid_from IS NULL OR stmt.valid_from <= datetime($vt))
+              AND (stmt.valid_to   IS NULL OR stmt.valid_to   > datetime($vt))
+              AND (stmt.recorded_at IS NULL OR stmt.recorded_at <= datetime($tt))
               AND coalesce(s.quarantined, false) = false
               AND coalesce(t.quarantined, false) = false
             RETURN s.name AS src, s.type AS src_type,
@@ -204,12 +204,12 @@ class BitemporalStore:
             """
             MATCH (d:Document)
             WHERE (d.tenant = $tenant)
-              AND (d.valid_from IS NULL OR d.valid_from <= $vt)
-              AND (d.valid_to   IS NULL OR d.valid_to   >  $vt)
-              AND (d.recorded_at IS NULL OR d.recorded_at <= $tt)
+              AND (d.valid_from IS NULL OR d.valid_from <= datetime($vt))
+              AND (d.valid_to   IS NULL OR d.valid_to   > datetime($vt))
+              AND (d.recorded_at IS NULL OR d.recorded_at <= datetime($tt))
             OPTIONAL MATCH (c:AuthorityChange {document_id: d.id})
             WHERE (c.tenant = $tenant)
-              AND (c.recorded_at IS NULL OR c.recorded_at <= $tt)
+              AND (c.recorded_at IS NULL OR c.recorded_at <= datetime($tt))
             WITH d, c ORDER BY c.recorded_at DESC
             WITH d, collect(c)[0] AS c
             RETURN d.id AS document_id,
@@ -233,7 +233,7 @@ class BitemporalStore:
             """
             MATCH (newer:Document)-[r:SUPERSEDES]->(older:Document)
             WHERE coalesce(r.tenant, newer.tenant, older.tenant) = $tenant
-              AND (r.recorded_at IS NULL OR r.recorded_at <= $tt)
+              AND (r.recorded_at IS NULL OR r.recorded_at <= datetime($tt))
             RETURN newer.id AS newer_document_id,
                    older.id AS older_document_id,
                    r.recorded_at AS recorded_at
@@ -262,8 +262,8 @@ class BitemporalStore:
             MATCH (e:Entity)
             WHERE (e.tenant = $tenant)
               AND e.recorded_at IS NOT NULL
-              AND e.recorded_at >  $tt_from
-              AND e.recorded_at <= $tt_to
+              AND e.recorded_at > datetime($tt_from)
+              AND e.recorded_at <= datetime($tt_to)
               AND coalesce(e.quarantined, false) = false
             RETURN count(e) AS count
             """,
@@ -276,8 +276,8 @@ class BitemporalStore:
             MATCH ()-[r:RELATES_TO]->()
             WHERE (r.tenant = $tenant)
               AND r.recorded_at IS NOT NULL
-              AND r.recorded_at >  $tt_from
-              AND r.recorded_at <= $tt_to
+              AND r.recorded_at > datetime($tt_from)
+              AND r.recorded_at <= datetime($tt_to)
             RETURN count(r) AS count
             """,
             tenant=tenant,
@@ -288,12 +288,12 @@ class BitemporalStore:
             """
             MATCH (e:Entity)
             WHERE (e.tenant = $tenant)
-              AND (e.recorded_at IS NULL OR e.recorded_at <= $tt_to)
+              AND (e.recorded_at IS NULL OR e.recorded_at <= datetime($tt_to))
               AND coalesce(e.quarantined, false) = false
             WITH count(e) AS entity_count
             MATCH ()-[r:RELATES_TO]->()
             WHERE (r.tenant = $tenant)
-              AND (r.recorded_at IS NULL OR r.recorded_at <= $tt_to)
+              AND (r.recorded_at IS NULL OR r.recorded_at <= datetime($tt_to))
             RETURN entity_count, count(r) AS edge_count
             """,
             tenant=tenant,

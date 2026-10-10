@@ -160,6 +160,8 @@ one focused commit. Order is chosen so each phase only depends on earlier ones.
 - Risks: strict gating can reject data that used to ingest. Mitigation: severities - only BLOCKING stops a batch; first release ships WARNING for rules with no prior enforcement and a per-tenant strictness setting.
 - Accept: no BLOCKING-invalid record is written; every rejection is queryable with rule IDs.
 
+#### Phase 8 status: experimental ContextItem contract + adapters (graphrag/retrieval/context_item.py); not used for ranking
+
 #### Phase 7 status: implemented (see docs/mcp-security.md); adversarial suite in tests/unit/test_guarded_operations.py
 
 #### Phase 6 status: implemented (see docs/explanations.md); decision-trace ACL leak fixed
@@ -253,3 +255,27 @@ cannot run locally is listed under "unverified" in the final summary, not claime
 2. Should I **start Docker Desktop** (or will you) so e2e/Cypher claims can be verified locally? Otherwise they are CI-only.
 3. May I **push** `77cf41e` (pyarrow cap)? It fixes the failing nightly and is independent of this work.
 4. Build order: I recommend Step 0 -> Phase 1 -> 2 -> 3a -> 5 -> 4 -> 6 -> 7. Phase 4 is later than the spec's numbering because routing evaluation needs Phase 5's trust predicates to be meaningful.
+
+
+## 8. Review (2026-10-10)
+
+| Step | Commit | Result |
+|---|---|---|
+| Step 0 | acb3bdf | all 74 schema statements bootstrap from every entry point; manual edge state survives re-ingest |
+| Phase 1 | b9ee4d8 | pre-write publication gate, durable quarantine + retry, JUnit in CI |
+| Phase 2 | 527a595 | versioned schema registry, drift detection, schema provenance |
+| Phase 3 | e38527f | targeted invalidation, inferred-edge premises, recompute state machine |
+| Phase 5 | ebfc49f | trust metadata, shared validity predicate, score components |
+| Phase 4 | ade52ae | deterministic router (observe default), routing eval 0.837 vs 0.408 legacy (structural) |
+| Phase 6 | ae38bb5 | explanations, decision-trace ACL leak fixed, async API keeps fields |
+| Phase 7 | 3477cd1 | guarded MCP/agent operations, RDF export tenant leak fixed |
+| Phase 8 | (this commit) | experimental ContextItem contract |
+
+Test baseline 2608 passed -> final run in the Phase 8 commit message. Not verified
+locally: anything needing live Neo4j (CI e2e) or the LLM stack (golden evals,
+RAGAS, live routing metrics). Defects from section 3: #1, #2 fixed (Step 0); #3
+fixed (Phase 3: confidence transitions invalidate dependents); #4 fixed (Phase
+6 traces, Phase 7 agent tools under ACL); #5 fixed (Phase 7); #6 not
+addressed (BitemporalStore, unverified); #7 recorded as limitation; #8
+partially (Phase 3 closes snapshots whose evidence changes; Phase 2 replaces
+the constant ontology cache key).

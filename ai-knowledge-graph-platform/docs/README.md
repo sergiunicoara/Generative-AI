@@ -23,6 +23,7 @@ The specification-to-implementation runner is documented in
 - `query-routing.md` — query router and routing evaluation
 - `explanations.md` — answer explanations and trace authorization
 - `mcp-security.md` — guarded MCP and agent-tool operations
+- `graphrag-hardening.md` — hardening overview, status, metrics, migration
 - `entity-resolution.md`, `ontology-model.md`, `ontology-governance.md`,
   `cypher-patterns.md` — focused KG references
 - `enterprise-content-governance.md` — provider-neutral ACL, SharePoint sync,

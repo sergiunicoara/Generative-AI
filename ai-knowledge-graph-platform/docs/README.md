@@ -22,6 +22,7 @@ The specification-to-implementation runner is documented in
 - `trust-metadata.md` — trust metadata, validity predicate, score components
 - `query-routing.md` — query router and routing evaluation
 - `explanations.md` — answer explanations and trace authorization
+- `mcp-security.md` — guarded MCP and agent-tool operations
 - `entity-resolution.md`, `ontology-model.md`, `ontology-governance.md`,
   `cypher-patterns.md` — focused KG references
 - `enterprise-content-governance.md` — provider-neutral ACL, SharePoint sync,

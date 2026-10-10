@@ -84,5 +84,6 @@ def register(registry: CapabilityRegistry) -> None:
         },
         dry_run_ok=True,
         requires_approval=True,
+        approval_enforced_by="WorkOrderService (governed command with approval)",
         pass_identity=True,
     ))

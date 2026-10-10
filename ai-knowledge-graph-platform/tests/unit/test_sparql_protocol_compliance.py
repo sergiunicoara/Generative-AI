@@ -18,11 +18,11 @@ from api.auth.dependencies import get_current_user
 from api.routes.kg import knowledge as kg_knowledge
 
 
-def _client(tenant: str = "acme") -> TestClient:
+def _client(tenant: str = "acme", scope: str = "read write") -> TestClient:
     app = FastAPI()
     app.include_router(kg_knowledge.router)
     app.dependency_overrides[get_current_user] = lambda: {
-        "scope": "read write", "sub": "test", "tenant": tenant,
+        "scope": scope, "sub": "test", "tenant": tenant,
     }
     return TestClient(app)
 
@@ -222,7 +222,8 @@ class TestUpdateStillTargetsLocalSnapshotWhenRemoteConfigured:
             "graphrag.graph.triplestore.remote_sparql_source_from_env",
             return_value=mock_endpoint,
         ):
-            resp = _client().post(
+            # persist=true overwrites the published export: admin only (Phase 7).
+            resp = _client(scope="read write admin").post(
                 "/sparql/update",
                 json={
                     "query": 'INSERT DATA { <http://example.org/bob> <http://example.org/name> "Bob" }',

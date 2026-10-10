@@ -26,7 +26,7 @@ def register(registry: CapabilityRegistry) -> None:
         fn=query_graph_facts,
         required_scopes=("read",),
         arg_schema={
-            "question": {"type": str, "required": True},
+            "question": {"type": str, "required": True, "max_length": 500},
             "tenant": {"type": str},
             "limit": {"type": int, "min": 1, "max": 100},
         },

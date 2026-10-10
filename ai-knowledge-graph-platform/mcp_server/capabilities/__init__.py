@@ -12,7 +12,9 @@ from mcp_server.registry import CapabilityRegistry
 
 
 def build_registry() -> CapabilityRegistry:
-    registry = CapabilityRegistry()
+    from mcp_server.audit import neo4j_audit_sink
+
+    registry = CapabilityRegistry(audit_sink=neo4j_audit_sink)
     from mcp_server.capabilities.answer_query import register as register_answer_query
     from mcp_server.capabilities.context_precedent import register as register_context_precedent
     from mcp_server.capabilities.discover import register as register_discover

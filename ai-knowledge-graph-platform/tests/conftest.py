@@ -118,3 +118,18 @@ def memory_session_store():
     """A ``SessionStore`` backed by in-memory storage (no Redis needed)."""
     from graphrag.retrieval.session_store import SessionStore
     return SessionStore(redis_url=None)
+
+
+
+import pytest as _pytest_audit  # noqa: E402
+
+
+@_pytest_audit.fixture(autouse=True)
+def _no_durable_capability_audit(request, monkeypatch):
+    """Unit tests never reach a database for the capability audit trail
+    (Phase 7). Tests of the audit sink itself patch or call it explicitly;
+    e2e tests (live Neo4j) keep the real sink."""
+    if "e2e" in str(getattr(request, "fspath", "")):
+        return
+    from unittest.mock import AsyncMock
+    monkeypatch.setattr("mcp_server.audit.record_audit_event", AsyncMock())

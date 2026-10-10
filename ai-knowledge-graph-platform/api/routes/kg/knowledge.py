@@ -7,7 +7,7 @@ import structlog
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from pydantic import BaseModel
 
-from api.auth.dependencies import get_tenant, require_scope
+from api.auth.dependencies import get_current_user, get_tenant, require_scope
 from graphrag.core.scopes import TENANT_NAME_RE
 from graphrag.graph.corpus_revision import CorpusMutation
 from graphrag.graph.neo4j_client import get_neo4j
@@ -857,7 +857,8 @@ class SPARQLUpdateRequest(BaseModel):
     dependencies=[Depends(require_scope("write"))],
     summary="Execute a SPARQL 1.1 Update against the caller's tenant RDF export",
 )
-async def sparql_update(request: SPARQLUpdateRequest, tenant: str = Depends(get_tenant)):
+async def sparql_update(request: SPARQLUpdateRequest, tenant: str = Depends(get_tenant),
+                        user: dict = Depends(get_current_user)):
     """Run a SPARQL 1.1 Update (INSERT/DELETE/CLEAR/...) against the caller's
     tenant export.
 
@@ -874,6 +875,11 @@ async def sparql_update(request: SPARQLUpdateRequest, tenant: str = Depends(get_
     diverge it from the export that regenerates it, and the next
     ``scripts/load_blazegraph.py``-style load would clobber the write anyway.
     """
+    # Persisting overwrites the tenant's published export: an administrative
+    # mutation (docs/mcp-security.md), not something a plain write token or an
+    # agent may do. In-memory (persist=False) updates stay available to "write".
+    if request.persist and "admin" not in str(user.get("scope", "")).split():
+        raise HTTPException(status_code=403, detail="persist=true requires the admin scope")
     import os
     from pathlib import Path
 

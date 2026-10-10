@@ -44,6 +44,7 @@ Usage::
 from __future__ import annotations
 
 import asyncio
+import re
 import time
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, Callable
@@ -105,7 +106,16 @@ def validate_args(arg_schema: dict[str, dict], args: dict, caller_scopes: list[s
     Behavior is unchanged from the original method — this is a pure
     extraction, verified by the full ``test_tool_safety.py`` suite passing
     unmodified.
+
+    Phase 7 hardening: undeclared argument names are rejected (no smuggled
+    labels, relationship types, property names or Cypher fragments; ``tenant``
+    stays accepted because callers always overwrite or validate it), strings
+    are length-bounded (``max_length``, default 4000) and may carry a
+    ``pattern`` they must fully match.
     """
+    unknown = sorted(k for k in args if k not in arg_schema and k != "tenant")
+    if unknown:
+        return f"unknown argument(s) {unknown}; allowed: {sorted(arg_schema)}"
     for arg_name, rule in arg_schema.items():
         value = args.get(arg_name)
         # Required fields
@@ -122,6 +132,12 @@ def validate_args(arg_schema: dict[str, dict], args: dict, caller_scopes: list[s
         allowed = rule.get("allowed")
         if allowed and value not in allowed:
             return f"argument '{arg_name}' must be one of {allowed}, got {value!r}"
+        if isinstance(value, str):
+            if len(value) > int(rule.get("max_length", 4000)):
+                return f"argument '{arg_name}' exceeds {rule.get('max_length', 4000)} characters"
+            pattern = rule.get("pattern")
+            if pattern and not re.fullmatch(pattern, value):
+                return f"argument '{arg_name}' has an invalid format"
         # Range checks
         if "max" in rule and isinstance(value, (int, float)) and value > rule["max"]:
             return f"argument '{arg_name}' exceeds maximum {rule['max']}"
@@ -369,25 +385,37 @@ class ToolPolicy:
             return {"status": "queued", "doc_url": doc_url, "tenant": tenant}
 
         async def _quarantine_entity(entity_name: str, entity_type: str, tenant: str,
-                                     reason: str = "") -> dict:
+                                     reason: str = "", requested_by: str = "agent") -> dict:
+            """Quarantine through the audited service + targeted invalidation
+            (previously a raw SET with no audit log or cache invalidation)."""
+            from graphrag.graph.corpus_revision import CorpusMutation
+            from graphrag.graph.invalidation import EntityRef, EventKind, InvalidationEvent, emit
             from graphrag.graph.neo4j_client import get_neo4j
+            from graphrag.graph.quarantine import QuarantineService
             neo4j = get_neo4j()
-            await neo4j.run(
-                "MATCH (e:Entity {name:$n,type:$t,tenant:$tn}) SET e.quarantined=true",
-                n=entity_name, t=entity_type, tn=tenant,
-            )
-            return {"quarantined": True, "entity": entity_name}
+            async with CorpusMutation(neo4j, tenant, "agent_quarantine", advance_revision=False):
+                await QuarantineService(neo4j).quarantine_entity(
+                    entity_name=entity_name, entity_type=entity_type, reason=reason or "agent tool",
+                    flagged_by=requested_by, tenant=tenant,
+                )
+                await emit(InvalidationEvent(
+                    tenant=tenant, kind=EventKind.FACT_CORRECTED, reason=f"agent quarantine: {reason}",
+                    actor=requested_by, cause=f"agent-quarantine:{entity_type}:{entity_name}:{time.time()}",
+                    entities=[EntityRef(name=entity_name, type=entity_type)],
+                ), neo4j)
+            return {"quarantined": True, "entity": entity_name, "requested_by": requested_by}
 
         async def _erase_entity(entity_name: str, entity_type: str, tenant: str,
                                 requested_by: str) -> dict:
-            """GDPR Article 17 right-to-be-forgotten."""
+            """GDPR Article 17 right-to-be-forgotten, through GDPRService (audit
+            record, corpus revision and cache eviction) instead of a raw DETACH DELETE."""
+            from graphrag.graph.gdpr import GDPRService
             from graphrag.graph.neo4j_client import get_neo4j
-            neo4j = get_neo4j()
-            await neo4j.run(
-                "MATCH (e:Entity {name:$n,type:$t,tenant:$tn}) DETACH DELETE e",
-                n=entity_name, t=entity_type, tn=tenant,
+            report = await GDPRService(get_neo4j()).forget_entity(
+                entity_name, entity_type, tenant, requested_by=requested_by,
             )
-            return {"erased": True, "entity": entity_name, "requested_by": requested_by}
+            return {"erased": True, "entity": entity_name, "requested_by": requested_by,
+                    "report": report}
 
         tools = [
             # ── LOW RISK — read-only, no graph side effects ──────────────────
@@ -418,7 +446,7 @@ class ToolPolicy:
                 timeout_s=5.0,
                 risk="low",
                 arg_schema={
-                    "entity_name": {"type": str, "required": True},
+                    "entity_name": {"type": str, "required": True, "max_length": 256},
                 },
             ),
 
@@ -466,10 +494,11 @@ class ToolPolicy:
                 timeout_s=10.0,
                 risk="high",
                 arg_schema={
-                    "entity_name": {"type": str, "required": True},
-                    "entity_type": {"type": str, "required": True},
-                    "tenant":      {"type": str, "required": True},
-                    "reason":      {"type": str},
+                    "entity_name":  {"type": str, "required": True, "max_length": 256},
+                    "entity_type":  {"type": str, "required": True, "pattern": r"^[A-Za-z][A-Za-z0-9_]{0,63}$"},
+                    "tenant":       {"type": str, "required": True},
+                    "reason":       {"type": str, "max_length": 500},
+                    "requested_by": {"type": str},
                 },
             ),
 
@@ -481,8 +510,8 @@ class ToolPolicy:
                 timeout_s=30.0,
                 risk="restricted",
                 arg_schema={
-                    "entity_name":  {"type": str, "required": True},
-                    "entity_type":  {"type": str, "required": True},
+                    "entity_name":  {"type": str, "required": True, "max_length": 256},
+                    "entity_type":  {"type": str, "required": True, "pattern": r"^[A-Za-z][A-Za-z0-9_]{0,63}$"},
                     "tenant":       {"type": str, "required": True},
                     "requested_by": {"type": str, "required": True},
                 },

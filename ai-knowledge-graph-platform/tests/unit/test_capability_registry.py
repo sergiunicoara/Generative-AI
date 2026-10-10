@@ -8,6 +8,12 @@ from mcp_server.identity import CallerIdentity
 from mcp_server.registry import CapabilityRegistry, CapabilitySpec, DeniedCapabilityCall
 
 
+def _without_receipt(result):
+    """Phase 7 adds a provenance receipt to dict results (asserted in test_guarded_operations.py)."""
+    assert "operation_id" in result["provenance_receipt"]
+    return {k: v for k, v in result.items() if k != "provenance_receipt"}
+
+
 def _identity(**kw) -> CallerIdentity:
     defaults = dict(
         subject="agent-1", tenant="aerospace",
@@ -138,7 +144,7 @@ class TestCall:
         registry = CapabilityRegistry()
         registry.register(_spec())
         result = await registry.call("kg.echo@1.0.0", {"value": "x"}, _identity(tenant="aerospace"))
-        assert result == {"tenant": "aerospace", "value": "x"}
+        assert _without_receipt(result) == {"tenant": "aerospace", "value": "x"}
 
     async def test_caller_supplied_tenant_matching_identity_is_allowed(self):
         # validate_args' own cross-tenant guard (shared with ToolPolicy) also
@@ -151,7 +157,7 @@ class TestCall:
             "kg.echo@1.0.0", {"tenant": "aerospace", "value": "x"},
             _identity(tenant="aerospace", scopes=frozenset({"read", "tenant:aerospace"})),
         )
-        assert result == {"tenant": "aerospace", "value": "x"}
+        assert _without_receipt(result) == {"tenant": "aerospace", "value": "x"}
 
     async def test_caller_supplied_tenant_mismatch_denied(self):
         registry = CapabilityRegistry()
@@ -201,7 +207,7 @@ class TestCall:
         registry = CapabilityRegistry()
         registry.register(_spec(fn=_sync_echo, arg_schema={"tenant": {"type": str}}))
         result = await registry.call("kg.echo@1.0.0", {}, _identity(tenant="aerospace"))
-        assert result == {"tenant": "aerospace"}
+        assert _without_receipt(result) == {"tenant": "aerospace"}
 
     async def test_not_found_denied(self):
         registry = CapabilityRegistry()

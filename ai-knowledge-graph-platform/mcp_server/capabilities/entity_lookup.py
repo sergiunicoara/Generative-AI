@@ -16,9 +16,9 @@ def register(registry: CapabilityRegistry) -> None:
         fn=lookup_entity,
         required_scopes=("read",),
         arg_schema={
-            "name": {"type": str, "required": True},
+            "name": {"type": str, "required": True, "max_length": 256},
             "tenant": {"type": str},
-            "as_of": {"type": str},
+            "as_of": {"type": str, "pattern": r"^\d{4}-\d{2}-\d{2}(T[0-9:.]+(Z|[+-]\d{2}:\d{2})?)?$"},
             "limit": {"type": int, "min": 1, "max": 100},
         },
     ))

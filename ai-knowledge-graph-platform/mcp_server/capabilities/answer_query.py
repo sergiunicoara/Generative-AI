@@ -44,9 +44,13 @@ def register(registry: CapabilityRegistry) -> None:
         required_scopes=("read",),
         pass_identity=True,
         arg_schema={
-            "question": {"type": str, "required": True},
+            "question": {"type": str, "required": True, "max_length": 2000},
             "tenant": {"type": str},
-            "mode": {"type": str},
-            "session_id": {"type": str},
+            "mode": {"type": str, "allowed": ["local", "global", "hybrid"]},
+            "session_id": {"type": str, "pattern": r"^[\w.:\-]{1,128}$"},
         },
+        # Read of the corpus, but the answer path records traces and caches
+        # (derived artifacts), so it cannot run in a READ-only session.
+        read_only_session=False,
+        timeout_s=120.0,
     ))

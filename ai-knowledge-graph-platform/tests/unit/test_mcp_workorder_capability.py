@@ -38,6 +38,7 @@ class TestPassIdentityPlumbing:
         registry.register(CapabilitySpec(
             capability_id="test.needs-identity", version="1.0.0", title="t",
             kind="write", risk="safe", fn=_needs_identity, pass_identity=True,
+            approval_enforced_by="test service",  # Phase 7: writes need an approval path
         ))
         identity = _identity()
         await registry.call("test.needs-identity@1.0.0", {}, identity)
@@ -53,7 +54,7 @@ class TestPassIdentityPlumbing:
             kind="read", risk="safe", fn=_plain,
         ))
         result = await registry.call("test.plain@1.0.0", {}, _identity())
-        assert result == {"tenant": "aerospace"}
+        assert {k: v for k, v in result.items() if k != "provenance_receipt"} == {"tenant": "aerospace"}
 
 
 class TestCreateWorkOrderAdapter:

@@ -236,7 +236,7 @@ def _emit_provenance_rows(graph: Graph, rows: list[dict], tenant: str) -> dict[t
 
     for row in rows:
         row_tenant = str(row.get("row_tenant") or row.get("tenant") or tenant)
-        if row_tenant != tenant and tenant != "default":
+        if row_tenant != tenant:
             continue
         kind = str(row.get("kind") or "")
         identifier = str(row.get("id") or "")
@@ -449,7 +449,7 @@ async def export(
     rel_rows = await neo4j.run(
         """
         MATCH ()-[r:RELATES_TO]->()
-        WHERE ($tenant = 'default' OR r.tenant = $tenant)
+        WHERE r.tenant = $tenant
         RETURN DISTINCT r.relation AS rel LIMIT $limit
         """,
         tenant=tenant, limit=limit,
@@ -471,7 +471,7 @@ async def export(
         """
         CALL {
           MATCH (m:IngestionRunManifest)
-          WHERE ($tenant = 'default' OR m.tenant = $tenant)
+          WHERE m.tenant = $tenant
           OPTIONAL MATCH (c:Chunk {tenant: m.tenant, document_id: m.document_id})
           WITH m, collect(DISTINCT c.id) AS chunk_ids
           RETURN 'ingestion' AS kind, m.id AS id, m.tenant AS row_tenant,
@@ -482,7 +482,7 @@ async def export(
                  null AS manifest_id, [] AS episodes, null AS answer_digest
           UNION ALL
           MATCH (r:CGAgentRun)
-          WHERE ($tenant = 'default' OR r.tenant = $tenant)
+          WHERE r.tenant = $tenant
           OPTIONAL MATCH (r)-[:USED_CONTEXT]->(m:CGContextManifest)
           OPTIONAL MATCH (r)-[:RECORDED_EPISODE]->(ep:CGEpisode)
           WITH r, m, collect(DISTINCT ep { .episode_type, .content_digest }) AS episodes
@@ -496,7 +496,7 @@ async def export(
                  episodes AS episodes, null AS answer_digest
           UNION ALL
           MATCH (a:IntelligenceArtifact)
-          WHERE ($tenant = 'default' OR a.tenant = $tenant)
+          WHERE a.tenant = $tenant
           RETURN 'artifact' AS kind, a.id AS id, a.tenant AS row_tenant,
                  a.source_doc_id AS document_id, a.extraction_model AS model_provider,
                  a.extraction_model AS model_version, null AS started_at,
@@ -518,7 +518,7 @@ async def export(
     ent_rows = await neo4j.run(
         """
         MATCH (e:Entity)
-        WHERE ($tenant = 'default' OR e.tenant = $tenant)
+        WHERE e.tenant = $tenant AND coalesce(e.quarantined, false) = false
         OPTIONAL MATCH (e)<-[:ALIAS_OF]-(al:Alias)
         WHERE al.tenant = e.tenant
         WITH e, collect(DISTINCT al.value) AS aliases
@@ -593,7 +593,11 @@ async def export(
     edge_rows = await neo4j.run(
         """
         MATCH (s:Entity)-[r:RELATES_TO]->(t:Entity)
-        WHERE ($tenant = 'default' OR r.tenant = $tenant)
+        WHERE r.tenant = $tenant AND s.tenant = $tenant AND t.tenant = $tenant
+          // Phase 7: the export is the published graph -- no retracted facts,
+          // no quarantined entities (expiry stays visible as annotations).
+          AND coalesce(r.confidence_state, 'ASSERTED') <> 'RETRACTED'
+          AND coalesce(s.quarantined, false) = false AND coalesce(t.quarantined, false) = false
         RETURN s.name AS sname, s.type AS stype,
                t.name AS tname, t.type AS ttype,
                r.relation AS rel,
@@ -655,7 +659,7 @@ async def export(
     neg_rows = await neo4j.run(
         """
         MATCH (s:Entity)-[r:NEGATIVE_RELATES_TO]->(t:Entity)
-        WHERE ($tenant = 'default' OR r.tenant = $tenant)
+        WHERE r.tenant = $tenant
         RETURN s.name AS sname, s.type AS stype,
                t.name AS tname, t.type AS ttype,
                r.relation AS rel, r.confidence AS conf,
@@ -752,8 +756,10 @@ async def export(
 
 def main():
     parser = argparse.ArgumentParser(description="Export knowledge graph RDF using rdflib")
-    parser.add_argument("--tenant",  default="default",
-                        help="Tenant to export (default: default)")
+    # Phase 7: the tenant is mandatory and exports only that tenant. The old
+    # "default" tenant exported every tenant's data into exports/default/.
+    parser.add_argument("--tenant", required=True,
+                        help="Tenant to export (exactly one tenant's data is exported)")
     # No static default -- POST /kg/sparql reads exports/<tenant>/graph_export.ttl
     # (GRAPHRAG_RDF_EXPORT_DIR overrides the "exports" root), so the default
     # output path must be derived from --tenant, not shared across every
@@ -778,6 +784,9 @@ def main():
                              "all if it violates any shape (exit code 1). Use this in "
                              "CI and scheduled export jobs.")
     args = parser.parse_args()
+    from graphrag.core.scopes import TENANT_NAME_RE
+    if not TENANT_NAME_RE.match(args.tenant):
+        parser.error(f"invalid tenant name {args.tenant!r}")
 
     if args.output:
         output = Path(args.output)

@@ -9,7 +9,7 @@ from collections.abc import Awaitable, Callable
 from typing import TypeVar
 
 import structlog
-from neo4j import READ_ACCESS, AsyncGraphDatabase, AsyncDriver
+from neo4j import READ_ACCESS, AsyncGraphDatabase, AsyncDriver, Query
 
 from graphrag.observability.operational_metrics import (
     record_graph_query, set_graph_pool,
@@ -29,6 +29,7 @@ from graphrag.core.models import (
 from graphrag.core.retry import with_retry
 from graphrag.graph.schema_statements import load_schema_statements
 from graphrag.enterprise.access import access_params, document_access_predicate, link_access_predicate
+from graphrag.graph.execution_scope import ResultTooLarge, current_scope
 from graphrag.graph.trust import origin_for
 from graphrag.graph.validity import (
     document_trust_fields,
@@ -126,27 +127,35 @@ class Neo4jClient:
 
     @with_retry(exceptions=(TransientError, ServiceUnavailable), max_attempts=3)
     async def run(self, cypher: str, **params) -> list[dict]:
-        self._in_flight += 1
-        set_graph_pool(self._in_flight, self.MAX_CONNECTION_POOL_SIZE)
-        try:
-            with record_graph_query():
-                async with self._driver.session() as session:
-                    result = await session.run(cypher, parameters=params)
-                    return [record.data() async for record in result]
-        finally:
-            self._in_flight -= 1
-            set_graph_pool(self._in_flight, self.MAX_CONNECTION_POOL_SIZE)
+        """Execute Cypher. Inside a guarded operation (``execution_scope``) the
+        session is READ-only for read operations, the transaction has a server
+        timeout, and rows beyond the operation's limit raise ``ResultTooLarge``."""
+        return await self._execute(cypher, params, force_read=False)
 
     @with_retry(exceptions=(TransientError, ServiceUnavailable), max_attempts=3)
     async def run_read(self, cypher: str, **params) -> list[dict]:
         """Like ``run`` but in a READ-access session: the server refuses writes."""
+        return await self._execute(cypher, params, force_read=True)
+
+    async def _execute(self, cypher: str, params: dict, *, force_read: bool) -> list[dict]:
+        scope = current_scope()
+        read_only = force_read or bool(scope and scope.read_only)
+        query = Query(cypher, timeout=scope.timeout_s) if scope and scope.timeout_s else cypher
+        max_rows = scope.max_rows if scope else None
         self._in_flight += 1
         set_graph_pool(self._in_flight, self.MAX_CONNECTION_POOL_SIZE)
         try:
             with record_graph_query():
-                async with self._driver.session(default_access_mode=READ_ACCESS) as session:
-                    result = await session.run(cypher, parameters=params)
-                    return [record.data() async for record in result]
+                session_kwargs = {"default_access_mode": READ_ACCESS} if read_only else {}
+                async with self._driver.session(**session_kwargs) as session:
+                    result = await session.run(query, parameters=params)
+                    rows: list[dict] = []
+                    async for record in result:
+                        rows.append(record.data())
+                        if max_rows is not None and len(rows) > max_rows:
+                            raise ResultTooLarge(
+                                f"{scope.operation or 'operation'} exceeded {max_rows} rows")
+                    return rows
         finally:
             self._in_flight -= 1
             set_graph_pool(self._in_flight, self.MAX_CONNECTION_POOL_SIZE)

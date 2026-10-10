@@ -30,7 +30,7 @@ def register(registry: CapabilityRegistry) -> None:
         fn=_find_precedents,
         required_scopes=("read",),
         arg_schema={
-            "policy_version_id": {"type": str, "required": True},
+            "policy_version_id": {"type": str, "required": True, "pattern": r"^[\w.:\-]{1,128}$"},
             "tenant": {"type": str},
             "limit": {"type": int, "min": 1, "max": 50},
         },

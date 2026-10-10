@@ -30,7 +30,7 @@ RULES = [
 ]
 
 
-async def seed(client, t: str) -> None:
+async def seed(client, t: str, p: str = "") -> None:
     """Docs d1 (Acme OWNS Bolt), d2 (Bolt OWNS Nut), d9 (Zed OWNS Yak, unrelated).
     One chunk per doc mentioning its entities; a snapshot and a decision per chunk."""
     await client.run(
@@ -48,9 +48,9 @@ async def seed(client, t: str) -> None:
                                  confidence: 0.9, source_type: 'document'}]->(o)
         """,
         t=t, docs=[
-            {"id": "d1", "chunk": "c1", "src": "Acme", "tgt": "Bolt"},
-            {"id": "d2", "chunk": "c2", "src": "Bolt", "tgt": "Nut"},
-            {"id": "d9", "chunk": "c9", "src": "Zed", "tgt": "Yak"},
+            {"id": f"{p}d1", "chunk": f"{p}c1", "src": "Acme", "tgt": "Bolt"},
+            {"id": f"{p}d2", "chunk": f"{p}c2", "src": "Bolt", "tgt": "Nut"},
+            {"id": f"{p}d9", "chunk": f"{p}c9", "src": "Zed", "tgt": "Yak"},
         ])
     await client.run(
         """
@@ -62,7 +62,8 @@ async def seed(client, t: str) -> None:
         CREATE (run:CGAgentRun {tenant: $t, id: 'r-' + it.c})-[:USED_CONTEXT]->(m)
         CREATE (run)-[:PRODUCED_DECISION]->(:CGDecision {tenant: $t, id: 'dec-' + it.c})
         """,
-        t=t, items=[{"c": "c1", "d": "d1"}, {"c": "c2", "d": "d2"}, {"c": "c9", "d": "d9"}])
+        t=t, items=[{"c": f"{p}c1", "d": f"{p}d1"}, {"c": f"{p}c2", "d": f"{p}d2"},
+                                  {"c": f"{p}c9", "d": f"{p}d9"}])
     await ForwardChainingEngine(client, rules=RULES).run(tenant=t, max_iterations=3)
 
 
@@ -83,7 +84,7 @@ class TestLiveInvalidation:
         try:
             await client.init_schema()
             await seed(client, t)
-            await seed(client, other)
+            await seed(client, other, p="other-")   # Document / Chunk ids are globally unique
             inferred = await client.run(
                 "MATCH (:Entity {tenant:$t, name:'Acme'})-[r:RELATES_TO {relation:'OWNS'}]->(:Entity {name:'Nut'}) "
                 "RETURN r.premise_keys AS p, r.rule_version AS v", t=t)

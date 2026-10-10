@@ -48,6 +48,7 @@ from __future__ import annotations
 
 import asyncio
 import re
+from contextvars import ContextVar
 from typing import Any
 
 import structlog
@@ -72,6 +73,21 @@ def _parse_retry_after(message: str) -> float:
     return max(_MIN_RETRY_WAIT, min(_MAX_RETRY_WAIT, minutes * 60 + seconds))
 
 
+# The model that actually served the most recent call in this task/context (OpenAI-compatible
+# providers report it as ``response.model``). Context-local, so concurrent extractions never see
+# each other's value. Callers that want true provenance reset it, call generate(), then read it.
+_response_model: ContextVar[str | None] = ContextVar("llm_response_model", default=None)
+
+
+def reset_response_model() -> None:
+    _response_model.set(None)
+
+
+def last_response_model() -> str | None:
+    """Model name the provider reported for the last call in this context, or None."""
+    return _response_model.get()
+
+
 def _report_openai_compatible_usage(response: Any) -> None:
     """Forward a chat-completion response's usage/model to GenAI telemetry.
 
@@ -89,6 +105,9 @@ def _report_openai_compatible_usage(response: Any) -> None:
     from graphrag.observability.genai_telemetry import record_llm_usage
 
     usage = getattr(response, "usage", None)
+    served_by = getattr(response, "model", None)
+    if isinstance(served_by, str) and served_by:
+        _response_model.set(served_by)
     record_llm_usage(
         response_model=getattr(response, "model", None),
         input_tokens=getattr(usage, "prompt_tokens", None) if usage else None,

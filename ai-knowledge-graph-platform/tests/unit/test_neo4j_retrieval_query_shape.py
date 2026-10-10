@@ -161,3 +161,31 @@ async def test_relation_subgraph_interpolates_bitemporal_filters() -> None:
     assert "r.valid_from" in cypher
     assert "r.recorded_at" in cypher
     assert client.run.await_args.kwargs["tenant"] == "acme"
+
+
+async def test_multihop_default_traverses_any_relation_and_keeps_superseded_edges() -> None:
+    client = _client()
+    await client.get_multihop_chunks(["c1"], hops=2, tenant="acme")
+    cypher = client.run.await_args.args[0]
+    assert "allowed_relations" not in cypher and "allowed_relations" not in client.run.await_args.kwargs
+    assert "sd.superseded_by" not in cypher
+
+
+async def test_multihop_allowlist_and_superseded_edge_exclusion_are_parameterised() -> None:
+    client = _client()
+    await client.get_multihop_chunks(["c1"], hops=2, tenant="acme", include_superseded=False,
+                                     allowed_relations=["SUPPLIES", "OWNS"])
+    cypher = client.run.await_args.args[0]
+    kw = client.run.await_args.kwargs
+    assert "r.relation IN $allowed_relations" in cypher
+    assert kw["allowed_relations"] == ["SUPPLIES", "OWNS"]          # never interpolated
+    assert "SUPPLIES" not in cypher
+    assert "sd.superseded_by IS NOT NULL" in cypher and "tenant: $tenant" in cypher
+
+
+async def test_entity_neighbors_can_exclude_edges_from_superseded_documents() -> None:
+    client = _client()
+    await client.get_entity_neighbors(["c1"], tenant="acme")
+    assert "sd.superseded_by" not in client.run.await_args.args[0]
+    await client.get_entity_neighbors(["c1"], tenant="acme", include_superseded=False)
+    assert "sd.superseded_by IS NOT NULL" in client.run.await_args.args[0]

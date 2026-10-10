@@ -222,3 +222,24 @@ def test_trace_routes_pass_the_callers_access_context():
     from api.routes import context_graph
     for fn in (context_graph.load_context_trace, context_graph.replay_context_trace):
         assert "AccessContext.from_claims(user)" in inspect.getsource(fn)
+
+
+def test_evidence_coverage_is_exposed_and_recorded():
+    from graphrag.core.models import QueryResult
+    from graphrag.retrieval import hybrid_retriever as hr
+
+    r = QueryResult(question="q", answer="a")
+    r.explanation = {"grounding": {"statements": 4, "grounded": 3, "unsupported_statements": ["x"],
+                                   "grounding_ratio": 0.75},
+                     "evidence": [{"id": "c1", "current": True}, {"id": "c2", "current": False}]}
+    hr._record_answer_grounding(r)
+    assert r.evidence_coverage == 0.75
+
+
+def test_evidence_coverage_is_none_without_grounding():
+    from graphrag.core.models import QueryResult
+    from graphrag.retrieval import hybrid_retriever as hr
+
+    r = QueryResult(question="q", answer="a")
+    hr._record_answer_grounding(r)
+    assert r.evidence_coverage is None

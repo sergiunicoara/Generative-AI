@@ -458,6 +458,7 @@ class LocalSearch:
                 per_seed_cap=traversal_policy.per_seed_cap,
                 total_cap=traversal_policy.total_cap,
                 include_superseded=include_superseded,
+                allowed_relations=list(cfg.get("multihop_allowed_relations") or []) or None,
             )
             log.info(
                 "local_search.multihop.done",
@@ -680,6 +681,7 @@ class LocalSearch:
             tenant=tenant,
             as_of=valid_at,
             transaction_at=transaction_at,
+            include_superseded=include_superseded,
         ) if use_entity_context else []
 
         # Collect the entity/chunk references so the caller can record the

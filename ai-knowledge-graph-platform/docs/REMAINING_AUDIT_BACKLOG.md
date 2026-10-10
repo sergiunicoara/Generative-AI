@@ -1,6 +1,6 @@
 # Remaining Audit Backlog
 
-**As of:** 2026-09-22. Consolidates every still-open, worth-implementing item
+**As of:** 2026-09-22 (item 3 updated 2026-10-10; see docs/graphrag-hardening.md for the hardening work since). Consolidates every still-open, worth-implementing item
 from the two live audit trails in this repo:
 [docs/IMPLEMENTATION_AUDIT.md](IMPLEMENTATION_AUDIT.md) (code-level, 2026-09-21/22)
 and the historical
@@ -38,11 +38,13 @@ graded penalty instead of a binary gate, then re-validate against the
 golden set before enabling.
 
 ### 3. Defensible evidence and provenance
-`QueryResult.citations` is a flat `list[str]` — no graph path, per-citation
-confidence, or timestamp. Answers can't surface "claim + source + timestamp
-+ path + confidence."
-**To close:** needs its own migration plan — this is a public API change
-that breaks every eval script's citation-recall scoring, not a quick patch.
+**Largely closed 2026-10-10** without changing `QueryResult.citations`: every
+answer now carries a structured `explanation` (evidence with trust and score
+components, graph paths, inferences, grounding, limitations) and per-citation
+`CitationEvidence`; relation provenance is kept per document. See
+[docs/explanations.md](explanations.md) and
+[docs/graphrag-hardening.md](graphrag-hardening.md). `citations` itself stays a
+flat list for eval-script compatibility.
 
 ---
 

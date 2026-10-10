@@ -78,7 +78,13 @@ class ClaimVerifier:
         return raw.strip().upper().startswith("YES")
 
     async def verify(self, answer: str, context: str) -> tuple[str, int]:
-        """Verify each sentence in *answer* against *context*.
+        """Verify each sentence in *answer* against *context* (see ``verify_with_stats``)."""
+        verified, n_removed, _total = await self.verify_with_stats(answer, context)
+        return verified, n_removed
+
+    async def verify_with_stats(self, answer: str, context: str) -> tuple[str, int, int]:
+        """Like ``verify`` but also returns the number of sentences checked, so the caller can
+        compute an evidence-coverage ratio ``(total - n_removed) / total``.
 
         Returns
         -------
@@ -89,15 +95,15 @@ class ClaimVerifier:
             Number of sentences that were stripped.
         """
         if not answer or not answer.strip():
-            return answer, 0
+            return answer, 0, 0
 
         # Pass through if the answer is already the fallback / refusal message
         if _FALLBACK in answer:
-            return answer, 0
+            return answer, 0, 0
 
         sentences = _split_sentences(answer)
         if not sentences:
-            return answer, 0
+            return answer, 0, 0
 
         import asyncio
         results = await asyncio.gather(
@@ -117,6 +123,6 @@ class ClaimVerifier:
             )
 
         if not kept:
-            return _FALLBACK, n_removed
+            return _FALLBACK, n_removed, len(sentences)
 
-        return " ".join(kept), n_removed
+        return " ".join(kept), n_removed, len(sentences)

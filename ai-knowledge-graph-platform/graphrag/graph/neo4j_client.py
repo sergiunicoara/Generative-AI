@@ -58,6 +58,29 @@ def _escape_lucene_query(text: str) -> str:
     return "".join(f"\\{c}" if c in _LUCENE_SPECIAL_CHARS else c for c in text)
 
 
+def _doc_provenance_sets(doc_id: str, chunk_id: str, model: str, observed_at: str) -> str:
+    """SET fragment keeping per-document provenance index-aligned with ``source_doc_ids``.
+
+    ``prior_docs`` is the pre-update snapshot of ``source_doc_ids``. Each contributing document owns
+    one slot in ``doc_chunk_ids`` / ``doc_extraction_models`` / ``doc_observed_at``: a new document
+    appends a slot, a re-ingested document replaces only ITS slot, and other documents' provenance
+    is never overwritten (previously the last writer silently replaced the edge-level scalars).
+    Arguments are Cypher expressions (``$param`` or ``row.key``), never user text.
+    """
+    def one(prop: str, value: str) -> str:
+        return (
+            f"r.{prop} = [i IN range(0, size(prior_docs) + CASE WHEN {doc_id} IN prior_docs THEN 0 ELSE 1 END - 1) | "
+            f"CASE WHEN i < size(prior_docs) AND prior_docs[i] <> {doc_id} "
+            f"THEN CASE WHEN i < size(coalesce(r.{prop}, [])) THEN r.{prop}[i] ELSE '' END "
+            f"ELSE coalesce({value}, CASE WHEN i < size(coalesce(r.{prop}, [])) THEN r.{prop}[i] ELSE '' END, '') END]"
+        )
+    return ",\n                ".join([
+        one("doc_chunk_ids", chunk_id),
+        one("doc_extraction_models", model),
+        one("doc_observed_at", observed_at),
+    ])
+
+
 class Neo4jClient:
     """Thin wrapper around the Neo4j async driver with retry logic."""
 
@@ -1171,16 +1194,22 @@ class Neo4jClient:
         updated_rows = await self.run(
             """
             MATCH ()-[r:RELATES_TO {tenant: $tenant}]-()
+            // The pattern is undirected, so each edge is matched twice. Every list below is therefore
+            // read from a pre-update snapshot, never from r, or the second pass would index into
+            // lists the first pass already shortened.
             WITH r, coalesce(r.source_doc_ids, [r.source_doc_id]) AS all_sources,
-                 coalesce(r.doc_confidences, []) AS all_confs
+                 coalesce(r.doc_confidences, []) AS all_confs,
+                 coalesce(r.doc_chunk_ids, []) AS all_chunks,
+                 coalesce(r.doc_extraction_models, []) AS all_models,
+                 coalesce(r.doc_observed_at, []) AS all_seen
             WHERE $doc_id IN all_sources
             // Keep only the indices whose source document is not the one
             // being reconciled, so source_doc_ids and doc_confidences stay
             // index-aligned as entries are removed together.
-            WITH r, all_sources, all_confs,
+            WITH r, all_sources, all_confs, all_chunks, all_models, all_seen,
                  [i IN range(0, size(all_sources) - 1) WHERE all_sources[i] <> $doc_id] AS keep_idx
             WHERE size(keep_idx) > 0
-            WITH r, keep_idx,
+            WITH r, keep_idx, all_chunks, all_models, all_seen,
                  [i IN keep_idx | all_sources[i]] AS remaining_sources,
                  [i IN keep_idx |
                     CASE WHEN i < size(all_confs) THEN all_confs[i] ELSE coalesce(r.confidence, 0.0) END
@@ -1188,6 +1217,13 @@ class Neo4jClient:
             SET r.source_doc_ids = remaining_sources,
                 r.source_doc_id = remaining_sources[0],
                 r.doc_confidences = remaining_confs,
+                // Per-document provenance stays aligned with source_doc_ids.
+                r.doc_chunk_ids = [i IN keep_idx |
+                    CASE WHEN i < size(all_chunks) THEN all_chunks[i] ELSE '' END],
+                r.doc_extraction_models = [i IN keep_idx |
+                    CASE WHEN i < size(all_models) THEN all_models[i] ELSE '' END],
+                r.doc_observed_at = [i IN keep_idx |
+                    CASE WHEN i < size(all_seen) THEN all_seen[i] ELSE '' END],
                 // Recompute from what's actually left, not the stale
                 // aggregate that included the reconciled document's
                 // contribution — see audit-2026-09-23.md, "Not fixed" #2.
@@ -1495,7 +1531,9 @@ class Neo4jClient:
                 r.confidence       = CASE
                     WHEN $source_doc_id IN prior_docs THEN r.confidence
                     ELSE 1.0 - reduce(acc = 1.0, c IN prior_confs_padded + [$confidence] | acc * (1.0 - c))
-                END
+                END,
+                // Per-document provenance, index-aligned with source_doc_ids.
+                """ + _doc_provenance_sets("$source_doc_id", "$chunk_id", "$extraction_model", "$extracted_at") + """
             """,
             src_name=src_name,
             src_type=src_type,
@@ -1507,6 +1545,8 @@ class Neo4jClient:
             confidence=rel.confidence,
             extracted_at=rel.extracted_at.isoformat(),
             source_doc_id=rel.source_doc_id,
+            chunk_id=rel.source_chunk_id or None,
+            extraction_model=rel.extraction_model or None,
             source_type=rel.source_type if isinstance(rel.source_type, str) else rel.source_type.value,
             constraint_type=rel.constraint_type if isinstance(rel.constraint_type, str) else rel.constraint_type.value,
             confidence_state=rel.confidence_state,
@@ -1615,7 +1655,9 @@ class Neo4jClient:
                 r.chunk_span_start = row.span_start,
                 r.chunk_span_end   = row.span_end,
                 r.extraction_model = row.extraction_model,
-                r.prompt_version   = row.prompt_version
+                r.prompt_version   = row.prompt_version,
+                // Per-document provenance, index-aligned with source_doc_ids.
+                """ + _doc_provenance_sets("row.source_doc_id", "row.chunk_id", "row.extraction_model", "row.extracted_at") + """
             """,
             rows=rows,
             tenant=tenant,
@@ -2189,8 +2231,12 @@ class Neo4jClient:
         as_of: str | None = None,
         tenant: str = "default",
         transaction_at: str | None = None,
+        include_superseded: bool = True,
     ) -> list[dict]:
         """Expand retrieved chunks to their entity neighbors (1-hop).
+
+        ``include_superseded=False`` also drops neighbours reached only through an edge whose
+        source document has been superseded (default keeps today's behaviour).
 
         Excludes quarantined entities and edges that are not current
         (retracted, or outside their validity window at ``as_of`` / now) —
@@ -2200,6 +2246,11 @@ class Neo4jClient:
             "AND (r.recorded_at IS NULL OR r.recorded_at <= datetime($transaction_at))"
             if transaction_at else ""
         )
+        superseded_filter = (
+            "AND NOT (r.source_doc_id IS NOT NULL AND EXISTS { MATCH (sd:Document {id: r.source_doc_id, "
+            "tenant: $tenant}) WHERE sd.superseded_by IS NOT NULL })"
+            if not include_superseded else ""
+        )
         return await self.run(
             f"""
             UNWIND $chunk_ids AS cid
@@ -2207,7 +2258,7 @@ class Neo4jClient:
             WHERE {entity_is_active("e")}
             OPTIONAL MATCH (e)-[r:RELATES_TO {{tenant: $tenant}}]-(neighbor:Entity {{tenant: $tenant}})
             WITH e, neighbor,
-                 ({entity_is_active("neighbor")} AND {edge_is_current("r")} {transaction_filter}) AS neighbor_ok
+                 ({entity_is_active("neighbor")} AND {edge_is_current("r")} {transaction_filter} {superseded_filter}) AS neighbor_ok
             RETURN e.name AS entity, e.type AS type, e.description AS description,
                    e.resolution_status AS resolution_status, e.resolution_method AS resolution_method,
                    collect(DISTINCT CASE WHEN neighbor_ok THEN neighbor.name ELSE null END) AS neighbors
@@ -2230,9 +2281,14 @@ class Neo4jClient:
         per_seed_cap: int = 200,
         total_cap: int = 500,
         include_superseded: bool = True,
+        allowed_relations: list[str] | None = None,
     ) -> list[dict]:
         """
         Multi-hop graph traversal with temporal filtering and path quality scoring.
+
+        ``allowed_relations`` (optional) restricts traversal to edges whose ``relation`` is in the
+        list; None / empty keeps today's behaviour (any relation). With ``include_superseded=False``
+        edges sourced from a superseded document are not traversed either.
 
         Returns hop chunks with:
           - path_length: number of RELATES_TO hops taken
@@ -2271,6 +2327,14 @@ class Neo4jClient:
         tenant_filter = (
             "AND ALL(r IN relationships(path) WHERE r.tenant = $tenant)"
         )
+        if allowed_relations:
+            temporal_filter += " AND ALL(r IN relationships(path) WHERE r.relation IN $allowed_relations)"
+        if not include_superseded:
+            temporal_filter += (
+                " AND ALL(r IN relationships(path) WHERE r.source_doc_id IS NULL OR NOT EXISTS "
+                "{ MATCH (sd:Document {id: r.source_doc_id, tenant: $tenant}) "
+                "WHERE sd.superseded_by IS NOT NULL })"
+            )
         use_semantic = query_embedding is not None and semantic_weight > 0
         score_expr = (
             # blend graph-path quality with query similarity; null-safe fallback
@@ -2337,6 +2401,7 @@ class Neo4jClient:
             as_of=as_of,
             transaction_at=transaction_at,
             include_superseded=include_superseded,
+            **({"allowed_relations": list(allowed_relations)} if allowed_relations else {}),
             **({"query_emb": query_embedding, "sem_w": float(semantic_weight)}
                if use_semantic else {}),
         )

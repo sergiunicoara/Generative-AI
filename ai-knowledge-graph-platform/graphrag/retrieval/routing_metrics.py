@@ -22,6 +22,41 @@ _denials = Counter("graphrag_retrieval_authorization_denials_total",
                    "Queries whose evidence was entirely removed by authorization") if Counter else None
 
 
+_coverage = Histogram("graphrag_answer_evidence_coverage",
+                      "Share of answer statements supported by the retrieved evidence (lexical grounding)",
+                      buckets=(0.0, 0.25, 0.5, 0.75, 0.9, 1.0)) if Histogram else None
+_unsupported = Counter("graphrag_unsupported_statements_total",
+                       "Answer statements not supported by the retrieved evidence") if Counter else None
+_statements = Counter("graphrag_answer_statements_total",
+                      "Answer statements checked for evidence support") if Counter else None
+_superseded_used = Counter("graphrag_superseded_evidence_used_total",
+                           "Evidence items in answers that are superseded or otherwise not current") if Counter else None
+_claims_checked = Counter("graphrag_claims_verified_total", "Sentences checked by the LLM claim verifier") if Counter else None
+_claims_stripped = Counter("graphrag_claims_stripped_total", "Sentences removed by the LLM claim verifier") if Counter else None
+
+
+def record_answer_grounding(grounding: dict, *, non_current_evidence: int = 0) -> None:
+    """Evidence coverage, unsupported-statement rate and non-current evidence usage for one answer."""
+    if not grounding:
+        return
+    n = int(grounding.get("statements") or 0)
+    if _coverage is not None and n:
+        _coverage.observe(float(grounding.get("grounding_ratio", 1.0)))
+    if _statements is not None and n:
+        _statements.inc(n)
+    if _unsupported is not None and grounding.get("unsupported_statements"):
+        _unsupported.inc(len(grounding["unsupported_statements"]))
+    if _superseded_used is not None and non_current_evidence:
+        _superseded_used.inc(non_current_evidence)
+
+
+def record_claim_verification(total: int, removed: int) -> None:
+    if _claims_checked is not None and total:
+        _claims_checked.inc(total)
+    if _claims_stripped is not None and removed:
+        _claims_stripped.inc(removed)
+
+
 def record_route(route: str, policy: str) -> None:
     if _routes is not None:
         _routes.labels(route=route, policy=policy).inc()

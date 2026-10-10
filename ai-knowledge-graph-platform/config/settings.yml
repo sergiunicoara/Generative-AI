@@ -86,6 +86,7 @@ retrieval:
   local_top_k: 10          # validated baseline — precision 0.907 measured at this value
   temporal_query_expansion_enabled: true  # January 2024 -> 2024-Q1 + 2024 lexical bridge
   multihop_depth: 2        # validated baseline — depth 3 diluted retrieval and caused refusals on answerable questions
+  multihop_allowed_relations: []  # empty = traverse any relation (unchanged). A list restricts multi-hop traversal to edges whose `relation` is listed; enable per corpus after a golden-eval run.
   multihop_top_k: 50       # max hop chunks fed to GNN — prevents full-corpus scoring on dense graphs (bug fix: 21min→30s)
   # Query-shaped graph expansion is an experiment: retain the measured fixed
   # depth baseline until an A/B run clears the benchmark acceptance gate.

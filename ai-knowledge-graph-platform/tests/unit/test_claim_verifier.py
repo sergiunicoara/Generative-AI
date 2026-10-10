@@ -114,3 +114,14 @@ async def test_context_truncation_does_not_error(verifier):
         mock_llm.return_value.generate = AsyncMock(return_value="YES")
         clean, n_removed = await verifier.verify("Some claim.", long_context)
     assert n_removed == 0
+
+
+async def test_verify_with_stats_reports_sentences_checked_and_verify_is_unchanged():
+    with patch("graphrag.retrieval.claim_verifier.get_fast_llm") as mock_llm:
+        mock_llm.return_value.generate = AsyncMock(side_effect=["YES", "NO"])
+        v = ClaimVerifier()
+        clean, removed, total = await v.verify_with_stats("First claim here. Second claim here.", "ctx")
+    assert (removed, total) == (1, 2) and "Second" not in clean
+    with patch("graphrag.retrieval.claim_verifier.get_fast_llm") as mock_llm:
+        mock_llm.return_value.generate = AsyncMock(return_value="YES")
+        assert await ClaimVerifier().verify("", "ctx") == ("", 0)

@@ -467,6 +467,9 @@ class QueryResult(BaseModel):
     # and its heuristic answer confidence; None for paths that predate it.
     explanation: dict[str, Any] | None = None
     confidence: float | None = None
+    # Share of answer statements supported by the retrieved evidence (lexical grounding,
+    # no LLM). None when no explanation was built. 1.0 when the answer has no checkable statement.
+    evidence_coverage: float | None = None
     policy_result: str = ""
     policy_reason_code: str = ""
     retrieval_sufficiency: dict[str, Any] = Field(default_factory=dict)

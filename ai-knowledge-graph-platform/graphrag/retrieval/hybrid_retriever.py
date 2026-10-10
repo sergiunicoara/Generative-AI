@@ -167,6 +167,16 @@ def _cache_retrieval_config(cfg: dict) -> dict:
         if key not in _NON_SEMANTIC_RETRIEVAL_KEYS
     }
 
+
+def _record_answer_grounding(result) -> None:
+    """Expose evidence coverage on the result and emit the grounding / non-current-evidence metrics."""
+    explanation = result.explanation or {}
+    grounding = explanation.get("grounding") or {}
+    if grounding:
+        result.evidence_coverage = grounding.get("grounding_ratio")
+    non_current = sum(1 for i in explanation.get("evidence") or [] if i.get("current") is False)
+    routing_metrics.record_answer_grounding(grounding, non_current_evidence=non_current)
+
 class HybridRetriever:
     def __init__(self):
         cfg = get_settings()
@@ -939,7 +949,8 @@ class HybridRetriever:
 
             # ── Claim verification — strip ungrounded sentences ────────────────────
             if cfg.get("claim_verification", False):
-                answer, n_removed = await self._verifier.verify(answer, context)
+                answer, n_removed, n_checked = await self._verifier.verify_with_stats(answer, context)
+                routing_metrics.record_claim_verification(n_checked, n_removed)
                 if n_removed:
                     log.info("hybrid_retriever.claims_stripped", n_removed=n_removed)
 
@@ -1070,6 +1081,7 @@ class HybridRetriever:
                     acl_enforced=acl_enforced, router_policy=router_policy,
                 )
                 result.confidence = result.explanation["confidence"]
+                _record_answer_grounding(result)
                 result.policy_result = policy_result.value
                 result.policy_reason_code = policy_reason_code
                 result.retrieval_sufficiency = sufficiency.as_dict()
@@ -1174,6 +1186,7 @@ class HybridRetriever:
                 acl_enforced=acl_enforced, router_policy=router_policy,
             )
             result.confidence = result.explanation["confidence"]
+            _record_answer_grounding(result)
             if query_id:
                 result.query_id = query_id
             try:

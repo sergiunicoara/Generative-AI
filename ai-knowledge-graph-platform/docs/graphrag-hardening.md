@@ -36,6 +36,21 @@ MCP / agent tools -> allowlisted operations in guarded execution scopes   [mcp-s
 | Automatic re-answering of invalidated decisions | **Planned, not implemented** (hook exists) |
 | Live quality / latency / token comparison of the router | **Not measured** (needs the running stack; `scripts/eval_routing.py --live`) |
 
+## Audit follow-ups (2026-10-10)
+
+Closed after the phases above (see `docs/IMPLEMENTATION_AUDIT.md` for the rows):
+
+| Item | State |
+|---|---|
+| `BitemporalStore` compared stored datetimes with raw string parameters (null in Neo4j, rows silently dropped) | **Fixed**; params wrapped in `datetime()`; live proof in `tests/e2e/test_live_audit_followups.py` (CI only) |
+| Relation provenance was last-write-wins for chunk / model / time | **Implemented**: per-document slots `doc_chunk_ids`, `doc_extraction_models`, `doc_observed_at`, index-aligned with `source_doc_ids`; a re-ingested document replaces only its own slot; reconcile removes a document's slot. Live proof: `tests/e2e/test_live_relation_provenance.py` (CI only). Edges written before this change have no slots until their next write |
+| `extraction_model` was the configured label | **Implemented**: the provider-reported model for the call (context-local), falling back to the label on a cache hit or when the provider reports none |
+| Runner-up entity candidates for ambiguous matches | **Implemented**: `AmbiguousMatch.runner_ups`; a `needs_review` entity persists the candidates it nearly merged into (best effort) |
+| Evidence coverage | **Implemented**: `QueryResult.evidence_coverage` = lexical grounding ratio (no LLM); metrics below. `ClaimVerifier.verify_with_stats` exposes the LLM verifier's sentence counts |
+| Multi-hop relation allowlist | **Optional**, default off: `retrieval.multihop_allowed_relations: []` (empty = any relation). Not evaluated; enable per corpus after a golden-eval run |
+| Superseded documents and edges | `include_superseded=False` now also drops multi-hop edges and entity-neighbour edges whose `source_doc_id` is superseded. The default (`True`) is unchanged. **Community (global) search is still not covered**: communities carry no document link to filter on |
+| Path validity / temporal-correctness production metrics | **Not implemented**: retrieval queries enforce edge currency by construction, so a live metric would be trivially 1.0; these are offline evaluation measures |
+
 ## Observability
 
 All labels are bounded enums; tenant, entity and query identifiers appear only
@@ -59,6 +74,10 @@ in structured logs.
 | `graphrag_retrieval_latency_seconds` | mode | routing |
 | `graphrag_graph_expansion_results` | – | routing |
 | `graphrag_retrieval_authorization_denials_total` | – | security |
+| `graphrag_answer_evidence_coverage` | – (histogram) | trust |
+| `graphrag_unsupported_statements_total`, `graphrag_answer_statements_total` | – | trust (unsupported-claim rate = ratio) |
+| `graphrag_superseded_evidence_used_total` | – | trust (non-current evidence in answers) |
+| `graphrag_claims_verified_total`, `graphrag_claims_stripped_total` | – | LLM claim verifier |
 | `graphrag_entity_resolution_ambiguous_total` | match_type | ingestion |
 | `graphrag_capability_calls_total` (existing) | transport, capability (bounded), outcome | MCP |
 
@@ -103,4 +122,6 @@ from the existing GenAI telemetry.
 - Remaining route misses (docs/query-routing.md) should be validated on a new
   held-out labelled set (the first one is now partly seen).
 - Entities do not yet carry origin/verification; global (community) search
-  does not yet apply supersession/quarantine filters.
+  does not yet apply supersession/quarantine filters (needs a community-to-document link first).
+- The new Cypher (provenance slots, relation allowlist, superseded-edge exclusion, bitemporal
+  `datetime()`) is proven only by the CI e2e job.

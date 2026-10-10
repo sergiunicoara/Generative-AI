@@ -15,7 +15,7 @@ import structlog
 
 from graphrag.core.config import get_settings
 from graphrag.core.llm_cache import get_llm_cache
-from graphrag.core.llm_client import get_llm
+from graphrag.core.llm_client import get_llm, last_response_model, reset_response_model
 from graphrag.core.models import Chunk, Entity, Relation
 from graphrag.core.prompt_security import escape_prompt_data
 
@@ -102,7 +102,11 @@ class Extractor:
             text=escape_prompt_data(chunk.text),
         )
 
+        reset_response_model()
         raw = await self._generate(prompt)
+        # The model that really answered; the configured label is the fallback (cache hit, or a
+        # provider that does not report one).
+        served_model = last_response_model() or self._model_name
 
         try:
             if not raw:
@@ -121,7 +125,7 @@ class Extractor:
                 confidence=max(0.0, min(1.0, float(e.get("confidence", 1.0)))),
                 source_chunk_ids=[chunk.id],
                 source_doc_id=chunk.document_id,
-                extraction_model=self._model_name,
+                extraction_model=served_model,
                 prompt_version="v1",
                 tenant=chunk.tenant,
             )
@@ -158,7 +162,7 @@ class Extractor:
                     # inputs (confidence > 1 → merged confidence > 1 → corrupts graph).
                     confidence=max(0.0, min(1.0, float(r.get("confidence", 1.0)))),
                         source_chunk_id=chunk.id,
-                        extraction_model=self._model_name,
+                        extraction_model=served_model,
                         prompt_version="v1",
                         tenant=chunk.tenant,
                         chunk_span_start=span_start,

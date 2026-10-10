@@ -728,6 +728,7 @@ class GraphWriter:
                 "span_start": rel.chunk_span_start,
                 "span_end": rel.chunk_span_end,
                 "extraction_model": rel.extraction_model,
+                "chunk_id": rel.source_chunk_id or None,
                 "prompt_version": rel.prompt_version,
                 "origin": origin_for(rel.source_type, rel.origin).value,
                 "generated_by": rel.extraction_model or None,

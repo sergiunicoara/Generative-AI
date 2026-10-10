@@ -460,6 +460,10 @@ class QueryResult(BaseModel):
     # AGGREGATION, TEMPORAL, AMBIGUOUS) and the rule that chose it.
     route: str = ""
     route_reason: str = ""
+    # Structured, authorization-filtered explanation (graphrag/retrieval/explanation.py)
+    # and its heuristic answer confidence; None for paths that predate it.
+    explanation: dict[str, Any] | None = None
+    confidence: float | None = None
     policy_result: str = ""
     policy_reason_code: str = ""
     retrieval_sufficiency: dict[str, Any] = Field(default_factory=dict)

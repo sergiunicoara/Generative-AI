@@ -21,6 +21,7 @@ The specification-to-implementation runner is documented in
 - `invalidation.md` — dependency tracking and targeted invalidation
 - `trust-metadata.md` — trust metadata, validity predicate, score components
 - `query-routing.md` — query router and routing evaluation
+- `explanations.md` — answer explanations and trace authorization
 - `entity-resolution.md`, `ontology-model.md`, `ontology-governance.md`,
   `cypher-patterns.md` — focused KG references
 - `enterprise-content-governance.md` — provider-neutral ACL, SharePoint sync,

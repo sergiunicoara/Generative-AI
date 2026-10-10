@@ -133,6 +133,16 @@ class QueryConsumer:
                 "routing_reason": result.routing_reason,
                 "policy_result": result.policy_result,
                 "policy_reason_code": result.policy_reason_code,
+                # Previously dropped on the async path (plan Phase 6).
+                "route": result.route,
+                "route_reason": result.route_reason,
+                "schema_version": result.schema_version,
+                "confidence": result.confidence,
+                "explanation": result.explanation,
+                "retrieval_sufficiency": result.retrieval_sufficiency,
+                "evidence_bundle": result.evidence_bundle,
+                "retrieval_trajectory": (result.retrieval_trajectory.model_dump(mode="json")
+                                         if result.retrieval_trajectory else None),
             })
 
             # Async RAGAS evaluation on sampled queries. Best-effort: this

@@ -2200,6 +2200,7 @@ class Neo4jClient:
             WITH e, neighbor,
                  ({entity_is_active("neighbor")} AND {edge_is_current("r")} {transaction_filter}) AS neighbor_ok
             RETURN e.name AS entity, e.type AS type, e.description AS description,
+                   e.resolution_status AS resolution_status, e.resolution_method AS resolution_method,
                    collect(DISTINCT CASE WHEN neighbor_ok THEN neighbor.name ELSE null END) AS neighbors
             """,
             chunk_ids=chunk_ids,
@@ -2656,6 +2657,8 @@ class Neo4jClient:
                    r.source_doc_id                    AS source_doc_id,
                    coalesce(r.source_type, 'asserted') AS source_type,
                    r.inferred_by                      AS inferred_by,
+                   r.premise_keys                     AS premise_keys,
+                   r.rule_version                     AS rule_version,
                    {edge_trust_fields("r")}
             """,
             entities=entities,

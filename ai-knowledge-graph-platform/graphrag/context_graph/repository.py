@@ -20,6 +20,14 @@ def _trace_hash(trace: DecisionTrace) -> str:
     return hashlib.sha256(payload.encode("utf-8")).hexdigest()
 
 
+# Decision fields that never carry evidence text (kept when a trace is redacted).
+_TRACE_SAFE_KEYS = frozenset({
+    "id", "tenant", "kind", "status", "decision_type", "manifest_id", "run_id", "case_id",
+    "valid_from", "valid_to", "transaction_from", "transaction_to", "created_at", "integrity_hash",
+    "policy_result", "selected_option_id", "schema_version",
+})
+
+
 class ContextGraphRepository:
     """Tenant-scoped, idempotent, append-only P0 graph persistence."""
 
@@ -340,7 +348,54 @@ class ContextGraphRepository:
             raise ContextGraphValidationError("completed Context Graph decision is immutable")
         return trace.decision.id
 
-    async def load_trace(self, decision_id: str, tenant: str) -> dict:
+    async def _authorize_trace(self, trace: dict, tenant: str, access_context) -> dict:
+        """Remove what the caller may not read from a loaded trace (plan Phase 6).
+
+        Embeddings are never returned. With access control enabled, chunks and
+        documents the caller is not authorised for are removed using the same
+        fail-closed predicate as retrieval; if anything was removed, the
+        decision's free text (which may restate that evidence) is redacted too.
+        """
+        from graphrag.core.config import get_settings
+        from graphrag.enterprise.access import access_params, document_access_predicate
+
+        for chunk in trace.get("chunks") or []:
+            chunk.pop("embedding", None)
+        for doc in trace.get("documents") or []:
+            doc.pop("embedding", None)
+        if not get_settings().access_control.get("enabled", False):
+            return trace
+        doc_ids = {d.get("id") for d in trace.get("documents") or [] if d.get("id")}
+        doc_ids |= {c.get("document_id") for c in trace.get("chunks") or [] if c.get("document_id")}
+        manifest = trace.get("manifest") or {}
+        doc_ids |= set(manifest.get("document_ids") or [])
+        allowed: set[str] = set()
+        if doc_ids:
+            rows = await self._neo4j.run(
+                "UNWIND $ids AS id MATCH (d:Document {tenant: $tenant, id: id}) WHERE d.tenant = $tenant "
+                + document_access_predicate("d") + " RETURN d.id AS id",
+                ids=sorted(doc_ids), tenant=tenant, **access_params(access_context, enabled=True),
+            )
+            allowed = {r["id"] for r in rows}
+        removed = doc_ids - allowed
+        trace["chunks"] = [c for c in trace.get("chunks") or [] if c.get("document_id") in allowed]
+        trace["documents"] = [d for d in trace.get("documents") or [] if d.get("id") in allowed]
+        if manifest:
+            manifest["document_ids"] = [d for d in manifest.get("document_ids") or [] if d in allowed]
+            allowed_chunks = {c.get("id") for c in trace["chunks"]}
+            manifest["chunk_ids"] = [c for c in manifest.get("chunk_ids") or [] if c in allowed_chunks]
+        if removed:
+            decision = trace.get("decision") or {}
+            for key in list(decision):
+                if isinstance(decision[key], str) and key not in _TRACE_SAFE_KEYS:
+                    decision[key] = "[redacted: cites evidence you are not authorized to read]"
+            if manifest.get("task_input"):
+                manifest["task_input"] = "[redacted]"
+            trace["observations"] = []
+            trace["redaction"] = {"reason": "unauthorized_evidence", "removed_documents": len(removed)}
+        return trace
+
+    async def load_trace(self, decision_id: str, tenant: str, access_context=None) -> dict:
         rows = await self._neo4j.run(
             """
             MATCH (d:CGDecision {tenant: $tenant, id: $decision_id})
@@ -369,7 +424,9 @@ class ContextGraphRepository:
             """,
             tenant=tenant, decision_id=decision_id,
         )
-        return dict(rows[0]) if rows else {}
+        if not rows:
+            return {}
+        return await self._authorize_trace(dict(rows[0]), tenant, access_context)
 
     async def load_session_episodes(
         self, session_id: str, tenant: str, limit: int = 10,
@@ -493,7 +550,7 @@ class ContextGraphRepository:
             )
         return feedback.id
 
-    async def replay_trace(self, decision_id: str, tenant: str, as_of: str) -> dict:
+    async def replay_trace(self, decision_id: str, tenant: str, as_of: str, access_context=None) -> dict:
         rows = await self._neo4j.run(
             """
             MATCH (d:CGDecision {tenant: $tenant, id: $decision_id})
@@ -503,7 +560,16 @@ class ContextGraphRepository:
             RETURN d {.*} AS decision, collect(DISTINCT r {.*}) AS runs
             """, tenant=tenant, decision_id=decision_id, as_of=as_of,
         )
-        return dict(rows[0]) if rows else {}
+        if not rows:
+            return {}
+        replay = dict(rows[0])
+        # The replayed decision may restate evidence: apply the same authorization
+        # as load_trace by checking the decision's manifest documents.
+        full = await self.load_trace(decision_id, tenant, access_context)
+        if full.get("redaction"):
+            replay["decision"] = full.get("decision")
+            replay["redaction"] = full["redaction"]
+        return replay
 
     async def find_precedents(self, tenant: str, policy_version_id: str, limit: int = 10) -> list[dict]:
         rows = await self._neo4j.run(

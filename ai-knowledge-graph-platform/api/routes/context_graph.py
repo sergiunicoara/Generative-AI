@@ -5,7 +5,8 @@ from datetime import datetime
 from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel, Field
 
-from api.auth.dependencies import assert_request_tenant, get_tenant, require_scope
+from api.auth.dependencies import assert_request_tenant, get_current_user, get_tenant, require_scope
+from graphrag.enterprise.models import AccessContext
 from graphrag.context_graph.models import (
     CGAction, CGApproval, CGCorrection, CGExceptionGrant, CGFeedback, CGOutcome,
     DecisionTrace,
@@ -62,8 +63,12 @@ async def record_context_trace(request: TraceRequest, tenant: str = Depends(get_
 
 
 @router.get("/traces/{decision_id}", dependencies=[Depends(require_scope("read"))])
-async def load_context_trace(decision_id: str, tenant: str = Depends(get_tenant)):
-    return await ContextGraphRepository(get_neo4j()).load_trace(decision_id, tenant)
+async def load_context_trace(decision_id: str, tenant: str = Depends(get_tenant),
+                             user: dict = Depends(get_current_user)):
+    # Authorization-filtered: evidence the caller cannot read is removed and the
+    # decision text redacted when ACLs are enabled (plan Phase 6).
+    return await ContextGraphRepository(get_neo4j()).load_trace(
+        decision_id, tenant, access_context=AccessContext.from_claims(user))
 
 
 @router.get("/sessions/{session_id}/episodes", dependencies=[Depends(require_scope("read"))])
@@ -137,8 +142,10 @@ async def record_feedback(feedback: CGFeedback, tenant: str = Depends(get_tenant
 
 
 @router.get("/traces/{decision_id}/replay", dependencies=[Depends(require_scope("read"))])
-async def replay_context_trace(decision_id: str, as_of: str, tenant: str = Depends(get_tenant)):
-    return await ContextGraphRepository(get_neo4j()).replay_trace(decision_id, tenant, as_of)
+async def replay_context_trace(decision_id: str, as_of: str, tenant: str = Depends(get_tenant),
+                               user: dict = Depends(get_current_user)):
+    return await ContextGraphRepository(get_neo4j()).replay_trace(
+        decision_id, tenant, as_of, access_context=AccessContext.from_claims(user))
 
 
 @router.get("/traces/{decision_id}/governance", dependencies=[Depends(require_scope("read"))])

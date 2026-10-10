@@ -37,6 +37,7 @@ from graphrag.retrieval.feedback import RetrievalFeedbackService, apply_feedback
 from graphrag.retrieval.query_planner import retrieval_plan
 from graphrag.retrieval.query_router import Route, enforced_overrides, route_query
 from graphrag.retrieval import routing_metrics
+from graphrag.retrieval.explanation import build_explanation
 from graphrag.retrieval.adaptive_router import AdaptiveRetrievalRouter
 from graphrag.retrieval.sufficiency import assess_retrieval_sufficiency, abstention_message
 from graphrag.retrieval.evidence_bundle import build_evidence_bundle
@@ -434,6 +435,20 @@ class HybridRetriever:
             routing_reason=f"route:{decision.reason}", route=decision.route.value,
             route_reason=decision.reason,
         )
+        result.explanation = {
+            "answer": answer, "confidence": 1.0,
+            "confidence_components": {"note": "deterministic template result; rows are the evidence"},
+            "route": decision.route.value, "route_reason": decision.reason,
+            "evidence": [{"id": f"row-{i}", "kind": "structured_row", "row": row,
+                          "document_id": row.get("source_doc_id")} for i, row in enumerate(rows)],
+            "citations": result.citations, "graph_paths": [], "inferences": [], "entity_resolution": [],
+            "score_breakdown": {}, "schema_version": None,
+            "fallback": {"triggered": False, "reason": None}, "insufficient_context": None,
+            "structured_query": {"intent": out["intent"], "safety": out.get("safety")},
+            "limitations": [{"code": "structured_template",
+                             "message": "Answered from a fixed read-only template; no text synthesis."}],
+        }
+        result.confidence = 1.0
         if query_id:
             result.query_id = query_id
         routing_metrics.record_latency("structured", result.latency_ms / 1000.0)
@@ -1014,10 +1029,11 @@ class HybridRetriever:
             if agentic_enabled and not _FALLBACK_ACTIVE.get() and (
                 low_confidence or planned_missing_evidence or route_fallback
             ):
-                routing_metrics.record_fallback(
+                fallback_reason = (
                     "planned_missing_evidence" if planned_missing_evidence
                     else "ambiguous_route" if route_fallback and not low_confidence
                     else "low_confidence")
+                routing_metrics.record_fallback(fallback_reason)
                 log.info(
                     "hybrid_retriever.low_confidence",
                     answer_preview=answer[:80],
@@ -1045,6 +1061,15 @@ class HybridRetriever:
                 result.routing_reason = routing_reason
                 result.route = route_decision.route.value
                 result.route_reason = route_decision.reason
+                result.schema_version = schema_version
+                result.explanation = build_explanation(
+                    answer=result.answer, route=route_decision.to_dict(), local_results=local_results,
+                    evidence=result.evidence, citations=result.citations,
+                    sufficiency=sufficiency.as_dict(), schema_version=schema_version,
+                    fallback={"triggered": True, "reason": fallback_reason},
+                    acl_enforced=acl_enforced, router_policy=router_policy,
+                )
+                result.confidence = result.explanation["confidence"]
                 result.policy_result = policy_result.value
                 result.policy_reason_code = policy_reason_code
                 result.retrieval_sufficiency = sufficiency.as_dict()
@@ -1141,6 +1166,14 @@ class HybridRetriever:
                     if capture_trajectory else None
                 ),
             )
+            result.explanation = build_explanation(
+                answer=result.answer, route=route_decision.to_dict(), local_results=local_results,
+                evidence=result.evidence, citations=result.citations,
+                sufficiency=result.retrieval_sufficiency, schema_version=schema_version,
+                fallback={"triggered": False, "reason": None},
+                acl_enforced=acl_enforced, router_policy=router_policy,
+            )
+            result.confidence = result.explanation["confidence"]
             if query_id:
                 result.query_id = query_id
             try:

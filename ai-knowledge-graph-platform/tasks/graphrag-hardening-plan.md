@@ -160,6 +160,8 @@ one focused commit. Order is chosen so each phase only depends on earlier ones.
 - Risks: strict gating can reject data that used to ingest. Mitigation: severities - only BLOCKING stops a batch; first release ships WARNING for rules with no prior enforcement and a per-tenant strictness setting.
 - Accept: no BLOCKING-invalid record is written; every rejection is queryable with rule IDs.
 
+#### Phase 5 status: implemented (see docs/trust-metadata.md); no quality delta measured (needs live stack)
+
 #### Phase 3 status: implemented (3a/3b/3c; see docs/invalidation.md); graph Cypher verified in CI e2e only
 
 #### Phase 2 status: implemented (see docs/schema-registry.md); registry Cypher verified in CI e2e only

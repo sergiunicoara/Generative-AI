@@ -464,7 +464,10 @@ class ForwardChainingEngine:
                 r.inferred_by = $rule,
                 r.rule_version = $rule_version,
                 r.premise_keys = $premises,
-                r.confidence_state = 'INFERRED'
+                r.confidence_state = 'INFERRED',
+                r.origin = 'INFERRED',
+                r.generated_by = 'rule:' + $rule,
+                r.verification_status = coalesce(r.verification_status, 'UNVERIFIED')
             """,
             src_name=src_name,
             src_type=src_type,

@@ -98,6 +98,10 @@ retrieval:
   retrieval_sufficiency_abstain_enabled: false
   retrieval_sufficiency_min_evidence: 1
   retrieval_sufficiency_min_average_score: 0.0
+  # Trust metadata in retrieval (docs/trust-metadata.md).
+  retrieval_sufficiency_abstain_on_stale: true   # abstain when ALL evidence is superseded/expired/stale
+  trust_weighting_enabled: true                  # superseded/stale evidence ranks below current; edge trust feeds graph scoring
+  chunk_authority_weighting_enabled: false       # also weight chunks by document authority (not yet evaluated)
   # Joint text/graph/path/provenance scoring is deliberately benchmark-gated.
   evidence_fusion_enabled: false
   evidence_fusion_weights: {}

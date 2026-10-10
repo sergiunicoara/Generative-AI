@@ -47,10 +47,16 @@ from graphrag.graph.ontology_proposals import OntologyProposalService
 from graphrag.graph.pagerank import PageRankComputer
 from graphrag.graph.quarantine import QuarantineService
 from graphrag.graph.review_queue import ReviewQueueService
+from graphrag.graph.trust import origin_for
 from graphrag.graph.validation.batch import RejectedRecord, relation_key, relation_payload
 from graphrag.enterprise.access import normalise_policy
 
 log = structlog.get_logger(__name__)
+
+
+def _schema_label(writer) -> str | None:
+    label = getattr(getattr(writer, "_ontology", None), "schema_label", None)
+    return label if isinstance(label, str) else None
 
 
 def _resolved_pair(resolved) -> tuple[str, str] | None:
@@ -687,6 +693,10 @@ class GraphWriter:
                 "span_end": rel.chunk_span_end,
                 "extraction_model": rel.extraction_model,
                 "prompt_version": rel.prompt_version,
+                "origin": origin_for(rel.source_type, rel.origin).value,
+                "generated_by": rel.extraction_model or None,
+                "stale_after": rel.stale_after.isoformat() if rel.stale_after else None,
+                "schema_version": _schema_label(self),
             })
             merged_count += 1
 

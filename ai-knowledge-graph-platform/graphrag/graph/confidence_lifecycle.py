@@ -75,7 +75,17 @@ class ConfidenceLifecycleService:
                   -[r:RELATES_TO {relation: $relation}]->
                   (t:Entity {name: $tgt_name, type: $tgt_type, tenant: $tenant})
             SET r.confidence_state = $target,
-                r.confidence_state_changed_at = datetime()
+                r.confidence_state_changed_at = datetime(),
+                // A reviewer's decision is the only thing that verifies or
+                // rejects a fact (docs/trust-metadata.md).
+                r.verification_status = CASE $target
+                    WHEN 'APPROVED' THEN 'VERIFIED'
+                    WHEN 'RETRACTED' THEN 'REJECTED'
+                    ELSE coalesce(r.verification_status, 'UNVERIFIED') END,
+                r.verified_by = CASE WHEN $target IN ['APPROVED', 'RETRACTED']
+                    THEN $changed_by ELSE r.verified_by END,
+                r.verified_at = CASE WHEN $target IN ['APPROVED', 'RETRACTED']
+                    THEN datetime() ELSE r.verified_at END
             CREATE (e:ConfidenceTransition {
                 id: $event_id, tenant: $tenant, current_state: $current,
                 target_state: $target, changed_by: $changed_by,

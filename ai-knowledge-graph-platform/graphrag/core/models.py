@@ -249,6 +249,12 @@ class Relation(BaseModel):
     constraint_type: ConstraintType = ConstraintType.SOFT
     valid_from: datetime | None = None
     valid_to: datetime | None = None   # None = currently valid
+    # Trust metadata (docs/trust-metadata.md). ``origin`` overrides the value
+    # derived from ``source_type`` (e.g. IMPORTED for relational sources);
+    # ``stale_after`` = needs re-verification after this instant. There is no
+    # verification field here on purpose: ingestion never verifies a fact.
+    origin: str | None = None
+    stale_after: datetime | None = None
     # ── Deep provenance ────────────────────────────────────────────────────────
     chunk_span_start: int | None = None   # character offset where relation was found
     chunk_span_end: int | None = None
@@ -420,6 +426,13 @@ class CitationEvidence(BaseModel):
     path: str = ""
     valid_from: str | None = None
     confidence: float | None = None
+    # Separately observable parts of the ranking score (vector, bm25, rrf,
+    # rerank, text, gnn, path, pagerank, feedback, trust factor, final) and the
+    # trust assessment of the evidence (origin, verification, authority,
+    # validity window, superseded/stale, current). Absent when unknown.
+    valid_to: str | None = None
+    score_components: dict[str, Any] | None = None
+    trust: dict[str, Any] | None = None
 
 
 class QueryResult(BaseModel):

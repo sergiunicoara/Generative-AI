@@ -281,7 +281,11 @@ async def override_edge(request: EdgeOverrideRequest, tenant: str = Depends(get_
                 r.source_type  = 'manual',
                 r.override_by  = $override_by,
                 r.override_note = $note,
-                r.extracted_at = $now
+                r.extracted_at = $now,
+                r.origin       = 'MANUAL',
+                r.verification_status = 'VERIFIED',
+                r.verified_by  = $override_by,
+                r.verified_at  = datetime()
             RETURN s.type AS src_type, t.type AS tgt_type
             """,
             src=request.src_entity,
@@ -422,6 +426,18 @@ async def retry_quarantine_record(
         raise HTTPException(status_code=404, detail="quarantined record not found")
     except ValueError as exc:
         raise HTTPException(status_code=409, detail=str(exc))
+
+
+@router.get(
+    "/conflict/{conflict_id}/suggestion",
+    dependencies=[Depends(require_scope("read"))],
+    summary="Trust-ranked competing sources for a conflict (suggestion only, nothing is applied)",
+)
+async def suggest_conflict_resolution(conflict_id: str, tenant: str = Depends(get_tenant)):
+    out = await ContradictionDetector(get_neo4j()).suggest_resolution(conflict_id, tenant=tenant)
+    if out["status"] == "not_found":
+        raise HTTPException(status_code=404, detail="conflict not found")
+    return out
 
 
 # ── Targeted invalidation (docs/invalidation.md) ─────────────────────────────

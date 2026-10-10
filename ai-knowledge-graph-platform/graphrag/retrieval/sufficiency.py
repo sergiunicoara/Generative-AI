@@ -45,8 +45,15 @@ def assess_retrieval_sufficiency(
         for chunk in chunks
     ]
     average_score = sum(scores) / len(scores) if scores else 0.0
+    assessed = [chunk["trust"] for chunk in chunks if isinstance(chunk.get("trust"), dict)]
+    all_stale = bool(chunks) and len(assessed) == len(chunks) and not any(
+        t.get("current", True) for t in assessed)
     if conflicts:
         reason = "unresolved_conflict"
+    elif all_stale:
+        # Every piece of evidence is superseded, expired, not yet valid, stale,
+        # retracted or rejected: answering would present it as current.
+        reason = "all_evidence_stale"
     elif evidence_count < max(1, min_evidence):
         reason = "insufficient_evidence"
     elif average_score < max(0.0, min_average_score):
@@ -67,6 +74,7 @@ def abstention_message(reason_code: str) -> str:
     messages = {
         "unresolved_conflict": "I can’t provide a grounded answer because the retrieved evidence contains an unresolved conflict.",
         "low_evidence_score": "I can’t provide a grounded answer because the retrieved evidence did not meet the configured confidence threshold.",
+        "all_evidence_stale": "I can\u2019t provide a grounded answer because all retrieved evidence is superseded, expired or stale.",
         "insufficient_evidence": "I can’t provide a grounded answer because no sufficient authorized evidence was retrieved.",
     }
     return messages.get(reason_code, "I can’t provide a grounded answer from the retrieved evidence.")

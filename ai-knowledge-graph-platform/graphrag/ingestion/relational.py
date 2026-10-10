@@ -494,6 +494,7 @@ class RelationalGraphIngestor:
                     valid_from=self._timestamp(row.get(table_map.valid_from_column)) if table_map.valid_from_column else None,
                     valid_to=self._timestamp(row.get(table_map.valid_to_column)) if table_map.valid_to_column else None,
                     source_doc_id=f"relational:{mapping.source_id}",
+                    origin="IMPORTED",  # mapped from a structured source, not extracted text
                 ))
                 row_hashes[f"relation:{table_map.table}:{source_key}:{target_key}"] = compute_row_hash(row)
 

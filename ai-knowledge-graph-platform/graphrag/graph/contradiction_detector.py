@@ -164,6 +164,55 @@ class ContradictionDetector(_ConflictStrategies):
             winner=winner_doc_id,
         )
 
+    async def suggest_resolution(self, conflict_id: str, tenant: str = "default") -> dict:
+        """Rank the conflict's competing sources by trust; suggest, never apply.
+
+        Each source document is assessed (authority, supersession, validity
+        window, staleness). A ``winner`` is suggested only when one current
+        source clearly dominates; otherwise the conflict stays ``unresolved``
+        and every claim is returned with its trust components, so competing
+        claims are never collapsed silently (docs/trust-metadata.md).
+        """
+        import ast
+
+        from graphrag.graph.trust import rank_conflicting_claims
+        from graphrag.graph.validity import document_trust_fields
+
+        require_tenant(tenant)
+        rows = await self._neo4j.run(
+            "MATCH (c:Conflict {id: $id, tenant: $tenant}) "
+            "RETURN c.sources AS sources, c.status AS status, c.src AS src, c.tgt AS tgt, "
+            "c.relation AS relation",
+            id=conflict_id, tenant=tenant,
+        )
+        if not rows:
+            return {"status": "not_found", "winner": None, "claims": []}
+        raw = rows[0].get("sources")
+        try:
+            parsed = ast.literal_eval(raw) if isinstance(raw, str) else raw
+        except (ValueError, SyntaxError):
+            parsed = []
+        values = parsed.values() if isinstance(parsed, dict) else (parsed or [])
+        doc_ids: list[str] = []
+        for v in values:
+            for item in (v if isinstance(v, (list, tuple, set)) else [v]):
+                if isinstance(item, str) and item and item not in doc_ids:
+                    doc_ids.append(item)
+        docs = await self._neo4j.run(
+            "UNWIND $ids AS id MATCH (d:Document {tenant: $tenant, id: id}) "
+            "RETURN d.id AS claim, " + document_trust_fields("d"),
+            ids=doc_ids, tenant=tenant,
+        )
+        ranked = rank_conflicting_claims([dict(d) for d in docs])
+        return {
+            "conflict_id": conflict_id,
+            "conflict_status": rows[0].get("status"),
+            "status": ranked["status"],
+            "suggested_winner_doc_id": ranked["winner"]["claim"] if ranked["winner"] else None,
+            "claims": [{"document_id": c["claim"], "score": c["score"], "current": c["current"],
+                        "trust": c["trust"]} for c in ranked["claims"]],
+        }
+
     async def get_open_conflicts(
         self,
         limit: int = 50,

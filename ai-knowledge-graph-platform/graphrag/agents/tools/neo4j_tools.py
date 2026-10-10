@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 
 from graphrag.graph.neo4j_client import get_neo4j
+from graphrag.graph.validity import edge_is_current, edge_trust_fields, entity_is_active
 
 
 def search_graph(query_text: str, top_k: int = 10, tenant: str = "default") -> list[dict]:
@@ -41,7 +42,11 @@ def get_neighbors(entity_name: str, tenant: str = "default") -> list[dict]:
             MATCH (e:Entity {name: $name})-[r:RELATES_TO]-(neighbor:Entity)
             WHERE (e.tenant = $tenant)
               AND (neighbor.tenant = $tenant)
-            RETURN neighbor.name AS name, neighbor.type AS type, r.relation AS relation
+              AND r.tenant = $tenant
+              AND """ + entity_is_active("e") + " AND " + entity_is_active("neighbor") + """
+              AND """ + edge_is_current("r", at="datetime()") + """
+            RETURN neighbor.name AS name, neighbor.type AS type, r.relation AS relation,
+                   """ + edge_trust_fields("r") + """
             LIMIT 20
             """,
             name=entity_name, tenant=tenant,

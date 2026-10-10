@@ -43,11 +43,16 @@ def _reciprocal_rank_fusion(
                 continue
             rrf_scores[doc_id] = rrf_scores.get(doc_id, 0.0) + 1.0 / (RRF_K + rank + 1)
             if doc_id not in chunk_store:
-                chunk_store[doc_id] = item
+                chunk_store[doc_id] = dict(item)
+            else:
+                # Keep raw per-retriever scores (vector_score, bm25_score, trust
+                # fields) from every list, not only the first one seen.
+                for key, value in item.items():
+                    chunk_store[doc_id].setdefault(key, value)
 
     merged = sorted(rrf_scores.items(), key=lambda x: x[1], reverse=True)[:top_k]
     return [
-        {**chunk_store[doc_id], "score": rrf_score}
+        {**chunk_store[doc_id], "score": rrf_score, "rrf_score": rrf_score}
         for doc_id, rrf_score in merged
         if doc_id in chunk_store
     ]
@@ -105,6 +110,12 @@ class HybridBM25Search:
             include_superseded=include_superseded,
             access_context=access_context,
         )
+
+        # Raw scores survive fusion under their own names (score components).
+        for c in bm25_chunks:
+            c.setdefault("bm25_score", c.get("score"))
+        for c in entity_chunks:
+            c.setdefault("bm25_entity_score", c.get("score"))
 
         # Merge entity BM25 into chunk BM25 (same RRF pass)
         bm25_combined = _reciprocal_rank_fusion(

@@ -204,7 +204,7 @@ class TestCapabilityRegistryWiring:
 # ── Neo4jClient.get_relations_for_entity ────────────────────────────────────────
 
 class TestGetRelationsForEntityQueryShape:
-    async def test_threads_params_and_omits_as_of_when_not_given(self) -> None:
+    async def test_threads_params_and_judges_currency_at_now_when_as_of_not_given(self) -> None:
         from graphrag.graph.neo4j_client import Neo4jClient
 
         client = Neo4jClient.__new__(Neo4jClient)  # bypass __init__ (no real driver)
@@ -217,7 +217,12 @@ class TestGetRelationsForEntityQueryShape:
         assert kwargs["type"] == "ORG"
         assert kwargs["tenant"] == "aerospace"
         assert kwargs["limit"] == 5
-        assert "as_of" not in kwargs
+        # Phase 5: expired/retracted edges are excluded even without as_of; the
+        # shared predicate judges currency at now when as_of is None.
+        assert kwargs["as_of"] is None
+        cypher = client.run.call_args.args[0]
+        assert "coalesce(datetime($as_of), datetime())" in cypher
+        assert "'RETRACTED'" in cypher
 
     async def test_includes_as_of_and_temporal_filter_when_given(self) -> None:
         from graphrag.graph.neo4j_client import Neo4jClient

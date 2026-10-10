@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
+from graphrag.graph.validity import edge_is_current, edge_trust_fields, entity_is_active
 
 _MAX_QUESTION_LENGTH = 500
 _MAX_LIMIT = 100
@@ -50,18 +51,23 @@ class ControlledQueryPlan:
     params: dict[str, object]
 
 
+# Templates return only current facts (shared predicate, graphrag/graph/validity.py):
+# no quarantined entities, no retracted or expired edges.
 _ENTITY_RELATIONS_CYPHER = """
 MATCH (s:Entity {tenant: $tenant, name: $name})-[r:RELATES_TO]->(t:Entity {tenant: $tenant})
 WHERE ($relation = '' OR r.relation = $relation)
+  AND """ + entity_is_active("s") + " AND " + entity_is_active("t") + """
+  AND """ + edge_is_current("r", at="datetime()") + """
 RETURN s.name AS source, s.type AS source_type, r.relation AS relation,
        t.name AS target, t.type AS target_type, r.confidence AS confidence,
-       r.source_doc_id AS source_doc_id
+       r.source_doc_id AS source_doc_id, """ + edge_trust_fields("r") + """
 ORDER BY confidence DESC, target ASC
 LIMIT $limit
 """
 
 _TYPE_ENTITIES_CYPHER = """
 MATCH (e:Entity {tenant: $tenant, type: $entity_type})
+WHERE """ + entity_is_active("e") + """
 RETURN e.name AS name, e.type AS type, e.description AS description,
        e.source_doc_id AS source_doc_id
 ORDER BY name ASC
@@ -70,11 +76,15 @@ LIMIT $limit
 
 _EVIDENCE_GAP_CYPHER = """
 MATCH (supplier:Entity {tenant: $tenant, type: 'SUPPLIER'})
-WHERE NOT EXISTS {
-    MATCH (supplier)-[:RELATES_TO {relation: 'REPORTED'}]->(:Entity {tenant: $tenant, type: 'EMISSIONS_RECORD'})
-          -[:RELATES_TO {relation: 'HAS_EVIDENCE'}]->(:Entity {tenant: $tenant, type: 'EVIDENCE'})
+WHERE """ + entity_is_active("supplier") + """
+  AND NOT EXISTS {
+    MATCH (supplier)-[r1:RELATES_TO {relation: 'REPORTED'}]->(rec:Entity {tenant: $tenant, type: 'EMISSIONS_RECORD'})
+          -[r2:RELATES_TO {relation: 'HAS_EVIDENCE'}]->(ev:Entity {tenant: $tenant, type: 'EVIDENCE'})
+    WHERE """ + edge_is_current("r1", at="datetime()") + " AND " + edge_is_current("r2", at="datetime()") + """
+      AND """ + entity_is_active("rec") + " AND " + entity_is_active("ev") + """
 }
-OPTIONAL MATCH (supplier)-[:RELATES_TO {relation: 'SUPPLIES'}]->(material:Entity {tenant: $tenant, type: 'MATERIAL'})
+OPTIONAL MATCH (supplier)-[rs:RELATES_TO {relation: 'SUPPLIES'}]->(material:Entity {tenant: $tenant, type: 'MATERIAL'})
+WHERE """ + edge_is_current("rs", at="datetime()") + " AND " + entity_is_active("material") + """
 RETURN supplier.name AS supplier, collect(DISTINCT material.name) AS materials
 ORDER BY supplier ASC
 LIMIT $limit

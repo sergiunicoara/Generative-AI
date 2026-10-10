@@ -29,6 +29,13 @@ from graphrag.core.models import (
 from graphrag.core.retry import with_retry
 from graphrag.graph.schema_statements import load_schema_statements
 from graphrag.enterprise.access import access_params, document_access_predicate, link_access_predicate
+from graphrag.graph.trust import origin_for
+from graphrag.graph.validity import (
+    document_trust_fields,
+    edge_is_current,
+    edge_trust_fields,
+    entity_is_active,
+)
 from graphrag.enterprise.models import AccessContext, DocumentLink, normalise_document_url
 
 log = structlog.get_logger(__name__)
@@ -1444,6 +1451,13 @@ class Neo4jClient:
                 r.valid_from       = CASE WHEN locked AND prior_vf IS NOT NULL THEN prior_vf ELSE datetime($valid_from) END,
                 r.valid_to         = CASE WHEN locked OR $valid_to IS NULL THEN prior_vt ELSE datetime($valid_to) END,
                 r.tenant           = $tenant,
+                // Trust metadata (docs/trust-metadata.md). Verification is never
+                // set by ingestion: only a reviewer makes a fact VERIFIED.
+                r.origin           = CASE WHEN locked AND r.origin IS NOT NULL THEN r.origin ELSE $origin END,
+                r.verification_status = coalesce(r.verification_status, 'UNVERIFIED'),
+                r.generated_by     = CASE WHEN locked AND r.generated_by IS NOT NULL THEN r.generated_by ELSE $generated_by END,
+                r.stale_after      = CASE WHEN locked OR $stale_after IS NULL THEN r.stale_after ELSE datetime($stale_after) END,
+                r.schema_version   = coalesce($schema_version, r.schema_version),
                 // Accumulate all contributing document IDs as a list so that
                 // contradiction detection can see every source even after
                 // multiple merges collapse to a single edge.
@@ -1489,6 +1503,10 @@ class Neo4jClient:
             confidence_state=rel.confidence_state,
             valid_from=rel.valid_from.isoformat() if rel.valid_from else None,
             valid_to=rel.valid_to.isoformat() if rel.valid_to else None,
+            origin=origin_for(rel.source_type, rel.origin).value,
+            generated_by=rel.extraction_model or None,
+            stale_after=rel.stale_after.isoformat() if rel.stale_after else None,
+            schema_version=None,
         )
         # Store deep provenance if present — scoped to the exact (name, type, tenant) edge
         if rel.chunk_span_start is not None or rel.extraction_model:
@@ -1559,6 +1577,13 @@ class Neo4jClient:
                 r.valid_from       = CASE WHEN locked AND prior_vf IS NOT NULL THEN prior_vf ELSE datetime(row.valid_from) END,
                 r.valid_to         = CASE WHEN locked OR row.valid_to IS NULL THEN prior_vt ELSE datetime(row.valid_to) END,
                 r.tenant           = $tenant,
+                // Trust metadata (docs/trust-metadata.md). Verification is never
+                // set by ingestion: only a reviewer makes a fact VERIFIED.
+                r.origin           = CASE WHEN locked AND r.origin IS NOT NULL THEN r.origin ELSE row.origin END,
+                r.verification_status = coalesce(r.verification_status, 'UNVERIFIED'),
+                r.generated_by     = CASE WHEN locked AND r.generated_by IS NOT NULL THEN r.generated_by ELSE row.generated_by END,
+                r.stale_after      = CASE WHEN locked OR row.stale_after IS NULL THEN r.stale_after ELSE datetime(row.stale_after) END,
+                r.schema_version   = coalesce(row.schema_version, r.schema_version),
                 r.source_doc_ids   = CASE
                     WHEN row.source_doc_id IN prior_docs THEN prior_docs
                     ELSE prior_docs + [row.source_doc_id]
@@ -1777,7 +1802,7 @@ class Neo4jClient:
                     WHERE e.quarantined = true
                   }
                   """ + document_access_predicate("d") + """
-                RETURN c.id AS chunk_id, c.text AS text, score
+                RETURN c.id AS chunk_id, c.text AS text, score, """ + document_trust_fields("d") + """
                 ORDER BY score DESC LIMIT $top_k
                 """,
                 embedding=embedding,
@@ -1813,7 +1838,7 @@ class Neo4jClient:
                   WHERE e.quarantined = true
               }
               """ + document_access_predicate("d") + """
-            RETURN c.id AS chunk_id, c.text AS text, score
+            RETURN c.id AS chunk_id, c.text AS text, score, """ + document_trust_fields("d") + """
             ORDER BY score DESC
             LIMIT $top_k
             """,
@@ -2157,13 +2182,11 @@ class Neo4jClient:
         transaction_at: str | None = None,
     ) -> list[dict]:
         """Expand retrieved chunks to their entity neighbors (1-hop).
-        Excludes quarantined entities. Optionally filters edges by valid_to.
+
+        Excludes quarantined entities and edges that are not current
+        (retracted, or outside their validity window at ``as_of`` / now) —
+        the shared predicate in graphrag/graph/validity.py.
         """
-        temporal_filter = (
-            "AND (r.valid_from IS NULL OR r.valid_from <= datetime($as_of)) "
-            "AND (r.valid_to IS NULL OR r.valid_to > datetime($as_of))"
-            if as_of else ""
-        )
         transaction_filter = (
             "AND (r.recorded_at IS NULL OR r.recorded_at <= datetime($transaction_at))"
             if transaction_at else ""
@@ -2171,17 +2194,17 @@ class Neo4jClient:
         return await self.run(
             f"""
             UNWIND $chunk_ids AS cid
-            MATCH (c:Chunk {{id: cid}})-[:MENTIONS]->(e:Entity)
-            WHERE coalesce(e.quarantined, false) = false
+            MATCH (c:Chunk {{id: cid, tenant: $tenant}})-[:MENTIONS]->(e:Entity {{tenant: $tenant}})
+            WHERE {entity_is_active("e")}
             OPTIONAL MATCH (e)-[r:RELATES_TO {{tenant: $tenant}}]-(neighbor:Entity {{tenant: $tenant}})
             WITH e, neighbor,
-                 (coalesce(neighbor.quarantined, false) = false {temporal_filter} {transaction_filter}) AS neighbor_ok
+                 ({entity_is_active("neighbor")} AND {edge_is_current("r")} {transaction_filter}) AS neighbor_ok
             RETURN e.name AS entity, e.type AS type, e.description AS description,
                    collect(DISTINCT CASE WHEN neighbor_ok THEN neighbor.name ELSE null END) AS neighbors
             """,
             chunk_ids=chunk_ids,
             tenant=tenant,
-            **({"as_of": as_of} if as_of else {}),
+            as_of=as_of,
             **({"transaction_at": transaction_at} if transaction_at else {}),
         )
 
@@ -2225,12 +2248,8 @@ class Neo4jClient:
         hops = min(max(int(hops), 1), 8)
         per_seed_cap = min(max(int(per_seed_cap), 1), 1_000)
         total_cap = min(max(int(total_cap), 1), 5_000)
-        temporal_filter = (
-            "AND ALL(r IN relationships(path) WHERE "
-            "(r.valid_from IS NULL OR r.valid_from <= datetime($as_of)) "
-            "AND (r.valid_to IS NULL OR r.valid_to > datetime($as_of)))"
-            if as_of else ""
-        )
+        # Every hop must be a current fact (not retracted, valid at as_of / now).
+        temporal_filter = f"AND ALL(r IN relationships(path) WHERE {edge_is_current('r')})"
         transaction_filter = (
             "AND ALL(r IN relationships(path) WHERE "
             "r.recorded_at IS NULL OR r.recorded_at <= datetime($transaction_at))"
@@ -2283,16 +2302,21 @@ class Neo4jClient:
                     length(path)        AS path_length,
                     reduce(conf = 1.0, r IN relationships(path) |
                         conf * coalesce(r.confidence, 1.0)) AS path_confidence,
-                    {sem_sim_expr} AS sem_sim
+                    {sem_sim_expr} AS sem_sim,
+                    {document_trust_fields("d")}
                 // unordered cap: bounds traversal per seed chunk so a single
                 // high-degree hub entity can't blow up the path enumeration
                 LIMIT $per_seed_cap
             }}
             // path score: penalise longer paths, reward high-confidence paths
             WITH chunk_id, text, via_entity, path_length, path_confidence, sem_sim,
+                 document_id, authority_level, superseded, superseded_by, doc_valid_from,
+                 doc_valid_to, doc_stale_after, schema_version,
                  (path_confidence / toFloat(path_length)) AS base_score
             RETURN chunk_id, text, via_entity, path_length, path_confidence,
-                   sem_sim, {score_expr} AS path_score
+                   sem_sim, {score_expr} AS path_score,
+                   document_id, authority_level, superseded, superseded_by, doc_valid_from,
+                   doc_valid_to, doc_stale_after, schema_version
             ORDER BY path_score DESC
             LIMIT $total_cap
             """,
@@ -2353,7 +2377,7 @@ class Neo4jClient:
                   WHERE e.quarantined = true
               }
               """ + document_access_predicate("d") + """
-            RETURN c.id AS chunk_id, c.text AS text, score
+            RETURN c.id AS chunk_id, c.text AS text, score, """ + document_trust_fields("d") + """
             ORDER BY score DESC
             LIMIT $k
             """,
@@ -2406,7 +2430,7 @@ class Neo4jClient:
                        OR coalesce(d.recorded_at, d.created_at) <= datetime($transaction_at))
               ))
               {document_access_predicate('d')}
-            RETURN DISTINCT c.id AS chunk_id, c.text AS text, score
+            RETURN DISTINCT c.id AS chunk_id, c.text AS text, score, """ + document_trust_fields("d") + """
             ORDER BY score DESC
             LIMIT $k
             """,
@@ -2605,11 +2629,7 @@ class Neo4jClient:
         """
         if not entities:
             return []
-        temporal_filter = (
-            "AND (r.valid_from IS NULL OR r.valid_from <= datetime($as_of)) "
-            "AND (r.valid_to IS NULL OR r.valid_to > datetime($as_of))"
-            if as_of else ""
-        )
+        temporal_filter = f"AND {edge_is_current('r')}"
         transaction_filter = (
             "AND (r.recorded_at IS NULL OR r.recorded_at <= datetime($transaction_at))"
             if transaction_at else ""
@@ -2635,12 +2655,13 @@ class Neo4jClient:
                    r.extracted_at                     AS extracted_at,
                    r.source_doc_id                    AS source_doc_id,
                    coalesce(r.source_type, 'asserted') AS source_type,
-                   r.inferred_by                      AS inferred_by
+                   r.inferred_by                      AS inferred_by,
+                   {edge_trust_fields("r")}
             """,
             entities=entities,
             entity_keys=[f"{e['name']}:{e['type']}" for e in entities],
             tenant=tenant,
-            **({"as_of": as_of} if as_of else {}),
+            as_of=as_of,
             **({"transaction_at": transaction_at} if transaction_at else {}),
         )
 
@@ -2660,13 +2681,10 @@ class Neo4jClient:
         explicit set — both endpoints must be in the passed-in list, so a
         1-item list only matches self-loops). This answers "what is this one
         named entity connected to" — the shape a single-entity lookup needs.
-        Excludes quarantined entities on either side.
+        Excludes quarantined entities on either side and edges that are not
+        current (shared predicate, graphrag/graph/validity.py).
         """
-        temporal_filter = (
-            "AND (r.valid_from IS NULL OR r.valid_from <= datetime($as_of)) "
-            "AND (r.valid_to IS NULL OR r.valid_to > datetime($as_of))"
-            if as_of else ""
-        )
+        temporal_filter = f"AND {edge_is_current('r')}"
         return await self.run(
             f"""
             MATCH (e:Entity {{name: $name, type: $type, tenant: $tenant}})
@@ -2675,6 +2693,8 @@ class Neo4jClient:
               AND coalesce(other.quarantined, false) = false
               {temporal_filter}
             RETURN other.name AS name, other.type AS type,
+                   r.relation AS relation, r.source_type AS source_type,
+                   {edge_trust_fields("r")},
                    r.weight AS weight,
                    coalesce(r.confidence, 1.0) AS confidence,
                    r.extracted_at AS extracted_at,
@@ -2683,8 +2703,7 @@ class Neo4jClient:
             ORDER BY confidence DESC
             LIMIT $limit
             """,
-            name=name, type=type, tenant=tenant, limit=limit,
-            **({"as_of": as_of} if as_of else {}),
+            name=name, type=type, tenant=tenant, limit=limit, as_of=as_of,
         )
 
     async def get_all_entities(self, tenant: str = "default") -> list[dict]:
@@ -2704,10 +2723,12 @@ class Neo4jClient:
             MATCH (s:Entity)-[r:RELATES_TO {tenant: $tenant}]->(t:Entity)
             WHERE coalesce(s.quarantined, false) = false
               AND coalesce(t.quarantined, false) = false
+              AND """ + edge_is_current("r") + """
             RETURN s.id AS source_id, t.id AS target_id, r.relation AS relation,
                    coalesce(r.weight, r.confidence, 1.0) AS weight
             """,
             tenant=tenant,
+            as_of=None,
         )
 
     # ── PageRank centrality (GDS) ────────────────────────────────────────────────

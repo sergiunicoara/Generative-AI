@@ -243,6 +243,8 @@ class LocalSearch:
                 **temporal_kwargs,
                 access_context=access_context,
             )
+            for c in vector_chunks:
+                c.setdefault("vector_score", c.get("score"))
         else:
             log.info("local_search.vector_skipped", reason="vector_search_enabled=false")
             vector_chunks = []
@@ -543,6 +545,11 @@ class LocalSearch:
                     "local_search.authority_weights.done",
                     elapsed_ms=round((time.monotonic() - _t0) * 1000, 1),
                 )
+            # Edge trust (origin, verification, dispute, staleness) feeds graph
+            # scoring; each factor is kept on the edge under "trust".
+            if cfg.get("trust_weighting_enabled", True):
+                from graphrag.graph.trust import apply_edge_trust
+                entity_edges = apply_edge_trust(entity_edges)
 
             _t0 = time.monotonic()
             loop = asyncio.get_running_loop()
@@ -637,6 +644,20 @@ class LocalSearch:
                 path_weight=round(weights.path, 3),
                 provenance_weight=round(weights.provenance, 3),
             )
+
+        # Trust stage (docs/trust-metadata.md): every chunk carries its document's
+        # trust assessment and its separate score components; superseded or stale
+        # evidence ranks below current evidence rather than being treated as current.
+        if all_chunks:
+            from graphrag.graph.trust import _parse as _parse_ts
+            from graphrag.graph.trust import apply_chunk_trust
+            if apply_chunk_trust(
+                all_chunks,
+                at=_parse_ts(valid_at),
+                enabled=cfg.get("trust_weighting_enabled", True),
+                authority=cfg.get("chunk_authority_weighting_enabled", False),
+            ):
+                all_chunks.sort(key=lambda chunk: chunk.get("final_score", 0.0), reverse=True)
 
         # Attach source document filenames so the LLM can attribute claims to
         # a specific document/revision — needed for cross-document questions

@@ -15,6 +15,19 @@ _NEAR_DUPLICATE_RATIO = 0.85
 _SECTION_SEPARATOR = "\n\n---\n\n"
 
 
+def _trust_fields(chunk: dict) -> dict:
+    """Trust metadata and score components for a chunk citation (docs/trust-metadata.md)."""
+    trust = chunk.get("trust") if isinstance(chunk.get("trust"), dict) else None
+    out: dict = {}
+    if trust:
+        out["trust"] = trust
+        out["valid_from"] = trust.get("valid_from")
+        out["valid_to"] = trust.get("valid_to")
+    if isinstance(chunk.get("score_components"), dict):
+        out["score_components"] = chunk["score_components"]
+    return out
+
+
 def _chunk_confidence(chunk: dict) -> float | None:
     """Best available ranking score for a chunk, or `None` if it has none."""
     for key in ("final_score", "rerank_score", "score", "gnn_score"):
@@ -204,7 +217,7 @@ class ContextBuilder:
             citations.append(citation)
             evidence.append(CitationEvidence(
                 source_id=citation, source_label=citation, path=f"[{citation}]",
-                confidence=_chunk_confidence(chunk),
+                confidence=_chunk_confidence(chunk), **_trust_fields(chunk),
             ))
 
         # A topology-reached document can be relevant precisely because it was
@@ -228,7 +241,7 @@ class ContextBuilder:
                 citations.append(citation)
                 evidence.append(CitationEvidence(
                     source_id=citation, source_label=citation, path=f"[{citation}]",
-                    confidence=_chunk_confidence(chunk),
+                    confidence=_chunk_confidence(chunk), **_trust_fields(chunk),
                 ))
                 link_slots -= 1
 
@@ -294,6 +307,11 @@ class ContextBuilder:
                 if e.get("source_type") == "inferred":
                     rule = e.get("inferred_by")
                     line += f" (inferred{f' via {rule}' if rule else ''})"
+                trust = e.get("trust") or {}
+                if trust.get("confidence_state") == "DISPUTED":
+                    line += " (disputed)"
+                if trust.get("stale"):
+                    line += " (stale)"
                 edge_lines.append(line)
                 # Register both endpoints as citations too, not just the prompt
                 # text above. A fact surfaced ONLY here (e.g. a transitive
@@ -310,8 +328,11 @@ class ContextBuilder:
                 # chunk-derived citations, and the [:10] cap above bounds it.
                 citations.append(e["src"])
                 citations.append(e["tgt"])
-                evidence.append(CitationEvidence(source_id=e["src"], source_label=e["src"], path=line))
-                evidence.append(CitationEvidence(source_id=e["tgt"], source_label=e["tgt"], path=line))
+                edge_trust = e.get("trust") if isinstance(e.get("trust"), dict) else None
+                evidence.append(CitationEvidence(source_id=e["src"], source_label=e["src"], path=line,
+                                                 trust=edge_trust))
+                evidence.append(CitationEvidence(source_id=e["tgt"], source_label=e["tgt"], path=line,
+                                                 trust=edge_trust))
             if edge_lines:
                 sections.add(
                     "graph_relationships",

@@ -48,6 +48,7 @@ The graph is not a RAG index. It is a formally modeled knowledge base:
 - [`docs/intelligence-ingestion.md`](docs/intelligence-ingestion.md) — source-grounded Claims, Observations, Events, Findings, deterministic aliases, tables, temporal hierarchy, and ingestion receipts
 - [`docs/graph-validation.md`](docs/graph-validation.md) — pre-write publication gate: rule catalogue, severities, quarantine and retry, read-only validation
 - [`docs/schema-registry.md`](docs/schema-registry.md) — versioned schemas per dataset, content hash, drift detection, enforce mode, schema provenance on answers
+- [`docs/trust-metadata.md`](docs/trust-metadata.md) — origin, verification, validity and staleness in retrieval; shared validity predicate; score components
 - [`docs/invalidation.md`](docs/invalidation.md) — dependency tracking, targeted invalidation of cached answers, decisions, snapshots and inferred edges
 - [`docs/ontology-governance.md`](docs/ontology-governance.md) — human-reviewed ontology-drift proposals, active-schema enforcement, and canonical entity identity
 - [`docs/cypher-patterns.md`](docs/cypher-patterns.md) — 6 production Cypher patterns: multi-hop traversal, bitemporal as-of, transitive supersession, contradiction scan, community ANN search, entity resolution audit

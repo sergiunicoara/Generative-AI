@@ -806,9 +806,15 @@ class HybridRetriever:
                     policy_result = PolicyResult.ESCALATE
                     policy_reason_code = sufficiency.reason_code
 
+            # Abstention stays opt-in (plan D6) except when every piece of
+            # evidence is stale: answering would present outdated facts as current.
+            abstain_on_stale = (
+                sufficiency.reason_code == "all_evidence_stale"
+                and cfg.get("retrieval_sufficiency_abstain_on_stale", True)
+            )
             if (
                 sufficiency_enabled
-                and cfg.get("retrieval_sufficiency_abstain_enabled", False)
+                and (cfg.get("retrieval_sufficiency_abstain_enabled", False) or abstain_on_stale)
                 and not sufficiency.sufficient
             ):
                 answer = abstention_message(sufficiency.reason_code)

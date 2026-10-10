@@ -56,6 +56,28 @@ _TEMPORAL = re.compile(
     r"previous(?:ly)?|former(?:ly)?|historical(?:ly)?|was (?:valid|in force|current)|"
     r"superseded|which (?:revision|version) was|at that time)\b", re.I)
 _ISO_DATE = re.compile(r"\b((?:19|20)\d{2}-\d{2}-\d{2})\b")
+# Document identifiers that merely contain a date-shaped number (AD 2024-03-07, SB-2023-11-04).
+# They name a document; they are not a time constraint.
+_IDENTIFIER = re.compile(r"\b[A-Z]{2,}[\s\-.]?(?:19|20)\d{2}-\d{2}(?:-\d{2})?\b")
+# Relation verbs that make "Who/Which/What <verb> ..." a graph question without saying "related".
+_RELATION_QUESTION = re.compile(
+    r"^\s*(?:who|whom|which|what)\b.*?\b(?:owns?|owned by|operat(?:es?|ors?|ed by)|suppl(?:y|ies|ier|iers|ied by)|"
+    r"manufactur\w+|made by|depends? on|depend(?:ed|ing) on|connects? to|feeds?|oversee\w*|regulat(?:es|or)|"
+    r"responsible for|subsidiar\w+|parent of|approv(?:es|ed by|ing)|leases?|acquir\w+)\b", re.I)
+# Questions that compare which source governs a claim.
+_AUTHORITY_COMPARE = re.compile(
+    r"\b(?:authoritative|takes? precedence|prevails?|overrides?|conflicts? with|contradicts?)\b", re.I)
+# Relation cues; two or more in one question means a chain of hops.
+_HOP_CUE = re.compile(
+    r"(?:\w+'s\b|\bsuppl(?:y|ies|ier|iers|ied by)\b|\bused (?:in|on|by)\b|\b(?:operated|owned|leased|made|"
+    r"issued|serviced) (?:by|to)\b|\bacquired\b|\bsubsidiar\w+|\bservic(?:e|es|ed|ing)\b|"
+    r"\bmanufacturer\b|\bcustomers?\b|\baffect\w*\b)", re.I)
+_HOP_WORDS = re.compile(r"\b(?:through which|via|ultimately|intermediar\w+|indirectly|transitive\w*)\b", re.I)
+_DEICTIC_ANY = re.compile(
+    r"\b(?:it|this|that|they|them|these|those|the other|the second|the first|the same|that one|this one|"
+    r"same for|other)\b", re.I)
+_FILLER = {"can", "you", "please", "still", "again", "also", "then", "more", "other", "same", "second", "first",
+           "one", "them", "explain", "about", "and", "so", "now"}
 _ENTITY_LOOKUP = re.compile(
     r"^\s*(who is|who are|what is|what's|what are|tell me about|describe|define|"
     r"show (?:me )?(?:the )?(?:entity|profile|details) (?:for|of))\b", re.I)
@@ -95,6 +117,26 @@ class RouteDecision:
         return d
 
 
+def _valid_iso_dates(question: str) -> list[str]:
+    """ISO dates that are real calendar dates and not part of a document identifier."""
+    from datetime import date
+
+    out = []
+    for m in _ISO_DATE.finditer(_IDENTIFIER.sub(" ", question)):
+        try:
+            date.fromisoformat(m.group(1))
+        except ValueError:
+            continue
+        out.append(m.group(1))
+    return out
+
+
+def _has_named_token(question: str) -> bool:
+    """An acronym or an identifier with digits anywhere after the first word."""
+    toks = re.findall(r"[A-Za-z0-9][\w\-./]*", question)[1:]
+    return any(re.search(r"\d", t) or (len(t) >= 2 and t.isupper()) for t in toks)
+
+
 def _content_words(question: str) -> list[str]:
     return [w for w in re.findall(r"[A-Za-z0-9][\w\-./]*", question.lower()) if w not in _STOP]
 
@@ -126,23 +168,40 @@ def route_query(question: str, *, tenant: str = "default", explicit_valid_at: st
                              "aggregation_phrase+template" if intent else "aggregation_phrase_no_template",
                              signals=signals, structured_intent=intent, **base)
 
-    if _TEMPORAL.search(question):
+    dates = _valid_iso_dates(question)
+    # Identifiers and non-calendar date-shaped numbers are not time constraints.
+    scrubbed = _ISO_DATE.sub(lambda m: m.group(1) if m.group(1) in dates else " ", _IDENTIFIER.sub(" ", question))
+    if _TEMPORAL.search(scrubbed):
         signals.append("temporal_phrase")
-        m = _ISO_DATE.search(question)
         return RouteDecision(Route.TEMPORAL, "temporal_phrase", signals=signals,
-                             as_of=m.group(1) if m else None, **base)
+                             as_of=dates[0] if dates else None, **base)
 
+    if len(_HOP_CUE.findall(question)) >= 2 or _HOP_WORDS.search(question):
+        return RouteDecision(Route.MULTI_HOP, "hop_cues", signals=["hop_cues"], **base)
     if legacy in ("multi_hop",):
         return RouteDecision(Route.MULTI_HOP, f"legacy_{legacy}", signals=[legacy], **base)
     if legacy in ("relational", "contradiction"):
         return RouteDecision(Route.RELATIONAL, f"legacy_{legacy}", signals=[legacy], **base)
+
+    if _RELATION_QUESTION.search(question) or _AUTHORITY_COMPARE.search(question):
+        return RouteDecision(Route.RELATIONAL, "relation_verb", signals=["relation_verb"], **base)
+
+    # A single named subject ("What is ICAO?") is a lookup, not an unresolved reference.
+    if _ENTITY_LOOKUP.search(question) and len(words) == 1 and not _DEICTIC_ANY.search(question):
+        return RouteDecision(Route.ENTITY_LOOKUP, "entity_lookup_phrase", signals=["entity_phrase"], **base)
+
+    residual = [w for w in words if w not in _FILLER]
+    if (not has_session and _DEICTIC_ANY.search(question) and len(residual) <= 1
+            and not _has_named_token(question)):
+        return RouteDecision(Route.AMBIGUOUS, "unresolved_reference", signals=["ambiguous"],
+                             **{**base, "fallback": "agentic"})
 
     if len(words) < 2 or (_DEICTIC_ONLY.search(question) and not has_session):
         return RouteDecision(Route.AMBIGUOUS,
                              "too_few_content_words" if len(words) < 2 else "unresolved_reference",
                              signals=["ambiguous"], **{**base, "fallback": "agentic"})
 
-    if _ENTITY_LOOKUP.search(question) and len(words) <= 6 and not _RELATION_WORDS.search(question):
+    if _ENTITY_LOOKUP.search(question) and len(words) <= 4 and not _RELATION_WORDS.search(question):
         return RouteDecision(Route.ENTITY_LOOKUP, "entity_lookup_phrase", signals=["entity_phrase"], **base)
 
     return RouteDecision(Route.FACTUAL_LOOKUP, f"legacy_{legacy}", signals=[legacy], **base)

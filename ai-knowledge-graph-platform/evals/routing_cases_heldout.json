@@ -1,0 +1,221 @@
+{
+  "description": "HELD-OUT routing cases. Written after the router fixes were designed from the dev-set misses and BEFORE the fixes were applied; never used to tune rules. Do not edit labels after a run; add new cases instead.",
+  "labelled_at": "2026-10-10",
+  "cases": [
+    {
+      "id": "HF01",
+      "question": "What is the maximum permitted torque for the nose wheel axle nut in AMM chapter 32?",
+      "expected": "FACTUAL_LOOKUP"
+    },
+    {
+      "id": "HF02",
+      "question": "What does service bulletin SB-2023-11-04 require operators to do?",
+      "expected": "FACTUAL_LOOKUP"
+    },
+    {
+      "id": "HF03",
+      "question": "What is the minimum tread depth allowed by the tyre inspection procedure?",
+      "expected": "FACTUAL_LOOKUP"
+    },
+    {
+      "id": "HF04",
+      "question": "What lubricant does the manual specify for the flap track rollers?",
+      "expected": "FACTUAL_LOOKUP"
+    },
+    {
+      "id": "HF05",
+      "question": "What is the stated flight-hour limit for the fuel pump overhaul?",
+      "expected": "FACTUAL_LOOKUP"
+    },
+    {
+      "id": "HF06",
+      "question": "What does AD 2022-15-09 say about the cabin pressure relief valve?",
+      "expected": "FACTUAL_LOOKUP"
+    },
+    {
+      "id": "HE01",
+      "question": "Who is Northwind Aviation?",
+      "expected": "ENTITY_LOOKUP"
+    },
+    {
+      "id": "HE02",
+      "question": "Tell me about the ATR 72 programme.",
+      "expected": "ENTITY_LOOKUP"
+    },
+    {
+      "id": "HE03",
+      "question": "What is ICAO?",
+      "expected": "ENTITY_LOOKUP"
+    },
+    {
+      "id": "HE04",
+      "question": "Describe the Skyline Maintenance Group.",
+      "expected": "ENTITY_LOOKUP"
+    },
+    {
+      "id": "HE05",
+      "question": "What is Part-145?",
+      "expected": "ENTITY_LOOKUP"
+    },
+    {
+      "id": "HR01",
+      "question": "Who supplies the landing gear actuators for the Q400?",
+      "expected": "RELATIONAL"
+    },
+    {
+      "id": "HR02",
+      "question": "Which subsystems does the avionics bus connect to?",
+      "expected": "RELATIONAL"
+    },
+    {
+      "id": "HR03",
+      "question": "Who manufactures the engine fitted to the E190?",
+      "expected": "RELATIONAL"
+    },
+    {
+      "id": "HR04",
+      "question": "Which standards does the quality manual reference?",
+      "expected": "RELATIONAL"
+    },
+    {
+      "id": "HR05",
+      "question": "Who is responsible for approving Bolt Supplier GmbH?",
+      "expected": "RELATIONAL"
+    },
+    {
+      "id": "HR06",
+      "question": "What is the relationship between Northwind Aviation and Skyline Maintenance?",
+      "expected": "RELATIONAL"
+    },
+    {
+      "id": "HR07",
+      "question": "Which parts does the hydraulic reservoir feed into?",
+      "expected": "RELATIONAL"
+    },
+    {
+      "id": "HM01",
+      "question": "Which suppliers of Northwind's subsidiaries provide parts used on aircraft leased to Skyline's customers?",
+      "expected": "MULTI_HOP"
+    },
+    {
+      "id": "HM02",
+      "question": "Which directives affect components made by suppliers of the Q400 engine manufacturer?",
+      "expected": "MULTI_HOP"
+    },
+    {
+      "id": "HM03",
+      "question": "Which maintenance organisations service aircraft owned by companies that Acme acquired?",
+      "expected": "MULTI_HOP"
+    },
+    {
+      "id": "HM04",
+      "question": "Through which intermediaries does Bolt Supplier GmbH ultimately supply Northwind Aviation?",
+      "expected": "MULTI_HOP"
+    },
+    {
+      "id": "HA01",
+      "question": "How many aircraft in the fleet are subject to AD 2022-15-09?",
+      "expected": "AGGREGATION"
+    },
+    {
+      "id": "HA02",
+      "question": "What is the total number of open findings across all audits?",
+      "expected": "AGGREGATION"
+    },
+    {
+      "id": "HA03",
+      "question": "List all suppliers that have no approved certificate.",
+      "expected": "AGGREGATION"
+    },
+    {
+      "id": "HA04",
+      "question": "How many documents reference the quality manual?",
+      "expected": "AGGREGATION"
+    },
+    {
+      "id": "HA05",
+      "question": "Count the entities flagged for review.",
+      "expected": "AGGREGATION"
+    },
+    {
+      "id": "HT01",
+      "question": "Which revision of the maintenance manual was in force on 2023-06-15?",
+      "expected": "TEMPORAL"
+    },
+    {
+      "id": "HT02",
+      "question": "What was the inspection interval before the 2024 amendment?",
+      "expected": "TEMPORAL"
+    },
+    {
+      "id": "HT03",
+      "question": "As of 2022-01-01, who owned Skyline Maintenance Group?",
+      "expected": "TEMPORAL"
+    },
+    {
+      "id": "HT04",
+      "question": "Which directives were superseded in 2023?",
+      "expected": "TEMPORAL"
+    },
+    {
+      "id": "HT05",
+      "question": "What did the procedure say previously about torque checks?",
+      "expected": "TEMPORAL"
+    },
+    {
+      "id": "HX01",
+      "question": "What about that one?",
+      "expected": "AMBIGUOUS"
+    },
+    {
+      "id": "HX02",
+      "question": "Is it still allowed?",
+      "expected": "AMBIGUOUS"
+    },
+    {
+      "id": "HX03",
+      "question": "Can you explain them?",
+      "expected": "AMBIGUOUS"
+    },
+    {
+      "id": "HX04",
+      "question": "And the other?",
+      "expected": "AMBIGUOUS"
+    },
+    {
+      "id": "HX05",
+      "question": "Same for the second one.",
+      "expected": "AMBIGUOUS"
+    },
+    {
+      "id": "HF07",
+      "question": "What is the validity period printed on certificate EASA.21J.123?",
+      "expected": "FACTUAL_LOOKUP"
+    },
+    {
+      "id": "HF08",
+      "question": "What inspection method does task 32-41-00 call for?",
+      "expected": "FACTUAL_LOOKUP"
+    },
+    {
+      "id": "HR08",
+      "question": "Which regulator oversees Northwind Aviation?",
+      "expected": "RELATIONAL"
+    },
+    {
+      "id": "HR09",
+      "question": "Which parts are made by Bolt Supplier GmbH?",
+      "expected": "RELATIONAL"
+    },
+    {
+      "id": "HE06",
+      "question": "What is a borescope inspection?",
+      "expected": "ENTITY_LOOKUP"
+    },
+    {
+      "id": "HA06",
+      "question": "What is the average interval between scheduled inspections?",
+      "expected": "AGGREGATION"
+    }
+  ]
+}

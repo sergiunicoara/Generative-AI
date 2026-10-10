@@ -1,10 +1,10 @@
 {
-  "generated_at": "2026-10-10T05:08:51.414147+00:00",
+  "generated_at": "2026-10-10T16:55:39.101505+00:00",
   "router": "graphrag/retrieval/query_router.py (deterministic, no LLM)",
   "offline": {
     "cases": 49,
     "route_accuracy": {
-      "router": 0.8367,
+      "router": 0.9796,
       "legacy_planner_baseline": 0.4082
     },
     "per_category": {
@@ -17,9 +17,9 @@
       },
       "AMBIGUOUS": {
         "n": 5,
-        "router_correct": 4,
+        "router_correct": 5,
         "baseline_correct": 0,
-        "router_accuracy": 0.8,
+        "router_accuracy": 1.0,
         "baseline_accuracy": 0.0
       },
       "ENTITY_LOOKUP": {
@@ -31,23 +31,23 @@
       },
       "FACTUAL_LOOKUP": {
         "n": 10,
-        "router_correct": 9,
+        "router_correct": 10,
         "baseline_correct": 10,
-        "router_accuracy": 0.9,
+        "router_accuracy": 1.0,
         "baseline_accuracy": 1.0
       },
       "MULTI_HOP": {
         "n": 6,
-        "router_correct": 5,
+        "router_correct": 6,
         "baseline_correct": 5,
-        "router_accuracy": 0.8333,
+        "router_accuracy": 1.0,
         "baseline_accuracy": 0.8333
       },
       "RELATIONAL": {
         "n": 9,
-        "router_correct": 5,
+        "router_correct": 9,
         "baseline_correct": 5,
-        "router_accuracy": 0.5556,
+        "router_accuracy": 1.0,
         "baseline_accuracy": 0.5556
       },
       "TEMPORAL": {
@@ -63,25 +63,20 @@
         "AGGREGATION": 6
       },
       "AMBIGUOUS": {
-        "AMBIGUOUS": 4,
-        "FACTUAL_LOOKUP": 1
+        "AMBIGUOUS": 5
       },
       "ENTITY_LOOKUP": {
         "ENTITY_LOOKUP": 5,
-        "AMBIGUOUS": 1
+        "RELATIONAL": 1
       },
       "FACTUAL_LOOKUP": {
-        "FACTUAL_LOOKUP": 9,
-        "TEMPORAL": 1
+        "FACTUAL_LOOKUP": 10
       },
       "MULTI_HOP": {
-        "MULTI_HOP": 5,
-        "FACTUAL_LOOKUP": 1
+        "MULTI_HOP": 6
       },
       "RELATIONAL": {
-        "ENTITY_LOOKUP": 1,
-        "RELATIONAL": 5,
-        "FACTUAL_LOOKUP": 3
+        "RELATIONAL": 9
       },
       "TEMPORAL": {
         "TEMPORAL": 7
@@ -89,51 +84,114 @@
     },
     "misses": [
       {
-        "id": "F02",
-        "expected": "FACTUAL_LOOKUP",
-        "router": "TEMPORAL",
-        "baseline": "FACTUAL_LOOKUP"
-      },
-      {
-        "id": "E02",
+        "id": "U02",
         "expected": "ENTITY_LOOKUP",
-        "router": "AMBIGUOUS",
+        "router": "RELATIONAL",
+        "baseline": "FACTUAL_LOOKUP"
+      }
+    ],
+    "notes": "The legacy planner has no ENTITY_LOOKUP / AGGREGATION / TEMPORAL / AMBIGUOUS classes, so its accuracy on those categories is 0 by construction; compare per_category for the shared classes."
+  },
+  "offline_heldout": {
+    "cases": 43,
+    "route_accuracy": {
+      "router": 0.9302,
+      "legacy_planner_baseline": 0.2093
+    },
+    "per_category": {
+      "AGGREGATION": {
+        "n": 6,
+        "router_correct": 6,
+        "baseline_correct": 0,
+        "router_accuracy": 1.0,
+        "baseline_accuracy": 0.0
+      },
+      "AMBIGUOUS": {
+        "n": 5,
+        "router_correct": 5,
+        "baseline_correct": 0,
+        "router_accuracy": 1.0,
+        "baseline_accuracy": 0.0
+      },
+      "ENTITY_LOOKUP": {
+        "n": 6,
+        "router_correct": 6,
+        "baseline_correct": 0,
+        "router_accuracy": 1.0,
+        "baseline_accuracy": 0.0
+      },
+      "FACTUAL_LOOKUP": {
+        "n": 8,
+        "router_correct": 7,
+        "baseline_correct": 8,
+        "router_accuracy": 0.875,
+        "baseline_accuracy": 1.0
+      },
+      "MULTI_HOP": {
+        "n": 4,
+        "router_correct": 4,
+        "baseline_correct": 0,
+        "router_accuracy": 1.0,
+        "baseline_accuracy": 0.0
+      },
+      "RELATIONAL": {
+        "n": 9,
+        "router_correct": 7,
+        "baseline_correct": 1,
+        "router_accuracy": 0.7778,
+        "baseline_accuracy": 0.1111
+      },
+      "TEMPORAL": {
+        "n": 5,
+        "router_correct": 5,
+        "baseline_correct": 0,
+        "router_accuracy": 1.0,
+        "baseline_accuracy": 0.0
+      }
+    },
+    "confusion": {
+      "AGGREGATION": {
+        "AGGREGATION": 6
+      },
+      "AMBIGUOUS": {
+        "AMBIGUOUS": 5
+      },
+      "ENTITY_LOOKUP": {
+        "ENTITY_LOOKUP": 6
+      },
+      "FACTUAL_LOOKUP": {
+        "FACTUAL_LOOKUP": 7,
+        "RELATIONAL": 1
+      },
+      "MULTI_HOP": {
+        "MULTI_HOP": 4
+      },
+      "RELATIONAL": {
+        "RELATIONAL": 7,
+        "FACTUAL_LOOKUP": 1,
+        "MULTI_HOP": 1
+      },
+      "TEMPORAL": {
+        "TEMPORAL": 5
+      }
+    },
+    "misses": [
+      {
+        "id": "HF02",
+        "expected": "FACTUAL_LOOKUP",
+        "router": "RELATIONAL",
         "baseline": "FACTUAL_LOOKUP"
       },
       {
-        "id": "E06",
+        "id": "HR04",
         "expected": "RELATIONAL",
-        "router": "ENTITY_LOOKUP",
+        "router": "FACTUAL_LOOKUP",
         "baseline": "FACTUAL_LOOKUP"
       },
       {
-        "id": "R05",
+        "id": "HR09",
         "expected": "RELATIONAL",
-        "router": "FACTUAL_LOOKUP",
-        "baseline": "FACTUAL_LOOKUP"
-      },
-      {
-        "id": "R06",
-        "expected": "RELATIONAL",
-        "router": "FACTUAL_LOOKUP",
-        "baseline": "FACTUAL_LOOKUP"
-      },
-      {
-        "id": "M05",
-        "expected": "MULTI_HOP",
-        "router": "FACTUAL_LOOKUP",
-        "baseline": "FACTUAL_LOOKUP"
-      },
-      {
-        "id": "X04",
-        "expected": "AMBIGUOUS",
-        "router": "FACTUAL_LOOKUP",
-        "baseline": "FACTUAL_LOOKUP"
-      },
-      {
-        "id": "C01",
-        "expected": "RELATIONAL",
-        "router": "FACTUAL_LOOKUP",
+        "router": "MULTI_HOP",
         "baseline": "FACTUAL_LOOKUP"
       }
     ],

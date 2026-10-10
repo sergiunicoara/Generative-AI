@@ -181,3 +181,28 @@ def test_recorded_routing_results_match_a_fresh_offline_run():
     recorded = json.loads((ROOT / "evals" / "routing_eval_results.json").read_text(encoding="utf-8"))
     assert recorded["offline"]["route_accuracy"] == fresh["route_accuracy"]
     assert recorded["live"] is None or isinstance(recorded["live"], dict)
+
+
+@pytest.mark.parametrize("question,route", [
+    # document identifiers that look like dates are not time constraints
+    ("What is the inspection interval stated in AD 2024-03-07?", Route.FACTUAL_LOOKUP),
+    ("What does bulletin SB-2023-11-04 require?", Route.FACTUAL_LOOKUP),
+    # a real calendar date still is
+    ("Which revision was in force on 2023-06-15?", Route.TEMPORAL),
+    # relation verbs without the word "related"
+    ("Who owns Bolt Supplier GmbH?", Route.RELATIONAL),
+    ("Which components does the hydraulic pump depend on?", Route.RELATIONAL),
+    # chains of relations
+    ("Which parts supplied by Bolt's subsidiaries are used in aircraft operated by Acme's customers?", Route.MULTI_HOP),
+    # single named subject, and references with nothing to resolve them
+    ("What is EASA?", Route.ENTITY_LOOKUP),
+    ("Is this still valid?", Route.AMBIGUOUS),
+    ("Is it still allowed?", Route.AMBIGUOUS),
+])
+def test_routing_fixes_from_recorded_misses(question, route):
+    assert route_query(question).route is route
+
+
+def test_reference_is_not_ambiguous_with_a_session_or_a_named_subject():
+    assert route_query("Is this still valid?", has_session=True).route is not Route.AMBIGUOUS
+    assert route_query("Is it listed in AD 2020-01-02?").route is not Route.AMBIGUOUS

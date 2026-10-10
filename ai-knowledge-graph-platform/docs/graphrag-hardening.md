@@ -100,7 +100,7 @@ from the existing GenAI telemetry.
 - Run the golden evaluations on the live stack before flipping
   `include_superseded`, `query_router_policy: enforce` or chunk authority
   weighting; no quality improvement is claimed until then.
-- Route misses recorded in docs/query-routing.md should be fixed against a
-  held-out labelled set.
+- Remaining route misses (docs/query-routing.md) should be validated on a new
+  held-out labelled set (the first one is now partly seen).
 - Entities do not yet carry origin/verification; global (community) search
   does not yet apply supersession/quarantine filters.

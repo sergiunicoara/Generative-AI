@@ -43,28 +43,62 @@ before the router was run and were not edited afterwards.
 `python scripts/eval_routing.py` writes `evals/routing_eval_results.json`
 (reproducibility is asserted by a unit test).
 
-Offline route accuracy (measured 2026-10-10):
+Offline route accuracy on the dev set (measured 2026-10-10, after the fixes
+below; **fitted to this set**, so treat the held-out figures as the honest ones):
 
 | Category | n | Router | Legacy planner (projected) |
 |---|---|---|---|
 | AGGREGATION | 6 | 1.00 | 0.00 |
-| AMBIGUOUS | 5 | 0.80 | 0.00 |
+| AMBIGUOUS | 5 | 1.00 | 0.00 |
 | ENTITY_LOOKUP | 6 | 0.83 | 0.00 |
-| FACTUAL_LOOKUP | 10 | 0.90 | 1.00 |
-| MULTI_HOP | 6 | 0.83 | 0.83 |
-| RELATIONAL | 9 | 0.56 | 0.56 |
+| FACTUAL_LOOKUP | 10 | 1.00 | 1.00 |
+| MULTI_HOP | 6 | 1.00 | 0.83 |
+| RELATIONAL | 9 | 1.00 | 0.56 |
 | TEMPORAL | 7 | 1.00 | 0.00 |
-| **all** | 49 | **0.837** | 0.408 |
+| **all** | 49 | **0.980** | 0.408 |
 
 Read with care: the legacy planner has no ENTITY_LOOKUP / AGGREGATION /
-TEMPORAL / AMBIGUOUS classes, so most of the gap is structural. On the shared
-classes the router is equal (RELATIONAL, MULTI_HOP) or slightly worse
-(FACTUAL_LOOKUP: one identifier containing a date, "AD 2024-03-07", is routed
-TEMPORAL). Known misses (kept, not tuned away): "What is EASA?" -> AMBIGUOUS
-(a one-word entity counts as too few content words); relational questions
-phrased without relation keywords ("Who owns X?", "Which components does X
-depend on?", authority comparisons) -> FACTUAL_LOOKUP; "Is this still valid?"
--> FACTUAL_LOOKUP. A fix should be validated on a held-out set, not this one.
+TEMPORAL / AMBIGUOUS classes, so much of the gap is structural.
+The first version missed 8 of these 49 (F02, E02, E06, R05, R06, M05, X04,
+C01). They were fixed with general rules (below), not per-question patches, and
+validated on a **separate held-out set**.
+
+### Fixes and held-out validation
+
+Rules added: date-shaped document identifiers ("AD 2024-03-07", "SB-2023-11-04")
+and non-calendar numbers are not time constraints; relation verbs ("owns",
+"supplies", "depends on", "operated by", ...) and authority comparisons route
+RELATIONAL; two or more relation cues, or "through which / ultimately /
+intermediaries", route MULTI_HOP; a single named subject ("What is ICAO?") is
+ENTITY_LOOKUP, and a bare reference with nothing to resolve it ("Is this still
+valid?") is AMBIGUOUS unless a session exists or a named token is present;
+ENTITY_LOOKUP needs at most 4 content words so property questions ("What is the
+stated limit for ...") stay FACTUAL_LOOKUP.
+
+`evals/routing_cases_heldout.json` (43 cases, different phrasings) was written
+and scored **before** the fixes, then scored once after them. It was not used to
+tune any rule:
+
+| Set | Router before | Router after | Legacy planner |
+|---|---|---|---|
+| Dev (49, fitted) | 83.67% | 97.96% | 40.82% |
+| Held-out (43) | 51.16% | 93.02% | 20.93% |
+
+The held-out "before" figure shows the earlier dev score was optimistic. The
+remaining misses are recorded, not tuned away:
+
+- Dev U02 "Who is the confidential supplier for ...?" is now RELATIONAL; the
+  label (ENTITY_LOOKUP) is arguably wrong, but labels are not edited after a run.
+- Held-out HF02 "What does service bulletin SB-2023-11-04 require operators to
+  do?" -> RELATIONAL ("operators" matches the relation-verb rule).
+- HR04 "Which standards does the quality manual reference?" -> FACTUAL_LOOKUP
+  ("reference" is not a relation cue).
+- HR09 "Which parts are made by Bolt Supplier GmbH?" -> MULTI_HOP (the word
+  "Supplier" in a name counts as a second relation cue).
+
+Further rule changes should be validated on a new held-out set; this one is now
+partly seen. Routing accuracy is a structural measure only: it says nothing
+about answer quality, latency or tokens.
 
 **Not measured** (needs the running stack): context precision/recall,
 faithfulness (RAGAS judge), latency p50/p95, token usage, fallback trigger rate

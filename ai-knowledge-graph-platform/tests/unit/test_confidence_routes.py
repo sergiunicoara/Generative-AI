@@ -14,6 +14,7 @@ from __future__ import annotations
 
 from unittest.mock import AsyncMock, patch
 
+import pytest
 from fastapi import FastAPI
 from starlette.testclient import TestClient
 
@@ -33,6 +34,18 @@ PAYLOAD = {
     "target_state": "VERIFIED",
     "reason": "manual review",
 }
+
+
+@pytest.fixture(autouse=True)
+def _graph():
+    """The route now brackets the transition in a CorpusMutation and emits an
+    invalidation event (Phase 3); both are faked here, and covered in
+    test_invalidation.py."""
+    neo4j = AsyncMock()
+    neo4j.complete_corpus_update = AsyncMock(return_value=1)
+    with patch.object(confidence_routes, "get_neo4j", return_value=neo4j), \
+         patch("graphrag.graph.invalidation.emit", AsyncMock(return_value={"fallback": None})):
+        yield neo4j
 
 
 def _client(scope: str, tenant: str = "acme", sub: str = "user-1") -> TestClient:

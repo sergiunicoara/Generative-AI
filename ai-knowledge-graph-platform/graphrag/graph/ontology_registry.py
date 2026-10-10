@@ -270,6 +270,13 @@ class OntologyRegistry:
                 event_type="schema_drift",
                 detail=f"{outcome}: {','.join(h[:12] for h in prior)} -> {identity.content_hash[:12]}",
             )
+            # Recorded decisions produced under another schema version need review.
+            # Cached answers need nothing: the schema label is part of their key.
+            from graphrag.graph.invalidation import EventKind, InvalidationEvent, emit
+            await emit(InvalidationEvent(
+                tenant=self._tenant, kind=EventKind.SCHEMA_CHANGED, reason=outcome,
+                actor="ontology_registry", cause=identity.content_hash, schema_version=identity.label,
+            ), self._neo4j, inside_mutation=False)
         else:
             sr.record_drift("match")
         self._loaded = True

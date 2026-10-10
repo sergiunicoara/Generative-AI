@@ -369,6 +369,18 @@ maintenance:
   orphan_flag_enabled: true         # flag entities with no chunk links
   cycle_check_enabled: true         # detect cycles on every maintenance run
 
+# Targeted invalidation of derived artifacts (docs/invalidation.md). When a fact
+# is corrected, retracted, superseded, expired or re-resolved, only the cached
+# answers, recorded decisions, community snapshots and inferred edges built on it
+# are invalidated. Anything that cannot be proven targeted falls back to the
+# tenant-wide revision bump.
+invalidation:
+  enabled: true                     # false: every event bumps the tenant revision (pre-Phase-3 behaviour)
+  max_depth: 5                      # inferred-edge dependency hops followed before falling back
+  max_dependents_per_query: 5000    # a larger closure falls back to the revision bump
+  recompute_inline: true            # recompute NEEDS_REVIEW artifacts right after the event
+  recompute_inline_limit: 200       # rest is picked up by scripts/recompute_stale.py
+
 business_matrix:
   kpi_retention_days: 90
   dashboard_refresh_seconds: 30

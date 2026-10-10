@@ -118,3 +118,8 @@ CREATE CONSTRAINT schema_version_key IF NOT EXISTS FOR (o:OntologyVersion) REQUI
 CREATE CONSTRAINT dataset_key IF NOT EXISTS FOR (d:Dataset) REQUIRE (d.tenant, d.id) IS UNIQUE;
 CREATE CONSTRAINT validation_profile_key IF NOT EXISTS FOR (p:ValidationProfile) REQUIRE (p.tenant, p.content_hash) IS UNIQUE;
 CREATE INDEX schema_version_active IF NOT EXISTS FOR (o:OntologyVersion) ON (o.tenant, o.dataset_id, o.active);
+
+-- Targeted invalidation (docs/invalidation.md).
+CREATE CONSTRAINT invalidation_event_key IF NOT EXISTS FOR (e:InvalidationEvent) REQUIRE (e.tenant, e.id) IS UNIQUE;
+CREATE CONSTRAINT derived_artifact_state_key IF NOT EXISTS FOR (a:DerivedArtifactState) REQUIRE (a.tenant, a.kind, a.artifact_id) IS UNIQUE;
+CREATE INDEX derived_artifact_state_queue IF NOT EXISTS FOR (a:DerivedArtifactState) ON (a.tenant, a.state);

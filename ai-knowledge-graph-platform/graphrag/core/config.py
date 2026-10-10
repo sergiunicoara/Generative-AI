@@ -413,6 +413,11 @@ class Settings(BaseSettings):
         return self._yaml.get("maintenance", {})
 
     @property
+    def invalidation(self) -> dict:
+        """Targeted invalidation of derived artifacts (docs/invalidation.md)."""
+        return self._yaml.get("invalidation", {})
+
+    @property
     def access_control(self) -> dict:
         """Document ACL enforcement configuration (disabled for legacy corpora)."""
         return self._yaml.get("access_control", {})

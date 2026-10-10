@@ -36,7 +36,18 @@ async def list_review_queue_all(tenant: str = Depends(get_tenant), limit: int = 
 async def approve_review_item(
     item_id: str, tenant: str = Depends(get_tenant), reviewed_by: str = "human"
 ):
-    return await ReviewQueueService().approve(item_id, reviewed_by, tenant)
+    result = await ReviewQueueService().approve(item_id, reviewed_by, tenant)
+    if "error" not in result and result.get("raw") and result.get("candidate"):
+        # A revised entity-resolution decision: mark what was built on either
+        # name. Additive (the alias can change how future queries resolve), so
+        # the tenant revision is bumped too.
+        from graphrag.graph.invalidation import EntityRef, EventKind, InvalidationEvent, emit
+        result["invalidation"] = await emit(InvalidationEvent(
+            tenant=tenant, kind=EventKind.ER_REVISED, additive=True, actor=reviewed_by,
+            reason="alias approved", cause=f"review:{item_id}",
+            entities=[EntityRef(**result["raw"]), EntityRef(**result["candidate"])],
+        ), inside_mutation=False)
+    return result
 
 
 @router.post(

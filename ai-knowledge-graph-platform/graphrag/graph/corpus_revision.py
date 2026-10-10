@@ -17,10 +17,13 @@ class CorpusMutation:
     the tenant marked updating, which is intentionally fail-closed.
     """
 
-    def __init__(self, neo4j_client, tenant: str, reason: str):
+    def __init__(self, neo4j_client, tenant: str, reason: str, *, advance_revision: bool = True):
         self._neo4j = neo4j_client
         self.tenant = tenant
         self.reason = reason
+        # False only for removals/corrections whose dependents are invalidated
+        # explicitly (graphrag/graph/invalidation); see complete_corpus_update.
+        self.advance_revision = advance_revision
         self.revision: int | None = None
 
     async def __aenter__(self) -> "CorpusMutation":
@@ -34,6 +37,7 @@ class CorpusMutation:
                 self.tenant,
                 reason=self.reason,
                 outcome=outcome,
+                **({} if self.advance_revision else {"advance_revision": False}),
             )
         except Exception:
             log.exception(

@@ -26,8 +26,28 @@ async def transition_confidence(
     user: dict = Depends(get_current_user),
 ):
     from graphrag.graph.confidence_lifecycle import ConfidenceLifecycleService
-    return await ConfidenceLifecycleService(get_neo4j()).transition_relation(
-        **request.model_dump(),
-        tenant=tenant,
-        changed_by=str(user.get("sub") or "unknown"),
-    )
+    from graphrag.graph.corpus_revision import CorpusMutation
+    from graphrag.graph.invalidation import EventKind, InvalidationEvent, RelationRef, emit
+
+    neo4j = get_neo4j()
+    # Weakening a fact (DISPUTED / RETRACTED) only affects what was built on it:
+    # targeted invalidation. Strengthening it can change answers that never cited
+    # it, so the tenant revision is bumped as well.
+    additive = request.target_state.upper() in ("ASSERTED", "APPROVED")
+    async with CorpusMutation(neo4j, tenant, "confidence_transition", advance_revision=additive) as mutation:
+        result = await ConfidenceLifecycleService(neo4j).transition_relation(
+            **request.model_dump(),
+            tenant=tenant,
+            changed_by=str(user.get("sub") or "unknown"),
+        )
+        result["invalidation"] = await emit(InvalidationEvent(
+            tenant=tenant, kind=EventKind.RELATION_CHANGED, additive=additive,
+            reason=f"confidence {result.get('from')} -> {result.get('to')}",
+            actor=str(user.get("sub") or "unknown"),
+            cause=str(result.get("event_id") or ""),
+            relations=[RelationRef(src_name=request.src_name, src_type=request.src_type,
+                                   relation=request.relation, tgt_name=request.tgt_name,
+                                   tgt_type=request.tgt_type)],
+        ), neo4j)
+    result["corpus_revision"] = mutation.revision
+    return result

@@ -135,6 +135,8 @@ class ReviewQueueService:
             "item_id": item_id,
             "status": "approved",
             "alias_registered": f"{r['raw_name']} → {r['candidate_name']}",
+            "raw": {"name": r["raw_name"], "type": r["raw_type"]},
+            "candidate": {"name": r["candidate_name"], "type": r["candidate_type"]},
         }
 
     async def reject(self, item_id: str, reviewed_by: str, tenant: str) -> dict:

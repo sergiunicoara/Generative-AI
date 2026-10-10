@@ -212,10 +212,12 @@ class Neo4jClient:
             "OPTIONAL MATCH (s:KGCorpusState {tenant: $tenant}) "
             "RETURN coalesce(s.revision, 0) AS revision, "
             "coalesce(s.updating, false) AS updating, "
-            "coalesce(s.active_updates, 0) AS active_updates",
+            "coalesce(s.active_updates, 0) AS active_updates, "
+            "coalesce(s.invalidation_seq, 0) AS invalidation_seq",
             tenant=tenant,
         )
-        return rows[0] if rows else {"revision": 0, "updating": False, "active_updates": 0}
+        return rows[0] if rows else {"revision": 0, "updating": False, "active_updates": 0,
+                                     "invalidation_seq": 0}
 
     async def begin_corpus_update(self, tenant: str = "default", *, reason: str = "ingestion") -> None:
         """Disable answer-cache reads while an ingestion mutates this tenant."""
@@ -235,14 +237,24 @@ class Neo4jClient:
         *,
         reason: str = "ingestion",
         outcome: str = "completed",
+        advance_revision: bool = True,
     ) -> int:
-        """Atomically publish a new corpus revision after successful ingestion."""
+        """Finish a mutation bracket.
+
+        ``advance_revision=True`` publishes a new corpus revision, which changes
+        every answer-cache key for the tenant (needed when a change can affect
+        answers that cited nothing related, e.g. new facts). ``False`` is for a
+        targeted invalidation: dependents are evicted explicitly and only
+        ``invalidation_seq`` advances, so in-flight answers computed before the
+        change are not cached after it (docs/invalidation.md).
+        """
         rows = await self.run(
             "MERGE (s:KGCorpusState {tenant: $tenant}) "
             "ON CREATE SET s.revision = 0, s.active_updates = 0 "
             "WITH s, CASE WHEN coalesce(s.active_updates, 0) > 0 "
             "THEN s.active_updates - 1 ELSE 0 END AS remaining "
-            "SET s.revision = coalesce(s.revision, 0) + 1, "
+            "SET s.revision = coalesce(s.revision, 0) + CASE WHEN $advance THEN 1 ELSE 0 END, "
+            "s.invalidation_seq = coalesce(s.invalidation_seq, 0) + 1, "
             "s.active_updates = remaining, s.updating = remaining > 0, "
             "s.updated_at = datetime(), s.last_reason = $reason, "
             "s.last_outcome = $outcome "
@@ -250,6 +262,7 @@ class Neo4jClient:
             tenant=tenant,
             reason=reason,
             outcome=outcome,
+            advance=advance_revision,
         )
         return int(rows[0]["revision"]) if rows else 0
 

@@ -27,7 +27,8 @@ async def test_corpus_revision_advances_atomically() -> None:
 
     assert revision == 10
     cypher = client.run.await_args.args[0]
-    assert "coalesce(s.revision, 0) + 1" in cypher
+    assert "coalesce(s.revision, 0) + CASE WHEN $advance THEN 1 ELSE 0 END" in cypher
+    assert client.run.await_args.kwargs["advance"] is True  # the default still advances
     assert "s.updating = remaining > 0" in cypher
 
 

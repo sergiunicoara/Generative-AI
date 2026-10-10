@@ -519,6 +519,7 @@ class HybridRetriever:
                     await _store.push_progress(query_id, msg)
 
             answer_cache = None
+            cache_invalidation_seq = 0
             cache_context = None
             schema_version = await _resolve_schema_version(tenant)
             if (
@@ -529,6 +530,7 @@ class HybridRetriever:
                 try:
                     corpus_state = await get_neo4j().get_corpus_state(tenant)
                     if not corpus_state.get("updating", False):
+                        cache_invalidation_seq = int(corpus_state.get("invalidation_seq", 0))
                         cache_context = QueryCacheContext(
                             corpus_revision=int(corpus_state.get("revision", 0)),
                             requested_mode=requested_mode,
@@ -570,6 +572,19 @@ class HybridRetriever:
             async def _store_governed_result(result: QueryResult, trace_id: str | None) -> None:
                 if not answer_cache or not cache_context or not trace_id or not result.citations:
                     return
+                # Targeted invalidation does not change the cache key, so an answer
+                # computed before an invalidation must not be stored after it.
+                try:
+                    latest = await get_neo4j().get_corpus_state(tenant)
+                except Exception:  # noqa: BLE001 - cannot prove freshness: do not cache
+                    return
+                if (
+                    latest.get("updating", False)
+                    or int(latest.get("revision", 0)) != cache_context.corpus_revision
+                    or int(latest.get("invalidation_seq", 0)) != cache_invalidation_seq
+                ):
+                    log.info("query_cache.store_skipped_concurrent_invalidation", tenant=tenant)
+                    return
                 key = await answer_cache.set(
                     question,
                     tenant,
@@ -582,6 +597,7 @@ class HybridRetriever:
                     # that never matched it. Global-only answers have no local
                     # entities; the corpus revision in cache_context guards those.
                     entities_used=list(local_results.get("referenced_entities", [])),
+                    chunks_used=list(local_results.get("referenced_chunks", [])),
                 )
                 result.cache_key = key
                 result.source_query_id = query_id

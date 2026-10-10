@@ -193,8 +193,10 @@ class QueryCache:
         source_query_id: str,
         source_trace_id: str,
         entities_used: list[str] | None = None,
+        chunks_used: list[str] | None = None,
     ) -> str:
         key = build_cache_key(query, tenant, context)
+        tokens = _provenance_tokens(entities_used, chunks_used)
         payload: dict[str, Any] = {
             "cache_key": key,
             "cached_at": time.time(),
@@ -204,12 +206,13 @@ class QueryCache:
             "source_query_id": source_query_id,
             "source_trace_id": source_trace_id,
             "entities_used": entities_used or [],
+            "chunks_used": chunks_used or [],
         }
         if self._redis is not None:
             try:
                 await self._redis.setex(key, self._ttl, _canonical_json(payload))
-                for entity in entities_used or []:
-                    provenance_key = self._provenance_key(entity, tenant)
+                for token in tokens:
+                    provenance_key = self._provenance_key(token, tenant)
                     await self._redis.sadd(provenance_key, key)
                     await self._redis.expire(provenance_key, _PROVENANCE_TTL)
                 log.info("query_cache.set", key=key[-12:], tenant=tenant)
@@ -218,8 +221,8 @@ class QueryCache:
             return key
 
         self._remember(key, payload)
-        for entity in entities_used or []:
-            self._index_provenance(key, (tenant, entity.casefold()))
+        for token in tokens:
+            self._index_provenance(key, (tenant, token.casefold()))
         return key
 
     async def invalidate_for_entities(
@@ -228,11 +231,27 @@ class QueryCache:
         tenant: str = "default",
     ) -> int:
         """Eagerly evict affected keys; corpus revision remains the hard guard."""
+        return await self.invalidate_for(tenant, entity_names=entity_names)
+
+    async def invalidate_for(
+        self,
+        tenant: str,
+        *,
+        entity_names: list[str] | None = None,
+        chunk_ids: list[str] | None = None,
+        raise_errors: bool = False,
+    ) -> int:
+        """Evict every cached answer that cited any of these entities or chunks.
+
+        Targeted invalidation (docs/invalidation.md): answers that cited none of
+        them stay cached.
+        """
+        tokens = _provenance_tokens(entity_names, chunk_ids)
         keys_to_delete: set[str] = set()
         if self._redis is not None:
             try:
-                for entity in entity_names:
-                    provenance_key = self._provenance_key(entity, tenant)
+                for token in tokens:
+                    provenance_key = self._provenance_key(token, tenant)
                     keys_to_delete.update(await self._redis.smembers(provenance_key))
                     await self._redis.delete(provenance_key)
                 if keys_to_delete:
@@ -240,10 +259,12 @@ class QueryCache:
                 return len(keys_to_delete)
             except Exception as exc:
                 log.warning("query_cache.invalidate_error", error=str(exc), tenant=tenant)
+                if raise_errors:
+                    raise
                 return 0
 
-        for entity in entity_names:
-            index_key = (tenant, entity.casefold())
+        for token in tokens:
+            index_key = (tenant, token.casefold())
             for key in self._prov_index.get(index_key, set()):
                 keys_to_delete.add(key)
         for key in keys_to_delete:
@@ -266,6 +287,15 @@ class QueryCache:
         for key in keys:
             self._forget(key)
         return len(keys)
+
+    @property
+    def shared(self) -> bool:
+        """True when every replica and worker reads the same cache (Redis).
+
+        Targeted eviction is only sound then: an in-process cache in another
+        process cannot be reached, so callers must fall back to a revision bump.
+        """
+        return self._redis is not None
 
     async def stats(self) -> dict[str, Any]:
         if self._redis is not None:
@@ -347,6 +377,12 @@ class QueryCache:
         raw = f"{tenant}\0{entity_name.casefold()}"
         digest = hashlib.sha256(raw.encode("utf-8")).hexdigest()
         return f"graphrag:answer-cache-provenance:v2:{digest}"
+
+
+def _provenance_tokens(entity_names: list[str] | None, chunk_ids: list[str] | None) -> list[str]:
+    """Index tokens: entity names as before (manual /kg/cache/invalidate stays
+    compatible), chunk ids in a namespace no entity name can collide with."""
+    return [*(entity_names or []), *(f"\0chunk\0{c}" for c in chunk_ids or [])]
 
 
 @lru_cache(maxsize=1)

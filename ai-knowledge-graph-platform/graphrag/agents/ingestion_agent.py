@@ -40,6 +40,7 @@ class IngestionAgent(BaseGraphRAGAgent):
         self._lineage = LineageService(self._writer.neo4j_client)
         # None when ingestion.publication_gate_enabled is false (legacy path).
         self._publication_gate = PublicationGate.from_settings(self._writer.neo4j_client)
+        self._emit_invalidations = True
         super().__init__("ingestion_agent")
 
     def _model(self) -> str:
@@ -397,6 +398,25 @@ class IngestionAgent(BaseGraphRAGAgent):
                 await gate.quarantine(late, doc=doc, document_id=doc.id, manifest=manifest,
                                       schema_version=staged.schema_version if staged else None)
                 quarantined += len(late)
+
+            # Targeted invalidation of what was derived from the replaced or
+            # superseded evidence (decisions, snapshots, inferred edges). The
+            # ingestion bracket still bumps the tenant revision: new facts can
+            # change answers that cited nothing related.
+            if getattr(self, "_emit_invalidations", False):
+                from graphrag.graph.invalidation import EventKind, InvalidationEvent, emit
+                if doc.supersedes:
+                    await emit(InvalidationEvent(
+                        tenant=doc.tenant, kind=EventKind.SUPERSEDED, additive=True,
+                        reason=f"superseded by {doc.filename}", actor="ingestion",
+                        cause=f"supersede:{doc.id}", document_ids=list(doc.supersedes),
+                    ), self._writer.neo4j_client)
+                if is_reingest:
+                    await emit(InvalidationEvent(
+                        tenant=doc.tenant, kind=EventKind.DOCUMENT_REINGESTED, additive=True,
+                        reason=f"re-ingested {doc.filename}", actor="ingestion",
+                        cause=f"reingest:{doc.id}:{doc.content_hash or job_id}", document_ids=[doc.id],
+                    ), self._writer.neo4j_client)
 
             maintenance_report = await self._writer.validate_and_check_cycles(
                 doc_id=doc.id,

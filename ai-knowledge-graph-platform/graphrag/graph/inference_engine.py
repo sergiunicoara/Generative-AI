@@ -40,7 +40,9 @@ list of dicts:
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+import hashlib
+import json
+from dataclasses import asdict, dataclass
 
 import structlog
 
@@ -234,125 +236,88 @@ class ForwardChainingEngine:
         A -[rel]-> B, B -[rel]-> C  =>  A -[rel]-> C
 
         Uses Cypher path matching up to max_depth hops. Only creates edges
-        that don't already exist (asserted or inferred).
+        that don't already exist (asserted or inferred). Retracted, expired or
+        quarantined premises never support a derivation.
         """
-        rel = rule.relation
-        depth = rule.max_depth
-        decay = rule.confidence_decay
-        # Tenant must be enforced on every node and edge along the path,
-        # not only on the endpoints — otherwise a 2-hop path can traverse
-        # an intermediate entity from a different tenant.
-        path_tenant_filter = (
-            "AND ALL(n IN nodes(path) WHERE n.tenant = $tenant) "
-            "AND ALL(r IN relationships(path) WHERE r.tenant = $tenant)"
-        )
-
         rows = await self._neo4j.run(
-            f"""
-            MATCH path = (a:Entity)-[:RELATES_TO*2..{depth} {{relation: $rel}}]->(c:Entity)
-            WHERE NOT (a)-[:RELATES_TO {{relation: $rel}}]->(c)
-              AND a <> c
-              {path_tenant_filter}
-            WITH a, c,
-                 length(path) AS hops,
-                 reduce(conf = 1.0, r IN relationships(path) |
-                     conf * coalesce(r.confidence, 1.0)) AS path_conf
-            RETURN a.name AS src, a.type AS src_type,
-                   c.name AS tgt, c.type AS tgt_type,
-                   hops,
-                   path_conf * $decay AS inferred_conf
-            LIMIT 500
-            """,
-            rel=rel,
-            decay=decay,
-            tenant=tenant,
+            self._transitivity_query(rule) + " LIMIT 500",
+            rel=rule.relation, decay=rule.confidence_decay, tenant=tenant,
         )
-
         if dry_run:
             return len(rows)
-
         for row in rows:
             await self._write_inferred_edge(
                 src_name=row["src"],  src_type=row["src_type"],
                 tgt_name=row["tgt"],  tgt_type=row["tgt_type"],
-                relation=rel,
-                confidence=float(row.get("inferred_conf") or decay),
+                relation=rule.relation,
+                confidence=float(row.get("inferred_conf") or rule.confidence_decay),
                 rule_name=rule.name,
                 tenant=tenant,
+                premises=row.get("premises") or [],
+                rule_version=rule_version(rule),
             )
         return len(rows)
+
+    def _transitivity_query(self, rule: InferenceRule, *, pinned: bool = False) -> str:
+        # Tenant must be enforced on every node and edge along the path,
+        # not only on the endpoints — otherwise a 2-hop path can traverse
+        # an intermediate entity from a different tenant.
+        pin = ("AND a.name = $src_name AND a.type = $src_type "
+               "AND c.name = $tgt_name AND c.type = $tgt_type ") if pinned else \
+              "AND NOT (a)-[:RELATES_TO {relation: $rel}]->(c) "
+        return f"""
+            MATCH path = (a:Entity)-[:RELATES_TO*2..{rule.max_depth} {{relation: $rel}}]->(c:Entity)
+            WHERE a <> c
+              {pin}
+              AND ALL(n IN nodes(path) WHERE n.tenant = $tenant AND {_NODE_OK.format(v='n')})
+              AND ALL(r IN relationships(path) WHERE r.tenant = $tenant AND {_EDGE_OK.format(v='r')})
+            WITH a, c, path,
+                 reduce(conf = 1.0, r IN relationships(path) |
+                     conf * coalesce(r.confidence, 1.0)) AS path_conf
+            RETURN a.name AS src, a.type AS src_type,
+                   c.name AS tgt, c.type AS tgt_type,
+                   length(path) AS hops,
+                   path_conf * $decay AS inferred_conf,
+                   [i IN range(0, length(path) - 1) |
+                       nodes(path)[i].type + ':' + nodes(path)[i].name + '|' + $rel + '|' +
+                       nodes(path)[i + 1].type + ':' + nodes(path)[i + 1].name] AS premises
+        """
 
     async def _apply_symmetry(
         self, rule: InferenceRule, tenant: str, dry_run: bool
     ) -> int:
         """A -[rel]-> B  =>  B -[rel]-> A"""
-        rel = rule.relation
-        derived = rule.derived_relation or rel
-        tenant_filter = (
-            "AND a.tenant = $tenant "
-            "AND b.tenant = $tenant "
-            "AND r.tenant = $tenant"
-        )
-
-        rows = await self._neo4j.run(
-            f"""
-            MATCH (a:Entity)-[r:RELATES_TO {{relation: $rel}}]->(b:Entity)
-            WHERE NOT (b)-[:RELATES_TO {{relation: $derived}}]->(a)
-              {tenant_filter}
-            RETURN a.name AS src, a.type AS src_type,
-                   b.name AS tgt, b.type AS tgt_type,
-                   coalesce(r.confidence, 1.0) AS conf
-            LIMIT 500
-            """,
-            rel=rel,
-            derived=derived,
-            tenant=tenant,
-        )
-
-        if dry_run:
-            return len(rows)
-
-        for row in rows:
-            await self._write_inferred_edge(
-                src_name=row["tgt"],  src_type=row["tgt_type"],
-                tgt_name=row["src"],  tgt_type=row["src_type"],
-                relation=derived,
-                confidence=float(row.get("conf") or 1.0) * rule.confidence_decay,
-                rule_name=rule.name,
-                tenant=tenant,
-            )
-        return len(rows)
+        return await self._apply_flip(rule, tenant, dry_run)
 
     async def _apply_inverse(
         self, rule: InferenceRule, tenant: str, dry_run: bool
     ) -> int:
         """A -[rel]-> B  =>  B -[derived_rel]-> A"""
-        rel = rule.relation
-        derived = rule.derived_relation or rel
-        tenant_filter = (
-            "AND a.tenant = $tenant "
-            "AND b.tenant = $tenant "
-            "AND r.tenant = $tenant"
-        )
+        return await self._apply_flip(rule, tenant, dry_run)
 
-        rows = await self._neo4j.run(
-            f"""
+    def _flip_query(self, *, pinned: bool = False) -> str:
+        pin = ("AND b.name = $src_name AND b.type = $src_type "
+               "AND a.name = $tgt_name AND a.type = $tgt_type ") if pinned else \
+              "AND NOT (b)-[:RELATES_TO {relation: $derived}]->(a) "
+        return f"""
             MATCH (a:Entity)-[r:RELATES_TO {{relation: $rel}}]->(b:Entity)
-            WHERE NOT (b)-[:RELATES_TO {{relation: $derived}}]->(a)
-              {tenant_filter}
+            WHERE a.tenant = $tenant AND b.tenant = $tenant AND r.tenant = $tenant
+              {pin}
+              AND {_EDGE_OK.format(v='r')} AND {_NODE_OK.format(v='a')} AND {_NODE_OK.format(v='b')}
             RETURN a.name AS src, a.type AS src_type,
                    b.name AS tgt, b.type AS tgt_type,
-                   coalesce(r.confidence, 1.0) AS conf
-            LIMIT 500
-            """,
-            rel=rel,
-            derived=derived,
-            tenant=tenant,
-        )
+                   coalesce(r.confidence, 1.0) AS conf,
+                   [a.type + ':' + a.name + '|' + $rel + '|' + b.type + ':' + b.name] AS premises
+        """
 
+    async def _apply_flip(self, rule: InferenceRule, tenant: str, dry_run: bool) -> int:
+        derived = rule.derived_relation or rule.relation
+        rows = await self._neo4j.run(
+            self._flip_query() + " LIMIT 500",
+            rel=rule.relation, derived=derived, tenant=tenant,
+        )
         if dry_run:
             return len(rows)
-
         for row in rows:
             await self._write_inferred_edge(
                 src_name=row["tgt"],  src_type=row["tgt_type"],
@@ -361,8 +326,33 @@ class ForwardChainingEngine:
                 confidence=float(row.get("conf") or 1.0) * rule.confidence_decay,
                 rule_name=rule.name,
                 tenant=tenant,
+                premises=row.get("premises") or [],
+                rule_version=rule_version(rule),
             )
         return len(rows)
+
+    def _composition_query(self, *, pinned: bool = False) -> str:
+        # All three entities AND both edges must belong to the same tenant.
+        # Missing b.tenant would let the inference cross tenant boundaries via
+        # a shared intermediate entity name.
+        pin = ("AND a.name = $src_name AND a.type = $src_type "
+               "AND c.name = $tgt_name AND c.type = $tgt_type ") if pinned else \
+              "AND NOT (a)-[:RELATES_TO {relation: $derived}]->(c) "
+        return f"""
+            MATCH (a:Entity)-[r1:RELATES_TO {{relation: $rel1}}]->(b:Entity)
+                  -[r2:RELATES_TO {{relation: $rel2}}]->(c:Entity)
+            WHERE a <> c
+              {pin}
+              AND a.tenant = $tenant AND b.tenant = $tenant AND c.tenant = $tenant
+              AND r1.tenant = $tenant AND r2.tenant = $tenant
+              AND {_EDGE_OK.format(v='r1')} AND {_EDGE_OK.format(v='r2')}
+              AND {_NODE_OK.format(v='a')} AND {_NODE_OK.format(v='b')} AND {_NODE_OK.format(v='c')}
+            RETURN a.name AS src, a.type AS src_type,
+                   c.name AS tgt, c.type AS tgt_type,
+                   coalesce(r1.confidence, 1.0) * coalesce(r2.confidence, 1.0) AS conf,
+                   [a.type + ':' + a.name + '|' + $rel1 + '|' + b.type + ':' + b.name,
+                    b.type + ':' + b.name + '|' + $rel2 + '|' + c.type + ':' + c.name] AS premises
+        """
 
     async def _apply_composition(
         self, rule: InferenceRule, tenant: str, dry_run: bool
@@ -370,43 +360,15 @@ class ForwardChainingEngine:
         """
         A -[rel]-> B, B -[body_rel_2]-> C  =>  A -[derived_rel]-> C
         """
-        rel1    = rule.relation
-        rel2    = rule.body_relation_2
-        derived = rule.derived_relation or rel1
-        if not rel2:
+        if not rule.body_relation_2:
             return 0
-        # All three entities AND both edges must belong to the same tenant.
-        # Missing b.tenant would let the inference cross tenant boundaries via
-        # a shared intermediate entity name.
-        tenant_filter = (
-            "AND a.tenant = $tenant "
-            "AND b.tenant = $tenant "
-            "AND c.tenant = $tenant "
-            "AND r1.tenant = $tenant "
-            "AND r2.tenant = $tenant"
-        )
-
+        derived = rule.derived_relation or rule.relation
         rows = await self._neo4j.run(
-            f"""
-            MATCH (a:Entity)-[r1:RELATES_TO {{relation: $rel1}}]->(b:Entity)
-                  -[r2:RELATES_TO {{relation: $rel2}}]->(c:Entity)
-            WHERE NOT (a)-[:RELATES_TO {{relation: $derived}}]->(c)
-              AND a <> c
-              {tenant_filter}
-            RETURN a.name AS src, a.type AS src_type,
-                   c.name AS tgt, c.type AS tgt_type,
-                   coalesce(r1.confidence, 1.0) * coalesce(r2.confidence, 1.0) AS conf
-            LIMIT 500
-            """,
-            rel1=rel1,
-            rel2=rel2,
-            derived=derived,
-            tenant=tenant,
+            self._composition_query() + " LIMIT 500",
+            rel1=rule.relation, rel2=rule.body_relation_2, derived=derived, tenant=tenant,
         )
-
         if dry_run:
             return len(rows)
-
         for row in rows:
             await self._write_inferred_edge(
                 src_name=row["src"],  src_type=row["src_type"],
@@ -415,8 +377,54 @@ class ForwardChainingEngine:
                 confidence=float(row.get("conf") or 1.0) * rule.confidence_decay,
                 rule_name=rule.name,
                 tenant=tenant,
+                premises=row.get("premises") or [],
+                rule_version=rule_version(rule),
             )
         return len(rows)
+
+    def rule_named(self, name: str) -> InferenceRule | None:
+        return next((r for r in self._rules if r.name == name), None)
+
+    async def derivation_for(
+        self, rule_name: str, *, src_name: str, src_type: str,
+        tgt_name: str, tgt_type: str, tenant: str,
+    ) -> dict | None:
+        """Re-derive ONE inferred edge from currently valid premises.
+
+        Returns ``{"premises": [...], "confidence": float}`` for the first valid
+        derivation, or ``None`` when the rule no longer supports the edge (used
+        by targeted recomputation, graphrag/graph/invalidation).
+        """
+        require_tenant(tenant)
+        rule = self.rule_named(rule_name)
+        if rule is None:
+            return None
+        pins = {"src_name": src_name, "src_type": src_type, "tgt_name": tgt_name,
+                "tgt_type": tgt_type, "tenant": tenant}
+        if rule.rule_type == "transitivity":
+            rows = await self._neo4j.run(
+                self._transitivity_query(rule, pinned=True) + " LIMIT 1",
+                rel=rule.relation, decay=rule.confidence_decay, **pins)
+            conf_key = "inferred_conf"
+            factor = 1.0
+        elif rule.rule_type in ("symmetry", "inverse"):
+            rows = await self._neo4j.run(
+                self._flip_query(pinned=True) + " LIMIT 1",
+                rel=rule.relation, derived=rule.derived_relation or rule.relation, **pins)
+            conf_key, factor = "conf", rule.confidence_decay
+        elif rule.rule_type == "composition" and rule.body_relation_2:
+            rows = await self._neo4j.run(
+                self._composition_query(pinned=True) + " LIMIT 1",
+                rel1=rule.relation, rel2=rule.body_relation_2,
+                derived=rule.derived_relation or rule.relation, **pins)
+            conf_key, factor = "conf", rule.confidence_decay
+        else:
+            return None
+        if not rows:
+            return None
+        row = rows[0]
+        return {"premises": list(row.get("premises") or []),
+                "confidence": min(1.0, max(0.0, float(row.get(conf_key) or 0.0) * factor))}
 
     async def _write_inferred_edge(
         self,
@@ -428,8 +436,15 @@ class ForwardChainingEngine:
         confidence: float,
         rule_name: str,
         tenant: str,
+        premises: list[str] | None = None,
+        rule_version: str = "",
     ) -> None:
-        """Write a derived RELATES_TO edge with source_type=inferred."""
+        """Write a derived RELATES_TO edge with source_type=inferred.
+
+        ``premise_keys`` (``Type:Name|REL|Type:Name``) and ``rule_version`` make
+        the derivation explicit, so a change to any premise can invalidate
+        exactly the edges it supports (docs/invalidation.md).
+        """
         await self._neo4j.run(
             """
             MATCH (s:Entity {name: $src_name, type: $src_type, tenant: $tenant})
@@ -447,6 +462,8 @@ class ForwardChainingEngine:
             WHERE r.source_type = 'inferred'
             SET r.confidence  = $confidence,
                 r.inferred_by = $rule,
+                r.rule_version = $rule_version,
+                r.premise_keys = $premises,
                 r.confidence_state = 'INFERRED'
             """,
             src_name=src_name,
@@ -457,4 +474,24 @@ class ForwardChainingEngine:
             confidence=min(1.0, max(0.0, confidence)),
             rule=rule_name,
             tenant=tenant,
+            premises=sorted(set(premises or [])),
+            rule_version=rule_version,
         )
+
+
+# A premise edge supports a derivation only while it is not retracted and not
+# expired; a premise entity only while it is not quarantined.
+_EDGE_OK = ("coalesce({v}.confidence_state, 'ASSERTED') <> 'RETRACTED' "
+            "AND ({v}.valid_to IS NULL OR {v}.valid_to > datetime())")
+_NODE_OK = "coalesce({v}.quarantined, false) = false"
+
+
+def relation_key(src_type: str, src_name: str, relation: str, tgt_type: str, tgt_name: str) -> str:
+    """Stable key of one RELATES_TO edge, as stored in ``premise_keys``."""
+    return f"{src_type}:{src_name}|{relation}|{tgt_type}:{tgt_name}"
+
+
+def rule_version(rule: InferenceRule) -> str:
+    """Content hash of a rule definition; changes whenever the rule's logic does."""
+    payload = json.dumps(asdict(rule), sort_keys=True, default=str)
+    return hashlib.sha256(payload.encode("utf-8")).hexdigest()[:16]

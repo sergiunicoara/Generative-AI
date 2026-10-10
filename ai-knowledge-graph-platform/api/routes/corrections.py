@@ -18,6 +18,8 @@ POST /corrections/quarantine/records/{id}/retry   Re-validate (corrected) record
 
 from __future__ import annotations
 
+from uuid import uuid4
+
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
@@ -28,6 +30,7 @@ from graphrag.graph.quarantine import QuarantineService
 from graphrag.graph.contradiction_detector import ContradictionDetector
 from graphrag.graph.corpus_revision import CorpusMutation
 from graphrag.graph.validation import PublicationGate
+from graphrag.graph.invalidation import EntityRef, EventKind, InvalidationEvent, RelationRef, emit
 
 router = APIRouter()
 
@@ -113,6 +116,13 @@ async def split_entity(request: EntitySplitRequest, tenant: str = Depends(get_te
             tenant=tenant,
             split_by=request.reviewed_by,
         )
+        if "error" not in result:
+            result["invalidation"] = await emit(InvalidationEvent(
+                tenant=tenant, kind=EventKind.ER_REVISED, additive=True, reason="entity split",
+                actor=request.reviewed_by, cause=f"split:{uuid4()}",
+                entities=[EntityRef(name=request.entity_name, type=request.entity_type)],
+                document_ids=[*request.doc_group_a, *request.doc_group_b],
+            ), neo4j)
     if "error" in result:
         raise HTTPException(status_code=404, detail=result["error"])
     result["corpus_revision"] = mutation.revision
@@ -137,9 +147,16 @@ async def quarantine_entity(request: QuarantineRequest, tenant: str = Depends(ge
                 depth=request.propagate_depth,
                 tenant=tenant,
             )
+            await emit(InvalidationEvent(
+                tenant=tenant, kind=EventKind.FACT_CORRECTED, additive=True,
+                reason=f"subgraph quarantine: {request.reason}", actor=request.flagged_by,
+                cause=f"quarantine-subgraph:{uuid4()}",
+                entities=[EntityRef(name=request.entity_name, type=request.entity_type)],
+            ), neo4j)
         return {"quarantined_count": count, "mode": "subgraph", "corpus_revision": mutation.revision}
     else:
-        async with CorpusMutation(neo4j, tenant, "manual_quarantine") as mutation:
+        # Removing one entity only affects what was built on it: targeted invalidation.
+        async with CorpusMutation(neo4j, tenant, "manual_quarantine", advance_revision=False) as mutation:
             await svc.quarantine_entity(
                 entity_name=request.entity_name,
                 entity_type=request.entity_type,
@@ -147,7 +164,13 @@ async def quarantine_entity(request: QuarantineRequest, tenant: str = Depends(ge
                 flagged_by=request.flagged_by,
                 tenant=tenant,
             )
-        return {"quarantined_count": 1, "mode": "single", "corpus_revision": mutation.revision}
+            invalidation = await emit(InvalidationEvent(
+                tenant=tenant, kind=EventKind.FACT_CORRECTED, reason=f"quarantine: {request.reason}",
+                actor=request.flagged_by, cause=f"quarantine:{uuid4()}",
+                entities=[EntityRef(name=request.entity_name, type=request.entity_type)],
+            ), neo4j)
+        return {"quarantined_count": 1, "mode": "single", "corpus_revision": mutation.revision,
+                "invalidation": invalidation}
 
 
 @router.post(
@@ -166,6 +189,11 @@ async def release_entity(request: ReleaseRequest, tenant: str = Depends(get_tena
             note=request.note,
             tenant=tenant,
         )
+        await emit(InvalidationEvent(
+            tenant=tenant, kind=EventKind.FACT_CORRECTED, additive=True, reason="quarantine released",
+            actor=request.released_by, cause=f"release:{uuid4()}",
+            entities=[EntityRef(name=request.entity_name, type=request.entity_type)],
+        ), neo4j)
     return {"status": "released", "entity": request.entity_name, "corpus_revision": mutation.revision}
 
 
@@ -181,23 +209,35 @@ async def reject_edge(request: EdgeRejectRequest, tenant: str = Depends(get_tena
     Deletes the specified edge and logs the deletion to AuditTrail.
     """
     neo4j = get_neo4j()
-    async with CorpusMutation(neo4j, tenant, "manual_edge_reject") as mutation:
+    # Deleting an edge only affects what was built on it: targeted invalidation.
+    async with CorpusMutation(neo4j, tenant, "manual_edge_reject", advance_revision=False) as mutation:
         rows = await neo4j.run(
             """
             MATCH (s:Entity {name: $src, tenant: $tenant})-[r:RELATES_TO {relation: $rel, tenant: $tenant}]->(t:Entity {name: $tgt, tenant: $tenant})
             WITH r, s, t,
-                 r.confidence AS old_conf, r.source_doc_id AS old_doc
+                 r.confidence AS old_conf, r.source_doc_id AS old_doc,
+                 s.type AS src_type, t.type AS tgt_type
             DELETE r
             RETURN count(r) AS deleted,
                    old_conf AS confidence,
-                   old_doc  AS source_doc_id
+                   old_doc  AS source_doc_id,
+                   collect(DISTINCT {src_type: src_type, tgt_type: tgt_type}) AS endpoint_types
             """,
             src=request.src_entity,
             tgt=request.tgt_entity,
             rel=request.relation,
             tenant=tenant,
         )
-    deleted = rows[0]["deleted"] if rows else 0
+        removed = [ep for row in rows for ep in row.get("endpoint_types") or []]
+        if removed:
+            await emit(InvalidationEvent(
+                tenant=tenant, kind=EventKind.RELATION_CHANGED, reason="edge rejected",
+                actor=request.rejected_by, cause=f"edge-reject:{uuid4()}",
+                relations=[RelationRef(src_name=request.src_entity, src_type=ep["src_type"],
+                                       relation=request.relation, tgt_name=request.tgt_entity,
+                                       tgt_type=ep["tgt_type"]) for ep in removed],
+            ), neo4j)
+    deleted = sum(r["deleted"] for r in rows) if rows else 0
     if not deleted:
         raise HTTPException(
             status_code=404,
@@ -232,7 +272,7 @@ async def override_edge(request: EdgeOverrideRequest, tenant: str = Depends(get_
     from datetime import datetime, timezone
     neo4j = get_neo4j()
     async with CorpusMutation(neo4j, tenant, "manual_edge_override") as mutation:
-        await neo4j.run(
+        overridden = await neo4j.run(
             """
             MATCH (s:Entity {name: $src, tenant: $tenant})
             MATCH (t:Entity {name: $tgt, tenant: $tenant})
@@ -242,6 +282,7 @@ async def override_edge(request: EdgeOverrideRequest, tenant: str = Depends(get_
                 r.override_by  = $override_by,
                 r.override_note = $note,
                 r.extracted_at = $now
+            RETURN s.type AS src_type, t.type AS tgt_type
             """,
             src=request.src_entity,
             tgt=request.tgt_entity,
@@ -252,6 +293,14 @@ async def override_edge(request: EdgeOverrideRequest, tenant: str = Depends(get_
             now=datetime.now(timezone.utc).isoformat(),
             tenant=tenant,
         )
+        if overridden:
+            await emit(InvalidationEvent(
+                tenant=tenant, kind=EventKind.RELATION_CHANGED, additive=True, reason="manual override",
+                actor=request.override_by, cause=f"edge-override:{uuid4()}",
+                relations=[RelationRef(src_name=request.src_entity, src_type=row["src_type"],
+                                       relation=request.relation, tgt_name=request.tgt_entity,
+                                       tgt_type=row["tgt_type"]) for row in overridden],
+            ), neo4j)
     return {
         "status": "override_applied",
         "edge": f"({request.src_entity})-[{request.relation}]->({request.tgt_entity})",
@@ -373,3 +422,41 @@ async def retry_quarantine_record(
         raise HTTPException(status_code=404, detail="quarantined record not found")
     except ValueError as exc:
         raise HTTPException(status_code=409, detail=str(exc))
+
+
+# ── Targeted invalidation (docs/invalidation.md) ─────────────────────────────
+
+@router.get(
+    "/invalidation/artifacts",
+    dependencies=[Depends(require_scope("read"))],
+    summary="Derived artifacts by invalidation state (NEEDS_REVIEW, RECOMPUTING, ...)",
+)
+async def list_invalidated_artifacts(
+    state: str | None = "NEEDS_REVIEW", kind: str | None = None, limit: int = 100,
+    tenant: str = Depends(get_tenant),
+):
+    from graphrag.graph.invalidation.state_store import StateStore
+    return await StateStore(get_neo4j()).list(tenant, state=state, kind=kind, limit=limit)
+
+
+@router.get(
+    "/invalidation/artifacts/{kind}/{artifact_id:path}",
+    dependencies=[Depends(require_scope("read"))],
+    summary="One artifact's state and the invalidation events that explain it",
+)
+async def get_invalidated_artifact(kind: str, artifact_id: str, tenant: str = Depends(get_tenant)):
+    from graphrag.graph.invalidation.state_store import StateStore
+    row = await StateStore(get_neo4j()).get(tenant, kind, artifact_id)
+    if row is None:
+        raise HTTPException(status_code=404, detail="no invalidation state for this artifact")
+    return row
+
+
+@router.post(
+    "/invalidation/recompute",
+    dependencies=[Depends(require_scope("write"))],
+    summary="Recompute artifacts waiting in NEEDS_REVIEW (bounded batch)",
+)
+async def recompute_invalidated(limit: int = 50, tenant: str = Depends(get_tenant)):
+    from graphrag.graph.invalidation.recompute import RecomputeWorker
+    return await RecomputeWorker(get_neo4j()).run_once(tenant, limit=max(1, min(limit, 500)))

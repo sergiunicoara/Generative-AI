@@ -1,0 +1,148 @@
+{
+  "generated_at": "2026-10-10T05:08:51.414147+00:00",
+  "router": "graphrag/retrieval/query_router.py (deterministic, no LLM)",
+  "offline": {
+    "cases": 49,
+    "route_accuracy": {
+      "router": 0.8367,
+      "legacy_planner_baseline": 0.4082
+    },
+    "per_category": {
+      "AGGREGATION": {
+        "n": 6,
+        "router_correct": 6,
+        "baseline_correct": 0,
+        "router_accuracy": 1.0,
+        "baseline_accuracy": 0.0
+      },
+      "AMBIGUOUS": {
+        "n": 5,
+        "router_correct": 4,
+        "baseline_correct": 0,
+        "router_accuracy": 0.8,
+        "baseline_accuracy": 0.0
+      },
+      "ENTITY_LOOKUP": {
+        "n": 6,
+        "router_correct": 5,
+        "baseline_correct": 0,
+        "router_accuracy": 0.8333,
+        "baseline_accuracy": 0.0
+      },
+      "FACTUAL_LOOKUP": {
+        "n": 10,
+        "router_correct": 9,
+        "baseline_correct": 10,
+        "router_accuracy": 0.9,
+        "baseline_accuracy": 1.0
+      },
+      "MULTI_HOP": {
+        "n": 6,
+        "router_correct": 5,
+        "baseline_correct": 5,
+        "router_accuracy": 0.8333,
+        "baseline_accuracy": 0.8333
+      },
+      "RELATIONAL": {
+        "n": 9,
+        "router_correct": 5,
+        "baseline_correct": 5,
+        "router_accuracy": 0.5556,
+        "baseline_accuracy": 0.5556
+      },
+      "TEMPORAL": {
+        "n": 7,
+        "router_correct": 7,
+        "baseline_correct": 0,
+        "router_accuracy": 1.0,
+        "baseline_accuracy": 0.0
+      }
+    },
+    "confusion": {
+      "AGGREGATION": {
+        "AGGREGATION": 6
+      },
+      "AMBIGUOUS": {
+        "AMBIGUOUS": 4,
+        "FACTUAL_LOOKUP": 1
+      },
+      "ENTITY_LOOKUP": {
+        "ENTITY_LOOKUP": 5,
+        "AMBIGUOUS": 1
+      },
+      "FACTUAL_LOOKUP": {
+        "FACTUAL_LOOKUP": 9,
+        "TEMPORAL": 1
+      },
+      "MULTI_HOP": {
+        "MULTI_HOP": 5,
+        "FACTUAL_LOOKUP": 1
+      },
+      "RELATIONAL": {
+        "ENTITY_LOOKUP": 1,
+        "RELATIONAL": 5,
+        "FACTUAL_LOOKUP": 3
+      },
+      "TEMPORAL": {
+        "TEMPORAL": 7
+      }
+    },
+    "misses": [
+      {
+        "id": "F02",
+        "expected": "FACTUAL_LOOKUP",
+        "router": "TEMPORAL",
+        "baseline": "FACTUAL_LOOKUP"
+      },
+      {
+        "id": "E02",
+        "expected": "ENTITY_LOOKUP",
+        "router": "AMBIGUOUS",
+        "baseline": "FACTUAL_LOOKUP"
+      },
+      {
+        "id": "E06",
+        "expected": "RELATIONAL",
+        "router": "ENTITY_LOOKUP",
+        "baseline": "FACTUAL_LOOKUP"
+      },
+      {
+        "id": "R05",
+        "expected": "RELATIONAL",
+        "router": "FACTUAL_LOOKUP",
+        "baseline": "FACTUAL_LOOKUP"
+      },
+      {
+        "id": "R06",
+        "expected": "RELATIONAL",
+        "router": "FACTUAL_LOOKUP",
+        "baseline": "FACTUAL_LOOKUP"
+      },
+      {
+        "id": "M05",
+        "expected": "MULTI_HOP",
+        "router": "FACTUAL_LOOKUP",
+        "baseline": "FACTUAL_LOOKUP"
+      },
+      {
+        "id": "X04",
+        "expected": "AMBIGUOUS",
+        "router": "FACTUAL_LOOKUP",
+        "baseline": "FACTUAL_LOOKUP"
+      },
+      {
+        "id": "C01",
+        "expected": "RELATIONAL",
+        "router": "FACTUAL_LOOKUP",
+        "baseline": "FACTUAL_LOOKUP"
+      }
+    ],
+    "notes": "The legacy planner has no ENTITY_LOOKUP / AGGREGATION / TEMPORAL / AMBIGUOUS classes, so its accuracy on those categories is 0 by construction; compare per_category for the shared classes."
+  },
+  "live": null,
+  "not_measured": {
+    "context_precision_recall": "needs RAGAS judge + live stack",
+    "faithfulness": "needs RAGAS judge + live stack",
+    "latency_p50_p95_fallback_rate_tokens": "run with --live against the running stack"
+  }
+}

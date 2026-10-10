@@ -456,6 +456,10 @@ class QueryResult(BaseModel):
     transaction_at: str | None = None
     correlation_id: str = ""
     routing_reason: str = ""
+    # Deterministic route (FACTUAL_LOOKUP, ENTITY_LOOKUP, RELATIONAL, MULTI_HOP,
+    # AGGREGATION, TEMPORAL, AMBIGUOUS) and the rule that chose it.
+    route: str = ""
+    route_reason: str = ""
     policy_result: str = ""
     policy_reason_code: str = ""
     retrieval_sufficiency: dict[str, Any] = Field(default_factory=dict)

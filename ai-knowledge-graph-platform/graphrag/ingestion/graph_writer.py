@@ -54,6 +54,22 @@ from graphrag.enterprise.access import normalise_policy
 log = structlog.get_logger(__name__)
 
 
+try:
+    from prometheus_client import Counter as _Counter
+except ImportError:  # pragma: no cover
+    _Counter = None
+_er_ambiguous = _Counter(
+    "graphrag_entity_resolution_ambiguous_total",
+    "Entity mentions whose resolution was ambiguous and queued for review",
+    ["match_type"],
+) if _Counter else None
+
+
+def _record_er_ambiguity(match_type: str) -> None:
+    if _er_ambiguous is not None:
+        _er_ambiguous.labels(match_type=str(match_type or "unknown")[:32]).inc()
+
+
 def _schema_label(writer) -> str | None:
     label = getattr(getattr(writer, "_ontology", None), "schema_label", None)
     return label if isinstance(label, str) else None
@@ -135,6 +151,7 @@ class GraphWriter:
         tenant: str,
     ) -> None:
         """Enqueue an ambiguous match for human review — fails open on any error."""
+        _record_er_ambiguity(getattr(match, "match_type", "unknown"))
         try:
             await self._review_queue.enqueue(
                 raw_name=entity.name,

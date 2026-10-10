@@ -146,6 +146,12 @@ retrieval:
   query_rewrite_enabled: true  # Stage-1: strip retrieval-diluting boilerplate + expand/normalize query before first-pass retrieval; search-only, never touches answer/eval. Fails open. A/B measured 2026-07-24 on aerospace golden set (34 Q): rewrite ON and OFF both scored 29/34 (85%) — zero accuracy delta. A later re-run of the OFF arm scored 13/34 with a timeout-dominated failure signature, but that was NOT rewrite-related — root cause was an unrelated DeepSeek model-id deprecation bug (fixed separately, commit 6fe2cc7) coincidentally active during that run. Keep enabled: no accuracy cost, and it reduces load on the agentic fallback path. See tasks/lessons.md A138.
   query_planner_enabled: true
   adaptive_router_enabled: true
+  # Deterministic route taxonomy (docs/query-routing.md). "observe" records the
+  # route on every query and keeps legacy retrieval; "enforce" applies the route
+  # behaviour (lookups skip graph expansion, aggregation uses allowlisted
+  # templates, temporal uses as_of, ambiguous may use the bounded fallback).
+  # Enforce is opt-in until scripts/eval_routing.py --live shows no regression.
+  query_router_policy: observe
   adaptive_router_minimum_samples: 5    # per tenant/query-class/mode before measured routing
   adaptive_router_exploration_rate: 0.05  # deterministic exploration, capped in code at 25%
   adaptive_router_latency_weight: 0.12  # quality remains dominant over log-scaled latency

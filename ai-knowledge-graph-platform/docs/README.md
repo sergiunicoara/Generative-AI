@@ -20,6 +20,7 @@ The specification-to-implementation runner is documented in
 - `schema-registry.md` — versioned schemas, drift detection, schema provenance
 - `invalidation.md` — dependency tracking and targeted invalidation
 - `trust-metadata.md` — trust metadata, validity predicate, score components
+- `query-routing.md` — query router and routing evaluation
 - `entity-resolution.md`, `ontology-model.md`, `ontology-governance.md`,
   `cypher-patterns.md` — focused KG references
 - `enterprise-content-governance.md` — provider-neutral ACL, SharePoint sync,

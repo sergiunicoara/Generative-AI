@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import contextvars
 import hashlib
 import time
 from datetime import datetime, timedelta, timezone
@@ -34,6 +35,8 @@ from graphrag.retrieval.claim_verifier import ClaimVerifier
 from graphrag.retrieval.query_rewriter import QueryRewriter
 from graphrag.retrieval.feedback import RetrievalFeedbackService, apply_feedback_scores
 from graphrag.retrieval.query_planner import retrieval_plan
+from graphrag.retrieval.query_router import Route, enforced_overrides, route_query
+from graphrag.retrieval import routing_metrics
 from graphrag.retrieval.adaptive_router import AdaptiveRetrievalRouter
 from graphrag.retrieval.sufficiency import assess_retrieval_sufficiency, abstention_message
 from graphrag.retrieval.evidence_bundle import build_evidence_bundle
@@ -64,6 +67,11 @@ _PROMPT_VERSION = "hybrid-answer-v3"
 # ``answer_prompt(cfg)`` so domain policy is resolved per tenant.
 _ANSWER_PROMPT = BASE_ANSWER_PROMPT
 
+
+# Set while the agentic fallback runs, so a fallback can never trigger another
+# fallback (bounded, non-recursive; docs/query-routing.md).
+_FALLBACK_ACTIVE: contextvars.ContextVar[bool] = contextvars.ContextVar("graphrag_fallback_active",
+                                                                         default=False)
 
 # Fallback label for tenants/datasets with no registered schema version.
 _ONTOLOGY_VERSION = "platform/v1"
@@ -395,6 +403,42 @@ class HybridRetriever:
             return None
 
 
+    async def _structured_answer(self, question: str, tenant: str, decision, t0: float, *,
+                                 query_id: str | None, correlation_id: str) -> QueryResult | None:
+        """AGGREGATION route: answer from a fixed, allowlisted, read-only template.
+
+        Rows are rendered deterministically (no LLM); every row's source document
+        is cited. Returns None (normal retrieval continues) when the template
+        yields nothing, so an empty structured result is never presented as an answer.
+        """
+        from graphrag.graph.controlled_query import ControlledQueryError, execute_controlled_query
+        try:
+            out = await execute_controlled_query(get_neo4j(), question, tenant=tenant)
+        except ControlledQueryError:
+            return None
+        rows = out.get("rows") or []
+        if not rows:
+            return None
+        lines = []
+        citations: list[str] = []
+        for row in rows:
+            lines.append("- " + ", ".join(f"{k}: {v}" for k, v in row.items()
+                                          if k not in ("source_doc_id",) and v not in (None, "", [])))
+            if row.get("source_doc_id"):
+                citations.append(str(row["source_doc_id"]))
+        answer = f"{out['count']} result(s) for {out['intent']}:\n" + "\n".join(lines)
+        result = QueryResult(
+            question=question, answer=answer, citations=list(dict.fromkeys(citations)),
+            latency_ms=(time.monotonic() - t0) * 1000, retrieval_mode="structured",
+            model_version="none (deterministic template)", correlation_id=correlation_id,
+            routing_reason=f"route:{decision.reason}", route=decision.route.value,
+            route_reason=decision.reason,
+        )
+        if query_id:
+            result.query_id = query_id
+        routing_metrics.record_latency("structured", result.latency_ms / 1000.0)
+        return result
+
     async def retrieve_and_answer(
         self,
         question: str,
@@ -465,6 +509,23 @@ class HybridRetriever:
                 mode = "local"
                 routing_reason = "retrieval_profile"
             plan = retrieval_plan(question)
+            # Deterministic route (docs/query-routing.md). Recorded on every query;
+            # route-specific retrieval is applied only under policy "enforce".
+            route_decision = route_query(question, tenant=tenant, explicit_valid_at=requested_valid_at,
+                                         has_session=bool(session_id))
+            router_policy = str(cfg.get("query_router_policy", "observe")).lower()
+            routing_metrics.record_route(route_decision.route.value, router_policy)
+            log.info("hybrid_retriever.route", route=route_decision.route.value,
+                     reason=route_decision.reason, policy=router_policy,
+                     legacy_class=route_decision.legacy_class)
+            if router_policy == "enforce" and requested_mode == "hybrid":
+                route_overrides = enforced_overrides(route_decision, cfg)
+                cfg = {**cfg, **route_overrides}
+                profile_overrides = {**profile_overrides, **route_overrides}
+                if route_decision.route is Route.TEMPORAL and route_decision.as_of and not requested_valid_at:
+                    # Time-constrained retrieval: judge validity at the asked date.
+                    valid_at = route_decision.as_of
+                    explicit_temporal_query = True
             if mode == "hybrid" and cfg.get("query_planner_enabled", False):
                 # Bug fix 2026-08-17 (found while diagnosing NEG-03, see
                 # docs/audit-2026-08-13.md "What's left"): this block has computed
@@ -511,6 +572,17 @@ class HybridRetriever:
                          top_k=cfg["local_top_k"], fallback=plan["fallback"],
                          routing_reason=routing_reason)
 
+            if (
+                router_policy == "enforce"
+                and route_decision.route is Route.AGGREGATION
+                and route_decision.structured_intent
+                and not acl_enforced
+            ):
+                structured = await self._structured_answer(question, tenant, route_decision, t0,
+                                                           query_id=query_id, correlation_id=correlation_id)
+                if structured is not None:
+                    return structured
+
             from graphrag.retrieval.result_store import get_result_store
             _store = get_result_store() if query_id else None
 
@@ -556,6 +628,8 @@ class HybridRetriever:
                             result.latency_ms = (time.monotonic() - t0) * 1000
                             result.correlation_id = correlation_id
                             result.routing_reason = routing_reason
+                            result.route = route_decision.route.value
+                            result.route_reason = route_decision.reason
                             await _step("Answer cache hit; original governed trace reused")
                             # Genuinely free -- a cache hit makes no LLM call.
                             record_cost_event(CostEvent(
@@ -800,6 +874,15 @@ class HybridRetriever:
                 transaction_at=transaction_at,
             )
             sufficiency_enabled = cfg.get("retrieval_sufficiency_enabled", True)
+            if not sufficiency.sufficient:
+                routing_metrics.record_insufficient(sufficiency.reason_code)
+            stale_chunks = sum(1 for c in local_results.get("chunks", [])
+                               if isinstance(c.get("trust"), dict) and not c["trust"].get("current", True))
+            routing_metrics.record_stale(stale_chunks)
+            routing_metrics.record_expansion(sum(1 for c in local_results.get("chunks", [])
+                                                 if c.get("path_length") or c.get("document_link")))
+            if acl_enforced and not local_results.get("chunks") and not citations:
+                routing_metrics.record_denial()
             if sufficiency_enabled:
                 log.info("hybrid_retriever.retrieval_sufficiency", **sufficiency.as_dict())
                 if not sufficiency.sufficient:
@@ -921,7 +1004,20 @@ class HybridRetriever:
                 and plan["fallback"] == "agentic"
                 and policy_reason_code == "missing_evidence"
             )
-            if agentic_enabled and (low_confidence or planned_missing_evidence):
+            route_fallback = (
+                router_policy == "enforce"
+                and route_decision.route is Route.AMBIGUOUS
+                and (not sufficiency.sufficient or not citations)
+            )
+            if agentic_enabled and _FALLBACK_ACTIVE.get():
+                log.warning("hybrid_retriever.fallback_suppressed", reason="already_in_fallback")
+            if agentic_enabled and not _FALLBACK_ACTIVE.get() and (
+                low_confidence or planned_missing_evidence or route_fallback
+            ):
+                routing_metrics.record_fallback(
+                    "planned_missing_evidence" if planned_missing_evidence
+                    else "ambiguous_route" if route_fallback and not low_confidence
+                    else "low_confidence")
                 log.info(
                     "hybrid_retriever.low_confidence",
                     answer_preview=answer[:80],
@@ -930,19 +1026,25 @@ class HybridRetriever:
                         else "low_confidence"
                     ),
                 )
-                result = await self._agentic.retrieve_and_answer(
-                    question=question,
-                    initial_context=context,
-                    initial_citations=citations,
-                    tenant=tenant,
-                    session_id=session_id,
-                )
+                _fallback_token = _FALLBACK_ACTIVE.set(True)
+                try:
+                    result = await self._agentic.retrieve_and_answer(
+                        question=question,
+                        initial_context=context,
+                        initial_citations=citations,
+                        tenant=tenant,
+                        session_id=session_id,
+                    )
+                finally:
+                    _FALLBACK_ACTIVE.reset(_fallback_token)
                 result.latency_ms += latency_ms
                 result.query_id = query_id or result.query_id
                 result.valid_at = valid_at
                 result.transaction_at = transaction_at
                 result.correlation_id = correlation_id
                 result.routing_reason = routing_reason
+                result.route = route_decision.route.value
+                result.route_reason = route_decision.reason
                 result.policy_result = policy_result.value
                 result.policy_reason_code = policy_reason_code
                 result.retrieval_sufficiency = sufficiency.as_dict()
@@ -1002,6 +1104,7 @@ class HybridRetriever:
                 return result
 
             log.info("hybrid_retriever.done", mode=mode, latency_ms=round(latency_ms, 1))
+            routing_metrics.record_latency(mode, latency_ms / 1000.0)
 
             result = QueryResult(
                 question=question,
@@ -1021,6 +1124,8 @@ class HybridRetriever:
                 transaction_at=transaction_at,
                 correlation_id=correlation_id,
                 routing_reason=routing_reason,
+                route=route_decision.route.value,
+                route_reason=route_decision.reason,
                 policy_result=policy_result.value,
                 policy_reason_code=policy_reason_code,
                 retrieval_sufficiency=sufficiency.as_dict(),

@@ -73,7 +73,7 @@ test-fuzz:     ## Run property/fuzz invariants for protocol, mapping, and tenant
 	$(PYTEST) tests/unit/test_property_invariants.py tests/unit/test_new_surface_invariants.py -q
 
 mutation:      ## Mutate high-risk new adapters; inspect surviving mutants before merge
-	$(PYTHON) -m mutmut run --paths-to-mutate graphrag/retrieval/answer_policy.py,mcp_server/transport_20260728.py,graphrag/ingestion/r2rml.py
+	$(PYTHON) -m mutmut run  # mutmut 3.x; targets come from [tool.mutmut] in pyproject.toml. Not supported on native Windows: use the manual "mutation" workflow (.github/workflows/ai-knowledge-graph-platform-mutation.yml) or WSL
 
 # ── Lint ───────────────────────────────────────────────────────────────────────
 

@@ -122,6 +122,13 @@ CI-run report exists anywhere in the repo.
 **Needs:** a CI run of the mutation campaign and a recorded score.
 
 ### 9. Apply the GKE hardening Terraform
+**Validated 2026-10-11 (not applied).** Terraform 1.16.5 (official binary, SHA256 checked against HashiCorp's
+published sums): `terraform init -backend=false` + `terraform validate` succeed, and `terraform test`
+passes against a mocked `google` provider with new assertions for Dataplane V2
+(`ADVANCED_DATAPATH`), private nodes and Cloud NAT. This proves the configuration is well-formed and
+internally consistent, not that it can be applied to a real project. Still open: a replacement/migration
+plan (datapath and private-cluster settings force cluster replacement), `master_authorized_networks`
+filled in for CI/operator access, and an `apply` with GCP credentials. Original description follows.
 Dataplane V2, private nodes, authorized networks and Cloud NAT were added to
 `infra/terraform/` on 2026-09-25 (audit-2026-09-23 closure pass) but never
 `terraform validate`d or applied. Both the datapath and private-cluster

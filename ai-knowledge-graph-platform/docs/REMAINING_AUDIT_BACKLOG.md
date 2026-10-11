@@ -92,6 +92,15 @@ GitHub repo-settings toggle, not a file in the repo.
 GitHub MCP connector).
 
 ### 8. Complete mutation score
+**Measured 2026-10-11** (mutmut 3.8 on Linux CI, manual workflow
+`ai-knowledge-graph-platform mutation`, run 38115846381) for `graphrag/retrieval/answer_policy.py`,
+`mcp_server/transport_20260728.py` and `graphrag/ingestion/r2rml.py`: **859 mutants, 425 killed
+(49.5%), 5 timed out, 404 survived, 25 with no covering test.** Roughly half of the mutations
+to these adapters are not detected by their tests. The surviving list is in the run's
+`mutation-results.txt` artifact: most survivors are in `r2rml` (94 listed by module prefix),
+the transport's JSON-schema/header helpers (`_json_type`, `_tool_schema`, `_header`) and the
+answer prompt text. Next: strengthen those tests, then rerun the workflow. Not supported on native Windows.
+Original description:
 `make mutation` (opt-in Mutmut campaign) exists, but no measured score or
 CI-run report exists anywhere in the repo.
 **Needs:** a CI run of the mutation campaign and a recorded score.

@@ -17,6 +17,14 @@ Ordered by value, code-fixable items first.
 ## Code-fixable (no external infra required)
 
 ### 1. Flip `include_superseded` default to `False`
+**Done 2026-10-11.** On the live aerospace stack (12 documents, `ENV=development`, the project's own
+`scripts/run_golden_eval.py`): default `True` 30/34 (88%); forced `False` 30/34 twice, with the same four
+failures (MH-02, MH-03, AUT-02, TMP-03) and AUT-03 still passing. The recorded earlier baselines were
+28-29/34. `HybridRetriever.retrieve_and_answer` now defaults to `include_superseded=False`; the Neo4j
+client methods keep their own `True` default and receive the value explicitly. Caveat: the graph in
+that run held only 34 edges from 315 extracted relations (the general ontology rejects most aerospace
+relations unless `ontology.domain_ontology_path` is set; the pre-change commit behaved the same), so
+graph-dependent questions are lightly exercised. Original description follows.
 Mechanism exists (`include_superseded` param threaded through
 `vector_search_chunks`/`bm25_search_chunks`/`bm25_search_entities`/etc.) and
 is live-tested to correctly exclude superseded docs. Still defaults to

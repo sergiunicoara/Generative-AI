@@ -32,7 +32,7 @@ MCP / agent tools -> allowlisted operations in guarded execution scopes   [mcp-s
 | Guarded MCP / agent operations | **Implemented and verified** (adversarial suite) |
 | `ContextItem` contract (`graphrag/retrieval/context_item.py`) | **Experimental**: adapters + fusion, tested; not yet used for ranking |
 | Chunk authority weighting | **Optional**, default off (not evaluated) |
-| `include_superseded=False` default | **Planned, not implemented** (needs a golden-eval run) |
+| `include_superseded=False` default | **Implemented 2026-10-11** after a live golden-eval run (30/34 vs 30/34, same failures); see the backlog for the thin-graph caveat |
 | Automatic re-answering of invalidated decisions | **Planned, not implemented** (hook exists) |
 | Live quality / latency / token comparison of the router | **Not measured** (needs the running stack; `scripts/eval_routing.py --live`) |
 
@@ -48,7 +48,7 @@ Closed after the phases above (see `docs/IMPLEMENTATION_AUDIT.md` for the rows):
 | Runner-up entity candidates for ambiguous matches | **Implemented**: `AmbiguousMatch.runner_ups`; a `needs_review` entity persists the candidates it nearly merged into (best effort) |
 | Evidence coverage | **Implemented**: `QueryResult.evidence_coverage` = lexical grounding ratio (no LLM); metrics below. `ClaimVerifier.verify_with_stats` exposes the LLM verifier's sentence counts |
 | Multi-hop relation allowlist | **Optional**, default off: `retrieval.multihop_allowed_relations: []` (empty = any relation). Not evaluated; enable per corpus after a golden-eval run |
-| Superseded documents and edges | `include_superseded=False` now also drops multi-hop edges and entity-neighbour edges whose `source_doc_id` is superseded, and community (global) search communities none of whose evidence documents is current (evidence is found through `MEMBER_OF` -> `MENTIONS` -> `PART_OF`, or the snapshot's `document_ids`). The default (`True`) is unchanged |
+| Superseded documents and edges | `include_superseded=False` now also drops multi-hop edges and entity-neighbour edges whose `source_doc_id` is superseded, and community (global) search communities none of whose evidence documents is current (evidence is found through `MEMBER_OF` -> `MENTIONS` -> `PART_OF`, or the snapshot's `document_ids`). `HybridRetriever` now defaults to `include_superseded=False`; Neo4j client methods keep a `True` default and are passed the value |
 | Quarantine in community search | **Implemented, always on**: a community whose recorded members are all quarantined is dropped; a community with no recorded members is left alone |
 | Entity trust metadata | **Implemented**: new entities carry `origin`, `generated_by` and `verification_status = UNVERIFIED`; legacy entities are backfilled on their next merge and a stored VERIFIED is never downgraded. Entity neighbours and the explanation's `entity_resolution` expose them. A reviewer marks an entity VERIFIED (or withdraws it) with `POST /corrections/entity/verify` (write scope; the reviewer is the authenticated subject, never a body field; quarantined entities are refused). Nothing else sets VERIFIED |
 | Re-answering invalidated decisions | **Optional, default off** (`invalidation.reanswer_decisions`): re-runs the question for a plain retrieval-query decision, stores the result as `reanswered_*` next to the untouched recorded decision, ends INSUFFICIENT_EVIDENCE if the new answer lacks evidence, and is refused while access control is enabled (the original caller's permissions are not stored). Calls the LLM; not evaluated |
@@ -119,9 +119,9 @@ from the existing GenAI telemetry.
 
 - Run the CI e2e job (live Neo4j) — the registry, invalidation, trust and
   quarantine Cypher is proven there, not locally.
-- Run the golden evaluations on the live stack before flipping
-  `include_superseded`, `query_router_policy: enforce` or chunk authority
-  weighting; no quality improvement is claimed until then.
+- `include_superseded=False` was validated on the live aerospace golden set (no change in pass rate).
+  Still to be evaluated before enabling: `query_router_policy: enforce`, chunk authority weighting and
+  the multi-hop relation allowlist. No quality improvement is claimed for those until measured.
 - Remaining route misses (docs/query-routing.md) should be validated on a new
   held-out labelled set (the first one is now partly seen).
 - Entity trust is recorded and shown but does not yet weight retrieval (unlike edge trust).

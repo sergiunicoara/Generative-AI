@@ -473,7 +473,9 @@ class HybridRetriever:
         query_id: str = "",
         valid_at: str | None = None,
         transaction_at: str | None = None,
-        include_superseded: bool = True,
+        # False since 2026-10-11: superseded documents are excluded by default. Measured on the live aerospace
+        # golden set: 30/34 with False (two runs, identical failures) vs 30/34 with True, AUT-03 unchanged.
+        include_superseded: bool = False,
         retrieval_profile: str = "full",
         config_overrides: dict | None = None,
         correlation_id: str = "",

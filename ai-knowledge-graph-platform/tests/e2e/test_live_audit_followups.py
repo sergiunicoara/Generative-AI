@@ -180,3 +180,47 @@ class TestLiveCommunitySnapshotFilters:
             assert {r["community_id"] for r in current} == {"k1"}
         finally:
             await driver.close()
+
+
+class TestLiveEntityVerificationRoute:
+    async def test_verify_sets_reviewer_fields_and_skips_quarantined(self, neo4j_container):  # noqa: F811
+        from unittest.mock import patch
+
+        from api.routes import corrections
+        from graphrag.core.models import Entity
+
+        t = f"ev-{uuid.uuid4().hex[:8]}"
+        driver, client = await _driver_client(neo4j_container)
+        try:
+            await client.merge_entities_batch([Entity(name="Acme", type="ORG"), Entity(name="Bad", type="ORG")], tenant=t)
+            await client.run("MATCH (e:Entity {tenant:$t, name:'Bad'}) SET e.quarantined=true", t=t)
+
+            class _Mut:
+                revision = 1
+
+                def __init__(self, *a, **k):
+                    pass
+
+                async def __aenter__(self):
+                    return self
+
+                async def __aexit__(self, *e):
+                    return False
+
+            with patch.object(corrections, "get_neo4j", return_value=client), patch.object(corrections, "CorpusMutation", _Mut):
+                out = await corrections.verify_entity(
+                    corrections.EntityVerifyRequest(entity_name="Acme", entity_type="ORG", note="ok"),
+                    tenant=t, user={"sub": "alice"})
+                assert out["status"] == "VERIFIED"
+                with pytest.raises(Exception) as bad:
+                    await corrections.verify_entity(
+                        corrections.EntityVerifyRequest(entity_name="Bad", entity_type="ORG"), tenant=t, user={"sub": "alice"})
+                assert "404" in str(bad.value) or getattr(bad.value, "status_code", None) == 404
+            row = (await client.run("MATCH (e:Entity {tenant:$t, name:'Acme'}) RETURN e.verification_status AS v, "
+                                    "e.verified_by AS by, e.verified_at IS NOT NULL AS at", t=t))[0]
+            assert row == {"v": "VERIFIED", "by": "alice", "at": True}
+            # a later re-ingest never downgrades the reviewer's decision
+            await client.merge_entities_batch([Entity(name="Acme", type="ORG")], tenant=t)
+            assert (await client.run("MATCH (e:Entity {tenant:$t, name:'Acme'}) RETURN e.verification_status AS v", t=t))[0]["v"] == "VERIFIED"
+        finally:
+            await driver.close()

@@ -50,7 +50,7 @@ Closed after the phases above (see `docs/IMPLEMENTATION_AUDIT.md` for the rows):
 | Multi-hop relation allowlist | **Optional**, default off: `retrieval.multihop_allowed_relations: []` (empty = any relation). Not evaluated; enable per corpus after a golden-eval run |
 | Superseded documents and edges | `include_superseded=False` now also drops multi-hop edges and entity-neighbour edges whose `source_doc_id` is superseded, and community (global) search communities none of whose evidence documents is current (evidence is found through `MEMBER_OF` -> `MENTIONS` -> `PART_OF`, or the snapshot's `document_ids`). The default (`True`) is unchanged |
 | Quarantine in community search | **Implemented, always on**: a community whose recorded members are all quarantined is dropped; a community with no recorded members is left alone |
-| Entity trust metadata | **Implemented**: new entities carry `origin`, `generated_by` and `verification_status = UNVERIFIED`; legacy entities are backfilled on their next merge and a stored VERIFIED is never downgraded. Entity neighbours and the explanation's `entity_resolution` expose them. There is no entity-level reviewer approval path yet, so nothing sets VERIFIED automatically |
+| Entity trust metadata | **Implemented**: new entities carry `origin`, `generated_by` and `verification_status = UNVERIFIED`; legacy entities are backfilled on their next merge and a stored VERIFIED is never downgraded. Entity neighbours and the explanation's `entity_resolution` expose them. A reviewer marks an entity VERIFIED (or withdraws it) with `POST /corrections/entity/verify` (write scope; the reviewer is the authenticated subject, never a body field; quarantined entities are refused). Nothing else sets VERIFIED |
 | Re-answering invalidated decisions | **Optional, default off** (`invalidation.reanswer_decisions`): re-runs the question for a plain retrieval-query decision, stores the result as `reanswered_*` next to the untouched recorded decision, ends INSUFFICIENT_EVIDENCE if the new answer lacks evidence, and is refused while access control is enabled (the original caller's permissions are not stored). Calls the LLM; not evaluated |
 | Path validity / temporal-correctness production metrics | **Not implemented**: retrieval queries enforce edge currency by construction, so a live metric would be trivially 1.0; these are offline evaluation measures |
 
@@ -124,7 +124,7 @@ from the existing GenAI telemetry.
   weighting; no quality improvement is claimed until then.
 - Remaining route misses (docs/query-routing.md) should be validated on a new
   held-out labelled set (the first one is now partly seen).
-- There is no entity-level reviewer approval, so entities stay UNVERIFIED.
+- Entity trust is recorded and shown but does not yet weight retrieval (unlike edge trust).
 - Community-search filtering is proven live for both the current-community and the time-travel
   (snapshot) branches (`tests/e2e/test_live_audit_followups.py`).
 - The new Cypher (provenance slots, relation allowlist, superseded-edge exclusion, bitemporal

@@ -76,6 +76,11 @@ with measured RTO/RPO. Unit-testing the federation code is not the same as
 tested disaster recovery.
 
 ### 7. Branch-protection enforcement on `main`
+**Checked 2026-10-11 (read-only GitHub API):** `main` requires 4 status checks (`Test (Python 3.11)`, `Lint`,
+`Validate a clean installation`, `Validate deployment definitions`) with `strict` (branch must be up to date).
+`enforce_admins` is **off**, so a repository admin can push directly past the checks (as happened with the
+hardening commits). Turn on "Include administrators" in the branch rule to close that. The paragraph below is
+the original, now-answered question.
 CI (`../.github/workflows/ai-knowledge-graph-platform-ci.yml`, at the
 monorepo root — an in-project copy at `.github/workflows/ci.yml` was
 deleted again on 2026-09-23 after being silently reintroduced; see
@@ -100,6 +105,7 @@ settings force cluster replacement.
 `master_authorized_networks` filled in for CI/operator access.
 
 ### 10. Upstream CVE fixes for `ragas` / `diskcache`
+**Re-checked 2026-10-11:** `pip index versions` still lists ragas 0.4.3 and diskcache 5.6.3 as the latest, so no fixed release exists yet.
 PYSEC-2026-3046 (`ragas==0.4.3`) and PYSEC-2026-2447 (`diskcache==5.6.3`,
 pulled in only via `ragas`) have no fixed release yet — both pins are the
 latest versions. Evaluation pipeline only.

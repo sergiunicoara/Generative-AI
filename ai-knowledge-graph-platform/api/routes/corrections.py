@@ -20,10 +20,12 @@ from __future__ import annotations
 
 from uuid import uuid4
 
-from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel
+from typing import Literal
 
-from api.auth.dependencies import get_tenant, require_scope
+from fastapi import APIRouter, Depends, HTTPException
+from pydantic import BaseModel, Field
+
+from api.auth.dependencies import get_current_user, get_tenant, require_scope
 from graphrag.graph.neo4j_client import get_neo4j
 from graphrag.graph.entity_splitter import EntitySplitter
 from graphrag.graph.quarantine import QuarantineService
@@ -74,6 +76,13 @@ class EdgeOverrideRequest(BaseModel):
     confidence: float = 1.0
     override_by: str = "admin"
     note: str = ""
+
+
+class EntityVerifyRequest(BaseModel):
+    entity_name: str = Field(..., min_length=1, max_length=500)
+    entity_type: str = Field(..., min_length=1, max_length=100)
+    verification: Literal["VERIFIED", "UNVERIFIED"] = "VERIFIED"
+    note: str = Field("", max_length=1000)
 
 
 class QuarantineRetryRequest(BaseModel):
@@ -311,6 +320,42 @@ async def override_edge(request: EdgeOverrideRequest, tenant: str = Depends(get_
         "source_type": "manual",
         "corpus_revision": mutation.revision,
     }
+
+
+@router.post(
+    "/entity/verify",
+    dependencies=[Depends(require_scope("write"))],
+    summary="Record a reviewer's verification decision on an entity",
+)
+async def verify_entity(
+    request: EntityVerifyRequest,
+    tenant: str = Depends(get_tenant),
+    user: dict = Depends(get_current_user),
+):
+    """Mark an entity VERIFIED (or back to UNVERIFIED). The reviewer is the authenticated subject,
+    never a body field. Ingestion never sets VERIFIED and re-ingest never downgrades it."""
+    neo4j = get_neo4j()
+    reviewer = str(user.get("sub") or "")
+    if not reviewer:
+        raise HTTPException(status_code=403, detail="an authenticated reviewer identity is required")
+    async with CorpusMutation(neo4j, tenant, "entity_verification") as mutation:
+        rows = await neo4j.run(
+            """
+            MATCH (e:Entity {name: $name, type: $type, tenant: $tenant})
+            WHERE coalesce(e.quarantined, false) = false
+            SET e.verification_status = $status,
+                e.verified_by = CASE WHEN $status = 'VERIFIED' THEN $reviewer ELSE null END,
+                e.verified_at = CASE WHEN $status = 'VERIFIED' THEN datetime() ELSE null END,
+                e.verification_note = $note
+            RETURN e.name AS name, e.verification_status AS status
+            """,
+            name=request.entity_name, type=request.entity_type, tenant=tenant,
+            status=request.verification, reviewer=reviewer, note=request.note,
+        )
+    if not rows:
+        raise HTTPException(status_code=404, detail="entity not found (or quarantined)")
+    return {"status": rows[0]["status"], "entity": rows[0]["name"], "verified_by": reviewer,
+            "corpus_revision": mutation.revision}
 
 
 # ── Conflict resolution ────────────────────────────────────────────────────────

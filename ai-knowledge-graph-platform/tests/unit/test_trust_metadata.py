@@ -344,3 +344,64 @@ async def test_new_entities_carry_origin_and_start_unverified():
     c.run.reset_mock()
     await c.merge_entity(Entity(name="Acme", type="ORG"), tenant="t")
     assert c.run.await_args.kwargs["origin"] == "EXTRACTED"
+
+
+# ── reviewer verification of entities ────────────────────────────────────────
+
+class _FakeMutation:
+    revision = 7
+
+    def __init__(self, *a, **k):
+        pass
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, *exc):
+        return False
+
+
+async def _verify(rows, user, **req):
+    from unittest.mock import patch
+
+    from api.routes import corrections
+
+    neo = MagicMock()
+    neo.run = AsyncMock(return_value=rows)
+    with patch.object(corrections, "get_neo4j", return_value=neo), \
+         patch.object(corrections, "CorpusMutation", _FakeMutation):
+        out = await corrections.verify_entity(
+            corrections.EntityVerifyRequest(entity_name="Acme", entity_type="ORG", **req), tenant=T, user=user)
+    return out, neo
+
+
+async def test_entity_verification_uses_the_authenticated_reviewer():
+    out, neo = await _verify([{"name": "Acme", "status": "VERIFIED"}], {"sub": "alice"}, note="checked")
+    assert out["status"] == "VERIFIED" and out["verified_by"] == "alice" and out["corpus_revision"] == 7
+    kw = neo.run.await_args.kwargs
+    assert kw["reviewer"] == "alice" and kw["status"] == "VERIFIED" and kw["tenant"] == T
+    assert "coalesce(e.quarantined, false) = false" in neo.run.await_args.args[0]
+
+
+async def test_entity_verification_can_be_withdrawn():
+    out, neo = await _verify([{"name": "Acme", "status": "UNVERIFIED"}], {"sub": "alice"}, verification="UNVERIFIED")
+    assert out["status"] == "UNVERIFIED" and neo.run.await_args.kwargs["status"] == "UNVERIFIED"
+
+
+async def test_entity_verification_rejects_missing_entity_and_anonymous_reviewer():
+    from fastapi import HTTPException
+
+    with pytest.raises(HTTPException) as nf:
+        await _verify([], {"sub": "alice"})
+    assert nf.value.status_code == 404
+    with pytest.raises(HTTPException) as anon:
+        await _verify([{"name": "Acme", "status": "VERIFIED"}], {})
+    assert anon.value.status_code == 403
+
+
+def test_entity_verification_request_has_no_reviewer_field_and_bounds_its_input():
+    from api.routes.corrections import EntityVerifyRequest
+
+    assert "reviewed_by" not in EntityVerifyRequest.model_fields and "verified_by" not in EntityVerifyRequest.model_fields
+    with pytest.raises(ValueError):
+        EntityVerifyRequest(entity_name="x", entity_type="ORG", verification="REJECTED")

@@ -89,9 +89,12 @@ class StatelessMCP20260728App:
                 return
             result = await self.registry.call(name, arguments, CallerIdentity.current())
             payload, is_error = _result_payload(result)
+            # Serialise once with default=str so dates / datetimes / UUIDs in a capability result
+            # cannot make the response encoder fail; both representations then carry the same data.
+            text = json.dumps(payload, sort_keys=True, default=str)
             await self._send_result(send, request_id, {
-                "content": [{"type": "text", "text": json.dumps(payload, sort_keys=True, default=str)}],
-                "structuredContent": payload, "isError": is_error,
+                "content": [{"type": "text", "text": text}],
+                "structuredContent": json.loads(text), "isError": is_error,
             })
             return
         if method == "tools/list":

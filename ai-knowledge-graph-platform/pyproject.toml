@@ -43,6 +43,7 @@ markers             = [
 # Mutation testing (mutmut 3.x; run via `make mutation`, opt-in, slow). Targets the small
 # high-risk adapters; inspect surviving mutants before merge.
 [tool.mutmut]
-paths_to_mutate = ["graphrag/retrieval/answer_policy.py", "mcp_server/transport_20260728.py", "graphrag/ingestion/r2rml.py"]
-tests_dir = ["tests/unit/test_answer_policy.py", "tests/unit/test_mcp_transport_20260728.py", "tests/unit/test_ingest_r2rml.py", "tests/unit/test_r2rml_obda.py", "tests/unit/test_r2rml_rdf_materialization.py"]
+source_paths = ["graphrag/retrieval/answer_policy.py", "mcp_server/transport_20260728.py", "graphrag/ingestion/r2rml.py"]
+pytest_add_cli_args_test_selection = ["tests/unit/test_answer_policy.py", "tests/unit/test_mcp_transport_20260728.py", "tests/unit/test_ingest_r2rml.py", "tests/unit/test_r2rml_obda.py", "tests/unit/test_r2rml_rdf_materialization.py"]
 do_not_mutate = []
+debug = true

@@ -100,6 +100,14 @@ to these adapters are not detected by their tests. The surviving list is in the 
 `mutation-results.txt` artifact: most survivors are in `r2rml` (94 listed by module prefix),
 the transport's JSON-schema/header helpers (`_json_type`, `_tool_schema`, `_header`) and the
 answer prompt text. Next: strengthen those tests, then rerun the workflow. Not supported on native Windows.
+**Re-measured after strengthening the tests (same day, run 38135880176): 861 mutants, 784 killed
+(91.1%), 73 survived, 4 with no covering test.** Survivors by module: answer_policy 8, transport 34,
+r2rml 35 (module-prefix counts from `mutation-results.txt`). The new tests also found and fixed a real
+bug: the MCP adapter's `structuredContent` was not serialised with `default=str`, so a capability
+result containing a date/datetime made the response fail. Another finding, left unchanged on purpose:
+the answer prompt literals begin with a stray backslash line (`"""\` in the source); removing it is a
+prompt change and needs a golden-eval run. Remaining survivors are mostly equivalent or cosmetic
+mutations; inspect them before adding more tests.
 Original description:
 `make mutation` (opt-in Mutmut campaign) exists, but no measured score or
 CI-run report exists anywhere in the repo.

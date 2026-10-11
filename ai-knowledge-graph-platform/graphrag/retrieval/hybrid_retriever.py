@@ -747,6 +747,7 @@ class HybridRetriever:
                                 transaction_at=transaction_at,
                                 config_overrides=profile_overrides,
                                 access_context=access_context,
+                                include_superseded=include_superseded,
                             )
                         )
                 except ExceptionGroup as eg:
@@ -788,6 +789,7 @@ class HybridRetriever:
                     transaction_at=transaction_at,
                     config_overrides=profile_overrides,
                     access_context=access_context,
+                    include_superseded=include_superseded,
                 )
 
             primary_step: RetrievalStep | None = None

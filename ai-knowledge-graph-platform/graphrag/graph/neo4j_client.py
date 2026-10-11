@@ -1273,10 +1273,16 @@ class Neo4jClient:
                           e.prompt_version   = $prompt_version,
                           e.resolution_status = $resolution_status,
                           e.resolution_method = $resolution_method,
+                          // Trust metadata (docs/trust-metadata.md); only a reviewer verifies.
+                          e.origin               = $origin,
+                          e.verification_status  = 'UNVERIFIED',
+                          e.generated_by         = $generated_by,
                           e.created_at       = datetime(),
                           e.recorded_at      = datetime()   // transaction time — never updated
             ON MATCH SET  e.description = CASE WHEN e.description = '' THEN $description ELSE e.description END,
                           e.embedding   = CASE WHEN $embedding IS NOT NULL AND size($embedding) > 0 THEN $embedding ELSE e.embedding END,
+                          e.origin              = coalesce(e.origin, $origin),
+                          e.verification_status = coalesce(e.verification_status, 'UNVERIFIED'),
                           e.updated_at  = datetime()
             """,
             id=entity.id,
@@ -1291,6 +1297,8 @@ class Neo4jClient:
             prompt_version=entity.prompt_version,
             resolution_status=entity.resolution_status,
             resolution_method=entity.resolution_method,
+            origin=origin_for(entity.source_type).value,
+            generated_by=entity.extraction_model or None,
         )
 
     async def set_entity_resolution_metadata(
@@ -1381,6 +1389,8 @@ class Neo4jClient:
                 "prompt_version": e.prompt_version,
                 "resolution_status": e.resolution_status,
                 "resolution_method": e.resolution_method,
+                "origin": origin_for(e.source_type).value,
+                "generated_by": e.extraction_model or None,
                 # Reserved identity/scope fields cannot be overwritten by a
                 # caller-supplied semantic property map.
                 "semantic_properties": {
@@ -1416,11 +1426,16 @@ class Neo4jClient:
                           e.prompt_version   = row.prompt_version,
                           e.resolution_status = row.resolution_status,
                           e.resolution_method = row.resolution_method,
+                          e.origin               = row.origin,
+                          e.verification_status  = 'UNVERIFIED',
+                          e.generated_by         = row.generated_by,
                           e += row.semantic_properties,
                           e.created_at       = datetime(),
                           e.recorded_at      = datetime()
             ON MATCH SET  e.description = CASE WHEN e.description = '' THEN row.description ELSE e.description END,
                           e.embedding   = CASE WHEN row.embedding IS NOT NULL AND size(row.embedding) > 0 THEN row.embedding ELSE e.embedding END,
+                          e.origin              = coalesce(e.origin, row.origin),
+                          e.verification_status = coalesce(e.verification_status, 'UNVERIFIED'),
                           e += row.semantic_properties,
                           e.updated_at  = datetime()
             RETURN row.name AS name, row.type AS type, prior_similarity
@@ -2111,6 +2126,7 @@ class Neo4jClient:
         tenant: str = "default",
         valid_at: str | None = None,
         transaction_at: str | None = None,
+        include_superseded: bool = True,
     ) -> list[dict]:
         """ANN search over Community.embedding for global search.
 
@@ -2121,13 +2137,41 @@ class Neo4jClient:
         plenty of its own relevant communities (see tasks/lessons.md A146).
         fetch_k gives the tenant filter a much larger candidate pool before
         truncating to top_k.
+
+        Evidence filters (graphrag/graph/validity.py semantics):
+          * A community whose recorded members are ALL quarantined is dropped. A community with no
+            recorded members is left alone (nothing to judge it by).
+          * ``include_superseded=False`` additionally drops a community none of whose evidence
+            documents is current (every source document superseded). Default keeps today's behaviour.
         """
+        live_members = (
+            "(NOT EXISTS { MATCH (m:Entity)-[:MEMBER_OF]->(c) WHERE m.tenant = $tenant } "
+            "OR EXISTS { MATCH (m:Entity)-[:MEMBER_OF]->(c) WHERE m.tenant = $tenant "
+            "AND coalesce(m.quarantined, false) = false })"
+        )
+        live_snapshot_members = (
+            "(size(coalesce(c.entity_ids, [])) = 0 OR EXISTS { MATCH (m:Entity {tenant: $tenant}) "
+            "WHERE m.id IN c.entity_ids AND coalesce(m.quarantined, false) = false })"
+        )
+        current_docs = (
+            "AND EXISTS { MATCH (m:Entity {tenant: $tenant})-[:MEMBER_OF]->(c) "
+            "WHERE coalesce(m.quarantined, false) = false AND EXISTS { "
+            "MATCH (m)<-[:MENTIONS]-(:Chunk {tenant: $tenant})-[:PART_OF]->(d:Document {tenant: $tenant}) "
+            "WHERE d.superseded_by IS NULL AND coalesce(d.is_deleted, false) = false } }"
+            if not include_superseded else ""
+        )
+        current_snapshot_docs = (
+            "AND (size(coalesce(c.document_ids, [])) = 0 OR EXISTS { MATCH (d:Document {tenant: $tenant}) "
+            "WHERE d.id IN c.document_ids AND d.superseded_by IS NULL "
+            "AND coalesce(d.is_deleted, false) = false })"
+            if not include_superseded else ""
+        )
         if ((valid_at or transaction_at) and tenant != "default"
                 and "community_summary_snapshot_embeddings"
                 in self.__dict__.get("_filtered_vector_indexes", set())):
             fetch_k = max(top_k * 4, 20)
             return await self.run(
-                """
+                f"""
                 MATCH (c:CommunitySummarySnapshot)
                   SEARCH c IN (
                     VECTOR INDEX community_summary_snapshot_embeddings
@@ -2141,6 +2185,7 @@ class Neo4jClient:
                        OR c.transaction_from <= datetime($transaction_at))
                   AND ($transaction_at IS NULL OR c.transaction_to IS NULL
                        OR c.transaction_to > datetime($transaction_at))
+                  AND {live_snapshot_members} {current_snapshot_docs}
                 RETURN c.community_id AS community_id, c.summary AS summary,
                        c.level AS level, score, c.id AS summary_snapshot_id,
                        c.content_hash AS summary_content_hash
@@ -2156,7 +2201,7 @@ class Neo4jClient:
         if valid_at or transaction_at:
             fetch_k = max(top_k * 20, 100)
             return await self.run(
-                """
+                f"""
                 CALL db.index.vector.queryNodes(
                   'community_summary_snapshot_embeddings', $fetch_k, $embedding
                 )
@@ -2168,6 +2213,7 @@ class Neo4jClient:
                        OR c.transaction_from <= datetime($transaction_at))
                   AND ($transaction_at IS NULL OR c.transaction_to IS NULL
                        OR c.transaction_to > datetime($transaction_at))
+                  AND {live_snapshot_members} {current_snapshot_docs}
                 RETURN c.community_id AS community_id, c.summary AS summary,
                        c.level AS level, score, c.id AS summary_snapshot_id,
                        c.content_hash AS summary_content_hash
@@ -2182,7 +2228,7 @@ class Neo4jClient:
             )
         if self.__dict__.get("_filtered_vector_search", False) and tenant != "default":
             return await self.run(
-                """
+                f"""
                 MATCH (c:Community)
                   SEARCH c IN (
                     VECTOR INDEX community_embeddings
@@ -2190,6 +2236,7 @@ class Neo4jClient:
                     WHERE c.tenant = $tenant
                     LIMIT $top_k
                   ) SCORE AS score
+                WHERE {live_members} {current_docs}
                 RETURN c.id AS community_id, c.summary AS summary,
                        c.level AS level, score
                 ORDER BY score DESC LIMIT $top_k
@@ -2200,7 +2247,7 @@ class Neo4jClient:
             )
         fetch_k = max(top_k * 20, 100)
         return await self.run(
-            """
+            f"""
             CALL db.index.vector.queryNodes('community_embeddings', $fetch_k, $embedding)
             YIELD node AS c, score
             WHERE (c.tenant = $tenant)
@@ -2213,6 +2260,7 @@ class Neo4jClient:
               AND ($transaction_at IS NULL OR (
                   c.recorded_at IS NULL OR c.recorded_at <= datetime($transaction_at)
               ))
+              AND {live_members} {current_docs}
             RETURN c.id AS community_id, c.summary AS summary, c.level AS level, score
             ORDER BY score DESC
             LIMIT $top_k
@@ -2261,6 +2309,7 @@ class Neo4jClient:
                  ({entity_is_active("neighbor")} AND {edge_is_current("r")} {transaction_filter} {superseded_filter}) AS neighbor_ok
             RETURN e.name AS entity, e.type AS type, e.description AS description,
                    e.resolution_status AS resolution_status, e.resolution_method AS resolution_method,
+                   e.origin AS origin, e.verification_status AS verification_status,
                    collect(DISTINCT CASE WHEN neighbor_ok THEN neighbor.name ELSE null END) AS neighbors
             """,
             chunk_ids=chunk_ids,

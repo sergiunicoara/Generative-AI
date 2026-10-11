@@ -133,6 +133,8 @@ def build_explanation(
                 "entity": ent.get("entity"), "type": ent.get("type"),
                 "resolution_status": ent.get("resolution_status") or "unrecorded",
                 "resolution_method": ent.get("resolution_method"),
+                "origin": ent.get("origin"),
+                "verification_status": ent.get("verification_status") or "UNVERIFIED",
             })
     if any(not i["derivation_recorded"] for i in inferences):
         limitations.append({"code": "inference_without_recorded_premises",

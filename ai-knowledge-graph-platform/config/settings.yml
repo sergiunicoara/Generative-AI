@@ -391,6 +391,7 @@ invalidation:
   max_dependents_per_query: 5000    # a larger closure falls back to the revision bump
   recompute_inline: true            # recompute NEEDS_REVIEW artifacts right after the event
   recompute_inline_limit: 200       # rest is picked up by scripts/recompute_stale.py
+  reanswer_decisions: false         # opt-in: re-run the question for invalidated query decisions (calls the LLM; refused while access control is enabled)
 
 business_matrix:
   kpi_retention_days: 90

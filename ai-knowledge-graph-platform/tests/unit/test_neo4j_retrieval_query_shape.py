@@ -189,3 +189,21 @@ async def test_entity_neighbors_can_exclude_edges_from_superseded_documents() ->
     assert "sd.superseded_by" not in client.run.await_args.args[0]
     await client.get_entity_neighbors(["c1"], tenant="acme", include_superseded=False)
     assert "sd.superseded_by IS NOT NULL" in client.run.await_args.args[0]
+
+
+async def test_community_search_default_only_drops_all_quarantined_communities() -> None:
+    client = _client()
+    await client.vector_search_communities([0.1], top_k=3, tenant="acme")
+    cypher = client.run.await_args.args[0]
+    assert "coalesce(m.quarantined, false) = false" in cypher
+    assert "d.superseded_by IS NULL" not in cypher          # supersession filter is opt-in
+
+
+async def test_community_search_can_require_current_evidence_documents() -> None:
+    client = _client()
+    await client.vector_search_communities([0.1], top_k=3, tenant="acme", include_superseded=False)
+    assert "d.superseded_by IS NULL" in client.run.await_args.args[0]
+    await client.vector_search_communities([0.1], top_k=3, tenant="acme", valid_at="2024-01-01",
+                                           include_superseded=False)
+    cypher = client.run.await_args.args[0]
+    assert "d.id IN c.document_ids" in cypher and "m.id IN c.entity_ids" in cypher

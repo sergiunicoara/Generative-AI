@@ -127,6 +127,10 @@ class RecomputeWorker:
         self._neo4j = neo4j_client
         self._store = StateStore(neo4j_client)
         self._engine = engine
+        if answer_recomputer is None:
+            # Opt-in (invalidation.reanswer_decisions); None while the feature is off.
+            from graphrag.graph.invalidation.answer_recompute import default_answer_recomputer
+            answer_recomputer = default_answer_recomputer(neo4j_client)
         self._answer_recomputer = answer_recomputer
 
     def _engine_or_default(self):

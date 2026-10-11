@@ -2,7 +2,7 @@
 
 Status: **implemented and unit-verified** (2026-10-10). The graph-side Cypher
 (dependency walk, state transitions, recompute queries) is proven by
-`tests/e2e/test_live_invalidation.py`, which runs in CI only (no local Docker).
+`tests/e2e/test_live_invalidation.py` (run against a live Neo4j 5.20 container on 2026-10-11).
 
 ## What changed
 
@@ -92,8 +92,13 @@ Deterministic, no LLM (`recompute.py`), inline after each event (bounded by
   community rebuild writes a new one. This also closes previously orphaned
   snapshots once something they depend on changes.
 - **decision**: no surviving evidence -> INSUFFICIENT_EVIDENCE; otherwise back to
-  NEEDS_REVIEW with `requires_human_review` (re-answering needs the model; an
-  `answer_recomputer` hook exists but is not wired).
+  NEEDS_REVIEW with `requires_human_review`. Optional, default off
+  (`invalidation.reanswer_decisions: true`): for a plain retrieval-query decision the
+  question is re-run through the retriever (an LLM call). A sufficient, cited answer ends
+  VALID and is stored as `reanswered_answer` / `reanswered_confidence` /
+  `reanswered_citations` / `reanswered_at` next to the untouched recorded decision; an
+  insufficient one ends INSUFFICIENT_EVIDENCE. Refused (stays NEEDS_REVIEW) while access
+  control is enabled, because the original caller's permissions are not stored.
 - errors -> RECOMPUTE_FAILED.
 
 Observe: `GET /corrections/invalidation/artifacts?state=NEEDS_REVIEW`,

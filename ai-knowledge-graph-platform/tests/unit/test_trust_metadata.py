@@ -323,3 +323,24 @@ def test_stale_evidence_abstains_even_when_general_abstention_is_off():
     src = inspect.getsource(hybrid_retriever)
     assert 'sufficiency.reason_code == "all_evidence_stale"' in src
     assert 'cfg.get("retrieval_sufficiency_abstain_on_stale", True)' in src
+
+
+async def test_new_entities_carry_origin_and_start_unverified():
+    from unittest.mock import AsyncMock
+
+    from graphrag.core.models import Entity, SourceType
+    from graphrag.graph.neo4j_client import Neo4jClient
+
+    c = Neo4jClient.__new__(Neo4jClient)
+    c.run = AsyncMock(return_value=[])
+    await c.merge_entities_batch([Entity(name="Acme", type="ORG", extraction_model="m1"),
+                                  Entity(name="Zed", type="ORG", source_type=SourceType.MANUAL)], tenant="t")
+    cypher, kw = c.run.await_args.args[0], c.run.await_args.kwargs
+    assert [r["origin"] for r in kw["rows"]] == ["EXTRACTED", "MANUAL"]
+    assert kw["rows"][0]["generated_by"] == "m1"
+    assert "e.verification_status  = 'UNVERIFIED'" in cypher                      # ON CREATE
+    assert "coalesce(e.verification_status, 'UNVERIFIED')" in cypher              # legacy backfill, never downgrades
+
+    c.run.reset_mock()
+    await c.merge_entity(Entity(name="Acme", type="ORG"), tenant="t")
+    assert c.run.await_args.kwargs["origin"] == "EXTRACTED"

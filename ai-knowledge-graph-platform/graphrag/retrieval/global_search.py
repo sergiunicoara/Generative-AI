@@ -81,6 +81,7 @@ class GlobalSearch:
         transaction_at: str | None = None,
         config_overrides: dict | None = None,
         access_context: AccessContext | None = None,
+        include_superseded: bool = True,
     ) -> dict:
         # Per-tenant config: merge this tenant's overrides over the global
         # retrieval defaults (mirrors LocalSearch.search — resolved from
@@ -113,6 +114,7 @@ class GlobalSearch:
             tenant=tenant,
             valid_at=valid_at,
             transaction_at=transaction_at,
+            include_superseded=include_superseded,
         )
         log.info(
             "global_search.community_vector_search.done",

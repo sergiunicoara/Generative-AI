@@ -98,7 +98,7 @@ def test_graph_paths_and_entity_resolution_with_trust():
     assert edge["origin"] == "EXTRACTED" and edge["confidence_before_trust"] == 0.8
     assert any(p.get("via_entity") == "Landing Gear" for p in e["graph_paths"])
     assert e["entity_resolution"][0] == {"entity": "Acme", "type": "ORG", "resolution_status": "auto_resolved",
-                                         "resolution_method": "alias"}
+                                         "resolution_method": "alias", "origin": None, "verification_status": "UNVERIFIED"}
 
 
 def test_score_breakdown_has_separate_components():

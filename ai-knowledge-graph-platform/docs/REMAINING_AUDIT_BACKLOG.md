@@ -117,4 +117,4 @@ latest versions. Evaluation pipeline only.
 - Persistent `ToolPolicy` audit-log flush — low priority while that path
   isn't used in production.
 - Runner-up entity-resolution candidate ranking at query time (persistence
-  is already done, just not surfaced live) — no current consumer.
+  is done, including for ambiguous matches; just not surfaced live) — no current consumer.

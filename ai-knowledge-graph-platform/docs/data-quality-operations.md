@@ -32,8 +32,7 @@ judged. The check never repairs anything; the connector decides what to re-fetch
 python scripts/ingestion_gaps.py --tenant acme --source-id sharepoint --inventory inventory.json
 ```
 
-API: `POST /enterprise/sync/{source_id}/gaps` (read scope) with `{"inventory": {"id": "version"}}`. The route prefix
-follows how the enterprise router is mounted.
+API: `POST /sync/{source_id}/gaps` (read scope) with `{"inventory": {"id": "version"}}`.
 
 ## Completeness report
 
@@ -54,7 +53,7 @@ absent for some sources (for example a source with no versions).
 python scripts/graph_completeness.py --tenant aerospace [--source-id S]
 ```
 
-API: `GET /enterprise/governance/completeness?source_id=...` (read scope).
+API: `GET /governance/completeness?source_id=...` (read scope).
 
 ## Not covered
 

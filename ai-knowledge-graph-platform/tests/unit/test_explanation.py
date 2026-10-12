@@ -69,7 +69,7 @@ def test_unsupported_statements_are_not_presented_as_grounded():
     e = explain(answer="The interval is 600 flight hours. Boeing also recalled every turbine blade worldwide last spring.")
     assert len(e["grounding"]["unsupported_statements"]) == 1
     assert "turbine" in e["grounding"]["unsupported_statements"][0]
-    assert any(l["code"] == "unsupported_statements" for l in e["limitations"])
+    assert any(lim["code"] == "unsupported_statements" for lim in e["limitations"])
     assert e["confidence"] < explain()["confidence"]
 
 
@@ -89,7 +89,7 @@ def test_inferred_facts_include_their_derivation():
 def test_inference_without_premises_is_flagged():
     edges = [{**EDGES[1], "premise_keys": None}]
     e = explain(local_results={**LOCAL, "entity_edges": edges})
-    assert any(l["code"] == "inference_without_recorded_premises" for l in e["limitations"])
+    assert any(lim["code"] == "inference_without_recorded_premises" for lim in e["limitations"])
 
 
 def test_graph_paths_and_entity_resolution_with_trust():
@@ -110,7 +110,7 @@ def test_score_breakdown_has_separate_components():
 
 def test_non_current_evidence_is_disclosed():
     e = explain(citations=["AD-2024-03", "SB-OLD"])
-    assert any(l["code"] == "non_current_evidence" for l in e["limitations"])
+    assert any(lim["code"] == "non_current_evidence" for lim in e["limitations"])
     old = next(i for i in e["evidence"] if i["id"] == "c2")
     assert old["current"] is False and old["trust"]["superseded"] is True
 
@@ -121,7 +121,7 @@ def test_unauthorized_graph_data_never_appears_under_acl():
     blob = json.dumps(e)
     for secret in ("Nut", "owns_transitive", "auto_resolved", "Landing Gear"):
         assert secret not in blob
-    assert any(l["code"] == "graph_explanation_withheld" for l in e["limitations"])
+    assert any(lim["code"] == "graph_explanation_withheld" for lim in e["limitations"])
 
 
 def test_insufficient_evidence_produces_an_honest_failure():
@@ -130,7 +130,7 @@ def test_insufficient_evidence_produces_an_honest_failure():
                 citations=[])
     assert e["insufficient_context"] == {"reason": "all_evidence_stale", "evidence_count": 1}
     assert e["confidence"] <= 0.25
-    assert any(l["code"] == "insufficient_context:all_evidence_stale" for l in e["limitations"])
+    assert any(lim["code"] == "insufficient_context:all_evidence_stale" for lim in e["limitations"])
 
 
 def test_no_evidence_means_zero_confidence():
@@ -141,12 +141,12 @@ def test_no_evidence_means_zero_confidence():
 def test_fallback_is_reported_with_its_reason():
     e = explain(fallback={"triggered": True, "reason": "low_confidence"})
     assert e["fallback"] == {"triggered": True, "reason": "low_confidence"}
-    assert any(l["code"] == "agentic_fallback" for l in e["limitations"])
+    assert any(lim["code"] == "agentic_fallback" for lim in e["limitations"])
 
 
 def test_observe_policy_and_unregistered_schema_are_limitations():
     e = explain(router_policy="observe", schema_version="platform/v1")
-    codes = {l["code"] for l in e["limitations"]}
+    codes = {lim["code"] for lim in e["limitations"]}
     assert {"route_observed_only", "schema_unregistered"} <= codes
 
 

@@ -29,7 +29,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
-from graphrag.retrieval.query_router import Route, baseline_route, route_query  # noqa: E402
+from graphrag.retrieval.query_router import baseline_route, route_query  # noqa: E402
 
 CASES = ROOT / "evals" / "routing_cases.json"
 HELDOUT_SETS = sorted((ROOT / "evals").glob("routing_cases_heldout*.json"))   # each scored separately

@@ -22,7 +22,7 @@ class _Capture(Neo4jClient):
 
 def _guarded(query: str, prefix: str) -> None:
     assert "locked" in query
-    assert f"r.source_type      = CASE WHEN prior_type = 'manual'" in query
+    assert "r.source_type      = CASE WHEN prior_type = 'manual'" in query
     assert "r.confidence_state = CASE WHEN locked" in query
     assert "r.valid_from       = CASE WHEN locked" in query
     assert "r.valid_to         = CASE WHEN locked OR" in query

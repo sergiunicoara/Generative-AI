@@ -7,7 +7,6 @@ registry's tenant scoping, and the provenance plumbing, with scripted fakes.
 """
 from __future__ import annotations
 
-import asyncio
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest

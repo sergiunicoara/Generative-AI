@@ -32,7 +32,7 @@ sys.path.insert(0, str(ROOT))
 from graphrag.retrieval.query_router import Route, baseline_route, route_query  # noqa: E402
 
 CASES = ROOT / "evals" / "routing_cases.json"
-HELDOUT = ROOT / "evals" / "routing_cases_heldout.json"
+HELDOUT_SETS = sorted((ROOT / "evals").glob("routing_cases_heldout*.json"))   # each scored separately
 OUT = ROOT / "evals" / "routing_eval_results.json"
 
 
@@ -102,13 +102,14 @@ def main(argv: list[str]) -> int:
     ap.add_argument("--tenant", default="default")
     args = ap.parse_args(argv)
     cases = json.loads(CASES.read_text(encoding="utf-8"))["cases"]
-    heldout = json.loads(HELDOUT.read_text(encoding="utf-8"))["cases"]
+    heldout_sets = {p.stem.replace("routing_cases_", ""): json.loads(p.read_text(encoding="utf-8"))["cases"]
+                    for p in HELDOUT_SETS}
     report = {
         "generated_at": datetime.now(timezone.utc).isoformat(),
         "router": "graphrag/retrieval/query_router.py (deterministic, no LLM)",
         "offline": offline(cases),
         # Written to be kept out of rule design: rules are fixed from the dev set only, then scored here.
-        "offline_heldout": offline(heldout),
+        "offline_heldout": {name: offline(cases_) for name, cases_ in heldout_sets.items()},
         "live": None,
         "not_measured": {
             "context_precision_recall": "needs RAGAS judge + live stack",
@@ -128,11 +129,11 @@ def main(argv: list[str]) -> int:
           f"legacy baseline {o['route_accuracy']['legacy_planner_baseline']:.2%}  ({o['cases']} cases)")
     for m in o["misses"]:
         print(f"  miss {m['id']}: expected {m['expected']}, router {m['router']}")
-    h = report["offline_heldout"]
-    print(f"held-out: router {h['route_accuracy']['router']:.2%}  "
-          f"legacy baseline {h['route_accuracy']['legacy_planner_baseline']:.2%}  ({h['cases']} cases)")
-    for m in h["misses"]:
-        print(f"  held-out miss {m['id']}: expected {m['expected']}, router {m['router']}")
+    for name, h in report["offline_heldout"].items():
+        print(f"{name}: router {h['route_accuracy']['router']:.2%}  "
+              f"legacy baseline {h['route_accuracy']['legacy_planner_baseline']:.2%}  ({h['cases']} cases)")
+        for m in h["misses"]:
+            print(f"  {name} miss {m['id']}: expected {m['expected']}, router {m['router']}")
     return 0
 
 

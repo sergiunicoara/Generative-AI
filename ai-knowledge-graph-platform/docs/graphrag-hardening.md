@@ -125,8 +125,8 @@ from the existing GenAI telemetry.
 - `include_superseded=False` was validated on the live aerospace golden set (no change in pass rate).
   Still to be evaluated before enabling: `query_router_policy: enforce`, chunk authority weighting and
   the multi-hop relation allowlist. No quality improvement is claimed for those until measured.
-- Remaining route misses (docs/query-routing.md) should be validated on a new
-  held-out labelled set (the first one is now partly seen).
+- Routing: the clean held-out estimate is 37/40 (92.5%, set 3, scored once); sets 1-2 are fitted. Recorded
+  misses are in docs/query-routing.md. Any further rule change needs a fourth, untouched set.
 - Entity trust is recorded and shown but does not yet weight retrieval (unlike edge trust).
 - Community-search filtering is proven live for both the current-community and the time-travel
   (snapshot) branches (`tests/e2e/test_live_audit_followups.py`).

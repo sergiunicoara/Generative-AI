@@ -97,7 +97,27 @@ remaining misses are recorded, not tuned away:
   "Supplier" in a name counts as a second relation cue).
 
 Further rule changes should be validated on a new held-out set; this one is now
-partly seen. Routing accuracy is a structural measure only: it says nothing
+partly seen.
+
+### Second round (2026-10-12): sets 2 and 3
+
+Offline only, no LLM, no cost. Set 2 (`evals/routing_cases_heldout2.json`, 40 cases) was labelled first and
+scored before any rule change: **33/40 (82.5%)**. Its misses showed four general causes, fixed with general
+rules: `before/after/since/until/during` constrain time only when a year or month follows closely; `number of`
+counts only as `the/a number of` (not "part number of"); relation verbs and hop cues are case-sensitive, so a
+capitalised word in a title or name ("Supplier Quality Manual", "Bolt Supplier GmbH") is not a relation;
+"operators" counts only as "operators of"; a trailing `reference` / `cite` is a relation verb; "How is X
+related/connected/linked to Y" is RELATIONAL; and sentence-final punctuation is stripped from content words
+("one." is "one"). Sets 1 and 2 were then re-scored at 100%, **but that is fitted**: three of the four causes
+were read off set 2 itself.
+
+Set 3 (`evals/routing_cases_heldout3.json`, 40 cases) was labelled and scored once after those changes,
+without being used to change any rule: **37/40 (92.5%)**, legacy planner 12/40. This is the figure to quote.
+Its three misses are recorded, not tuned away: K-E02 "What is the Transport Canada Civil Aviation authority?"
+(5 content words, so not an entity lookup), K-R02 "Which operators run the PC-12 ..." (the relation verb
+"run" is not covered) and K-T02 "... prior to the 2022 revision" ("prior to" is not a time phrase).
+Routing accuracy remains a structural measure; nothing here says anything about answer quality, latency or
+tokens. Routing accuracy is a structural measure only: it says nothing
 about answer quality, latency or tokens.
 
 **Not measured** (needs the running stack): context precision/recall,

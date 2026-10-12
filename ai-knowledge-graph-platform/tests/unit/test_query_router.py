@@ -206,3 +206,50 @@ def test_routing_fixes_from_recorded_misses(question, route):
 def test_reference_is_not_ambiguous_with_a_session_or_a_named_subject():
     assert route_query("Is this still valid?", has_session=True).route is not Route.AMBIGUOUS
     assert route_query("Is it listed in AD 2020-01-02?").route is not Route.AMBIGUOUS
+
+
+@pytest.mark.parametrize("question,route", [
+    # before/after/since/until/during constrain time only with a year or month nearby
+    ("What must the technician do after removing the access panel?", Route.FACTUAL_LOOKUP),
+    ("What do the operators have to record after each inspection?", Route.FACTUAL_LOOKUP),
+    ("What was the inspection interval before the 2024 amendment?", Route.TEMPORAL),
+    ("Since March 2024, who has operated the aircraft?", Route.TEMPORAL),
+    # "part number of" is not a count; "the number of" is
+    ("What is the part number of the main fuel filter?", Route.FACTUAL_LOOKUP),
+    ("What is the number of aircraft in the fleet?", Route.AGGREGATION),
+    # a capitalised word inside a title / company name is not a relation or a hop
+    ("What does the Supplier Quality Manual say about incoming inspection?", Route.FACTUAL_LOOKUP),
+    ("What is the Operations Manual limit for crosswind landings?", Route.FACTUAL_LOOKUP),
+    ("Which parts are made by Bolt Supplier GmbH?", Route.RELATIONAL),
+    # "operators" as a noun is not a relation; "operators of X" is
+    ("What does the procedure require operators to do?", Route.FACTUAL_LOOKUP),
+    ("Who are the operators of the A320neo fleet?", Route.RELATIONAL),
+    # "reference"/"cite" as the question's verb
+    ("Which documents does the maintenance programme reference?", Route.RELATIONAL),
+    ("What is the document reference of the cabin safety instruction?", Route.FACTUAL_LOOKUP),
+    # "How is X related to Y"
+    ("How is the quality manual related to the maintenance organisation exposition?", Route.RELATIONAL),
+    # sentence-final punctuation must not turn a filler word into a content word
+    ("Same question for the other one.", Route.AMBIGUOUS),
+])
+def test_rules_from_the_second_and_third_review_with_their_look_alikes(question, route):
+    assert route_query(question).route is route
+
+
+def test_trailing_punctuation_is_stripped_from_content_words_but_identifiers_survive():
+    from graphrag.retrieval.query_router import _content_words
+
+    assert _content_words("Same for the other one.") == ["same", "other", "one"]
+    assert "ad-2024-01-02" in _content_words("Is AD-2024-01-02 current?")
+    assert "14.5" in _content_words("What is 14.5 here?")
+
+
+def test_every_recorded_routing_set_is_scored_by_the_eval_script():
+    import json
+    from pathlib import Path
+
+    root = Path(__file__).resolve().parents[2]
+    sets = sorted((root / "evals").glob("routing_cases_heldout*.json"))
+    assert len(sets) >= 3
+    ids = [c["id"] for p in sets for c in json.loads(p.read_text(encoding="utf-8"))["cases"]]
+    assert len(ids) == len(set(ids))        # ids are unique across sets

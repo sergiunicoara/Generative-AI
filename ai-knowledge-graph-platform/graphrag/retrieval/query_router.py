@@ -48,10 +48,12 @@ LEGACY_TO_ROUTE = {
 }
 
 _AGGREGATION = re.compile(
-    r"\b(how many|number of|count of|count the|total (?:number|amount)|how much in total|"
+    r"\b(how many|(?:the|a) number of|count of|count the|total (?:number|amount)|how much in total|"
     r"list (?:all|every)|which \w+ (?:have|has) no|without (?:any )?evidence|average|sum of)\b", re.I)
 _TEMPORAL = re.compile(
-    r"\b(as of|as at|at the time|before|after|since|until|between \d{4}|during|"
+    r"\b(as of|as at|at the time|between \d{4}|"
+    r"(?:before|after|since|until|during)\s+(?:\w+\s+){0,3}?(?:(?:19|20)\d{2}|january|february|march|april|may|june|"
+    r"july|august|september|october|november|december)|"
     r"in (?:19|20)\d{2}|on \d{4}-\d{2}-\d{2}|(?:19|20)\d{2}-\d{2}-\d{2}|"
     r"previous(?:ly)?|former(?:ly)?|historical(?:ly)?|was (?:valid|in force|current)|"
     r"superseded|which (?:revision|version) was|at that time)\b", re.I)
@@ -61,9 +63,12 @@ _ISO_DATE = re.compile(r"\b((?:19|20)\d{2}-\d{2}-\d{2})\b")
 _IDENTIFIER = re.compile(r"\b[A-Z]{2,}[\s\-.]?(?:19|20)\d{2}-\d{2}(?:-\d{2})?\b")
 # Relation verbs that make "Who/Which/What <verb> ..." a graph question without saying "related".
 _RELATION_QUESTION = re.compile(
-    r"^\s*(?:who|whom|which|what)\b.*?\b(?:owns?|owned by|operat(?:es?|ors?|ed by)|suppl(?:y|ies|ier|iers|ied by)|"
-    r"manufactur\w+|made by|depends? on|depend(?:ed|ing) on|connects? to|feeds?|oversee\w*|regulat(?:es|or)|"
-    r"responsible for|subsidiar\w+|parent of|approv(?:es|ed by|ing)|leases?|acquir\w+)\b", re.I)
+    r"(?i:^\s*(?:who|whom|which|what))\b.*?\b(?:owns?|owned by|operates?|operated by|operators? of|"
+    r"suppl(?:y|ies|ier|iers|ied by)|manufactur\w+|made by|depends? on|depend(?:ed|ing) on|connects? to|feeds?|"
+    r"oversee\w*|regulat(?:es|or)|responsible for|subsidiar\w+|parent of|approv(?:es|ed by|ing)|leases?|acquir\w+|"
+    r"refers? to|(?:references?|cites?)(?=\s*[?.!]*\s*$))\b")
+# "How is X related / connected / linked to Y".
+_RELATED_TO = re.compile(r"(?i:^\s*how)\b.*\b(?:related|connected|linked|tied)\s+to\b")
 # Questions that compare which source governs a claim.
 _AUTHORITY_COMPARE = re.compile(
     r"\b(?:authoritative|takes? precedence|prevails?|overrides?|conflicts? with|contradicts?)\b", re.I)
@@ -71,7 +76,7 @@ _AUTHORITY_COMPARE = re.compile(
 _HOP_CUE = re.compile(
     r"(?:\w+'s\b|\bsuppl(?:y|ies|ier|iers|ied by)\b|\bused (?:in|on|by)\b|\b(?:operated|owned|leased|made|"
     r"issued|serviced) (?:by|to)\b|\bacquired\b|\bsubsidiar\w+|\bservic(?:e|es|ed|ing)\b|"
-    r"\bmanufacturer\b|\bcustomers?\b|\baffect\w*\b)", re.I)
+    r"\bmanufacturer\b|\bcustomers?\b|\baffect\w*\b)")   # case-sensitive: a capitalised "Supplier" is a name
 _HOP_WORDS = re.compile(r"\b(?:through which|via|ultimately|intermediar\w+|indirectly|transitive\w*)\b", re.I)
 _DEICTIC_ANY = re.compile(
     r"\b(?:it|this|that|they|them|these|those|the other|the second|the first|the same|that one|this one|"
@@ -138,7 +143,10 @@ def _has_named_token(question: str) -> bool:
 
 
 def _content_words(question: str) -> list[str]:
-    return [w for w in re.findall(r"[A-Za-z0-9][\w\-./]*", question.lower()) if w not in _STOP]
+    # The token class keeps "." "-" "/" for identifiers (AD-2024-01, 14.5); strip them from the END so a
+    # sentence-final "one." is the word "one".
+    tokens = (t.rstrip(".-/") for t in re.findall(r"[A-Za-z0-9][\w\-./]*", question.lower()))
+    return [w for w in tokens if w and w not in _STOP]
 
 
 def route_query(question: str, *, tenant: str = "default", explicit_valid_at: str | None = None,
@@ -183,7 +191,8 @@ def route_query(question: str, *, tenant: str = "default", explicit_valid_at: st
     if legacy in ("relational", "contradiction"):
         return RouteDecision(Route.RELATIONAL, f"legacy_{legacy}", signals=[legacy], **base)
 
-    if _RELATION_QUESTION.search(question) or _AUTHORITY_COMPARE.search(question):
+    if (_RELATION_QUESTION.search(question) or _AUTHORITY_COMPARE.search(question)
+            or _RELATED_TO.search(question)):
         return RouteDecision(Route.RELATIONAL, "relation_verb", signals=["relation_verb"], **base)
 
     # A single named subject ("What is ICAO?") is a lookup, not an unresolved reference.

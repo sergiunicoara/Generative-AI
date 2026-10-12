@@ -683,6 +683,10 @@ class LocalSearch:
             transaction_at=transaction_at,
             include_superseded=include_superseded,
         ) if use_entity_context else []
+        if entities and cfg.get("entity_trust_weighting_enabled", False):
+            # Opt-in: reviewer-verified / extracted entities are shown before unverified generated ones.
+            from graphrag.graph.trust import rank_entities_by_trust
+            entities = rank_entities_by_trust(entities)
 
         # Collect the entity/chunk references so the caller can record the
         # session turn once the real LLM answer is available.

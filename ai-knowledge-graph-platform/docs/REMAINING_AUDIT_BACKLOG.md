@@ -36,6 +36,13 @@ with `include_superseded=False` forced, confirm no regression against the
 A128 baseline (esp. AUT-03), then flip the default.
 
 ### 2. Question-relevant conflict calibration
+**Code done 2026-10-12, validation NOT done.** `graphrag/retrieval/conflict_relevance.py` narrows the conflicts
+that may trigger the `unresolved_conflict` sufficiency reason to those that plausibly affect the answer
+(entity named in the question, or entity in the top-ranked evidence plus a shared source document; unknown
+sources stay relevant). Opt-in (`retrieval.conflict_relevance_filter_enabled`, default false) and it only
+matters when `retrieval_sufficiency_abstain_enabled` is enabled, which stays off. Unit-tested only; the
+golden-set revalidation this item requires needs LLM calls and was deliberately not run. Original
+description follows.
 `sufficiency.py`'s abstention gate is a binary global disqualifier — any
 open `Conflict` node reachable in retrieved context blocks the answer, even
 when unrelated to the question. Enabling it as-is previously collapsed the

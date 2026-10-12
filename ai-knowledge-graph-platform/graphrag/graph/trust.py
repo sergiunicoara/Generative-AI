@@ -76,6 +76,38 @@ def _parse(ts: Any) -> datetime | None:
     return dt if dt.tzinfo else dt.replace(tzinfo=timezone.utc)
 
 
+def entity_trust_factor(row: dict) -> float:
+    """Origin x verification factor for an entity row (``origin`` / ``verification_status``).
+
+    Missing fields mean a legacy entity written before trust metadata existed: treated as EXTRACTED and
+    UNVERIFIED, the same defaults new entities start with. A REJECTED entity scores 0.
+    """
+    try:
+        origin = Origin(str(row.get("origin") or "EXTRACTED").upper())
+    except ValueError:
+        origin = Origin.EXTRACTED
+    try:
+        status = VerificationStatus(str(row.get("verification_status") or "UNVERIFIED").upper())
+    except ValueError:
+        status = VerificationStatus.UNVERIFIED
+    return round(ORIGIN_FACTOR[origin] * VERIFICATION_FACTOR[status], 6)
+
+
+def rank_entities_by_trust(entities: list[dict]) -> list[dict]:
+    """Stable-sort entity rows by trust (highest first) and attach an explainable ``trust`` block.
+
+    Equal trust keeps the incoming order, so with no trust metadata the list is returned in the same order.
+    Context assembly keeps only the first few entities, so this decides which ones the model sees.
+    """
+    ranked = []
+    for row in entities:
+        factor = entity_trust_factor(row)
+        ranked.append({**row, "trust": {"origin": row.get("origin") or "EXTRACTED",
+                                         "verification_status": row.get("verification_status") or "UNVERIFIED",
+                                         "trust_factor": factor}})
+    return sorted(ranked, key=lambda r: r["trust"]["trust_factor"], reverse=True)
+
+
 @dataclass
 class TrustAssessment:
     """Why a piece of evidence is (or is not) trusted as current."""

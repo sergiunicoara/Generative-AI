@@ -39,6 +39,7 @@ from graphrag.retrieval.query_router import Route, enforced_overrides, route_que
 from graphrag.retrieval import routing_metrics
 from graphrag.retrieval.explanation import build_explanation
 from graphrag.retrieval.adaptive_router import AdaptiveRetrievalRouter
+from graphrag.retrieval.conflict_relevance import filter_relevant_conflicts
 from graphrag.retrieval.sufficiency import assess_retrieval_sufficiency, abstention_message
 from graphrag.retrieval.evidence_bundle import build_evidence_bundle
 from graphrag.observability.budgets import check_budget
@@ -888,10 +889,21 @@ class HybridRetriever:
                 return_evidence=True,
             )
 
+            gate_conflicts = conflicts
+            if conflicts and cfg.get("conflict_relevance_filter_enabled", False):
+                # Opt-in: only conflicts that plausibly affect THIS answer may block it. The annotation
+                # shown to the model and the policy trace keep the full list.
+                gate_conflicts, ignored_conflicts = filter_relevant_conflicts(
+                    conflicts, question=question, chunks=local_results.get("chunks", []),
+                    max_ranked_chunks=int(cfg.get("rerank_top_k", 5)),
+                )
+                if ignored_conflicts:
+                    log.info("hybrid_retriever.conflicts_not_relevant",
+                             ignored=len(ignored_conflicts), relevant=len(gate_conflicts))
             sufficiency = assess_retrieval_sufficiency(
                 chunks=local_results.get("chunks", []),
                 citations=citations,
-                conflicts=conflicts,
+                conflicts=gate_conflicts,
                 min_evidence=int(cfg.get("retrieval_sufficiency_min_evidence", 1)),
                 min_average_score=float(cfg.get("retrieval_sufficiency_min_average_score", 0.0)),
             )

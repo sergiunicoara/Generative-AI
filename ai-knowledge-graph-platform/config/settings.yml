@@ -96,6 +96,13 @@ retrieval:
   # Log sufficiency now; enable hard abstention only after threshold
   # calibration on tenant-disjoint golden data.
   retrieval_sufficiency_enabled: true
+  # Opt-in, NOT validated against the golden sets: when true, only conflicts that name an entity from the
+  # question, or that sit in the top-ranked evidence's documents, can trigger the unresolved_conflict
+  # sufficiency reason. Matters only together with retrieval_sufficiency_abstain_enabled.
+  conflict_relevance_filter_enabled: false
+  # Opt-in, NOT evaluated: order the entity context by trust (origin x verification) so the few entities that
+  # fit in the prompt are the most trusted ones. Entities have no trust metadata until re-ingested or verified.
+  entity_trust_weighting_enabled: false
   retrieval_sufficiency_abstain_enabled: false
   retrieval_sufficiency_min_evidence: 1
   retrieval_sufficiency_min_average_score: 0.0

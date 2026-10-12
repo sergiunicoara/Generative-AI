@@ -405,3 +405,42 @@ def test_entity_verification_request_has_no_reviewer_field_and_bounds_its_input(
     assert "reviewed_by" not in EntityVerifyRequest.model_fields and "verified_by" not in EntityVerifyRequest.model_fields
     with pytest.raises(ValueError):
         EntityVerifyRequest(entity_name="x", entity_type="ORG", verification="REJECTED")
+
+
+# ── entity trust ranking (opt-in) ────────────────────────────────────────────
+
+def test_entity_trust_factor_combines_origin_and_verification():
+    from graphrag.graph.trust import entity_trust_factor
+
+    assert entity_trust_factor({"origin": "EXTRACTED", "verification_status": "VERIFIED"}) == 1.0
+    assert entity_trust_factor({"origin": "EXTRACTED", "verification_status": "UNVERIFIED"}) == 0.9
+    assert entity_trust_factor({"origin": "GENERATED", "verification_status": "UNVERIFIED"}) == 0.54
+    assert entity_trust_factor({"origin": "INFERRED", "verification_status": "VERIFIED"}) == 0.85
+    assert entity_trust_factor({"origin": "EXTRACTED", "verification_status": "REJECTED"}) == 0.0
+    assert entity_trust_factor({}) == 0.9                       # legacy entity: EXTRACTED + UNVERIFIED
+    assert entity_trust_factor({"origin": "weird", "verification_status": "also weird"}) == 0.9
+
+
+def test_ranking_orders_by_trust_keeps_ties_stable_and_explains_itself():
+    from graphrag.graph.trust import rank_entities_by_trust
+
+    rows = [{"entity": "a", "origin": "GENERATED"}, {"entity": "b"}, {"entity": "c", "verification_status": "VERIFIED"},
+            {"entity": "d"}, {"entity": "e", "verification_status": "REJECTED"}]
+    out = rank_entities_by_trust(rows)
+    assert [r["entity"] for r in out] == ["c", "b", "d", "a", "e"]       # b before d: stable
+    assert out[0]["trust"] == {"origin": "EXTRACTED", "verification_status": "VERIFIED", "trust_factor": 1.0}
+    assert "trust" not in rows[0]                                          # input rows are not mutated
+
+
+def test_ranking_without_any_metadata_preserves_order():
+    from graphrag.graph.trust import rank_entities_by_trust
+
+    rows = [{"entity": n} for n in "xyz"]
+    assert [r["entity"] for r in rank_entities_by_trust(rows)] == ["x", "y", "z"]
+    assert rank_entities_by_trust([]) == []
+
+
+def test_entity_trust_weighting_is_off_by_default():
+    from graphrag.core.config import get_settings
+
+    assert get_settings().retrieval.get("entity_trust_weighting_enabled", False) is False

@@ -224,3 +224,37 @@ class TestLiveEntityVerificationRoute:
             assert (await client.run("MATCH (e:Entity {tenant:$t, name:'Acme'}) RETURN e.verification_status AS v", t=t))[0]["v"] == "VERIFIED"
         finally:
             await driver.close()
+
+
+class TestLiveGraphCorrectness:
+    async def test_report_counts_real_damage(self, neo4j_container):  # noqa: F811
+        from graphrag.graph.correctness import graph_correctness_report
+
+        t = f"gc-{uuid.uuid4().hex[:8]}"
+        driver, client = await _driver_client(neo4j_container)
+        try:
+            await client.run(
+                """
+                CREATE (a:Entity {tenant:$t, id:$t+'a', name:'A', type:'ORG'}), (b:Entity {tenant:$t, id:$t+'b', name:'B', type:'ORG'}),
+                       (c:Entity {tenant:$t, id:$t+'c', name:'C', type:'ORG', quarantined:true}),
+                       (:Document {tenant:$t, id:$t+'old', superseded_by:'x'}), (:Document {tenant:$t, id:$t+'ok'})
+                CREATE (a)-[:RELATES_TO {relation:'OK', tenant:$t, source_doc_id:$t+'ok', source_doc_ids:[$t+'ok']}]->(b)
+                CREATE (a)-[:RELATES_TO {relation:'FROM_OLD', tenant:$t, source_doc_id:$t+'old', source_doc_ids:[$t+'old']}]->(b)
+                CREATE (a)-[:RELATES_TO {relation:'INVERTED', tenant:$t, source_doc_id:$t+'ok', source_doc_ids:[$t+'ok'],
+                         valid_from: datetime('2024-01-01T00:00:00Z'), valid_to: datetime('2023-01-01T00:00:00Z')}]->(b)
+                CREATE (a)-[:RELATES_TO {relation:'ON_QUARANTINED', tenant:$t, source_doc_id:$t+'ok', source_doc_ids:[$t+'ok']}]->(c)
+                CREATE (a)-[:RELATES_TO {relation:'GONE', tenant:$t, confidence_state:'RETRACTED', source_doc_id:$t+'ok', source_doc_ids:[$t+'ok']}]->(b)
+                CREATE (a)-[:RELATES_TO {relation:'DERIVED', tenant:$t, origin:'INFERRED', source_type:'inferred'}]->(b)
+                CREATE (a)-[:RELATES_TO {relation:'NO_SOURCE', tenant:$t}]->(b)
+                """, t=t)
+            report = await graph_correctness_report(client, t)
+            v = report["violations"]
+            assert report["edges"] == 7
+            assert v["inverted_validity"] == 1
+            assert v["superseded_source_edges"] == 1
+            assert v["current_edges_on_quarantined_entities"] == 1
+            assert v["inferred_without_premises"] == 1
+            assert v["document_edges_without_source"] == 1
+            assert report["current_edges"] == 5              # RETRACTED and the expired (inverted-window) edge are not current
+        finally:
+            await driver.close()

@@ -1,0 +1,508 @@
+{
+  "golden_set_by_type": {
+    "group_key": "type",
+    "n": 34,
+    "overall_rate": 0.8824,
+    "groups": [
+      {
+        "group": "agentic",
+        "n": 2,
+        "passed": 2,
+        "rate": 1.0,
+        "ci95": [
+          0.3424,
+          1.0
+        ],
+        "insufficient_n": true,
+        "below_overall": false
+      },
+      {
+        "group": "authority_chain",
+        "n": 3,
+        "passed": 2,
+        "rate": 0.6667,
+        "ci95": [
+          0.2077,
+          0.9385
+        ],
+        "insufficient_n": false,
+        "below_overall": true
+      },
+      {
+        "group": "calibration",
+        "n": 1,
+        "passed": 1,
+        "rate": 1.0,
+        "ci95": [
+          0.2065,
+          1.0
+        ],
+        "insufficient_n": true,
+        "below_overall": false
+      },
+      {
+        "group": "contextual",
+        "n": 2,
+        "passed": 2,
+        "rate": 1.0,
+        "ci95": [
+          0.3424,
+          1.0
+        ],
+        "insufficient_n": true,
+        "below_overall": false
+      },
+      {
+        "group": "inference",
+        "n": 3,
+        "passed": 3,
+        "rate": 1.0,
+        "ci95": [
+          0.4385,
+          1.0
+        ],
+        "insufficient_n": false,
+        "below_overall": false
+      },
+      {
+        "group": "multi_hop",
+        "n": 6,
+        "passed": 4,
+        "rate": 0.6667,
+        "ci95": [
+          0.3,
+          0.9032
+        ],
+        "insufficient_n": false,
+        "below_overall": true
+      },
+      {
+        "group": "negative",
+        "n": 3,
+        "passed": 3,
+        "rate": 1.0,
+        "ci95": [
+          0.4385,
+          1.0
+        ],
+        "insufficient_n": false,
+        "below_overall": false
+      },
+      {
+        "group": "precision",
+        "n": 2,
+        "passed": 2,
+        "rate": 1.0,
+        "ci95": [
+          0.3424,
+          1.0
+        ],
+        "insufficient_n": true,
+        "below_overall": false
+      },
+      {
+        "group": "single_hop",
+        "n": 8,
+        "passed": 8,
+        "rate": 1.0,
+        "ci95": [
+          0.6756,
+          1.0
+        ],
+        "insufficient_n": false,
+        "below_overall": false
+      },
+      {
+        "group": "temporal",
+        "n": 4,
+        "passed": 3,
+        "rate": 0.75,
+        "ci95": [
+          0.3006,
+          0.9544
+        ],
+        "insufficient_n": false,
+        "below_overall": false
+      }
+    ],
+    "max_gap": 0.3333,
+    "flagged": [
+      "authority_chain",
+      "multi_hop"
+    ],
+    "thresholds": {
+      "min_n": 3,
+      "min_gap": 0.15
+    }
+  },
+  "routing": {
+    "by_expected_class": {
+      "group_key": "expected",
+      "n": 172,
+      "overall_rate": 0.9767,
+      "groups": [
+        {
+          "group": "AGGREGATION",
+          "n": 22,
+          "passed": 22,
+          "rate": 1.0,
+          "ci95": [
+            0.8513,
+            1.0
+          ],
+          "insufficient_n": false,
+          "below_overall": false
+        },
+        {
+          "group": "AMBIGUOUS",
+          "n": 20,
+          "passed": 20,
+          "rate": 1.0,
+          "ci95": [
+            0.8389,
+            1.0
+          ],
+          "insufficient_n": false,
+          "below_overall": false
+        },
+        {
+          "group": "ENTITY_LOOKUP",
+          "n": 22,
+          "passed": 20,
+          "rate": 0.9091,
+          "ci95": [
+            0.7218,
+            0.9747
+          ],
+          "insufficient_n": false,
+          "below_overall": false
+        },
+        {
+          "group": "FACTUAL_LOOKUP",
+          "n": 35,
+          "passed": 35,
+          "rate": 1.0,
+          "ci95": [
+            0.9011,
+            1.0
+          ],
+          "insufficient_n": false,
+          "below_overall": false
+        },
+        {
+          "group": "MULTI_HOP",
+          "n": 17,
+          "passed": 17,
+          "rate": 1.0,
+          "ci95": [
+            0.8157,
+            1.0
+          ],
+          "insufficient_n": false,
+          "below_overall": false
+        },
+        {
+          "group": "RELATIONAL",
+          "n": 34,
+          "passed": 33,
+          "rate": 0.9706,
+          "ci95": [
+            0.8508,
+            0.9948
+          ],
+          "insufficient_n": false,
+          "below_overall": false
+        },
+        {
+          "group": "TEMPORAL",
+          "n": 22,
+          "passed": 21,
+          "rate": 0.9545,
+          "ci95": [
+            0.782,
+            0.9919
+          ],
+          "insufficient_n": false,
+          "below_overall": false
+        }
+      ],
+      "max_gap": 0.0909,
+      "flagged": [],
+      "thresholds": {
+        "min_n": 3,
+        "min_gap": 0.15
+      }
+    },
+    "by_set": {
+      "group_key": "set",
+      "n": 172,
+      "overall_rate": 0.9767,
+      "groups": [
+        {
+          "group": "routing_cases",
+          "n": 49,
+          "passed": 48,
+          "rate": 0.9796,
+          "ci95": [
+            0.8931,
+            0.9964
+          ],
+          "insufficient_n": false,
+          "below_overall": false
+        },
+        {
+          "group": "routing_cases_heldout",
+          "n": 43,
+          "passed": 43,
+          "rate": 1.0,
+          "ci95": [
+            0.918,
+            1.0
+          ],
+          "insufficient_n": false,
+          "below_overall": false
+        },
+        {
+          "group": "routing_cases_heldout2",
+          "n": 40,
+          "passed": 40,
+          "rate": 1.0,
+          "ci95": [
+            0.9124,
+            1.0
+          ],
+          "insufficient_n": false,
+          "below_overall": false
+        },
+        {
+          "group": "routing_cases_heldout3",
+          "n": 40,
+          "passed": 37,
+          "rate": 0.925,
+          "ci95": [
+            0.8014,
+            0.9742
+          ],
+          "insufficient_n": false,
+          "below_overall": false
+        }
+      ],
+      "max_gap": 0.075,
+      "flagged": [],
+      "thresholds": {
+        "min_n": 3,
+        "min_gap": 0.15
+      }
+    }
+  },
+  "entity_resolution_by_category": {
+    "group_key": "category",
+    "n": 29,
+    "overall_rate": 0.7931,
+    "groups": [
+      {
+        "group": "abbreviation",
+        "n": 1,
+        "passed": 1,
+        "rate": 1.0,
+        "ci95": [
+          0.2065,
+          1.0
+        ],
+        "insufficient_n": true,
+        "below_overall": false
+      },
+      {
+        "group": "acronym",
+        "n": 2,
+        "passed": 0,
+        "rate": 0.0,
+        "ci95": [
+          0.0,
+          0.6576
+        ],
+        "insufficient_n": false,
+        "below_overall": true
+      },
+      {
+        "group": "ambiguous-between-two-entities",
+        "n": 2,
+        "passed": 2,
+        "rate": 1.0,
+        "ci95": [
+          0.3424,
+          1.0
+        ],
+        "insufficient_n": false,
+        "below_overall": false
+      },
+      {
+        "group": "ambiguous-between-two-variants",
+        "n": 1,
+        "passed": 1,
+        "rate": 1.0,
+        "ci95": [
+          0.2065,
+          1.0
+        ],
+        "insufficient_n": true,
+        "below_overall": false
+      },
+      {
+        "group": "case",
+        "n": 1,
+        "passed": 1,
+        "rate": 1.0,
+        "ci95": [
+          0.2065,
+          1.0
+        ],
+        "insufficient_n": true,
+        "below_overall": false
+      },
+      {
+        "group": "case-plural",
+        "n": 1,
+        "passed": 1,
+        "rate": 1.0,
+        "ci95": [
+          0.2065,
+          1.0
+        ],
+        "insufficient_n": true,
+        "below_overall": false
+      },
+      {
+        "group": "exact",
+        "n": 2,
+        "passed": 2,
+        "rate": 1.0,
+        "ci95": [
+          0.3424,
+          1.0
+        ],
+        "insufficient_n": false,
+        "below_overall": false
+      },
+      {
+        "group": "legal-suffix",
+        "n": 2,
+        "passed": 2,
+        "rate": 1.0,
+        "ci95": [
+          0.3424,
+          1.0
+        ],
+        "insufficient_n": false,
+        "below_overall": false
+      },
+      {
+        "group": "near-identifier-distinct",
+        "n": 2,
+        "passed": 0,
+        "rate": 0.0,
+        "ci95": [
+          0.0,
+          0.6576
+        ],
+        "insufficient_n": false,
+        "below_overall": true
+      },
+      {
+        "group": "parenthetical-alias",
+        "n": 1,
+        "passed": 1,
+        "rate": 1.0,
+        "ci95": [
+          0.2065,
+          1.0
+        ],
+        "insufficient_n": true,
+        "below_overall": false
+      },
+      {
+        "group": "plural-singular",
+        "n": 3,
+        "passed": 3,
+        "rate": 1.0,
+        "ci95": [
+          0.4385,
+          1.0
+        ],
+        "insufficient_n": false,
+        "below_overall": false
+      },
+      {
+        "group": "punctuation",
+        "n": 2,
+        "passed": 2,
+        "rate": 1.0,
+        "ci95": [
+          0.3424,
+          1.0
+        ],
+        "insufficient_n": false,
+        "below_overall": false
+      },
+      {
+        "group": "shared-tokens-distinct",
+        "n": 4,
+        "passed": 2,
+        "rate": 0.5,
+        "ci95": [
+          0.15,
+          0.85
+        ],
+        "insufficient_n": false,
+        "below_overall": true
+      },
+      {
+        "group": "symbol-variant",
+        "n": 1,
+        "passed": 1,
+        "rate": 1.0,
+        "ci95": [
+          0.2065,
+          1.0
+        ],
+        "insufficient_n": true,
+        "below_overall": false
+      },
+      {
+        "group": "typo",
+        "n": 1,
+        "passed": 1,
+        "rate": 1.0,
+        "ci95": [
+          0.2065,
+          1.0
+        ],
+        "insufficient_n": true,
+        "below_overall": false
+      },
+      {
+        "group": "unrelated",
+        "n": 3,
+        "passed": 3,
+        "rate": 1.0,
+        "ci95": [
+          0.4385,
+          1.0
+        ],
+        "insufficient_n": false,
+        "below_overall": false
+      }
+    ],
+    "max_gap": 1.0,
+    "flagged": [
+      "acronym",
+      "near-identifier-distinct",
+      "shared-tokens-distinct"
+    ],
+    "thresholds": {
+      "min_n": 2,
+      "min_gap": 0.15
+    }
+  },
+  "note": "Descriptive only. Small groups have wide intervals; a flag means 'look here', not 'broken'."
+}

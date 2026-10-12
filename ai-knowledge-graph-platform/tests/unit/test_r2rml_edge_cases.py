@@ -250,3 +250,80 @@ def test_exports_and_regex():
     assert r2rml.__all__ == ["FederatedOBDAIngestor", "FederatedOBDASource", "R2RMLMappingError", "r2rml_to_mapping"]
     assert str(r2rml.RR["class"]) == "http://www.w3.org/ns/r2rml#class"
     assert issubclass(R2RMLMappingError, ValueError)
+
+
+# ── branch conditions inside r2rml_to_mapping ─────────────────────────────────
+
+def test_predicate_without_object_map_is_ignored_not_rejected(tmp_path):
+    body = SUPPLIER.rstrip(".\n") + "; rr:predicateObjectMap [rr:predicate ex:dangling]."
+    mapping = _load(tmp_path, body)
+    assert mapping.relations == [] and len(mapping.entities) == 1
+
+
+_ORDER_HEAD = """
+ex:Order a rr:TriplesMap; rr:logicalTable [rr:tableName "orders"];
+  rr:subjectMap [rr:template "https://x/o/{oid}"; rr:class ex:Order];
+  rr:predicateObjectMap [rr:predicate rdfs:label; rr:objectMap [rr:column "oname"]];
+  rr:predicateObjectMap [rr:predicate ex:orderedFrom; rr:objectMap %s].
+"""
+_PARENT_MAP = '[rr:parentTriplesMap ex:Supplier; rr:joinCondition [rr:child "supplier_id"; rr:parent "sid"]]'
+
+
+def test_two_object_maps_on_a_relation_are_rejected(tmp_path):
+    two = _ORDER_HEAD % (_PARENT_MAP + ", " + _PARENT_MAP.replace("supplier_id", "alt_id"))
+    _fails(tmp_path, SUPPLIER + two, "a parent-triples-map relation needs one predicate and one object map")
+
+
+def test_one_parent_object_map_among_several_still_marks_a_relation(tmp_path):
+    mixed = _ORDER_HEAD % (_PARENT_MAP + ', [rr:column "plain"]')
+    _fails(tmp_path, SUPPLIER + mixed, "a parent-triples-map relation needs one predicate and one object map")
+
+
+def test_no_label_at_all_names_the_table(tmp_path):
+    body = ('ex:X a rr:TriplesMap; rr:logicalTable [rr:tableName "things"]; '
+            'rr:subjectMap [rr:template "https://x/{id}"; rr:class ex:X].')
+    _fails(tmp_path, body, "things: exactly one rdfs:label rr:column is required")
+
+
+def test_several_relations_keep_their_own_endpoints(tmp_path):
+    third = """
+ex:Part a rr:TriplesMap; rr:logicalTable [rr:tableName "parts"];
+  rr:subjectMap [rr:template "https://x/p/{pid}"; rr:class ex:Part];
+  rr:predicateObjectMap [rr:predicate rdfs:label; rr:objectMap [rr:column "pname"]];
+  rr:predicateObjectMap [rr:predicate ex:madeBy; rr:objectMap [
+    rr:parentTriplesMap ex:Supplier; rr:joinCondition [rr:child "maker_id"; rr:parent "sid"]]].
+"""
+    mapping = _load(tmp_path, SUPPLIER + ORDER + third)
+    rels = {r.relation: r for r in mapping.relations}
+    assert set(rels) == {"ORDEREDFROM", "MADEBY"}
+    assert (rels["MADEBY"].source_table, rels["MADEBY"].target_table) == ("parts", "suppliers")
+    assert (rels["MADEBY"].source_column, rels["MADEBY"].target_column) == ("pid", "maker_id")
+    assert (rels["ORDEREDFROM"].source_column, rels["ORDEREDFROM"].target_column) == ("oid", "supplier_id")
+
+
+def test_source_may_be_a_string_path(tmp_path):
+    path = tmp_path / "m.ttl"
+    path.write_text(PREFIXES + SUPPLIER, encoding="utf-8")
+    mapping = r2rml_to_mapping(str(path), mapping_id="m", version="1", source_id="s", tenant="t")
+    assert mapping.entities[0].table == "suppliers"
+
+
+@pytest.mark.parametrize("iri,expected", [
+    ("http://x/ns#a/b", "B"),            # '#' is split first, then '/'
+    ("http://x/a/b", "B"),
+    ("http://x#a#b", "B"),               # only the last '#'
+    ("http://x/__Mixed__Case__", "MIXED_CASE"),
+    ("http://x/a1b2", "A1B2"),
+])
+def test_local_name_splitting_rules(iri, expected):
+    assert r2rml._local_name(URIRef(iri)) == expected
+
+
+def test_federation_reports_validation_errors_in_source_order():
+    a, b = _Ingestor(errors=["first"]), _Ingestor(errors=["second"])
+    fed = FederatedOBDAIngestor([FederatedOBDASource("a", a, _mapping("a")), FederatedOBDASource("b", b, _mapping("b"))])
+    with pytest.raises(ValueError) as exc:
+        import asyncio
+        asyncio.run(fed.validate())
+    assert str(exc.value).endswith("first; second")
+    assert fed.sources == tuple(fed.sources) and len(fed.sources) == 2

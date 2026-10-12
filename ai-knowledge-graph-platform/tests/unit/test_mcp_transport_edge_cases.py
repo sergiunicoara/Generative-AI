@@ -234,3 +234,66 @@ def test_module_constants_and_exports():
     assert MCP_PROTOCOL_VERSION == "2026-07-28"
     assert t.__all__ == ["HEADER_MISMATCH", "MCP_PROTOCOL_VERSION", "ProtocolVersionDispatch",
                          "StatelessMCP20260728App"]
+
+
+# ── ASGI plumbing ─────────────────────────────────────────────────────────────
+
+class _Capture:
+    def __init__(self):
+        self.messages = []
+
+    async def __call__(self, message):
+        self.messages.append(message)
+
+
+def test_non_http_scope_is_rejected_with_405(monkeypatch):
+    app = StatelessMCP20260728App.__new__(StatelessMCP20260728App)
+    cap = _Capture()
+    asyncio.run(app({"type": "websocket", "method": "POST"}, None, cap))
+    start = cap.messages[0]
+    assert start["status"] == 405
+
+
+def test_send_result_and_error_status_headers_and_body():
+    cap = _Capture()
+    asyncio.run(StatelessMCP20260728App._send_result(cap, "r1", {"ok": True}))
+    start, body = cap.messages
+    assert start["status"] == 200
+    headers = {k.decode(): v.decode() for k, v in start["headers"]}
+    assert headers["mcp-protocol-version"] == MCP_PROTOCOL_VERSION
+    assert headers["content-type"] == "application/json"
+    import json
+    assert json.loads(body["body"]) == {"jsonrpc": "2.0", "id": "r1", "result": {"ok": True}}
+
+    cap = _Capture()
+    asyncio.run(StatelessMCP20260728App._send_error(cap, None, -32601, "nope", status=418))
+    start, body = cap.messages
+    assert start["status"] == 418
+    assert {k.decode() for k, _ in start["headers"]} >= {"mcp-protocol-version", "content-type"}
+    assert json.loads(body["body"]) == {"jsonrpc": "2.0", "id": None, "error": {"code": -32601, "message": "nope"}}
+
+
+def test_dispatch_forwards_scope_receive_and_send_unchanged():
+    got = {}
+
+    async def legacy(scope, receive, send):
+        got["legacy"] = (scope, receive, send)
+
+    async def modern(scope, receive, send):
+        got["modern"] = (scope, receive, send)
+    d = t.ProtocolVersionDispatch(legacy)
+    d.modern_app = modern
+    recv, send = object(), object()
+    modern_scope = {"type": "http", "headers": [(b"mcp-protocol-version", MCP_PROTOCOL_VERSION.encode())]}
+    legacy_scope = {"type": "http", "headers": []}
+    asyncio.run(d(modern_scope, recv, send))
+    asyncio.run(d(legacy_scope, recv, send))
+    assert got["modern"] == (modern_scope, recv, send) and got["legacy"] == (legacy_scope, recv, send)
+    assert d.legacy_app is legacy and isinstance(t.ProtocolVersionDispatch(legacy).modern_app, StatelessMCP20260728App)
+
+
+def test_app_builds_its_own_registry():
+    from mcp_server.capabilities import build_registry
+
+    app = StatelessMCP20260728App()
+    assert type(app.registry) is type(build_registry())

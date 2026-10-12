@@ -14,11 +14,14 @@ from api.auth.dependencies import (
     get_tenant,
     require_scope,
 )
+from graphrag.enterprise.gaps import find_ingestion_gaps
 from graphrag.enterprise.lineage import LineageService
 from graphrag.enterprise.metadata_governance import MetadataGovernanceService
 from graphrag.enterprise.models import CollectionSchema, SyncChange
 from graphrag.enterprise.sync import ContentSyncService
 from graphrag.enterprise.sharepoint import SharePointSyncConnector
+from graphrag.graph.completeness import graph_completeness_report
+from graphrag.graph.neo4j_client import get_neo4j
 
 router = APIRouter()
 
@@ -31,6 +34,11 @@ class SyncChangesRequest(BaseModel):
 
 class ReconciliationRequest(BaseModel):
     discovered_external_ids: list[str] = Field(default_factory=list, max_length=100_000)
+
+
+class GapCheckRequest(BaseModel):
+    """A source listing (ids, optionally with versions). No content: the connector's cheap listing call."""
+    inventory: dict[str, str] = Field(default_factory=dict, max_length=100_000)
 
 
 @router.post("/governance/schemas", dependencies=[Depends(require_scope("write"))])
@@ -69,6 +77,22 @@ async def reconcile_sync_source(
     tenant: str = Depends(get_tenant),
 ):
     return await ContentSyncService().reconcile(source_id, body.discovered_external_ids, tenant)
+
+
+@router.post("/sync/{source_id}/gaps", dependencies=[Depends(require_scope("read"))])
+async def ingestion_gaps(
+    source_id: str,
+    body: GapCheckRequest,
+    tenant: str = Depends(get_tenant),
+):
+    """Read-only: items the source lists that the graph is missing, holds stale, or never finished ingesting."""
+    return await find_ingestion_gaps(get_neo4j(), tenant=tenant, source_id=source_id, inventory=body.inventory)
+
+
+@router.get("/governance/completeness", dependencies=[Depends(require_scope("read"))])
+async def graph_completeness(source_id: str | None = None, tenant: str = Depends(get_tenant)):
+    """Read-only population shares for documents, chunks, entities and relations."""
+    return await graph_completeness_report(get_neo4j(), tenant, source_id)
 
 
 @router.get("/sync/sources", dependencies=[Depends(require_scope("read"))])

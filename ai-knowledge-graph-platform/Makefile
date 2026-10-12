@@ -160,3 +160,9 @@ restore:       ## Restore a graph from NDJSON (TENANT= INPUT= required)
 
 test-e2e:      ## Run live end-to-end tests (requires Docker for testcontainers)
 	$(PYTEST) tests/e2e/ -v
+
+.PHONY: eval-offline
+eval-offline:   ## Offline evals and checks (no LLM, no cost): ER linkage, subgroups, licences
+	$(PYTHON) scripts/eval_entity_resolution.py
+	$(PYTHON) scripts/eval_subgroups.py
+	$(PYTHON) scripts/check_licenses.py

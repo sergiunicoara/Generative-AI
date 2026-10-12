@@ -1,0 +1,30 @@
+# Register of third-party models the platform is configured to use, with the licence / terms they are used under.
+# Checked by scripts/check_licenses.py (and tests/unit/test_license_register.py): any model identifier found in
+# config/ or graphrag/ that no entry's `pattern` covers fails the check, so adopting a model means adding a row here.
+#
+# `review_status: needs_review` means the entry was filled in from the provider's public description and has NOT
+# been confirmed against the current model card / terms by a person. Confirm, then set `reviewed` with `reviewed_on`.
+# `licence: provider-terms` = hosted API governed by the provider's terms of service, not a weights licence.
+allowed_licences: [apache-2.0, mit, provider-terms]
+models:
+  - pattern: "gpt-oss-*"
+    kind: llm
+    licence: apache-2.0
+    review_status: needs_review
+    note: "Open-weight; hosted via an inference provider, whose terms also apply."
+  - pattern: "deepseek-*"
+    kind: llm
+    licence: provider-terms
+    review_status: needs_review
+    note: "Used through the DeepSeek / aggregator API. Weights licence not assessed; confirm if self-hosting."
+  - pattern: "text-embedding-3-*"
+    kind: embedding
+    licence: provider-terms
+    review_status: needs_review
+    note: "OpenAI API terms. Embeddings are stored in the graph; check retention/ownership terms for the tenant."
+  - pattern: "ms-marco-MiniLM-*"
+    kind: reranker
+    licence: apache-2.0
+    review_status: needs_review
+    note: "Cross-encoder weights. The MS MARCO training data has its own (non-commercial research) terms; confirm that is acceptable before commercial use."
+datasets: []

@@ -83,6 +83,39 @@ The current fixture baseline is 7/7 expected dispositions: 5 `matched`, 1
 
 ---
 
+## Labelled Linkage Evaluation (measured, offline)
+
+`evals/entity_resolution_cases.json` holds 29 labelled mentions against a 12-entity synthetic registry (aerospace
+organisations, aircraft variants, parts). Labels were written from human judgement **before** the matcher was run and
+are not tuned to it. `python scripts/eval_entity_resolution.py [--write]` scores `AliasRegistry.resolve` and writes
+`evals/entity_resolution_results.json`. No LLM, no network, no cost.
+
+Errors are split by downstream cost rather than folded into one accuracy number:
+
+| error | meaning |
+| --- | --- |
+| `wrong_link` | merged into the wrong canonical entity (silent graph corruption) |
+| `over_merge` | a distinct entity was merged into an existing one |
+| `missed_match` | a true duplicate stayed separate (fragmentation) |
+| `over_quarantine` | a clear case was sent to review (reviewer load) |
+| `missed_review` | an ambiguous mention was resolved without review |
+
+Recorded result (2026-10-12, exact + stem + fuzzy tiers): 23/29 correct, auto-match precision 0.833, recall 0.882,
+F1 0.857. Errors: 3 `over_merge`, 2 `missed_match`, 1 `over_quarantine`, 0 `wrong_link`, 0 `missed_review`.
+
+* `over_merge`: `Boeing 747-800` and `Boeing 737-900` merge into `Boeing 737-800`, and `Meridian Marine Services` into
+  `Meridian Air Services`. A one-character difference in an identifier scores above the fuzzy threshold. This is a real
+  weakness of a purely lexical tier for names that differ only in a model/part number.
+* `missed_match`: `FAA` and `EASA` are not matched to their expanded names because no alias is registered; acronyms
+  need `register_alias` or a curated alias list.
+* **Not tuned.** The misses are recorded, not fixed, so the number stays an honest baseline. A fix (for example
+  requiring digit-token equality before a fuzzy auto-merge) should be proposed and re-measured on a *new* case set.
+* **Not measured:** the embedding tier and the co-occurrence tie-break need Neo4j and an embedding provider. The file
+  is small (29 cases) so one case moves the rates by about 3 points; treat it as a regression baseline, not an accuracy
+  claim for production data. `AliasRegistry.resolve` ignores `entity_type`, so cross-type collisions are not covered.
+
+---
+
 ## Stage 1: Exact / Normalized Match
 
 The alias registry maintains an in-memory hash map:

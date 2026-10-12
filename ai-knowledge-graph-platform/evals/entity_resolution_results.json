@@ -1,0 +1,417 @@
+{
+  "total": 29,
+  "correct": 23,
+  "accuracy": 0.7931034482758621,
+  "auto_match_precision": 0.8333333333333334,
+  "auto_match_recall": 0.8823529411764706,
+  "auto_match_f1": 0.8571,
+  "dispositions": {
+    "matched": 18,
+    "quarantined": 4,
+    "new": 7
+  },
+  "errors": {
+    "wrong_link": 0,
+    "over_merge": 3,
+    "missed_match": 2,
+    "over_quarantine": 1,
+    "missed_review": 0
+  },
+  "by_category": {
+    "exact": {
+      "correct": 2,
+      "total": 2
+    },
+    "case": {
+      "correct": 1,
+      "total": 1
+    },
+    "punctuation": {
+      "correct": 2,
+      "total": 2
+    },
+    "acronym": {
+      "correct": 0,
+      "total": 2
+    },
+    "parenthetical-alias": {
+      "correct": 1,
+      "total": 1
+    },
+    "symbol-variant": {
+      "correct": 1,
+      "total": 1
+    },
+    "legal-suffix": {
+      "correct": 2,
+      "total": 2
+    },
+    "typo": {
+      "correct": 1,
+      "total": 1
+    },
+    "plural-singular": {
+      "correct": 3,
+      "total": 3
+    },
+    "abbreviation": {
+      "correct": 1,
+      "total": 1
+    },
+    "case-plural": {
+      "correct": 1,
+      "total": 1
+    },
+    "ambiguous-between-two-entities": {
+      "correct": 2,
+      "total": 2
+    },
+    "ambiguous-between-two-variants": {
+      "correct": 1,
+      "total": 1
+    },
+    "near-identifier-distinct": {
+      "correct": 0,
+      "total": 2
+    },
+    "shared-tokens-distinct": {
+      "correct": 2,
+      "total": 4
+    },
+    "unrelated": {
+      "correct": 3,
+      "total": 3
+    }
+  },
+  "results": [
+    {
+      "raw_name": "Federal Aviation Administration",
+      "entity_type": "ORG",
+      "category": "exact",
+      "expected": "matched",
+      "actual": "matched",
+      "canonical_name": "Federal Aviation Administration",
+      "canonical_type": "ORG",
+      "correct": true,
+      "error": null
+    },
+    {
+      "raw_name": "federal aviation administration",
+      "entity_type": "ORG",
+      "category": "case",
+      "expected": "matched",
+      "actual": "matched",
+      "canonical_name": "Federal Aviation Administration",
+      "canonical_type": "ORG",
+      "correct": true,
+      "error": null
+    },
+    {
+      "raw_name": "Federal Aviation Administration.",
+      "entity_type": "ORG",
+      "category": "punctuation",
+      "expected": "matched",
+      "actual": "matched",
+      "canonical_name": "Federal Aviation Administration",
+      "canonical_type": "ORG",
+      "correct": true,
+      "error": null
+    },
+    {
+      "raw_name": "FAA",
+      "entity_type": "ORG",
+      "category": "acronym",
+      "expected": "matched",
+      "actual": "new",
+      "canonical_name": "",
+      "canonical_type": "",
+      "correct": false,
+      "error": "missed_match"
+    },
+    {
+      "raw_name": "EASA",
+      "entity_type": "ORG",
+      "category": "acronym",
+      "expected": "matched",
+      "actual": "new",
+      "canonical_name": "",
+      "canonical_type": "",
+      "correct": false,
+      "error": "missed_match"
+    },
+    {
+      "raw_name": "European Union Aviation Safety Agency (EASA)",
+      "entity_type": "ORG",
+      "category": "parenthetical-alias",
+      "expected": "matched",
+      "actual": "matched",
+      "canonical_name": "European Union Aviation Safety Agency",
+      "canonical_type": "ORG",
+      "correct": true,
+      "error": null
+    },
+    {
+      "raw_name": "Pratt and Whitney",
+      "entity_type": "ORG",
+      "category": "symbol-variant",
+      "expected": "matched",
+      "actual": "matched",
+      "canonical_name": "Pratt & Whitney",
+      "canonical_type": "ORG",
+      "correct": true,
+      "error": null
+    },
+    {
+      "raw_name": "Pratt & Whitney Inc.",
+      "entity_type": "ORG",
+      "category": "legal-suffix",
+      "expected": "matched",
+      "actual": "matched",
+      "canonical_name": "Pratt & Whitney",
+      "canonical_type": "ORG",
+      "correct": true,
+      "error": null
+    },
+    {
+      "raw_name": "Honeywell Aerospace Inc",
+      "entity_type": "ORG",
+      "category": "legal-suffix",
+      "expected": "matched",
+      "actual": "matched",
+      "canonical_name": "Honeywell Aerospace",
+      "canonical_type": "ORG",
+      "correct": true,
+      "error": null
+    },
+    {
+      "raw_name": "Honeywell Aerospce",
+      "entity_type": "ORG",
+      "category": "typo",
+      "expected": "matched",
+      "actual": "matched",
+      "canonical_name": "Honeywell Aerospace",
+      "canonical_type": "ORG",
+      "correct": true,
+      "error": null
+    },
+    {
+      "raw_name": "Meridian Air Service",
+      "entity_type": "ORG",
+      "category": "plural-singular",
+      "expected": "matched",
+      "actual": "matched",
+      "canonical_name": "Meridian Air Services",
+      "canonical_type": "ORG",
+      "correct": true,
+      "error": null
+    },
+    {
+      "raw_name": "Orion Regional Airline",
+      "entity_type": "ORG",
+      "category": "plural-singular",
+      "expected": "matched",
+      "actual": "matched",
+      "canonical_name": "Orion Regional Airlines",
+      "canonical_type": "ORG",
+      "correct": true,
+      "error": null
+    },
+    {
+      "raw_name": "Landing Gear Actuators",
+      "entity_type": "PRODUCT",
+      "category": "plural-singular",
+      "expected": "matched",
+      "actual": "matched",
+      "canonical_name": "Landing Gear Actuator",
+      "canonical_type": "PRODUCT",
+      "correct": true,
+      "error": null
+    },
+    {
+      "raw_name": "Hydraulic Pump Assy",
+      "entity_type": "PRODUCT",
+      "category": "abbreviation",
+      "expected": "matched",
+      "actual": "matched",
+      "canonical_name": "Hydraulic Pump Assembly",
+      "canonical_type": "PRODUCT",
+      "correct": true,
+      "error": null
+    },
+    {
+      "raw_name": "Boeing 737 800",
+      "entity_type": "PRODUCT",
+      "category": "punctuation",
+      "expected": "matched",
+      "actual": "matched",
+      "canonical_name": "Boeing 737-800",
+      "canonical_type": "PRODUCT",
+      "correct": true,
+      "error": null
+    },
+    {
+      "raw_name": "Torque Wrench Calibration Procedure",
+      "entity_type": "CONCEPT",
+      "category": "exact",
+      "expected": "matched",
+      "actual": "matched",
+      "canonical_name": "Torque Wrench Calibration Procedure",
+      "canonical_type": "CONCEPT",
+      "correct": true,
+      "error": null
+    },
+    {
+      "raw_name": "torque wrench calibration procedures",
+      "entity_type": "CONCEPT",
+      "category": "case-plural",
+      "expected": "matched",
+      "actual": "matched",
+      "canonical_name": "Torque Wrench Calibration Procedure",
+      "canonical_type": "CONCEPT",
+      "correct": true,
+      "error": null
+    },
+    {
+      "raw_name": "Orion Airlines",
+      "entity_type": "ORG",
+      "category": "ambiguous-between-two-entities",
+      "expected": "quarantined",
+      "actual": "quarantined",
+      "canonical_name": "Orion Regional Airlines",
+      "canonical_type": "ORG",
+      "correct": true,
+      "error": null
+    },
+    {
+      "raw_name": "Orion Air",
+      "entity_type": "ORG",
+      "category": "ambiguous-between-two-entities",
+      "expected": "quarantined",
+      "actual": "quarantined",
+      "canonical_name": "Orion Air Cargo",
+      "canonical_type": "ORG",
+      "correct": true,
+      "error": null
+    },
+    {
+      "raw_name": "Boeing 737",
+      "entity_type": "PRODUCT",
+      "category": "ambiguous-between-two-variants",
+      "expected": "quarantined",
+      "actual": "quarantined",
+      "canonical_name": "Boeing 737-800",
+      "canonical_type": "PRODUCT",
+      "correct": true,
+      "error": null
+    },
+    {
+      "raw_name": "Boeing 747-800",
+      "entity_type": "PRODUCT",
+      "category": "near-identifier-distinct",
+      "expected": "new",
+      "actual": "matched",
+      "canonical_name": "Boeing 737-800",
+      "canonical_type": "PRODUCT",
+      "correct": false,
+      "error": "over_merge"
+    },
+    {
+      "raw_name": "Boeing 737-900",
+      "entity_type": "PRODUCT",
+      "category": "near-identifier-distinct",
+      "expected": "new",
+      "actual": "matched",
+      "canonical_name": "Boeing 737-800",
+      "canonical_type": "PRODUCT",
+      "correct": false,
+      "error": "over_merge"
+    },
+    {
+      "raw_name": "Meridian Marine Services",
+      "entity_type": "ORG",
+      "category": "shared-tokens-distinct",
+      "expected": "new",
+      "actual": "matched",
+      "canonical_name": "Meridian Air Services",
+      "canonical_type": "ORG",
+      "correct": false,
+      "error": "over_merge"
+    },
+    {
+      "raw_name": "Pratt Institute",
+      "entity_type": "ORG",
+      "category": "shared-tokens-distinct",
+      "expected": "new",
+      "actual": "new",
+      "canonical_name": "",
+      "canonical_type": "",
+      "correct": true,
+      "error": null
+    },
+    {
+      "raw_name": "Honeywell International",
+      "entity_type": "ORG",
+      "category": "shared-tokens-distinct",
+      "expected": "new",
+      "actual": "new",
+      "canonical_name": "",
+      "canonical_type": "",
+      "correct": true,
+      "error": null
+    },
+    {
+      "raw_name": "Contoso Logistics",
+      "entity_type": "ORG",
+      "category": "unrelated",
+      "expected": "new",
+      "actual": "new",
+      "canonical_name": "",
+      "canonical_type": "",
+      "correct": true,
+      "error": null
+    },
+    {
+      "raw_name": "Northern Supplier Holdings",
+      "entity_type": "ORG",
+      "category": "unrelated",
+      "expected": "new",
+      "actual": "new",
+      "canonical_name": "",
+      "canonical_type": "",
+      "correct": true,
+      "error": null
+    },
+    {
+      "raw_name": "Cabin Pressure Controller",
+      "entity_type": "PRODUCT",
+      "category": "unrelated",
+      "expected": "new",
+      "actual": "new",
+      "canonical_name": "",
+      "canonical_type": "",
+      "correct": true,
+      "error": null
+    },
+    {
+      "raw_name": "Federal Railroad Administration",
+      "entity_type": "ORG",
+      "category": "shared-tokens-distinct",
+      "expected": "new",
+      "actual": "quarantined",
+      "canonical_name": "Federal Aviation Administration",
+      "canonical_type": "ORG",
+      "correct": false,
+      "error": "over_quarantine"
+    }
+  ],
+  "tiers_measured": [
+    "exact",
+    "regulatory-prefix",
+    "romanian-stem",
+    "fuzzy"
+  ],
+  "tiers_not_measured": [
+    "embedding",
+    "cooccurrence-tiebreak"
+  ]
+}

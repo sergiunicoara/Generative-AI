@@ -1,0 +1,264 @@
+{
+ "description": "Labelled entity-resolution cases against a small synthetic canonical registry. Labels were written from human judgement BEFORE the matcher was run on them and are not tuned to it; do not edit labels after a run, add cases instead. Misses are recorded in evals/entity_resolution_results.json, not hidden. Note: AliasRegistry.resolve matches on name only (entity_type is not used), so cross-type collisions are not exercised here.",
+ "labelled_at": "2026-10-12",
+ "canonical": [
+  [
+   "Federal Aviation Administration",
+   "ORG"
+  ],
+  [
+   "European Union Aviation Safety Agency",
+   "ORG"
+  ],
+  [
+   "Pratt & Whitney",
+   "ORG"
+  ],
+  [
+   "Honeywell Aerospace",
+   "ORG"
+  ],
+  [
+   "Orion Regional Airlines",
+   "ORG"
+  ],
+  [
+   "Orion Air Cargo",
+   "ORG"
+  ],
+  [
+   "Meridian Air Services",
+   "ORG"
+  ],
+  [
+   "Boeing 737-800",
+   "PRODUCT"
+  ],
+  [
+   "Boeing 737-700",
+   "PRODUCT"
+  ],
+  [
+   "Landing Gear Actuator",
+   "PRODUCT"
+  ],
+  [
+   "Hydraulic Pump Assembly",
+   "PRODUCT"
+  ],
+  [
+   "Torque Wrench Calibration Procedure",
+   "CONCEPT"
+  ]
+ ],
+ "cases": [
+  {
+   "raw_name": "Federal Aviation Administration",
+   "entity_type": "ORG",
+   "expected": "matched",
+   "category": "exact",
+   "canonical_name": "Federal Aviation Administration",
+   "canonical_type": "ORG"
+  },
+  {
+   "raw_name": "federal aviation administration",
+   "entity_type": "ORG",
+   "expected": "matched",
+   "category": "case",
+   "canonical_name": "Federal Aviation Administration",
+   "canonical_type": "ORG"
+  },
+  {
+   "raw_name": "Federal Aviation Administration.",
+   "entity_type": "ORG",
+   "expected": "matched",
+   "category": "punctuation",
+   "canonical_name": "Federal Aviation Administration",
+   "canonical_type": "ORG"
+  },
+  {
+   "raw_name": "FAA",
+   "entity_type": "ORG",
+   "expected": "matched",
+   "category": "acronym",
+   "canonical_name": "Federal Aviation Administration",
+   "canonical_type": "ORG"
+  },
+  {
+   "raw_name": "EASA",
+   "entity_type": "ORG",
+   "expected": "matched",
+   "category": "acronym",
+   "canonical_name": "European Union Aviation Safety Agency",
+   "canonical_type": "ORG"
+  },
+  {
+   "raw_name": "European Union Aviation Safety Agency (EASA)",
+   "entity_type": "ORG",
+   "expected": "matched",
+   "category": "parenthetical-alias",
+   "canonical_name": "European Union Aviation Safety Agency",
+   "canonical_type": "ORG"
+  },
+  {
+   "raw_name": "Pratt and Whitney",
+   "entity_type": "ORG",
+   "expected": "matched",
+   "category": "symbol-variant",
+   "canonical_name": "Pratt & Whitney",
+   "canonical_type": "ORG"
+  },
+  {
+   "raw_name": "Pratt & Whitney Inc.",
+   "entity_type": "ORG",
+   "expected": "matched",
+   "category": "legal-suffix",
+   "canonical_name": "Pratt & Whitney",
+   "canonical_type": "ORG"
+  },
+  {
+   "raw_name": "Honeywell Aerospace Inc",
+   "entity_type": "ORG",
+   "expected": "matched",
+   "category": "legal-suffix",
+   "canonical_name": "Honeywell Aerospace",
+   "canonical_type": "ORG"
+  },
+  {
+   "raw_name": "Honeywell Aerospce",
+   "entity_type": "ORG",
+   "expected": "matched",
+   "category": "typo",
+   "canonical_name": "Honeywell Aerospace",
+   "canonical_type": "ORG"
+  },
+  {
+   "raw_name": "Meridian Air Service",
+   "entity_type": "ORG",
+   "expected": "matched",
+   "category": "plural-singular",
+   "canonical_name": "Meridian Air Services",
+   "canonical_type": "ORG"
+  },
+  {
+   "raw_name": "Orion Regional Airline",
+   "entity_type": "ORG",
+   "expected": "matched",
+   "category": "plural-singular",
+   "canonical_name": "Orion Regional Airlines",
+   "canonical_type": "ORG"
+  },
+  {
+   "raw_name": "Landing Gear Actuators",
+   "entity_type": "PRODUCT",
+   "expected": "matched",
+   "category": "plural-singular",
+   "canonical_name": "Landing Gear Actuator",
+   "canonical_type": "PRODUCT"
+  },
+  {
+   "raw_name": "Hydraulic Pump Assy",
+   "entity_type": "PRODUCT",
+   "expected": "matched",
+   "category": "abbreviation",
+   "canonical_name": "Hydraulic Pump Assembly",
+   "canonical_type": "PRODUCT"
+  },
+  {
+   "raw_name": "Boeing 737 800",
+   "entity_type": "PRODUCT",
+   "expected": "matched",
+   "category": "punctuation",
+   "canonical_name": "Boeing 737-800",
+   "canonical_type": "PRODUCT"
+  },
+  {
+   "raw_name": "Torque Wrench Calibration Procedure",
+   "entity_type": "CONCEPT",
+   "expected": "matched",
+   "category": "exact",
+   "canonical_name": "Torque Wrench Calibration Procedure",
+   "canonical_type": "CONCEPT"
+  },
+  {
+   "raw_name": "torque wrench calibration procedures",
+   "entity_type": "CONCEPT",
+   "expected": "matched",
+   "category": "case-plural",
+   "canonical_name": "Torque Wrench Calibration Procedure",
+   "canonical_type": "CONCEPT"
+  },
+  {
+   "raw_name": "Orion Airlines",
+   "entity_type": "ORG",
+   "expected": "quarantined",
+   "category": "ambiguous-between-two-entities"
+  },
+  {
+   "raw_name": "Orion Air",
+   "entity_type": "ORG",
+   "expected": "quarantined",
+   "category": "ambiguous-between-two-entities"
+  },
+  {
+   "raw_name": "Boeing 737",
+   "entity_type": "PRODUCT",
+   "expected": "quarantined",
+   "category": "ambiguous-between-two-variants"
+  },
+  {
+   "raw_name": "Boeing 747-800",
+   "entity_type": "PRODUCT",
+   "expected": "new",
+   "category": "near-identifier-distinct"
+  },
+  {
+   "raw_name": "Boeing 737-900",
+   "entity_type": "PRODUCT",
+   "expected": "new",
+   "category": "near-identifier-distinct"
+  },
+  {
+   "raw_name": "Meridian Marine Services",
+   "entity_type": "ORG",
+   "expected": "new",
+   "category": "shared-tokens-distinct"
+  },
+  {
+   "raw_name": "Pratt Institute",
+   "entity_type": "ORG",
+   "expected": "new",
+   "category": "shared-tokens-distinct"
+  },
+  {
+   "raw_name": "Honeywell International",
+   "entity_type": "ORG",
+   "expected": "new",
+   "category": "shared-tokens-distinct"
+  },
+  {
+   "raw_name": "Contoso Logistics",
+   "entity_type": "ORG",
+   "expected": "new",
+   "category": "unrelated"
+  },
+  {
+   "raw_name": "Northern Supplier Holdings",
+   "entity_type": "ORG",
+   "expected": "new",
+   "category": "unrelated"
+  },
+  {
+   "raw_name": "Cabin Pressure Controller",
+   "entity_type": "PRODUCT",
+   "expected": "new",
+   "category": "unrelated"
+  },
+  {
+   "raw_name": "Federal Railroad Administration",
+   "entity_type": "ORG",
+   "expected": "new",
+   "category": "shared-tokens-distinct"
+  }
+ ]
+}

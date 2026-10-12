@@ -60,6 +60,7 @@ def evaluate_entity_resolution(
                 false_positive += 1
         elif case.expected == "matched":
             false_negative += 1
+        error = _error_kind(case, actual, canonical_name, canonical_type)
         results.append({
             "raw_name": case.raw_name,
             "entity_type": case.entity_type,
@@ -69,6 +70,7 @@ def evaluate_entity_resolution(
             "canonical_name": canonical_name,
             "canonical_type": canonical_type,
             "correct": correct,
+            "error": error,
         })
 
     precision = true_positive / (true_positive + false_positive) if true_positive + false_positive else 1.0
@@ -79,9 +81,44 @@ def evaluate_entity_resolution(
         "accuracy": sum(item["correct"] for item in results) / len(cases) if cases else 1.0,
         "auto_match_precision": precision,
         "auto_match_recall": recall,
+        "auto_match_f1": round(2 * precision * recall / (precision + recall), 4) if precision + recall else 0.0,
         "dispositions": disposition_counts,
+        "errors": _error_counts(results),
+        "by_category": _by_category(results),
         "results": results,
     }
 
 
-__all__ = ["EntityResolutionCase", "evaluate_entity_resolution"]
+# Error taxonomy (additive to the original report). Different errors have different downstream cost:
+#   wrong_link     - merged into the WRONG canonical entity (corrupts the graph; hardest to notice)
+#   over_merge     - a genuinely new / distinct entity was merged into an existing one
+#   missed_match   - a true duplicate was left as a new entity (fragmentation)
+#   over_quarantine- a clear match or clear new entity was sent to review (reviewer load, not corruption)
+#   missed_review  - an ambiguous mention was resolved without review (silent guess)
+ERROR_KINDS = ("wrong_link", "over_merge", "missed_match", "over_quarantine", "missed_review")
+
+
+def _error_kind(case: EntityResolutionCase, actual: str, name: str, type_: str) -> str | None:
+    if case.expected == "matched":
+        if actual == "matched":
+            return None if (name, type_) == (case.canonical_name, case.canonical_type) else "wrong_link"
+        return "missed_match" if actual == "new" else "over_quarantine"
+    if case.expected == "new":
+        return {"new": None, "matched": "over_merge", "quarantined": "over_quarantine"}[actual]
+    return {"quarantined": None, "matched": "missed_review", "new": "missed_review"}[actual]
+
+
+def _error_counts(results: list[dict]) -> dict[str, int]:
+    return {kind: sum(1 for item in results if item["error"] == kind) for kind in ERROR_KINDS}
+
+
+def _by_category(results: list[dict]) -> dict[str, dict[str, int]]:
+    out: dict[str, dict[str, int]] = {}
+    for item in results:
+        bucket = out.setdefault(item["category"], {"correct": 0, "total": 0})
+        bucket["total"] += 1
+        bucket["correct"] += int(item["correct"])
+    return out
+
+
+__all__ = ["ERROR_KINDS", "EntityResolutionCase", "evaluate_entity_resolution"]

@@ -6421,3 +6421,53 @@ produces a real `datetime`, not just a same-shaped string. A read-side fix
 alone can look complete (and pass a test that seeds data via raw Cypher
 `datetime(...)` literals) while the actual production write path remains
 broken underneath it.
+
+## A178 - The bitemporal store's missing `datetime()` cast (flagged in A177) was real and is now fixed
+`graphrag/graph/bitemporal.py` compared stored `valid_from` / `recorded_at` datetimes with raw string
+parameters in every `as_of_*` / `transaction_diff` query, so rows with a non-null timestamp silently dropped out
+(`datetime <= string` is `null`, A176). Fixed by wrapping every parameter in `datetime($x)`; proven live by
+`tests/e2e/test_live_audit_followups.py`.
+
+**Rule:** when a lesson says "also found, not fixed here", put it on the backlog with the file name; it was still
+open nine days later. Substring-asserting unit tests (`"d.recorded_at <= $tt" in cypher`) pinned the bug, so
+assert the absence of the bare-parameter pattern with a regex instead.
+
+## A179 - `MATCH ()-[r]-()` visits every edge twice: read pre-update snapshots in `SET`, never `r.prop`
+The first version of per-document relation provenance reconciled with `r.doc_chunk_ids[i]` inside the `SET`.
+The undirected pattern in `reconcile_document_evidence` matches each edge in both directions, so the second pass
+indexed into a list the first pass had already shortened and wrote empty strings. Unit tests on the Cypher text
+passed; only the live Neo4j test caught it (`retained_relations` was 2 for one edge).
+
+**Rule:** in any query whose pattern is undirected, carry list properties through `WITH ... AS snapshot` before the
+`SET` (the existing `doc_confidences` code already did) and never read `r.prop` on the right-hand side. Prefer a
+live e2e test over Cypher-shape asserts for anything that rewrites lists.
+
+## A180 - Shared e2e container: `Document.id` and `Chunk.id` are globally unique, not per tenant
+`tests/e2e/test_live_invalidation.py` seeded the same ids (`d1`, `c1`) for two tenants and failed on the
+uniqueness constraint once another test had run first. Seed with a per-run or per-tenant prefix.
+
+## A181 - Mutation testing: `mutmut` 3 on this repo
+* Not supported on native Windows (issue boxed/mutmut#397); run it from the manual workflow
+  `.github/workflows/ai-knowledge-graph-platform-mutation.yml`.
+* Config keys are `source_paths`, `pytest_add_cli_args_test_selection`, `also_copy` (the mutants tree only contains
+  mutated files, so packages the tests import must be listed) and `debug = true` to expose the real pytest error.
+  New test files must be added to the selection or they do not count.
+* Result: 49.5% -> 91.1% killed after adding edge-case tests, and the work found a real bug (MCP
+  `structuredContent` not serialised with `default=str`) plus a prompt quirk (literals written as `"""\`, so the
+  prompt starts with a stray backslash line). The quirk is pinned, not fixed: it changes what the model sees and
+  needs a golden-eval run first.
+* A pinning test that copies the code under test (`BASE.format(...)`) kills nothing; pin literal text.
+
+## A182 - Cost discipline and two environment traps
+* The user does not want any step that costs money (LLM credit, evals, LLM ingestion, extra cloud/CI) unless that
+  exact run is requested. "implement all / continue / go / da" never authorises one, and a small cost estimate is not
+  a reason to run it. I spent about $0.2 on ingestions and golden evals under a vague "implement all". See the
+  memory note `feedback-no-paid-runs`.
+* Summing `cost_usd=` from logs: values use scientific notation (`1.2e-05`); a naive `[0-9.]+` regex overstated the
+  total by a factor of ~1000.
+* `pkill` does not exist in Git Bash on Windows, so a "restarted" worker was still running beside the new one and
+  both consumed the queue. Stop processes with PowerShell (`Get-CimInstance Win32_Process` + `Stop-Process`) and
+  check for strays before measuring.
+* `ontology.domain_ontology_path` defaults to empty, so the general ontology rejects most aerospace relations
+  (34 edges kept from 315 on a fresh graph, same on the pre-change commit). A golden-eval run on that graph exercises
+  graph-dependent questions only lightly; state that next to any pass rate.

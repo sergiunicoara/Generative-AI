@@ -1,0 +1,195 @@
+{
+ "version": "heldout-1",
+ "tenant": "automotive",
+ "status": "unrun",
+ "description": "HELD-OUT automotive cases. Written from the corpus text on 2026-10-13 and structurally validated offline (scripts/validate_heldout_cases.py: every required term occurs in a cited document, every negative's forbidden term occurs nowhere). NEVER RUN against the model: running costs LLM credit and needs an explicit decision. Score exactly once when run; do not edit labels afterwards.",
+ "thresholds": {
+  "pass_rate_min": 0.7
+ },
+ "questions": [
+  {
+   "id": "HO-SH-01",
+   "type": "single_hop",
+   "question": "Cât timp sunt arhivate înregistrările conform procedurii PCAL-PROC-10?",
+   "expected_citations": [
+    "pcal-proc-10"
+   ],
+   "required_answer_terms": [
+    "3 ani"
+   ],
+   "forbidden_terms": [],
+   "min_context_precision": 0.6,
+   "note": "PCAL-PROC-10 line 116: arhivate minimum 3 ani"
+  },
+  {
+   "id": "HO-SH-02",
+   "type": "single_hop",
+   "question": "Cât timp se păstrează formularele de comandă internă (FCI) conform IL-INS-03-rev4?",
+   "expected_citations": [
+    "il-ins-03-rev4"
+   ],
+   "required_answer_terms": [
+    "5 ani"
+   ],
+   "forbidden_terms": [],
+   "min_context_precision": 0.6,
+   "note": "IL-INS-03-rev4 line 149"
+  },
+  {
+   "id": "HO-SH-03",
+   "type": "single_hop",
+   "question": "La ce valoare a ratei de conformitate a furnizorilor se declanșează alertarea în REG-ETA-01?",
+   "expected_citations": [
+    "reg-eta-01"
+   ],
+   "required_answer_terms": [
+    "90%"
+   ],
+   "forbidden_terms": [],
+   "min_context_precision": 0.6,
+   "note": "REG-ETA-01 line 37: < 90% (alertare); target >= 95%"
+  },
+  {
+   "id": "HO-SH-04",
+   "type": "single_hop",
+   "question": "Care este timpul de livrare țintă pentru furnizori în REG-ETA-01?",
+   "expected_citations": [
+    "reg-eta-01"
+   ],
+   "required_answer_terms": [
+    "7 zile"
+   ],
+   "forbidden_terms": [],
+   "min_context_precision": 0.6,
+   "note": "REG-ETA-01 line 38: <= 7 zile, alert > 10 zile"
+  },
+  {
+   "id": "HO-SH-05",
+   "type": "single_hop",
+   "question": "Cât de des se întâlnește echipa pentru a discuta neconformitățile conform IL-NC-06-rev2?",
+   "expected_citations": [
+    "il-nc-06-rev2"
+   ],
+   "required_answer_terms": [],
+   "required_answer_any_of": [
+    [
+     "săptămânal",
+     "saptamanal",
+     "weekly"
+    ]
+   ],
+   "forbidden_terms": [],
+   "min_context_precision": 0.6,
+   "note": "IL-NC-06-rev2 line 153"
+  },
+  {
+   "id": "HO-SH-06",
+   "type": "single_hop",
+   "question": "Ce proporție de produse conforme livrate către AutoCorp GmbH urmărește PPAP-PROC-01?",
+   "expected_citations": [
+    "ppap-proc-01"
+   ],
+   "required_answer_terms": [
+    "98%"
+   ],
+   "forbidden_terms": [],
+   "min_context_precision": 0.6,
+   "note": "PPAP-PROC-01 line 17"
+  },
+  {
+   "id": "HO-MH-01",
+   "type": "multi_hop",
+   "question": "Conform PAI-PROC-04, cât de des sunt evaluați furnizorii și cât timp se păstrează înregistrările?",
+   "expected_citations": [
+    "pai-proc-04"
+   ],
+   "required_answer_terms": [
+    "semestrial",
+    "3 ani"
+   ],
+   "forbidden_terms": [],
+   "min_context_precision": 0.6,
+   "note": "PAI-PROC-04 lines 122 and 173"
+  },
+  {
+   "id": "HO-MH-02",
+   "type": "multi_hop",
+   "question": "În REG-ETA-01, cât de des sunt monitorizați indicatorii furnizorilor și ce număr de neconformități declanșează o investigație?",
+   "expected_citations": [
+    "reg-eta-01"
+   ],
+   "required_answer_terms": [
+    "lunar"
+   ],
+   "required_answer_any_of": [
+    [
+     "> 3",
+     "peste 3",
+     "mai mult de 3",
+     "3 neconformit",
+     "more than 3"
+    ]
+   ],
+   "forbidden_terms": [],
+   "min_context_precision": 0.6,
+   "note": "REG-ETA-01 lines 37-39"
+  },
+  {
+   "id": "HO-TMP-01",
+   "type": "temporal",
+   "question": "Care cerințe specifice ale clientului AutoCorp sunt în vigoare: CSR-CLIENT-2021 sau CSR-CLIENT-2023?",
+   "expected_citations": [
+    "csr-client-2023"
+   ],
+   "required_answer_terms": [
+    "2023"
+   ],
+   "forbidden_terms": [],
+   "min_context_precision": 0.6,
+   "note": "supersession chain CSR-CLIENT-2023 over CSR-CLIENT-2021 (config/ontologies/automotive_iatf.yml)"
+  },
+  {
+   "id": "HO-CON-01",
+   "type": "contradiction",
+   "question": "PTRN-PROC-13 și PAI-PROC-04 indică aceeași frecvență de reevaluare a furnizorilor?",
+   "expected_citations": [
+    "ptrn-proc-13",
+    "pai-proc-04"
+   ],
+   "required_answer_terms": [
+    "anual",
+    "semestrial"
+   ],
+   "forbidden_terms": [],
+   "min_context_precision": 0.5,
+   "note": "PTRN-PROC-13 line 94 says annual; PAI-PROC-04 line 122 says semestrial. Not one of the tagged C01-C05."
+  },
+  {
+   "id": "HO-NEG-01",
+   "type": "negative",
+   "question": "Ce penalitate în euro aplică AutoCorp GmbH pentru fiecare zi de întârziere a livrării?",
+   "expected_citations": [],
+   "required_answer_terms": [],
+   "forbidden_terms": [
+    "euro",
+    "EUR"
+   ],
+   "min_context_precision": 0.5,
+   "note": "No currency amounts in the corpus; a number in euro is fabricated."
+  },
+  {
+   "id": "HO-NEG-02",
+   "type": "negative",
+   "question": "Ce prag de emisii CO2 pe piesă impune clientul pentru furnizori?",
+   "expected_citations": [],
+   "required_answer_terms": [],
+   "forbidden_terms": [
+    "CO2/",
+    "g CO2",
+    "kg CO2"
+   ],
+   "min_context_precision": 0.5,
+   "note": "PTRN-PROC-13 line 717 mentions emission-reduction initiatives only; no threshold exists."
+  }
+ ]
+}

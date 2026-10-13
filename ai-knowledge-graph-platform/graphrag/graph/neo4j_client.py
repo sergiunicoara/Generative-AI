@@ -2280,11 +2280,17 @@ class Neo4jClient:
         tenant: str = "default",
         transaction_at: str | None = None,
         include_superseded: bool = True,
+        hide_superseded_descriptions: bool = False,
     ) -> list[dict]:
         """Expand retrieved chunks to their entity neighbors (1-hop).
 
         ``include_superseded=False`` also drops neighbours reached only through an edge whose
         source document has been superseded (default keeps today's behaviour).
+
+        ``hide_superseded_descriptions=True`` (opt-in, not golden-validated) blanks an entity's description when the
+        document that created it (``e.source_doc_id``, which is also where the first-writer-wins description came
+        from) has been superseded, and returns ``description_superseded: true``. Without it, a KPI first extracted
+        from a superseded revision keeps that revision's wording in the answer context (automotive SH-03).
 
         Excludes quarantined entities and edges that are not current
         (retracted, or outside their validity window at ``as_of`` / now) —
@@ -2307,7 +2313,13 @@ class Neo4jClient:
             OPTIONAL MATCH (e)-[r:RELATES_TO {{tenant: $tenant}}]-(neighbor:Entity {{tenant: $tenant}})
             WITH e, neighbor,
                  ({entity_is_active("neighbor")} AND {edge_is_current("r")} {transaction_filter} {superseded_filter}) AS neighbor_ok
-            RETURN e.name AS entity, e.type AS type, e.description AS description,
+            WITH e, neighbor, neighbor_ok,
+                 ($hide_superseded_descriptions AND e.source_doc_id IS NOT NULL
+                  AND EXISTS {{ MATCH (ed:Document {{id: e.source_doc_id, tenant: $tenant}})
+                               WHERE ed.superseded_by IS NOT NULL }}) AS description_superseded
+            RETURN e.name AS entity, e.type AS type,
+                   CASE WHEN description_superseded THEN '' ELSE e.description END AS description,
+                   description_superseded,
                    e.resolution_status AS resolution_status, e.resolution_method AS resolution_method,
                    e.origin AS origin, e.verification_status AS verification_status,
                    collect(DISTINCT CASE WHEN neighbor_ok THEN neighbor.name ELSE null END) AS neighbors
@@ -2315,6 +2327,7 @@ class Neo4jClient:
             chunk_ids=chunk_ids,
             tenant=tenant,
             as_of=as_of,
+            hide_superseded_descriptions=hide_superseded_descriptions,
             **({"transaction_at": transaction_at} if transaction_at else {}),
         )
 

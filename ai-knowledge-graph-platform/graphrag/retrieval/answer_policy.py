@@ -49,10 +49,19 @@ _AEROSPACE_RULES = """\\
 """
 
 
+# Opt-in (``answer_language_rule_enabled``), NOT golden-validated: automotive CON-05 was asked in Romanian and
+# answered in English. Off by default until a golden run shows it does not cost accuracy elsewhere.
+ANSWER_LANGUAGE_RULE = (
+    "- Answer in the same language as the question, even when the context is in another language.\n"
+)
+
+
 def answer_prompt(cfg: dict[str, Any]) -> str:
     """Build the synthesis prompt for one effective tenant configuration."""
     policy = str(cfg.get("answer_policy", "generic"))
     domain_rules = _AEROSPACE_RULES if policy == "aerospace_regulatory" else ""
+    if cfg.get("answer_language_rule_enabled", False):
+        domain_rules += ANSWER_LANGUAGE_RULE
     return BASE_ANSWER_PROMPT.format(
         domain_rules=domain_rules, context="{context}", question="{question}",
     )

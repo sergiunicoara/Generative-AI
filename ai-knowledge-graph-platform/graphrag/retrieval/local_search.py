@@ -682,6 +682,9 @@ class LocalSearch:
             as_of=valid_at,
             transaction_at=transaction_at,
             include_superseded=include_superseded,
+            # Opt-in (not golden-validated): drop descriptions written from a superseded revision.
+            hide_superseded_descriptions=(not include_superseded
+                                          and bool(cfg.get("entity_description_supersession_filter_enabled", False))),
         ) if use_entity_context else []
         if entities and cfg.get("entity_trust_weighting_enabled", False):
             # Opt-in: reviewer-verified / extracted entities are shown before unverified generated ones.

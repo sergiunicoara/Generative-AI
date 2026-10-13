@@ -80,6 +80,8 @@ class GraphBackend(Protocol):
         as_of: str | None = None,
         tenant: str = "default",
         transaction_at: str | None = None,
+        include_superseded: bool = True,
+        hide_superseded_descriptions: bool = False,
     ) -> list[dict]: ...
 
     async def get_relations_for_entity(

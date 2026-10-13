@@ -307,7 +307,14 @@ class GremlinBackend:
         as_of: str | None = None,
         tenant: str = "default",
         transaction_at: str | None = None,
+        include_superseded: bool = True,
+        hide_superseded_descriptions: bool = False,
     ) -> list[dict]:
+        if not include_superseded or hide_superseded_descriptions:
+            raise NotImplementedError(
+                "GremlinBackend.get_entity_neighbors: superseded-document filtering has no verified Gremlin "
+                "translation; refusing rather than silently returning superseded evidence"
+            )
         if as_of is not None or transaction_at is not None:
             raise NotImplementedError(
                 "GremlinBackend.get_entity_neighbors: as_of/transaction_at "

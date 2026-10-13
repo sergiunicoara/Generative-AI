@@ -12,6 +12,13 @@ Everything here is deterministic and offline except the API's sign-off storage (
 | API | `/audit/iatf/clauses`, `/clauses/{id}`, `/clauses/{id}/signoff`, `/signoffs`, `/export` | implemented, tested |
 | Golden checker percent fix + offline rescore of saved answers | `scripts/run_golden_eval.py`, `scripts/rescore_saved_answers.py` | implemented, measured |
 | 12 held-out cases, structurally validated | `data/eval_golden/queries_automotive_heldout.json` | **written, never run** (running costs credit) |
+| Graph-backed evidence (tenant's ingested Document/Chunk nodes) | `audit.load_graph_corpus`, `source: graph` | implemented; proven on live Neo4j |
+| Clause-mapping review by a quality engineer | `POST /audit/iatf/clauses/{id}/mapping-review` | implemented, tested |
+| Signed checkpoints anchoring the chain head outside Neo4j | `graphrag/domains/automotive/checkpoints.py`, `scripts/iatf_checkpoint.py` | implemented, tested |
+| Prometheus gauges + example CronJobs | `graphrag/domains/automotive/metrics.py`, `deploy/kubernetes/iatf-freshness-cronjob.example.yaml` | implemented; CronJob is an example (not deployed) |
+| Dashboard tab | `graphrag/dashboard/tabs/iatf_audit.py` | implemented, tested |
+| Superseded entity descriptions kept out of answers (SH-03 root cause) | `entity_description_supersession_filter_enabled` | **opt-in, off, not golden-validated** |
+| Answer in the question's language (CON-05) | `answer_language_rule_enabled` | **opt-in, off, not golden-validated** |
 
 ## Evidence view
 
@@ -40,6 +47,15 @@ the document's recorded time and age, and its contradiction tags; `conflicts` li
   This is the same supersession and contradiction picture the golden failures below come from.
 * `python scripts/iatf_audit.py freshness` exits 1 because of the three missing clauses. That is the intended alert.
 
+### Graph-backed evidence
+
+`iatf_audit.tenants.<t>.source: graph` (or `scripts/iatf_audit.py --source graph --tenant <t>`) builds the same view
+from the tenant's ingested graph, read-only: non-deleted `Document` nodes, their chunks in `chunk_index` order, and
+supersession from `Document.superseded_by`. Chunks keep no file line numbers, so passages cite `chunk N, line M`.
+Contradiction tags still come from the corpus metadata files when configured; the graph's model-detected `Conflict`
+nodes are a different signal and are not mixed in. Proven on a live Neo4j: tenant scoping, deleted documents
+excluded, superseded revision reported separately.
+
 ## Auditor sign-off and the audit trail
 
 `POST /audit/iatf/clauses/{id}/signoff` with `{"decision": "accepted" | "rejected" | "needs_more_evidence", "note"}`.
@@ -54,9 +70,29 @@ the document's recorded time and age, and its contradiction tags; `conflicts` li
   and the first broken sequence number is named.
 * The export flags `signoff_digest_matches: false` when the evidence changed after the sign-off, so a stale approval
   is visible rather than silently carried forward.
-* **Limit:** tamper-*evident*, not tamper-*proof*. Someone with database write access can rewrite the whole chain.
-  For an external guarantee, publish the head hash (`chain.head`) periodically to a store the database administrator
-  cannot change, for example a WORM bucket or a signed ticket. That is not wired.
+* **Limit:** the chain alone is tamper-*evident*, not tamper-*proof*: someone with database write access can rewrite
+  every entry and recompute every hash. **Signed checkpoints** close most of that gap: `scripts/iatf_checkpoint.py
+  write` records `(tenant, seq, head)` signed with an HMAC key from `IATF_CHECKPOINT_KEY` (never in config or the
+  repository) to an append-only JSON-lines file; `verify` then also requires the chain to still hold each
+  checkpointed hash at its sequence number. A fully rehashed rewrite is caught (tested). This only holds if the key
+  and the checkpoint file are outside the database administrator's reach (separate secret, write-once storage). The
+  example CronJob mounts a PVC for this; binding it to write-once storage is a deployment decision.
+
+### Clause-mapping review
+
+`POST /audit/iatf/clauses/{id}/mapping-review` with `{"decision": "mapping_confirmed" | "mapping_rejected"}` records a
+quality engineer's decision on the clause's evidence mapping in the same hash chain (reviewer = token subject). The
+entry stores a digest of the clause's `doc_prefixes` and `keywords`, so editing the catalogue later turns the clause's
+mapping status into `changed_since_review` instead of silently keeping "confirmed". Every view and export carries
+`mapping` / `mapping_status`; all 14 clauses are `proposed` until reviewed.
+
+### Monitoring
+
+`graphrag_iatf_clauses{tenant,status}`, `graphrag_iatf_clause_mappings{tenant,status}`,
+`graphrag_iatf_clauses_with_conflicts{tenant}` and `graphrag_iatf_signoff_chain_valid{tenant}` are set when the API
+computes the full clause view or verifies the chain. `deploy/kubernetes/iatf-freshness-cronjob.example.yaml` runs the
+freshness check hourly and checkpoint verify+write daily; a failed Job is the alert. It is an example, deliberately not
+in `kustomization.yaml`.
 
 Only tenants listed under `iatf_audit.tenants` in `config/settings.yml` get these routes; any other tenant receives 404.
 
@@ -67,8 +103,8 @@ The saved 2026-09-21 automotive run scored 6/10. All four failures were diagnose
 | id | cause | action |
 | --- | --- | --- |
 | SH-02, MH-02 | Correct answers written "1 %" / "95 %" (Romanian typography); the checker required "1%" / "95%" | checker now ignores whitespace before `%` (both sides) |
-| SH-03 | Checker now passes it, but **not a genuine pass**: the answer refuses a single value, citing a conflict between 95 % and a 98 % that comes from the superseded CSR-CLIENT-2021 or an unrelated KPI line | recorded in `evals/automotive_rescored.json`; root cause is superseded/unrelated facts in the context |
-| CON-05 | Genuine failure: answer says the context has no information (in English) although context exists | open. Label is sound: RFA-REG-01-rev5 line 74 (critical: semestrial) and line 201 (all suppliers: annual) |
+| SH-03 | Checker now passes it, but **not a genuine pass**: the answer refuses a single value, citing a conflict between 95 % and a 98 % that comes from the superseded CSR-CLIENT-2021 or an unrelated KPI line | recorded in `evals/automotive_rescored.json`. Root cause found: entity descriptions are first-writer-wins, so a KPI first extracted from CSR-CLIENT-2021 keeps that wording and reaches the context through any *current* chunk that mentions it; `include_superseded=False` does not cover this. Fix shipped **opt-in** (`entity_description_supersession_filter_enabled`), proven on live Neo4j, effect on answers unmeasured |
+| CON-05 | Genuine failure: answer says the context has no information (in English) although context exists | open. Label is sound: RFA-REG-01-rev5 line 74 (critical: semestrial) and line 201 (all suppliers: annual). Language part addressed **opt-in** (`answer_language_rule_enabled`); the retrieval miss itself is not diagnosed further without a run |
 
 Re-scoring the saved answers with the fixed checker gives **9/10 by the checker, 8/10 judged genuine**. This measures
 the checker fix only. The answers are the September ones, and no new generation was run.
@@ -89,5 +125,6 @@ These need a customer, paid runs or infrastructure, so code alone cannot close t
 * A measured evaluation: run the held-out set, agree acceptance thresholds, and add evidence-recall per clause.
 * An identity-provider integration test, a penetration test, data-residency review of the LLM provider, a load test
   and a disaster-recovery drill.
-* Publishing the sign-off chain head to external write-once storage.
-* An auditor UI on top of these routes.
+* Binding the checkpoint store to write-once storage and keeping the HMAC key from the database administrator.
+* A golden run to decide whether the two opt-in fixes (superseded descriptions, answer language) should be enabled.
+* A real auditor workflow review of the dashboard tab (it is functional, not designed with auditors).

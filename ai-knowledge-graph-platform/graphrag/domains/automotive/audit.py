@@ -50,6 +50,8 @@ class CorpusDocument:
     contradictions: tuple[str, ...]
     lines: list[str] = field(repr=False, default_factory=list)
     superseded_by: str | None = None
+    # Optional human-readable location per line (graph documents: "chunk 3, line 2"); file documents use line numbers.
+    locators: list[str] | None = field(repr=False, default=None)
 
     @property
     def current(self) -> bool:
@@ -110,6 +112,51 @@ def load_corpus(corpus_dir: Path = CORPUS, metadata_dir: Path = METADATA,
     return docs
 
 
+GRAPH_DOCUMENTS = """
+MATCH (d:Document {tenant: $tenant})
+WHERE coalesce(d.is_deleted, false) = false
+OPTIONAL MATCH (c:Chunk {tenant: $tenant})-[:PART_OF]->(d)
+WITH d, c ORDER BY c.chunk_index
+WITH d, collect(CASE WHEN c IS NULL THEN NULL ELSE {index: c.chunk_index, text: c.text} END) AS chunks
+OPTIONAL MATCH (newer:Document {tenant: $tenant, id: d.superseded_by})
+RETURN d.id AS id, coalesce(d.filename, d.id) AS filename, coalesce(newer.filename, d.superseded_by) AS superseded_by,
+       toString(coalesce(d.recorded_at, d.ingested_at)) AS recorded_at, chunks
+"""
+
+
+def _doc_key(name: str) -> str:
+    return Path(str(name)).stem
+
+
+async def load_graph_corpus(neo4j, tenant: str, metadata_dir: Path | None = None) -> list[CorpusDocument]:
+    """The same evidence model built from a tenant's ingested graph (read-only) instead of corpus files.
+
+    Supersession comes from ``Document.superseded_by`` (set by document_authority.register_supersession).
+    Passages carry ``chunk N, line M`` locators because chunks keep no file line numbers. Contradiction tags come
+    from ``metadata_dir`` when given (the graph's Conflict nodes are a different, model-detected signal).
+    """
+    from graphrag.graph.validation.graph_checks import run_read_only
+
+    rows = await run_read_only(neo4j, GRAPH_DOCUMENTS, tenant=tenant)
+    docs = []
+    for row in rows:
+        key = _doc_key(row["filename"])
+        meta = {}
+        if metadata_dir is not None and (metadata_dir / f"{key}.json").exists():
+            meta = json.loads((metadata_dir / f"{key}.json").read_text(encoding="utf-8"))
+        lines, locators = [], []
+        for chunk in [c for c in row.get("chunks") or [] if c]:
+            for n, line in enumerate(str(chunk.get("text") or "").splitlines(), start=1):
+                lines.append(line)
+                locators.append(f"chunk {chunk.get('index')}, line {n}")
+        docs.append(CorpusDocument(
+            doc_id=key, folder="graph", recorded_at=_parse_time(row.get("recorded_at")),
+            contradictions=tuple(meta.get("detected_contradictions") or ()), lines=lines,
+            superseded_by=_doc_key(row["superseded_by"]) if row.get("superseded_by") else None,
+            locators=locators))
+    return docs
+
+
 def matches_prefix(doc_id: str, prefixes: Iterable[str]) -> bool:
     return any(doc_id == p or doc_id.startswith(p + "-") for p in prefixes)
 
@@ -121,7 +168,10 @@ def _passages(doc: CorpusDocument, keywords: tuple[str, ...], limit: int) -> tup
         folded = fold(line)
         found = [k for k, p in zip(keywords, patterns) if p.search(folded)]
         if found:
-            hits.append({"line": number, "text": line.strip()[:240], "keywords": found})
+            hit = {"line": number, "text": line.strip()[:240], "keywords": found}
+            if doc.locators:
+                hit["locator"] = doc.locators[number - 1]
+            hits.append(hit)
     return len(hits), hits[:limit]
 
 
@@ -132,7 +182,7 @@ def _as_of_view(docs: list[CorpusDocument], as_of: datetime | None) -> list[Corp
     present = [d for d in docs if d.recorded_at is None or d.recorded_at <= as_of]
     ids = {d.doc_id for d in present}
     return [CorpusDocument(d.doc_id, d.folder, d.recorded_at, d.contradictions, d.lines,
-                           d.superseded_by if d.superseded_by in ids else None) for d in present]
+                           d.superseded_by if d.superseded_by in ids else None, d.locators) for d in present]
 
 
 def clause_evidence(clause: Clause, docs: list[CorpusDocument], *, max_age_days: int, now: datetime,
@@ -180,9 +230,29 @@ def evidence_digest(clause_view: dict[str, Any]) -> str:
     return hashlib.sha256(json.dumps(material, sort_keys=True, default=str).encode("utf-8")).hexdigest()
 
 
+def mapping_digest(clause: Clause) -> str:
+    """Fingerprint of a clause's evidence mapping; a mapping review is only valid for the mapping it reviewed."""
+    material = {"clause": clause.id, "doc_prefixes": sorted(clause.doc_prefixes), "keywords": sorted(clause.keywords)}
+    return hashlib.sha256(json.dumps(material, sort_keys=True).encode("utf-8")).hexdigest()
+
+
+def mapping_state(clause: Clause, review: dict[str, Any] | None, default: str) -> dict[str, Any]:
+    """``proposed`` until a quality engineer reviews it; ``changed_since_review`` if the catalogue was edited after."""
+    digest = mapping_digest(clause)
+    if not review:
+        return {"status": default, "mapping_digest": digest}
+    if review.get("evidence_digest") != digest:
+        status = "changed_since_review"
+    else:
+        status = "confirmed" if review.get("decision") == "mapping_confirmed" else "rejected"
+    return {"status": status, "mapping_digest": digest, "reviewer": review.get("reviewer"),
+            "reviewed_at": review.get("signed_at")}
+
+
 def audit_view(*, catalogue: dict[str, Any] | None = None, docs: list[CorpusDocument] | None = None,
                as_of: datetime | str | None = None, now: datetime | None = None,
-               clause_ids: Iterable[str] | None = None) -> dict[str, Any]:
+               clause_ids: Iterable[str] | None = None,
+               mapping_reviews: dict[str, dict[str, Any]] | None = None) -> dict[str, Any]:
     catalogue = catalogue or load_catalogue()
     as_of_dt = _parse_time(as_of) if isinstance(as_of, str) else as_of
     now = now or as_of_dt or datetime.now(timezone.utc)
@@ -194,6 +264,7 @@ def audit_view(*, catalogue: dict[str, Any] | None = None, docs: list[CorpusDocu
             continue
         item = clause_evidence(clause, view_docs, max_age_days=catalogue["max_document_age_days"], now=now)
         item["evidence_digest"] = evidence_digest(item)
+        item["mapping"] = mapping_state(clause, (mapping_reviews or {}).get(clause.id), catalogue["mapping_status"])
         clauses.append(item)
     counts = {s: sum(1 for c in clauses if c["status"] == s) for s in STATUSES}
     return {
@@ -219,7 +290,7 @@ def freshness_problems(view: dict[str, Any]) -> list[dict[str, Any]]:
     return problems
 
 
-CSV_FIELDS = ("clause", "heading", "status", "doc_id", "current", "recorded_at", "age_days", "line", "passage",
+CSV_FIELDS = ("clause", "heading", "status", "mapping_status", "doc_id", "current", "recorded_at", "age_days", "line", "passage",
               "contradiction_tags", "signoff_decision", "signoff_by", "signoff_at", "signoff_digest_matches")
 
 
@@ -230,6 +301,7 @@ def export_rows(view: dict[str, Any], signoffs: dict[str, dict[str, Any]] | None
     for c in view["clauses"]:
         s = signoffs.get(c["clause"]) or {}
         base = {"clause": c["clause"], "heading": c["heading"], "status": c["status"],
+                "mapping_status": (c.get("mapping") or {}).get("status", ""),
                 "signoff_decision": s.get("decision", ""), "signoff_by": s.get("reviewer", ""),
                 "signoff_at": s.get("signed_at", ""),
                 "signoff_digest_matches": (s.get("evidence_digest") == c["evidence_digest"]) if s else ""}
@@ -240,7 +312,7 @@ def export_rows(view: dict[str, Any], signoffs: dict[str, dict[str, Any]] | None
         for entry, is_current in entries:
             for p in entry["passages"] or [{"line": "", "text": ""}]:
                 rows.append({**base, "doc_id": entry["doc_id"], "current": is_current,
-                             "recorded_at": entry["recorded_at"], "age_days": entry["age_days"], "line": p["line"],
+                             "recorded_at": entry["recorded_at"], "age_days": entry["age_days"], "line": p.get("locator", p["line"]),
                              "passage": p["text"], "contradiction_tags": " ".join(entry["contradiction_tags"])})
     return rows
 
@@ -254,4 +326,5 @@ def to_csv(rows: list[dict[str, Any]]) -> str:
 
 
 __all__ = ["CSV_FIELDS", "STATUSES", "Clause", "CorpusDocument", "audit_view", "clause_evidence", "evidence_digest",
-           "export_rows", "fold", "freshness_problems", "load_catalogue", "load_corpus", "matches_prefix", "to_csv"]
+           "export_rows", "fold", "GRAPH_DOCUMENTS", "load_graph_corpus", "freshness_problems", "load_catalogue", "load_corpus", "mapping_digest", "mapping_state",
+           "matches_prefix", "to_csv"]

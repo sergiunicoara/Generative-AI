@@ -103,6 +103,13 @@ retrieval:
   # Opt-in, NOT evaluated: order the entity context by trust (origin x verification) so the few entities that
   # fit in the prompt are the most trusted ones. Entities have no trust metadata until re-ingested or verified.
   entity_trust_weighting_enabled: false
+  # Opt-in, NOT golden-validated: when superseded evidence is excluded, also blank an entity's description if the
+  # document that created it was superseded (first-writer-wins descriptions leaked CSR-CLIENT-2021 into automotive
+  # SH-03). Off until a golden run measures it; see docs/iatf-audit.md.
+  entity_description_supersession_filter_enabled: false
+  # Opt-in, NOT golden-validated: add "answer in the question's language" to the answer prompt (automotive CON-05
+  # was asked in Romanian, answered in English). Changes the prompt, so it stays off until measured.
+  answer_language_rule_enabled: false
   retrieval_sufficiency_abstain_enabled: false
   retrieval_sufficiency_min_evidence: 1
   retrieval_sufficiency_min_average_score: 0.0
@@ -362,9 +369,11 @@ content_sync:
 
 # IATF 16949 clause evidence view (graphrag/domains/automotive/audit.py, docs/iatf-audit.md). Only tenants listed here
 # get the /audit/iatf routes; every other tenant receives 404. Paths are relative to the project root.
+# source: files (corpus_dir, the default) or graph (the tenant's ingested Document/Chunk nodes in Neo4j, read-only).
 iatf_audit:
   tenants:
     automotive:
+      source: files
       corpus_dir: data/automotive
       metadata_dir: data/metadata/automotive
 

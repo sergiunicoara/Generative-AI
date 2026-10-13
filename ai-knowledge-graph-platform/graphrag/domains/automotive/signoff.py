@@ -19,7 +19,11 @@ from datetime import datetime, timezone
 from typing import Any
 from uuid import uuid4
 
-DECISIONS = ("accepted", "rejected", "needs_more_evidence")
+EVIDENCE_DECISIONS = ("accepted", "rejected", "needs_more_evidence")
+# A quality engineer confirming or rejecting the clause -> evidence MAPPING (config/iatf_clauses.yml), recorded in
+# the same chain so there is one audit trail. Their digest is ``audit.mapping_digest`` instead of the evidence digest.
+MAPPING_DECISIONS = ("mapping_confirmed", "mapping_rejected")
+DECISIONS = EVIDENCE_DECISIONS + MAPPING_DECISIONS
 GENESIS = "0" * 64
 _FIELDS = ("id", "tenant", "seq", "clause", "decision", "reviewer", "note", "evidence_digest", "evidence_as_of",
            "signed_at", "prev_hash")
@@ -127,11 +131,14 @@ class SignoffStore:
         head = (await self._neo4j.run(HEAD, tenant=tenant, genesis=GENESIS))[0]
         return verify_chain(await self.entries(tenant), head_hash=head["hash"])
 
-    async def latest_by_clause(self, tenant: str) -> dict[str, dict[str, Any]]:
+    async def latest_by_clause(self, tenant: str, kind: str = "evidence") -> dict[str, dict[str, Any]]:
+        """Latest entry per clause of one kind: ``evidence`` (auditor sign-off) or ``mapping`` (mapping review)."""
+        wanted = EVIDENCE_DECISIONS if kind == "evidence" else MAPPING_DECISIONS
         latest: dict[str, dict[str, Any]] = {}
         for entry in await self.entries(tenant):
-            latest[entry["clause"]] = entry
+            if entry.get("decision") in wanted:
+                latest[entry["clause"]] = entry
         return latest
 
 
-__all__ = ["DECISIONS", "GENESIS", "ChainConflict", "SignoffStore", "entry_hash", "verify_chain", "SCHEMA"]
+__all__ = ["DECISIONS", "EVIDENCE_DECISIONS", "MAPPING_DECISIONS", "GENESIS", "ChainConflict", "SignoffStore", "entry_hash", "verify_chain", "SCHEMA"]

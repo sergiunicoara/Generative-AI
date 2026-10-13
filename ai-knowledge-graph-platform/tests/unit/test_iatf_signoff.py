@@ -130,7 +130,8 @@ def test_tenant_without_a_configured_corpus_gets_404():
 
 
 def test_coverage_route_serves_the_configured_tenant():
-    body = _client().get("/audit/iatf/clauses").json()
+    with patch.object(routes, "get_neo4j", return_value=_FakeNeo4j()):
+        body = _client().get("/audit/iatf/clauses").json()
     assert body["documents_considered"] == 30 and body["mapping_status"] == "proposed"
 
 

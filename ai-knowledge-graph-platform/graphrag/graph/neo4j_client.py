@@ -1269,6 +1269,8 @@ class Neo4jClient:
                           e.embedding        = $embedding,
                           e.source_type      = $source_type,
                           e.source_doc_id    = $source_doc_id,
+                          // which document wrote the description (descriptions are first-writer-wins)
+                          e.description_doc_id = CASE WHEN coalesce($description, '') <> '' THEN $source_doc_id ELSE null END,
                           e.extraction_model = $extraction_model,
                           e.prompt_version   = $prompt_version,
                           e.resolution_status = $resolution_status,
@@ -1279,7 +1281,9 @@ class Neo4jClient:
                           e.generated_by         = $generated_by,
                           e.created_at       = datetime(),
                           e.recorded_at      = datetime()   // transaction time — never updated
-            ON MATCH SET  e.description = CASE WHEN e.description = '' THEN $description ELSE e.description END,
+            ON MATCH SET  e.description_doc_id = CASE WHEN coalesce(e.description, '') = '' AND coalesce($description, '') <> ''
+                                                    THEN $source_doc_id ELSE e.description_doc_id END,
+                          e.description = CASE WHEN e.description = '' THEN $description ELSE e.description END,
                           e.embedding   = CASE WHEN $embedding IS NOT NULL AND size($embedding) > 0 THEN $embedding ELSE e.embedding END,
                           e.origin              = coalesce(e.origin, $origin),
                           e.verification_status = coalesce(e.verification_status, 'UNVERIFIED'),
@@ -1422,6 +1426,7 @@ class Neo4jClient:
                           e.embedding        = row.embedding,
                           e.source_type      = row.source_type,
                           e.source_doc_id    = row.source_doc_id,
+                          e.description_doc_id = CASE WHEN coalesce(row.description, '') <> '' THEN row.source_doc_id ELSE null END,
                           e.extraction_model = row.extraction_model,
                           e.prompt_version   = row.prompt_version,
                           e.resolution_status = row.resolution_status,
@@ -1432,7 +1437,9 @@ class Neo4jClient:
                           e += row.semantic_properties,
                           e.created_at       = datetime(),
                           e.recorded_at      = datetime()
-            ON MATCH SET  e.description = CASE WHEN e.description = '' THEN row.description ELSE e.description END,
+            ON MATCH SET  e.description_doc_id = CASE WHEN coalesce(e.description, '') = '' AND coalesce(row.description, '') <> ''
+                                                    THEN row.source_doc_id ELSE e.description_doc_id END,
+                          e.description = CASE WHEN e.description = '' THEN row.description ELSE e.description END,
                           e.embedding   = CASE WHEN row.embedding IS NOT NULL AND size(row.embedding) > 0 THEN row.embedding ELSE e.embedding END,
                           e.origin              = coalesce(e.origin, row.origin),
                           e.verification_status = coalesce(e.verification_status, 'UNVERIFIED'),
@@ -2288,8 +2295,8 @@ class Neo4jClient:
         source document has been superseded (default keeps today's behaviour).
 
         ``hide_superseded_descriptions=True`` (opt-in, not golden-validated) blanks an entity's description when the
-        document that created it (``e.source_doc_id``, which is also where the first-writer-wins description came
-        from) has been superseded, and returns ``description_superseded: true``. Without it, a KPI first extracted
+        document that wrote it (``e.description_doc_id``; for entities written before that property existed,
+        ``e.source_doc_id``, the creating document) has been superseded, and returns ``description_superseded: true``. Without it, a KPI first extracted
         from a superseded revision keeps that revision's wording in the answer context (automotive SH-03).
 
         Excludes quarantined entities and edges that are not current
@@ -2314,8 +2321,9 @@ class Neo4jClient:
             WITH e, neighbor,
                  ({entity_is_active("neighbor")} AND {edge_is_current("r")} {transaction_filter} {superseded_filter}) AS neighbor_ok
             WITH e, neighbor, neighbor_ok,
-                 ($hide_superseded_descriptions AND e.source_doc_id IS NOT NULL
-                  AND EXISTS {{ MATCH (ed:Document {{id: e.source_doc_id, tenant: $tenant}})
+                 ($hide_superseded_descriptions AND coalesce(e.description_doc_id, e.source_doc_id) IS NOT NULL
+                  AND EXISTS {{ MATCH (ed:Document {{id: coalesce(e.description_doc_id, e.source_doc_id),
+                                                     tenant: $tenant}})
                                WHERE ed.superseded_by IS NOT NULL }}) AS description_superseded
             RETURN e.name AS entity, e.type AS type,
                    CASE WHEN description_superseded THEN '' ELSE e.description END AS description,

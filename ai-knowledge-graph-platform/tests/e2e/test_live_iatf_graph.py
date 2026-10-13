@@ -75,3 +75,75 @@ async def test_superseded_entity_description_is_hidden_only_when_asked(neo4j_con
         assert current[0]["description"] == "tinta 98% (CSR 2021)"
     finally:
         await driver.close()
+
+
+async def test_graph_evidence_respects_document_acls(neo4j_container):  # noqa: F811
+    from graphrag.enterprise.models import AccessContext
+
+    t = f"iatfa-{uuid.uuid4().hex[:8]}"
+    driver, client = await _driver_client(neo4j_container)
+    try:
+        await client.run(
+            """
+            CREATE (open:Document {tenant:$t, id:$t+'-o', filename:'CSR-CLIENT-2023.txt', acl_state:'known',
+                                   access_mode:'tenant'})
+            CREATE (qa:Document {tenant:$t, id:$t+'-q', filename:'RFA-REG-01-rev5.txt', acl_state:'known',
+                                 access_mode:'restricted', allow_principals:['group:quality']})
+            CREATE (deny:Document {tenant:$t, id:$t+'-d', filename:'PQ-07-rev3.txt', acl_state:'known',
+                                   access_mode:'tenant', deny_principals:['user:eve']})
+            CREATE (unknown:Document {tenant:$t, id:$t+'-u', filename:'IL-NC-06-rev2.txt'})
+            """, t=t)
+
+        async def visible(claims, enabled=True):
+            docs = await audit.load_graph_corpus(client, t, access_context=AccessContext.from_claims(claims),
+                                                 acl_enabled=enabled)
+            return {d.doc_id for d in docs}
+
+        everyone = {"CSR-CLIENT-2023", "RFA-REG-01-rev5", "PQ-07-rev3", "IL-NC-06-rev2"}
+        assert await visible({"sub": "bob"}, enabled=False) == everyone
+        assert await visible({"sub": "bob", "groups": []}) == {"CSR-CLIENT-2023", "PQ-07-rev3"}
+        assert await visible({"sub": "ann", "groups": ["quality"]}) == {"CSR-CLIENT-2023", "PQ-07-rev3",
+                                                                         "RFA-REG-01-rev5"}
+        assert await visible({"sub": "ann"}) == {"CSR-CLIENT-2023", "PQ-07-rev3"}   # groups claim missing
+        assert await visible({"sub": "eve", "groups": []}) == {"CSR-CLIENT-2023"}     # explicit deny wins
+    finally:
+        await driver.close()
+
+
+async def test_effective_from_is_read_from_valid_from(neo4j_container):  # noqa: F811
+    t = f"iatfe-{uuid.uuid4().hex[:8]}"
+    driver, client = await _driver_client(neo4j_container)
+    try:
+        await client.run(
+            "CREATE (:Document {tenant:$t, id:$t+'-x', filename:'CSR-CLIENT-2023.txt', "
+            "recorded_at: datetime('2026-01-01T00:00:00Z'), valid_from: datetime('2026-03-01T00:00:00Z')})", t=t)
+        doc = (await audit.load_graph_corpus(client, t, acl_enabled=False))[0]
+        assert doc.effective_from.isoformat().startswith("2026-03-01")
+        assert doc.recorded_at.isoformat().startswith("2026-01-01")
+    finally:
+        await driver.close()
+
+
+async def test_description_provenance_follows_the_document_that_filled_it(neo4j_container):  # noqa: F811
+    from graphrag.core.models import Entity
+
+    t = f"iatfp-{uuid.uuid4().hex[:8]}"
+    driver, client = await _driver_client(neo4j_container)
+    try:
+        await client.merge_entity(Entity(name="Livrare", type="KPI", description="", source_doc_id=t + "-a"),
+                                  tenant=t)
+        await client.merge_entity(Entity(name="Livrare", type="KPI", description="tinta 98%",
+                                         source_doc_id=t + "-b"), tenant=t)
+        await client.merge_entity(Entity(name="Livrare", type="KPI", description="tinta 95%",
+                                         source_doc_id=t + "-c"), tenant=t)
+        row = (await client.run("MATCH (e:Entity {tenant:$t, name:'Livrare'}) "
+                                "RETURN e.source_doc_id AS src, e.description_doc_id AS dsrc, e.description AS d",
+                                t=t))[0]
+        assert row == {"src": t + "-a", "dsrc": t + "-b", "d": "tinta 98%"}
+        await client.merge_entities_batch([Entity(name="Stoc", type="KPI", description="x", source_doc_id=t + "-z")],
+                                          tenant=t)
+        batch = (await client.run("MATCH (e:Entity {tenant:$t, name:'Stoc'}) RETURN e.description_doc_id AS d",
+                                  t=t))[0]
+        assert batch["d"] == t + "-z"
+    finally:
+        await driver.close()

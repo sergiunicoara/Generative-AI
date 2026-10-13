@@ -19,6 +19,7 @@ from api.auth.dependencies import get_current_user, get_tenant, require_scope
 from graphrag.core.config import get_settings
 from graphrag.domains.automotive import audit, metrics
 from graphrag.domains.automotive.signoff import DECISIONS, ChainConflict, SignoffStore
+from graphrag.enterprise.models import AccessContext
 from graphrag.graph.neo4j_client import get_neo4j
 
 router = APIRouter(prefix="/audit/iatf", tags=["IATF Audit"])
@@ -43,17 +44,27 @@ def _tenant_cfg(tenant: str) -> dict:
     return cfg
 
 
-async def _corpus_for(tenant: str) -> list[audit.CorpusDocument]:
-    """``source: graph`` reads the tenant's ingested documents from Neo4j; otherwise the configured files."""
+def _acl_enforced() -> bool:
+    return bool(get_settings().access_control.get("enabled", False))
+
+
+async def _corpus_for(tenant: str, user: dict) -> list[audit.CorpusDocument]:
+    """``source: graph`` reads the tenant's ingested documents from Neo4j, filtered by the caller's document ACLs
+    with the same fail-closed predicate as search. Corpus files carry no ACLs, so while ACL enforcement is on the
+    file source is refused instead of showing every file to every reader."""
     cfg = _tenant_cfg(tenant)
     metadata_dir = _ROOT / cfg["metadata_dir"] if cfg.get("metadata_dir") else None
     if cfg.get("source") == "graph":
-        return await audit.load_graph_corpus(get_neo4j(), tenant, metadata_dir)
+        return await audit.load_graph_corpus(get_neo4j(), tenant, metadata_dir,
+                                             access_context=AccessContext.from_claims(user))
+    if _acl_enforced():
+        raise HTTPException(status_code=403, detail="document ACLs are enforced and file evidence has no ACLs; "
+                                                    "configure source: graph for this tenant")
     return audit.load_corpus(_ROOT / cfg["corpus_dir"], metadata_dir)
 
 
-async def _view(tenant: str, as_of: datetime | None, clause_ids: list[str] | None = None) -> dict:
-    docs = await _corpus_for(tenant)
+async def _view(tenant: str, user: dict, as_of: datetime | None, clause_ids: list[str] | None = None) -> dict:
+    docs = await _corpus_for(tenant, user)
     reviews = await SignoffStore(get_neo4j()).latest_by_clause(tenant, kind="mapping")
     return audit.audit_view(docs=docs, as_of=as_of, clause_ids=clause_ids, mapping_reviews=reviews)
 
@@ -66,17 +77,19 @@ def _reviewer(user: dict) -> str:
 
 
 @router.get("/clauses", dependencies=[Depends(require_scope("read"))])
-async def clause_coverage(as_of: datetime | None = None, tenant: str = Depends(get_tenant)):
+async def clause_coverage(as_of: datetime | None = None, tenant: str = Depends(get_tenant),
+                          user: dict = Depends(get_current_user)):
     """Coverage of every catalogued clause, with evidence passages, superseded revisions and conflicts."""
-    view = await _view(tenant, as_of)
-    if as_of is None:
+    view = await _view(tenant, user, as_of)
+    if as_of is None and not _acl_enforced():   # a per-user filtered view must not set tenant-wide gauges
         metrics.record_view(tenant, view)
     return view
 
 
 @router.get("/clauses/{clause_id}", dependencies=[Depends(require_scope("read"))])
-async def clause_detail(clause_id: str, as_of: datetime | None = None, tenant: str = Depends(get_tenant)):
-    view = await _view(tenant, as_of, [clause_id])
+async def clause_detail(clause_id: str, as_of: datetime | None = None, tenant: str = Depends(get_tenant),
+                        user: dict = Depends(get_current_user)):
+    view = await _view(tenant, user, as_of, [clause_id])
     if not view["clauses"]:
         raise HTTPException(status_code=404, detail="unknown clause")
     store = SignoffStore(get_neo4j())
@@ -89,7 +102,7 @@ async def clause_detail(clause_id: str, as_of: datetime | None = None, tenant: s
 async def sign_off(clause_id: str, body: SignoffRequest, tenant: str = Depends(get_tenant),
                    user: dict = Depends(get_current_user)):
     reviewer = _reviewer(user)
-    view = await _view(tenant, body.as_of, [clause_id])
+    view = await _view(tenant, user, body.as_of, [clause_id])
     if not view["clauses"]:
         raise HTTPException(status_code=404, detail="unknown clause")
     clause = view["clauses"][0]
@@ -129,9 +142,9 @@ async def signoffs(tenant: str = Depends(get_tenant)):
 
 @router.get("/export", dependencies=[Depends(require_scope("read"))])
 async def export(as_of: datetime | None = None, format: Literal["json", "csv"] = Query("json"),
-                 tenant: str = Depends(get_tenant)):
+                 tenant: str = Depends(get_tenant), user: dict = Depends(get_current_user)):
     """Evidence as of a date plus the latest sign-off per clause and whether its evidence digest still matches."""
-    view = await _view(tenant, as_of)
+    view = await _view(tenant, user, as_of)
     store = SignoffStore(get_neo4j())
     latest = await store.latest_by_clause(tenant, kind="evidence")
     rows = audit.export_rows(view, latest)

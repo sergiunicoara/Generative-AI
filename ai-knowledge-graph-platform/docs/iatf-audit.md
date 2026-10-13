@@ -29,9 +29,10 @@ the document's recorded time and age, and its contradiction tags; `conflicts` li
 
 * Superseded = predecessor in `supersession_chains` (`config/ontologies/automotive_iatf.yml`) or stored in the corpus
   `archive` folder.
-* `as_of`: documents recorded after the date are ignored, and a successor recorded later does not yet supersede its
-  predecessor. The corpus has no effective dates, so "recorded at" stands in for "in force from". This is an
-  approximation and is stated in every export.
+* `as_of`: a document counts from the date its revision came into force (graph `Document.valid_from`) and, when that
+  is unknown, from when it was recorded. A successor not yet in force does not supersede its predecessor. The file
+  corpus has no effective dates, so for files "recorded at" stands in for "in force from", which is an approximation.
+  Graph documents with `valid_from` set give the exact revision in force on the audit date.
 * Keyword matching is by word start, accent- and case-insensitive, with no stemming, so the catalogue lists the
   inflected forms it needs. A keyword hit is a located passage, not proof that the passage satisfies the requirement;
   the auditor decides.
@@ -53,7 +54,15 @@ the document's recorded time and age, and its contradiction tags; `conflicts` li
 from the tenant's ingested graph, read-only: non-deleted `Document` nodes, their chunks in `chunk_index` order, and
 supersession from `Document.superseded_by`. Chunks keep no file line numbers, so passages cite `chunk N, line M`.
 Contradiction tags still come from the corpus metadata files when configured; the graph's model-detected `Conflict`
-nodes are a different signal and are not mixed in. Proven on a live Neo4j: tenant scoping, deleted documents
+nodes are a different signal and are not mixed in.
+
+**Document ACLs.** The graph source applies the same fail-closed predicate as search (`graphrag/enterprise/access.py`)
+when `access_control.enabled` is on: deny wins, restricted documents need an allowed principal, group-protected
+documents need a resolved groups claim, and documents with unknown ACL state are hidden. A caller's view, sign-off
+digest and export therefore cover only the evidence they may read (proven on live Neo4j). Corpus files carry no ACLs,
+so while enforcement is on every evidence route refuses the file source (403) rather than showing all files to every
+reader. Tenant-wide gauges are not set from a per-user filtered view. The offline CLI is an operator tool with direct
+database access and does not filter. Proven on a live Neo4j: tenant scoping, deleted documents
 excluded, superseded revision reported separately.
 
 ## Auditor sign-off and the audit trail
@@ -103,7 +112,7 @@ The saved 2026-09-21 automotive run scored 6/10. All four failures were diagnose
 | id | cause | action |
 | --- | --- | --- |
 | SH-02, MH-02 | Correct answers written "1 %" / "95 %" (Romanian typography); the checker required "1%" / "95%" | checker now ignores whitespace before `%` (both sides) |
-| SH-03 | Checker now passes it, but **not a genuine pass**: the answer refuses a single value, citing a conflict between 95 % and a 98 % that comes from the superseded CSR-CLIENT-2021 or an unrelated KPI line | recorded in `evals/automotive_rescored.json`. Root cause found: entity descriptions are first-writer-wins, so a KPI first extracted from CSR-CLIENT-2021 keeps that wording and reaches the context through any *current* chunk that mentions it; `include_superseded=False` does not cover this. Fix shipped **opt-in** (`entity_description_supersession_filter_enabled`), proven on live Neo4j, effect on answers unmeasured |
+| SH-03 | Checker now passes it, but **not a genuine pass**: the answer refuses a single value, citing a conflict between 95 % and a 98 % that comes from the superseded CSR-CLIENT-2021 or an unrelated KPI line | recorded in `evals/automotive_rescored.json`. Root cause found: entity descriptions are first-writer-wins, so a KPI first extracted from CSR-CLIENT-2021 keeps that wording and reaches the context through any *current* chunk that mentions it; `include_superseded=False` does not cover this. Fix shipped **opt-in** (`entity_description_supersession_filter_enabled`), proven on live Neo4j, effect on answers unmeasured. Entities now record `description_doc_id` (the document that actually wrote the description, which can differ from the creating document); older entities fall back to `source_doc_id` until re-ingested |
 | CON-05 | Genuine failure: answer says the context has no information (in English) although context exists | open. Label is sound: RFA-REG-01-rev5 line 74 (critical: semestrial) and line 201 (all suppliers: annual). Language part addressed **opt-in** (`answer_language_rule_enabled`); the retrieval miss itself is not diagnosed further without a run |
 
 Re-scoring the saved answers with the fixed checker gives **9/10 by the checker, 8/10 judged genuine**. This measures

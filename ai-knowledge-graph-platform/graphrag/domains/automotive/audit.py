@@ -25,6 +25,9 @@ from typing import Any, Iterable
 
 import yaml
 
+from graphrag.enterprise.access import access_params, document_access_predicate
+from graphrag.enterprise.models import AccessContext
+
 ROOT = Path(__file__).resolve().parents[3]
 CATALOGUE = ROOT / "config" / "iatf_clauses.yml"
 ONTOLOGY = ROOT / "config" / "ontologies" / "automotive_iatf.yml"
@@ -52,6 +55,13 @@ class CorpusDocument:
     superseded_by: str | None = None
     # Optional human-readable location per line (graph documents: "chunk 3, line 2"); file documents use line numbers.
     locators: list[str] | None = field(repr=False, default=None)
+    # When the revision came into force (graph ``Document.valid_from``). Unknown for corpus files.
+    effective_from: datetime | None = None
+
+    @property
+    def available_from(self) -> datetime | None:
+        """Start of the revision for an as-of view: in force from ``effective_from`` when known, else recorded."""
+        return self.effective_from or self.recorded_at
 
     @property
     def current(self) -> bool:
@@ -115,12 +125,13 @@ def load_corpus(corpus_dir: Path = CORPUS, metadata_dir: Path = METADATA,
 GRAPH_DOCUMENTS = """
 MATCH (d:Document {tenant: $tenant})
 WHERE coalesce(d.is_deleted, false) = false
+""" + document_access_predicate("d") + """
 OPTIONAL MATCH (c:Chunk {tenant: $tenant})-[:PART_OF]->(d)
 WITH d, c ORDER BY c.chunk_index
 WITH d, collect(CASE WHEN c IS NULL THEN NULL ELSE {index: c.chunk_index, text: c.text} END) AS chunks
 OPTIONAL MATCH (newer:Document {tenant: $tenant, id: d.superseded_by})
 RETURN d.id AS id, coalesce(d.filename, d.id) AS filename, coalesce(newer.filename, d.superseded_by) AS superseded_by,
-       toString(coalesce(d.recorded_at, d.ingested_at)) AS recorded_at, chunks
+       toString(coalesce(d.recorded_at, d.ingested_at)) AS recorded_at, toString(d.valid_from) AS valid_from, chunks
 """
 
 
@@ -128,8 +139,14 @@ def _doc_key(name: str) -> str:
     return Path(str(name)).stem
 
 
-async def load_graph_corpus(neo4j, tenant: str, metadata_dir: Path | None = None) -> list[CorpusDocument]:
+async def load_graph_corpus(neo4j, tenant: str, metadata_dir: Path | None = None, *,
+                            access_context: AccessContext | None = None,
+                            acl_enabled: bool | None = None) -> list[CorpusDocument]:
     """The same evidence model built from a tenant's ingested graph (read-only) instead of corpus files.
+
+    Document ACLs are enforced with the same fail-closed predicate as search (graphrag/enterprise/access.py) when
+    ``access_control.enabled`` is on: a caller only sees evidence from documents they may read, so a sign-off digest
+    covers exactly the evidence that caller was shown. ``acl_enabled`` overrides the setting (tests, operator CLI).
 
     Supersession comes from ``Document.superseded_by`` (set by document_authority.register_supersession).
     Passages carry ``chunk N, line M`` locators because chunks keep no file line numbers. Contradiction tags come
@@ -137,7 +154,12 @@ async def load_graph_corpus(neo4j, tenant: str, metadata_dir: Path | None = None
     """
     from graphrag.graph.validation.graph_checks import run_read_only
 
-    rows = await run_read_only(neo4j, GRAPH_DOCUMENTS, tenant=tenant)
+    if acl_enabled is None:
+        from graphrag.core.config import get_settings
+
+        acl_enabled = bool(get_settings().access_control.get("enabled", False))
+    rows = await run_read_only(neo4j, GRAPH_DOCUMENTS, tenant=tenant,
+                               **access_params(access_context, enabled=acl_enabled))
     docs = []
     for row in rows:
         key = _doc_key(row["filename"])
@@ -153,7 +175,7 @@ async def load_graph_corpus(neo4j, tenant: str, metadata_dir: Path | None = None
             doc_id=key, folder="graph", recorded_at=_parse_time(row.get("recorded_at")),
             contradictions=tuple(meta.get("detected_contradictions") or ()), lines=lines,
             superseded_by=_doc_key(row["superseded_by"]) if row.get("superseded_by") else None,
-            locators=locators))
+            locators=locators, effective_from=_parse_time(row.get("valid_from"))))
     return docs
 
 
@@ -179,10 +201,11 @@ def _as_of_view(docs: list[CorpusDocument], as_of: datetime | None) -> list[Corp
     """Documents recorded by ``as_of``; a successor recorded later does not yet supersede its predecessor."""
     if as_of is None:
         return docs
-    present = [d for d in docs if d.recorded_at is None or d.recorded_at <= as_of]
+    present = [d for d in docs if d.available_from is None or d.available_from <= as_of]
     ids = {d.doc_id for d in present}
     return [CorpusDocument(d.doc_id, d.folder, d.recorded_at, d.contradictions, d.lines,
-                           d.superseded_by if d.superseded_by in ids else None, d.locators) for d in present]
+                           d.superseded_by if d.superseded_by in ids else None, d.locators, d.effective_from)
+            for d in present]
 
 
 def clause_evidence(clause: Clause, docs: list[CorpusDocument], *, max_age_days: int, now: datetime,
@@ -196,7 +219,8 @@ def clause_evidence(clause: Clause, docs: list[CorpusDocument], *, max_age_days:
             continue
         age = (now - doc.recorded_at).days if doc.recorded_at else None
         entry = {"doc_id": doc.doc_id, "folder": doc.folder,
-                 "recorded_at": doc.recorded_at.isoformat() if doc.recorded_at else None, "age_days": age,
+                 "recorded_at": doc.recorded_at.isoformat() if doc.recorded_at else None,
+                 "effective_from": doc.effective_from.isoformat() if doc.effective_from else None, "age_days": age,
                  "matching_lines": count, "passages": passages, "contradiction_tags": list(doc.contradictions)}
         if doc.current:
             current.append(entry)

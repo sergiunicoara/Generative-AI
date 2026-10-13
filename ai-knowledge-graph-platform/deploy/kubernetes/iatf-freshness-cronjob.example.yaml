@@ -1,0 +1,82 @@
+# IATF evidence freshness + sign-off chain anchoring (docs/iatf-audit.md). Example only: not in kustomization.yaml.
+# Replace REGION, PROJECT_ID, TAG and the checkpoint bucket mount. A failed Job (exit 1) is the alert signal:
+#   freshness -> a clause lost current evidence, went stale, or (with --fail-on conflict) has open conflicts
+#   checkpoint verify -> the sign-off chain or a signed checkpoint does not verify
+# IATF_CHECKPOINT_KEY must come from a Secret the database administrator cannot read.
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: graphrag-iatf-freshness
+  namespace: graphrag
+spec:
+  schedule: "23 * * * *"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 7
+  jobTemplate:
+    spec:
+      backoffLimit: 0
+      template:
+        spec:
+          serviceAccountName: graphrag-workload
+          restartPolicy: Never
+          securityContext: {runAsNonRoot: true, seccompProfile: {type: RuntimeDefault}}
+          containers:
+            - name: freshness
+              image: REGION-docker.pkg.dev/PROJECT_ID/graphrag/api:TAG
+              command: ["python", "scripts/iatf_audit.py", "freshness", "--fail-on", "missing,stale,only_superseded"]
+              envFrom:
+                - configMapRef: {name: graphrag-config}
+              resources:
+                requests: {cpu: 100m, memory: 256Mi}
+                limits: {cpu: 500m, memory: 512Mi}
+              securityContext:
+                allowPrivilegeEscalation: false
+                capabilities: {drop: ["ALL"]}
+                readOnlyRootFilesystem: true
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: graphrag-iatf-checkpoint
+  namespace: graphrag
+spec:
+  schedule: "41 1 * * *"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 7
+  jobTemplate:
+    spec:
+      backoffLimit: 0
+      template:
+        spec:
+          serviceAccountName: graphrag-workload
+          restartPolicy: Never
+          securityContext: {runAsNonRoot: true, seccompProfile: {type: RuntimeDefault}}
+          containers:
+            - name: checkpoint
+              image: REGION-docker.pkg.dev/PROJECT_ID/graphrag/api:TAG
+              command: ["/bin/sh", "-c"]
+              args:
+                - >-
+                  python scripts/iatf_checkpoint.py verify --tenant automotive --path /checkpoints/iatf.jsonl &&
+                  python scripts/iatf_checkpoint.py write --tenant automotive --path /checkpoints/iatf.jsonl
+              envFrom:
+                - configMapRef: {name: graphrag-config}
+                - secretRef: {name: graphrag-secrets}
+              env:
+                - name: IATF_CHECKPOINT_KEY
+                  valueFrom: {secretKeyRef: {name: graphrag-iatf-checkpoint, key: key}}
+              resources:
+                requests: {cpu: 100m, memory: 256Mi}
+                limits: {cpu: 500m, memory: 512Mi}
+              securityContext:
+                allowPrivilegeEscalation: false
+                capabilities: {drop: ["ALL"]}
+                readOnlyRootFilesystem: true
+              volumeMounts:
+                - name: checkpoints
+                  mountPath: /checkpoints
+          volumes:
+            - name: checkpoints
+              persistentVolumeClaim: {claimName: graphrag-iatf-checkpoints}   # bind to write-once storage

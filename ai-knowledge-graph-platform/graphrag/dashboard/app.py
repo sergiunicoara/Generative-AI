@@ -43,7 +43,7 @@ from dash import Input, Output, State, callback, dcc, html
 # Tab modules imported here so their @callback decorators are registered.
 import graphrag.dashboard.tabs  # noqa: F401 — side-effect import
 from graphrag.dashboard.tabs import (
-    calibration, communities, conflicts, gdpr, health, review_queue,
+    calibration, communities, conflicts, gdpr, health, iatf_audit, review_queue,
 )
 from graphrag.dashboard.utils import (
     CANVAS, FONT, NAV, NAV2, TAB_SELECTED_STYLE, TAB_STYLE, TEAL, TEAL2,
@@ -288,6 +288,7 @@ app.layout = html.Div([
             dcc.Tab(label="GDPR & PII",    value="gdpr",        style=TAB_STYLE, selected_style=TAB_SELECTED_STYLE),
             dcc.Tab(label="Calibration",   value="calibration", style=TAB_STYLE, selected_style=TAB_SELECTED_STYLE),
             dcc.Tab(label="Review Queue",  value="review_queue", style=TAB_STYLE, selected_style=TAB_SELECTED_STYLE),
+            dcc.Tab(label="IATF Audit",    value="iatf_audit",  style=TAB_STYLE, selected_style=TAB_SELECTED_STYLE),
         ]),
         style={"background": "white", "padding": "0 16px",
                "borderBottom": f"1px solid {TEAL}", "boxShadow": "0 2px 8px rgba(15,31,71,0.04)"},
@@ -324,6 +325,7 @@ def render_tab(tab: str, _n: int, tenant: str):
         "gdpr":        gdpr.render,
         "calibration": calibration.render,
         "review_queue": review_queue.render,
+        "iatf_audit":  iatf_audit.render,
     }
     renderer = _tab_renderers.get(tab)
     if renderer is None:

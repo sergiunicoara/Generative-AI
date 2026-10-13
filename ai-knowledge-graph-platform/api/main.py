@@ -15,7 +15,7 @@ from starlette.middleware.sessions import SessionMiddleware
 
 from api.limiter import limiter
 from api.request_limits import RequestBodyLimitMiddleware
-from api.routes import agent, auth, ingest, query, search, evaluation, kpis, corrections, kg_features, demo, context_graph, business, skills, wellknown, enterprise, energy_demo
+from api.routes import agent, auth, ingest, query, search, evaluation, kpis, corrections, kg_features, demo, context_graph, business, skills, wellknown, enterprise, energy_demo, iatf_audit
 from graphrag.core.config import get_settings, is_dev_env
 
 log = structlog.get_logger(__name__)
@@ -221,6 +221,7 @@ app.include_router(ingest.router,     prefix="/ingest",     tags=["Ingestion"])
 app.include_router(query.router,      prefix="/query",      tags=["Query"])
 app.include_router(search.router,     prefix="/search",     tags=["Search"])
 app.include_router(enterprise.router, tags=["Enterprise Content"])
+app.include_router(iatf_audit.router)
 app.include_router(evaluation.router,  prefix="/evaluation",  tags=["Evaluation"],
                    dependencies=[Depends(require_scope("read"))])
 app.include_router(kpis.router,        prefix="/kpis",        tags=["KPIs"])

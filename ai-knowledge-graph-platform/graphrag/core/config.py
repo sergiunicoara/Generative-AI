@@ -432,6 +432,11 @@ class Settings(BaseSettings):
         """Provider-neutral content synchronisation configuration."""
         return self._yaml.get("content_sync", {})
 
+    @property
+    def iatf_audit(self) -> dict:
+        """IATF clause evidence view: which tenants have a configured evidence corpus (others get 404)."""
+        return self._yaml.get("iatf_audit", {})
+
 
 @lru_cache(maxsize=1)
 def get_settings() -> Settings:

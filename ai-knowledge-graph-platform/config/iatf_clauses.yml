@@ -1,0 +1,71 @@
+# IATF 16949 clause catalogue for the evidence/coverage view (graphrag/domains/automotive/audit.py).
+#
+# Clause NUMBERS and short headings only, written in our own words. The standard's text is copyrighted and is not
+# bundled; a deployment uses its own licensed copy for the requirement wording.
+#
+# The clause -> evidence mapping below is a PROPOSAL made for the synthetic corpus in data/automotive, not a
+# certified interpretation of the standard. A quality engineer must confirm it before it is used for a real audit
+# (`mapping_status: proposed`). Each clause names:
+#   doc_prefixes: document families expected to evidence the clause (matched against the document id prefix)
+#   keywords:     terms that locate the evidence passage inside those documents (case- and accent-insensitive)
+# A clause is evidenced when at least one CURRENT document of a listed family contains at least one keyword.
+standard: IATF 16949:2016
+mapping_status: proposed
+max_document_age_days: 365        # freshness: older current evidence is reported as stale
+clauses:
+  - id: "4.3.2"
+    heading: Customer-specific requirements are evaluated and included
+    doc_prefixes: [CSR-CLIENT]
+    keywords: [cerinte specifice, cerintele clientului, csr]
+  - id: "4.4.1.2"
+    heading: Product safety process
+    doc_prefixes: [PFMEA, SPEC, MC-01]
+    keywords: [siguranta produsului, caracteristici critice, caracteristica speciala, caracteristici speciale]
+  - id: "7.1.5"
+    heading: Monitoring and measuring resources, calibration and MSA
+    doc_prefixes: [PCAL, IL-CAL]
+    keywords: [calibrare, etalonare, msa, mijloace de masurare]
+  - id: "7.2"
+    heading: Competence and training
+    doc_prefixes: [PTRN]
+    keywords: [instruire, competenta, training]
+  - id: "7.5"
+    heading: Control of documented information
+    doc_prefixes: [PN, MC-01]
+    keywords: [revizie, arhivare, retentie, documentele]
+  - id: "8.3.4.4"
+    heading: Product approval process (PPAP)
+    doc_prefixes: [PPAP]
+    keywords: [ppap, aprobarea pieselor]
+  - id: "8.4"
+    heading: Control of externally provided processes, products and services
+    doc_prefixes: [RFA, PQ, CSR-CLIENT]
+    keywords: [furnizor, aprovizionare]
+  - id: "8.4.2.4"
+    heading: Supplier monitoring and re-evaluation
+    doc_prefixes: [RFA, PQ, CSR-CLIENT]
+    keywords: [reevaluare, reevaluarii, monitorizare, kpi, livrare la timp]
+  - id: "8.5.1.1"
+    heading: Control plan
+    doc_prefixes: [PC, PFMEA]
+    keywords: [plan de control, control plan]
+  - id: "8.5.2.1"
+    heading: Identification and traceability
+    doc_prefixes: [REG-ETA, IL-EXP, IL-INS]
+    keywords: [trasabilitate, etichet, identificare]
+  - id: "8.5.4"
+    heading: Preservation, packaging and storage
+    doc_prefixes: [FP-PAC, IL-EXP]
+    keywords: [ambalare, ambalaj, stocare, depozitare]
+  - id: "8.7"
+    heading: Control of nonconforming outputs
+    doc_prefixes: [IL-NC, REG-NC]
+    keywords: [neconform]
+  - id: "9.2.2"
+    heading: Internal audit programme
+    doc_prefixes: [PAI]
+    keywords: [audit intern, auditul intern, program de audit]
+  - id: "10.2"
+    heading: Nonconformity and corrective action
+    doc_prefixes: [IL-NC, REG-NC]
+    keywords: [actiune corectiva, actiuni corective, masuri corective, 8d]

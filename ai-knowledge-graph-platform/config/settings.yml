@@ -360,6 +360,14 @@ content_sync:
   # deployment configuration; never commit a client secret here.
   sharepoint_sources: {}
 
+# IATF 16949 clause evidence view (graphrag/domains/automotive/audit.py, docs/iatf-audit.md). Only tenants listed here
+# get the /audit/iatf routes; every other tenant receives 404. Paths are relative to the project root.
+iatf_audit:
+  tenants:
+    automotive:
+      corpus_dir: data/automotive
+      metadata_dir: data/metadata/automotive
+
 ontology:
   enforce_domain_range: true        # reject relations that violate domain/range rules
   allow_migration_renames: true     # auto-rename deprecated relation names on ingestion

@@ -32,8 +32,8 @@ REVIEW_NOTES = {
              "95 % and 98 % taken from the entity context. 98% comes from the superseded CSR-CLIENT-2021 / a different "
              "KPI line in CSR-CLIENT-2023. Root cause: superseded or unrelated KPI facts reach the answer context.",
     "CON-05": "Genuine failure: answer says the context has no information (in English) although has_context is true. "
-              "Also the question premise (RFA-REG-01 says annual) is not supported by the corpus: RFA-REG-01-rev5 "
-              "line 74 also says critical suppliers are re-evaluated semestrially. Label left unchanged; flagged.",
+              "The label is sound: RFA-REG-01-rev5 line 74 (critical suppliers: semestrial) and line 201 (all "
+              "suppliers: annual evaluations) support the question's premise.",
 }
 
 

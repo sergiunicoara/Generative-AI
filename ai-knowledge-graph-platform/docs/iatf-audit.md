@@ -68,7 +68,7 @@ The saved 2026-09-21 automotive run scored 6/10. All four failures were diagnose
 | --- | --- | --- |
 | SH-02, MH-02 | Correct answers written "1 %" / "95 %" (Romanian typography); the checker required "1%" / "95%" | checker now ignores whitespace before `%` (both sides) |
 | SH-03 | Checker now passes it, but **not a genuine pass**: the answer refuses a single value, citing a conflict between 95 % and a 98 % that comes from the superseded CSR-CLIENT-2021 or an unrelated KPI line | recorded in `evals/automotive_rescored.json`; root cause is superseded/unrelated facts in the context |
-| CON-05 | Genuine failure: answer says the context has no information (in English) although context exists | open. The question premise ("RFA-REG-01 says annual") is not supported: RFA-REG-01-rev5 line 74 also says semestrial for critical suppliers. Label left unchanged and flagged |
+| CON-05 | Genuine failure: answer says the context has no information (in English) although context exists | open. Label is sound: RFA-REG-01-rev5 line 74 (critical: semestrial) and line 201 (all suppliers: annual) |
 
 Re-scoring the saved answers with the fixed checker gives **9/10 by the checker, 8/10 judged genuine**. This measures
 the checker fix only. The answers are the September ones, and no new generation was run.

@@ -172,3 +172,33 @@ class TestCitationRecallCanonicalMatching:
         )
         assert not passed
         assert "citation recall" in failures[0]
+
+
+# ── percent spacing (Romanian/French typography writes "1 %") ──────────────────────────────────────────────────
+def test_required_term_matches_across_a_space_before_percent():
+    spec = {"required_answer_terms": ["1%"]}
+    for answer in ("sub 1 % neconformitati", "sub 1 % x", "sub 1 % x", "sub 1% x"):
+        assert _check(spec, {"answer": answer, "citations": []})[0], answer
+
+
+def test_percent_normalisation_does_not_create_false_matches():
+    assert _check({"required_answer_terms": ["1%"]}, {"answer": "valoarea 11 %", "citations": []})[0]  # substring, as before
+    assert not _check({"required_answer_terms": ["95%"]}, {"answer": "9 5 %", "citations": []})[0]
+    assert not _check({"required_answer_terms": ["1%"]}, {"answer": "1 procent", "citations": []})[0]
+
+
+def test_any_of_groups_and_spec_side_spacing_are_normalised_too():
+    assert _check({"required_answer_any_of": [["95 %"]]}, {"answer": "tinta 95%", "citations": []})[0]
+    assert _check({"required_answer_terms": ["95 %"]}, {"answer": "tinta 95%", "citations": []})[0]
+
+
+def test_rescore_of_saved_automotive_run_is_reproducible_offline():
+    sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "scripts"))
+    import rescore_saved_answers as rescore
+
+    report = rescore.rescore()
+    assert report["total"] == 10 and report["saved_pass_rate"] == 0.6
+    # every question that passed before still passes: the change only relaxes "1 %" vs "1%"
+    assert all(r["rescored_passed"] for r in report["questions"] if r.get("saved_passed"))
+    assert set(report["changed"]) <= {"SH-02", "SH-03", "MH-02"}
+    assert "SH-03" in report["checker_passes_judged_not_genuine"]

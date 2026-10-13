@@ -79,20 +79,29 @@ def _submit_query(client: httpx.Client, question: str, tenant: str) -> dict:
     return {"status": "timeout", "answer": "", "citations": []}
 
 
+def _normalise_answer_text(text: str) -> str:
+    """Lower-case and remove the space some languages put before '%' ("1 %" in Romanian/French typography).
+
+    Applied to both the answer and the required phrase, so "1%" and "1 %" (also with a non-breaking or narrow
+    no-break space) match each other. Nothing else is normalised: this is a typographic convention, not paraphrase.
+    """
+    return re.sub(r"[\s  ]+%", "%", text.lower())
+
+
 def _check(question_spec: dict, result: dict) -> tuple[bool, list[str]]:
     """
     Evaluate one result against the golden spec.
     Returns (passed: bool, failures: list[str]).
     """
     failures = []
-    answer   = (result.get("answer") or "").lower()
+    answer   = _normalise_answer_text(result.get("answer") or "")
     citations = [str(c) for c in (result.get("citations") or [])]
 
     # Required terms (supports both v2 and v1 field names)
     required = (question_spec.get("required_answer_terms")
                 or question_spec.get("answer_must_contain", []))
     for phrase in required:
-        if phrase.lower() not in answer:
+        if _normalise_answer_text(phrase) not in answer:
             failures.append(f"answer missing required term: {phrase!r}")
 
     # Required terms — any-of groups. Each entry is a list of alternative
@@ -107,7 +116,7 @@ def _check(question_spec: dict, result: dict) -> tuple[bool, list[str]]:
     # one-off question rewrite each time it recurs.
     required_any = question_spec.get("required_answer_any_of", [])
     for group in required_any:
-        if not any(alt.lower() in answer for alt in group):
+        if not any(_normalise_answer_text(alt) in answer for alt in group):
             failures.append(f"answer missing any of required terms: {group!r}")
 
     # Forbidden terms (supports both v2 and v1 field names)

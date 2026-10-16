@@ -1044,3 +1044,100 @@ async def rename_entity_type(request: EntityTypeRenameRequest, tenant: str = Dep
         )
     result["corpus_revision"] = mutation.revision
     return result
+
+
+# ── RDF checks: SHACL validation and OWL-RL reasoning on the tenant export ────
+
+_MAX_RDF_CHECK_TRIPLES = 200_000
+
+
+class ValidateRdfRequest(BaseModel):
+    shapes: str | None = None      # stem of ontology/shapes/<stem>.shapes.ttl; None = the export shapes
+    limit: int = 50                # results returned in the body; counts always cover every result
+
+
+class ReasonRdfRequest(BaseModel):
+    limit: int = 50                # inferred triples returned in the body
+
+
+def _load_tenant_export(tenant: str):
+    import os
+    from pathlib import Path
+
+    from rdflib import Graph
+
+    if not _TENANT_PATH_RE.fullmatch(tenant):
+        raise HTTPException(status_code=403, detail="Invalid tenant")
+    path = Path(os.getenv("GRAPHRAG_RDF_EXPORT_DIR", "exports")) / tenant / "graph_export.ttl"
+    if not path.exists():
+        raise HTTPException(status_code=404, detail=f"RDF export not found at '{path}'. "
+                                                    f"Run: python scripts/export_rdf.py --tenant {tenant}")
+    graph = Graph()
+    graph.parse(str(path), format="turtle")
+    if len(graph) > _MAX_RDF_CHECK_TRIPLES:
+        raise HTTPException(status_code=413, detail=f"export has {len(graph)} triples; the limit for this check is "
+                                                    f"{_MAX_RDF_CHECK_TRIPLES}. Run the script offline instead.")
+    return graph
+
+
+@router.post(
+    "/validate",
+    dependencies=[Depends(require_scope("read"))],
+    summary="Validate the caller's tenant RDF export against SHACL shapes",
+)
+async def validate_rdf(request: ValidateRdfRequest, tenant: str = Depends(get_tenant)):
+    """Read-only. ``shapes`` selects a shapes file by stem from ``ontology/shapes`` (a fixed list, never a path);
+    omitted, the platform's export shapes are used. Returns conformance, counts and the first ``limit`` results."""
+    from pathlib import Path
+
+    from graphrag.graph.shacl_validator import _SHAPES_DIR, SHACLValidator
+
+    shapes_path = None
+    if request.shapes is not None:
+        available = {p.name[: -len(".shapes.ttl")]: p for p in Path(_SHAPES_DIR).glob("*.shapes.ttl")}
+        if request.shapes not in available:
+            raise HTTPException(status_code=400, detail=f"unknown shapes {request.shapes!r}; "
+                                                        f"available: {sorted(available)}")
+        shapes_path = available[request.shapes]
+    limit = max(0, min(request.limit, 500))
+    graph = _load_tenant_export(tenant)
+    try:
+        report = SHACLValidator(graph, shapes_path=shapes_path).validate_report(target=tenant)
+    except ImportError as exc:
+        raise HTTPException(status_code=501, detail=str(exc)) from exc
+    return {
+        "conforms": report.conforms,
+        "counts": report.counts,
+        "failures_by_shape": report.failures_by_shape,
+        "results": [vars(r) for r in report.results[:limit]],
+        "truncated": len(report.results) > limit,
+    }
+
+
+@router.post(
+    "/reason",
+    dependencies=[Depends(require_scope("read"))],
+    summary="Apply OWL-RL entailment to an in-memory copy of the tenant RDF export",
+)
+async def reason_rdf(request: ReasonRdfRequest, tenant: str = Depends(get_tenant)):
+    """Read-only: nothing is written; the closure runs on a copy loaded from the export. Returns whether the graph
+    is consistent, how many triples the closure added, and the first ``limit`` of them."""
+    import copy
+
+    from graphrag.graph.owl_reasoner import OWLRLReasoner
+
+    limit = max(0, min(request.limit, 500))
+    graph = _load_tenant_export(tenant)
+    original = copy.deepcopy(graph)
+    reasoner = OWLRLReasoner(graph)
+    try:
+        added = reasoner.apply_closure()
+    except ImportError as exc:
+        raise HTTPException(status_code=501, detail=str(exc)) from exc
+    inferred = reasoner.inferred_triples(original)
+    return {
+        "consistent": reasoner.is_consistent(),
+        "new_triples": added,
+        "inferred": [[t.n3() for t in triple] for triple in inferred[:limit]],
+        "truncated": len(inferred) > limit,
+    }

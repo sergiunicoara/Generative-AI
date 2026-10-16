@@ -1,0 +1,205 @@
+# DO NOT EDIT: generated from the domain ontology YAML by graphrag/graph/ontology_owl_export.py
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix sh: <http://www.w3.org/ns/shacl#> .
+@prefix shape: <https://graphrag.example.com/ontology/marketing-adtech/shape#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+
+shape:ACTIVATED_VIA a sh:NodeShape ;
+    sh:message "The subject of ACTIVATED_VIA must be one of: CAMPAIGN, LINE_ITEM." ;
+    sh:or ( [ sh:class <https://graphrag.example.com/ontology/marketing-adtech/class#CAMPAIGN> ] [ sh:class <https://graphrag.example.com/ontology/marketing-adtech/class#LINE_ITEM> ] ) ;
+    sh:property [ sh:message "Every object of ACTIVATED_VIA must be one of: DSP." ;
+            sh:or ( [ sh:class <https://graphrag.example.com/ontology/marketing-adtech/class#DSP> ] ) ;
+            sh:path <https://graphrag.example.com/ontology/marketing-adtech/relation#ACTIVATED_VIA> ] ;
+    sh:targetSubjectsOf <https://graphrag.example.com/ontology/marketing-adtech/relation#ACTIVATED_VIA> .
+
+shape:APPROVED_UNDER a sh:NodeShape ;
+    sh:message "The subject of APPROVED_UNDER must be one of: CAMPAIGN_BRIEF." ;
+    sh:or ( [ sh:class <https://graphrag.example.com/ontology/marketing-adtech/class#CAMPAIGN_BRIEF> ] ) ;
+    sh:property [ sh:message "Every object of APPROVED_UNDER must be one of: BRAND_GUIDELINE." ;
+            sh:or ( [ sh:class <https://graphrag.example.com/ontology/marketing-adtech/class#BRAND_GUIDELINE> ] ) ;
+            sh:path <https://graphrag.example.com/ontology/marketing-adtech/relation#APPROVED_UNDER> ] ;
+    sh:targetSubjectsOf <https://graphrag.example.com/ontology/marketing-adtech/relation#APPROVED_UNDER> .
+
+shape:BELONGS_TO a sh:NodeShape ;
+    sh:message "The subject of BELONGS_TO must be one of: LINE_ITEM." ;
+    sh:or ( [ sh:class <https://graphrag.example.com/ontology/marketing-adtech/class#LINE_ITEM> ] ) ;
+    sh:property [ sh:message "Every object of BELONGS_TO must be one of: CAMPAIGN." ;
+            sh:or ( [ sh:class <https://graphrag.example.com/ontology/marketing-adtech/class#CAMPAIGN> ] ) ;
+            sh:path <https://graphrag.example.com/ontology/marketing-adtech/relation#BELONGS_TO> ] ;
+    sh:targetSubjectsOf <https://graphrag.example.com/ontology/marketing-adtech/relation#BELONGS_TO> .
+
+shape:BID_USING a sh:NodeShape ;
+    sh:message "The subject of BID_USING must be one of: LINE_ITEM." ;
+    sh:or ( [ sh:class <https://graphrag.example.com/ontology/marketing-adtech/class#LINE_ITEM> ] ) ;
+    sh:property [ sh:maxCount 1 ;
+            sh:message "Every object of BID_USING must be one of: BIDDING_STRATEGY." ;
+            sh:or ( [ sh:class <https://graphrag.example.com/ontology/marketing-adtech/class#BIDDING_STRATEGY> ] ) ;
+            sh:path <https://graphrag.example.com/ontology/marketing-adtech/relation#BID_USING> ] ;
+    sh:targetSubjectsOf <https://graphrag.example.com/ontology/marketing-adtech/relation#BID_USING> .
+
+shape:BUYS_ON_BEHALF_OF a sh:NodeShape ;
+    sh:message "The subject of BUYS_ON_BEHALF_OF must be one of: AGENCY." ;
+    sh:or ( [ sh:class <https://graphrag.example.com/ontology/marketing-adtech/class#AGENCY> ] ) ;
+    sh:property [ sh:message "Every object of BUYS_ON_BEHALF_OF must be one of: ADVERTISER." ;
+            sh:or ( [ sh:class <https://graphrag.example.com/ontology/marketing-adtech/class#ADVERTISER> ] ) ;
+            sh:path <https://graphrag.example.com/ontology/marketing-adtech/relation#BUYS_ON_BEHALF_OF> ] ;
+    sh:targetSubjectsOf <https://graphrag.example.com/ontology/marketing-adtech/relation#BUYS_ON_BEHALF_OF> .
+
+shape:CLASSIFIED_AS a sh:NodeShape ;
+    sh:property [ sh:maxCount 1 ;
+            sh:path <https://graphrag.example.com/ontology/marketing-adtech/relation#CLASSIFIED_AS> ] ;
+    sh:targetSubjectsOf <https://graphrag.example.com/ontology/marketing-adtech/relation#CLASSIFIED_AS> .
+
+shape:COMPLIES_WITH a sh:NodeShape ;
+    sh:message "The subject of COMPLIES_WITH must be one of: CAMPAIGN, LINE_ITEM, DSP, SSP." ;
+    sh:or ( [ sh:class <https://graphrag.example.com/ontology/marketing-adtech/class#CAMPAIGN> ] [ sh:class <https://graphrag.example.com/ontology/marketing-adtech/class#LINE_ITEM> ] [ sh:class <https://graphrag.example.com/ontology/marketing-adtech/class#DSP> ] [ sh:class <https://graphrag.example.com/ontology/marketing-adtech/class#SSP> ] ) ;
+    sh:property [ sh:message "Every object of COMPLIES_WITH must be one of: PRIVACY_REGULATION." ;
+            sh:or ( [ sh:class <https://graphrag.example.com/ontology/marketing-adtech/class#PRIVACY_REGULATION> ] ) ;
+            sh:path <https://graphrag.example.com/ontology/marketing-adtech/relation#COMPLIES_WITH> ] ;
+    sh:targetSubjectsOf <https://graphrag.example.com/ontology/marketing-adtech/relation#COMPLIES_WITH> .
+
+shape:EXCLUDES_CATEGORY a sh:NodeShape ;
+    sh:message "The subject of EXCLUDES_CATEGORY must be one of: STATEMENT_OF_WORK, DATA_PRIVACY_POLICY, BRAND_SAFETY_POLICY." ;
+    sh:or ( [ sh:class <https://graphrag.example.com/ontology/marketing-adtech/class#STATEMENT_OF_WORK> ] [ sh:class <https://graphrag.example.com/ontology/marketing-adtech/class#DATA_PRIVACY_POLICY> ] [ sh:class <https://graphrag.example.com/ontology/marketing-adtech/class#BRAND_SAFETY_POLICY> ] ) ;
+    sh:property [ sh:message "Every object of EXCLUDES_CATEGORY must be one of: EXCLUDED_CATEGORY, ADJACENCY_VERTICAL." ;
+            sh:or ( [ sh:class <https://graphrag.example.com/ontology/marketing-adtech/class#EXCLUDED_CATEGORY> ] [ sh:class <https://graphrag.example.com/ontology/marketing-adtech/class#ADJACENCY_VERTICAL> ] ) ;
+            sh:path <https://graphrag.example.com/ontology/marketing-adtech/relation#EXCLUDES_CATEGORY> ] ;
+    sh:targetSubjectsOf <https://graphrag.example.com/ontology/marketing-adtech/relation#EXCLUDES_CATEGORY> .
+
+shape:EXTENDS_ADJACENCY a sh:NodeShape ;
+    sh:message "The subject of EXTENDS_ADJACENCY must be one of: CAMPAIGN_BRIEF, CAMPAIGN." ;
+    sh:or ( [ sh:class <https://graphrag.example.com/ontology/marketing-adtech/class#CAMPAIGN_BRIEF> ] [ sh:class <https://graphrag.example.com/ontology/marketing-adtech/class#CAMPAIGN> ] ) ;
+    sh:property [ sh:message "Every object of EXTENDS_ADJACENCY must be one of: ADJACENCY_VERTICAL." ;
+            sh:or ( [ sh:class <https://graphrag.example.com/ontology/marketing-adtech/class#ADJACENCY_VERTICAL> ] ) ;
+            sh:path <https://graphrag.example.com/ontology/marketing-adtech/relation#EXTENDS_ADJACENCY> ] ;
+    sh:targetSubjectsOf <https://graphrag.example.com/ontology/marketing-adtech/relation#EXTENDS_ADJACENCY> .
+
+shape:GOVERNED_BY a sh:NodeShape ;
+    sh:message "The subject of GOVERNED_BY must be one of: CAMPAIGN, LINE_ITEM, ADVERTISER, AGENCY." ;
+    sh:or ( [ sh:class <https://graphrag.example.com/ontology/marketing-adtech/class#CAMPAIGN> ] [ sh:class <https://graphrag.example.com/ontology/marketing-adtech/class#LINE_ITEM> ] [ sh:class <https://graphrag.example.com/ontology/marketing-adtech/class#ADVERTISER> ] [ sh:class <https://graphrag.example.com/ontology/marketing-adtech/class#AGENCY> ] ) ;
+    sh:property [ sh:message "Every object of GOVERNED_BY must be one of: STATEMENT_OF_WORK, DATA_PRIVACY_POLICY, BRAND_GUIDELINE." ;
+            sh:or ( [ sh:class <https://graphrag.example.com/ontology/marketing-adtech/class#STATEMENT_OF_WORK> ] [ sh:class <https://graphrag.example.com/ontology/marketing-adtech/class#DATA_PRIVACY_POLICY> ] [ sh:class <https://graphrag.example.com/ontology/marketing-adtech/class#BRAND_GUIDELINE> ] ) ;
+            sh:path <https://graphrag.example.com/ontology/marketing-adtech/relation#GOVERNED_BY> ] ;
+    sh:targetSubjectsOf <https://graphrag.example.com/ontology/marketing-adtech/relation#GOVERNED_BY> .
+
+shape:GOVERNED_BY_DEAL a sh:NodeShape ;
+    sh:message "The subject of GOVERNED_BY_DEAL must be one of: LINE_ITEM." ;
+    sh:or ( [ sh:class <https://graphrag.example.com/ontology/marketing-adtech/class#LINE_ITEM> ] ) ;
+    sh:property [ sh:maxCount 1 ;
+            sh:message "Every object of GOVERNED_BY_DEAL must be one of: DEAL." ;
+            sh:or ( [ sh:class <https://graphrag.example.com/ontology/marketing-adtech/class#DEAL> ] ) ;
+            sh:path <https://graphrag.example.com/ontology/marketing-adtech/relation#GOVERNED_BY_DEAL> ] ;
+    sh:targetSubjectsOf <https://graphrag.example.com/ontology/marketing-adtech/relation#GOVERNED_BY_DEAL> .
+
+shape:GOVERNS a sh:NodeShape ;
+    sh:message "The subject of GOVERNS must be one of: STATEMENT_OF_WORK, DATA_PRIVACY_POLICY, BRAND_GUIDELINE." ;
+    sh:or ( [ sh:class <https://graphrag.example.com/ontology/marketing-adtech/class#STATEMENT_OF_WORK> ] [ sh:class <https://graphrag.example.com/ontology/marketing-adtech/class#DATA_PRIVACY_POLICY> ] [ sh:class <https://graphrag.example.com/ontology/marketing-adtech/class#BRAND_GUIDELINE> ] ) ;
+    sh:property [ sh:message "Every object of GOVERNS must be one of: CAMPAIGN, LINE_ITEM, ADVERTISER, AGENCY." ;
+            sh:or ( [ sh:class <https://graphrag.example.com/ontology/marketing-adtech/class#CAMPAIGN> ] [ sh:class <https://graphrag.example.com/ontology/marketing-adtech/class#LINE_ITEM> ] [ sh:class <https://graphrag.example.com/ontology/marketing-adtech/class#ADVERTISER> ] [ sh:class <https://graphrag.example.com/ontology/marketing-adtech/class#AGENCY> ] ) ;
+            sh:path <https://graphrag.example.com/ontology/marketing-adtech/relation#GOVERNS> ] ;
+    sh:targetSubjectsOf <https://graphrag.example.com/ontology/marketing-adtech/relation#GOVERNS> .
+
+shape:MANAGES a sh:NodeShape ;
+    sh:message "The subject of MANAGES must be one of: AGENCY." ;
+    sh:or ( [ sh:class <https://graphrag.example.com/ontology/marketing-adtech/class#AGENCY> ] ) ;
+    sh:property [ sh:message "Every object of MANAGES must be one of: CAMPAIGN, MEDIA_PLAN." ;
+            sh:or ( [ sh:class <https://graphrag.example.com/ontology/marketing-adtech/class#CAMPAIGN> ] [ sh:class <https://graphrag.example.com/ontology/marketing-adtech/class#MEDIA_PLAN> ] ) ;
+            sh:path <https://graphrag.example.com/ontology/marketing-adtech/relation#MANAGES> ] ;
+    sh:targetSubjectsOf <https://graphrag.example.com/ontology/marketing-adtech/relation#MANAGES> .
+
+shape:MANDATED_BY a sh:NodeShape ;
+    sh:message "The subject of MANDATED_BY must be one of: BRAND_SAFETY_POLICY, FREQUENCY_CAP, CAMPAIGN, LINE_ITEM." ;
+    sh:or ( [ sh:class <https://graphrag.example.com/ontology/marketing-adtech/class#BRAND_SAFETY_POLICY> ] [ sh:class <https://graphrag.example.com/ontology/marketing-adtech/class#FREQUENCY_CAP> ] [ sh:class <https://graphrag.example.com/ontology/marketing-adtech/class#CAMPAIGN> ] [ sh:class <https://graphrag.example.com/ontology/marketing-adtech/class#LINE_ITEM> ] ) ;
+    sh:property [ sh:message "Every object of MANDATED_BY must be one of: ADVERTISER, AGENCY, PRIVACY_REGULATION." ;
+            sh:or ( [ sh:class <https://graphrag.example.com/ontology/marketing-adtech/class#ADVERTISER> ] [ sh:class <https://graphrag.example.com/ontology/marketing-adtech/class#AGENCY> ] [ sh:class <https://graphrag.example.com/ontology/marketing-adtech/class#PRIVACY_REGULATION> ] ) ;
+            sh:path <https://graphrag.example.com/ontology/marketing-adtech/relation#MANDATED_BY> ] ;
+    sh:targetSubjectsOf <https://graphrag.example.com/ontology/marketing-adtech/relation#MANDATED_BY> .
+
+shape:MANDATES a sh:NodeShape ;
+    sh:message "The subject of MANDATES must be one of: ADVERTISER, AGENCY, PRIVACY_REGULATION." ;
+    sh:or ( [ sh:class <https://graphrag.example.com/ontology/marketing-adtech/class#ADVERTISER> ] [ sh:class <https://graphrag.example.com/ontology/marketing-adtech/class#AGENCY> ] [ sh:class <https://graphrag.example.com/ontology/marketing-adtech/class#PRIVACY_REGULATION> ] ) ;
+    sh:property [ sh:message "Every object of MANDATES must be one of: BRAND_SAFETY_POLICY, FREQUENCY_CAP, CAMPAIGN, LINE_ITEM." ;
+            sh:or ( [ sh:class <https://graphrag.example.com/ontology/marketing-adtech/class#BRAND_SAFETY_POLICY> ] [ sh:class <https://graphrag.example.com/ontology/marketing-adtech/class#FREQUENCY_CAP> ] [ sh:class <https://graphrag.example.com/ontology/marketing-adtech/class#CAMPAIGN> ] [ sh:class <https://graphrag.example.com/ontology/marketing-adtech/class#LINE_ITEM> ] ) ;
+            sh:path <https://graphrag.example.com/ontology/marketing-adtech/relation#MANDATES> ] ;
+    sh:targetSubjectsOf <https://graphrag.example.com/ontology/marketing-adtech/relation#MANDATES> .
+
+shape:MONITORED_BY a sh:NodeShape ;
+    sh:message "The subject of MONITORED_BY must be one of: CAMPAIGN, LINE_ITEM." ;
+    sh:or ( [ sh:class <https://graphrag.example.com/ontology/marketing-adtech/class#CAMPAIGN> ] [ sh:class <https://graphrag.example.com/ontology/marketing-adtech/class#LINE_ITEM> ] ) ;
+    sh:property [ sh:message "Every object of MONITORED_BY must be one of: KPI." ;
+            sh:or ( [ sh:class <https://graphrag.example.com/ontology/marketing-adtech/class#KPI> ] ) ;
+            sh:path <https://graphrag.example.com/ontology/marketing-adtech/relation#MONITORED_BY> ] ;
+    sh:targetSubjectsOf <https://graphrag.example.com/ontology/marketing-adtech/relation#MONITORED_BY> .
+
+shape:PART_OF a sh:NodeShape ;
+    sh:message "The subject of PART_OF must be one of: CAMPAIGN." ;
+    sh:or ( [ sh:class <https://graphrag.example.com/ontology/marketing-adtech/class#CAMPAIGN> ] ) ;
+    sh:property [ sh:message "Every object of PART_OF must be one of: MEDIA_PLAN." ;
+            sh:or ( [ sh:class <https://graphrag.example.com/ontology/marketing-adtech/class#MEDIA_PLAN> ] ) ;
+            sh:path <https://graphrag.example.com/ontology/marketing-adtech/relation#PART_OF> ] ;
+    sh:targetSubjectsOf <https://graphrag.example.com/ontology/marketing-adtech/relation#PART_OF> .
+
+shape:PREVAILS_OVER a sh:NodeShape ;
+    sh:message "The subject of PREVAILS_OVER must be one of: STATEMENT_OF_WORK, DATA_PRIVACY_POLICY." ;
+    sh:or ( [ sh:class <https://graphrag.example.com/ontology/marketing-adtech/class#STATEMENT_OF_WORK> ] [ sh:class <https://graphrag.example.com/ontology/marketing-adtech/class#DATA_PRIVACY_POLICY> ] ) ;
+    sh:property [ sh:message "Every object of PREVAILS_OVER must be one of: MEDIA_PLAN, CAMPAIGN, CAMPAIGN_BRIEF, BRAND_GUIDELINE." ;
+            sh:or ( [ sh:class <https://graphrag.example.com/ontology/marketing-adtech/class#MEDIA_PLAN> ] [ sh:class <https://graphrag.example.com/ontology/marketing-adtech/class#CAMPAIGN> ] [ sh:class <https://graphrag.example.com/ontology/marketing-adtech/class#CAMPAIGN_BRIEF> ] [ sh:class <https://graphrag.example.com/ontology/marketing-adtech/class#BRAND_GUIDELINE> ] ) ;
+            sh:path <https://graphrag.example.com/ontology/marketing-adtech/relation#PREVAILS_OVER> ] ;
+    sh:targetSubjectsOf <https://graphrag.example.com/ontology/marketing-adtech/relation#PREVAILS_OVER> .
+
+shape:PROHIBITS_INFERENCE a sh:NodeShape ;
+    sh:message "The subject of PROHIBITS_INFERENCE must be one of: DATA_PRIVACY_POLICY." ;
+    sh:or ( [ sh:class <https://graphrag.example.com/ontology/marketing-adtech/class#DATA_PRIVACY_POLICY> ] ) ;
+    sh:property [ sh:message "Every object of PROHIBITS_INFERENCE must be one of: SENSITIVE_CATEGORY." ;
+            sh:or ( [ sh:class <https://graphrag.example.com/ontology/marketing-adtech/class#SENSITIVE_CATEGORY> ] ) ;
+            sh:path <https://graphrag.example.com/ontology/marketing-adtech/relation#PROHIBITS_INFERENCE> ] ;
+    sh:targetSubjectsOf <https://graphrag.example.com/ontology/marketing-adtech/relation#PROHIBITS_INFERENCE> .
+
+shape:REQUIRES_CONSENT a sh:NodeShape ;
+    sh:message "The subject of REQUIRES_CONSENT must be one of: LINE_ITEM, CAMPAIGN." ;
+    sh:or ( [ sh:class <https://graphrag.example.com/ontology/marketing-adtech/class#LINE_ITEM> ] [ sh:class <https://graphrag.example.com/ontology/marketing-adtech/class#CAMPAIGN> ] ) ;
+    sh:property [ sh:message "Every object of REQUIRES_CONSENT must be one of: CONSENT_SIGNAL." ;
+            sh:or ( [ sh:class <https://graphrag.example.com/ontology/marketing-adtech/class#CONSENT_SIGNAL> ] ) ;
+            sh:path <https://graphrag.example.com/ontology/marketing-adtech/relation#REQUIRES_CONSENT> ] ;
+    sh:targetSubjectsOf <https://graphrag.example.com/ontology/marketing-adtech/relation#REQUIRES_CONSENT> .
+
+shape:SERVES_ON a sh:NodeShape ;
+    sh:message "The subject of SERVES_ON must be one of: LINE_ITEM, CREATIVE." ;
+    sh:or ( [ sh:class <https://graphrag.example.com/ontology/marketing-adtech/class#LINE_ITEM> ] [ sh:class <https://graphrag.example.com/ontology/marketing-adtech/class#CREATIVE> ] ) ;
+    sh:property [ sh:message "Every object of SERVES_ON must be one of: PUBLISHER, INVENTORY_TYPE." ;
+            sh:or ( [ sh:class <https://graphrag.example.com/ontology/marketing-adtech/class#PUBLISHER> ] [ sh:class <https://graphrag.example.com/ontology/marketing-adtech/class#INVENTORY_TYPE> ] ) ;
+            sh:path <https://graphrag.example.com/ontology/marketing-adtech/relation#SERVES_ON> ] ;
+    sh:targetSubjectsOf <https://graphrag.example.com/ontology/marketing-adtech/relation#SERVES_ON> .
+
+shape:SOURCES_INVENTORY_FROM a sh:NodeShape ;
+    sh:message "The subject of SOURCES_INVENTORY_FROM must be one of: DSP." ;
+    sh:or ( [ sh:class <https://graphrag.example.com/ontology/marketing-adtech/class#DSP> ] ) ;
+    sh:property [ sh:message "Every object of SOURCES_INVENTORY_FROM must be one of: SSP, AD_EXCHANGE." ;
+            sh:or ( [ sh:class <https://graphrag.example.com/ontology/marketing-adtech/class#SSP> ] [ sh:class <https://graphrag.example.com/ontology/marketing-adtech/class#AD_EXCHANGE> ] ) ;
+            sh:path <https://graphrag.example.com/ontology/marketing-adtech/relation#SOURCES_INVENTORY_FROM> ] ;
+    sh:targetSubjectsOf <https://graphrag.example.com/ontology/marketing-adtech/relation#SOURCES_INVENTORY_FROM> .
+
+shape:SUPERSEDES a sh:NodeShape ;
+    sh:message "The subject of SUPERSEDES must be one of: MARKETING_DOCUMENT, STATEMENT_OF_WORK, BRAND_GUIDELINE, DATA_PRIVACY_POLICY." ;
+    sh:or ( [ sh:class <https://graphrag.example.com/ontology/marketing-adtech/class#MARKETING_DOCUMENT> ] [ sh:class <https://graphrag.example.com/ontology/marketing-adtech/class#STATEMENT_OF_WORK> ] [ sh:class <https://graphrag.example.com/ontology/marketing-adtech/class#BRAND_GUIDELINE> ] [ sh:class <https://graphrag.example.com/ontology/marketing-adtech/class#DATA_PRIVACY_POLICY> ] ) ;
+    sh:property [ sh:message "Every object of SUPERSEDES must be one of: MARKETING_DOCUMENT, STATEMENT_OF_WORK, BRAND_GUIDELINE, DATA_PRIVACY_POLICY." ;
+            sh:or ( [ sh:class <https://graphrag.example.com/ontology/marketing-adtech/class#MARKETING_DOCUMENT> ] [ sh:class <https://graphrag.example.com/ontology/marketing-adtech/class#STATEMENT_OF_WORK> ] [ sh:class <https://graphrag.example.com/ontology/marketing-adtech/class#BRAND_GUIDELINE> ] [ sh:class <https://graphrag.example.com/ontology/marketing-adtech/class#DATA_PRIVACY_POLICY> ] ) ;
+            sh:path <https://graphrag.example.com/ontology/marketing-adtech/relation#SUPERSEDES> ] ;
+    sh:targetSubjectsOf <https://graphrag.example.com/ontology/marketing-adtech/relation#SUPERSEDES> .
+
+shape:TARGETS a sh:NodeShape ;
+    sh:message "The subject of TARGETS must be one of: LINE_ITEM, CAMPAIGN, CAMPAIGN_BRIEF." ;
+    sh:or ( [ sh:class <https://graphrag.example.com/ontology/marketing-adtech/class#LINE_ITEM> ] [ sh:class <https://graphrag.example.com/ontology/marketing-adtech/class#CAMPAIGN> ] [ sh:class <https://graphrag.example.com/ontology/marketing-adtech/class#CAMPAIGN_BRIEF> ] ) ;
+    sh:property [ sh:message "Every object of TARGETS must be one of: AUDIENCE_SEGMENT." ;
+            sh:or ( [ sh:class <https://graphrag.example.com/ontology/marketing-adtech/class#AUDIENCE_SEGMENT> ] ) ;
+            sh:path <https://graphrag.example.com/ontology/marketing-adtech/relation#TARGETS> ] ;
+    sh:targetSubjectsOf <https://graphrag.example.com/ontology/marketing-adtech/relation#TARGETS> .
+
+shape:USES_CREATIVE a sh:NodeShape ;
+    sh:message "The subject of USES_CREATIVE must be one of: LINE_ITEM." ;
+    sh:or ( [ sh:class <https://graphrag.example.com/ontology/marketing-adtech/class#LINE_ITEM> ] ) ;
+    sh:property [ sh:message "Every object of USES_CREATIVE must be one of: CREATIVE." ;
+            sh:or ( [ sh:class <https://graphrag.example.com/ontology/marketing-adtech/class#CREATIVE> ] ) ;
+            sh:path <https://graphrag.example.com/ontology/marketing-adtech/relation#USES_CREATIVE> ] ;
+    sh:targetSubjectsOf <https://graphrag.example.com/ontology/marketing-adtech/relation#USES_CREATIVE> .
+

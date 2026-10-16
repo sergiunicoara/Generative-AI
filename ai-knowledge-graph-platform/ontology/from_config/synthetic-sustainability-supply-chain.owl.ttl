@@ -1,0 +1,84 @@
+# DO NOT EDIT: generated from the domain ontology YAML by graphrag/graph/ontology_owl_export.py
+@prefix cls: <https://graphrag.example.com/ontology/synthetic-sustainability-supply-chain/class#> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix rel: <https://graphrag.example.com/ontology/synthetic-sustainability-supply-chain/relation#> .
+
+<https://graphrag.example.com/ontology/synthetic-sustainability-supply-chain> a owl:Ontology ;
+    owl:versionInfo "1.0.0" .
+
+cls:LEGAL_ENTITY_RECORD a owl:Class ;
+    rdfs:label "Legal entity record"@en ;
+    rdfs:subClassOf cls:ORG .
+
+rel:HAS_EVIDENCE a owl:ObjectProperty ;
+    rdfs:label "Has evidence"@en ;
+    rdfs:domain [ a owl:Class ;
+            owl:unionOf ( cls:ASSESSMENT cls:EMISSIONS_RECORD cls:RISK ) ] ;
+    rdfs:range cls:EVIDENCE .
+
+rel:HAS_RISK a owl:ObjectProperty ;
+    rdfs:label "Has risk"@en ;
+    rdfs:domain [ a owl:Class ;
+            owl:unionOf ( cls:SUPPLIER cls:FACILITY cls:MATERIAL ) ] ;
+    rdfs:range cls:RISK .
+
+rel:OPERATES a owl:ObjectProperty ;
+    rdfs:label "Operates"@en ;
+    rdfs:domain cls:SUPPLIER ;
+    rdfs:range cls:FACILITY .
+
+rel:REPORTED a owl:ObjectProperty ;
+    rdfs:label "Reported"@en ;
+    rdfs:domain cls:SUPPLIER ;
+    rdfs:range cls:EMISSIONS_RECORD .
+
+rel:SUPPLIES a owl:ObjectProperty ;
+    rdfs:label "Supplies"@en ;
+    rdfs:domain cls:SUPPLIER ;
+    rdfs:range cls:MATERIAL .
+
+cls:ASSESSMENT a owl:Class ;
+    rdfs:label "Assessment"@en ;
+    rdfs:subClassOf cls:EVENT .
+
+cls:EVIDENCE a owl:Class ;
+    rdfs:label "Evidence"@en ;
+    rdfs:subClassOf cls:CONCEPT .
+
+cls:LOCATION a owl:Class ;
+    rdfs:label "Location"@en .
+
+cls:PRODUCT a owl:Class ;
+    rdfs:label "Product"@en .
+
+cls:CONCEPT a owl:Class ;
+    rdfs:label "Concept"@en .
+
+cls:EMISSIONS_RECORD a owl:Class ;
+    rdfs:label "Emissions record"@en ;
+    rdfs:subClassOf cls:EVENT .
+
+cls:EVENT a owl:Class ;
+    rdfs:label "Event"@en .
+
+cls:FACILITY a owl:Class ;
+    rdfs:label "Facility"@en ;
+    rdfs:subClassOf cls:LOCATION .
+
+cls:MATERIAL a owl:Class ;
+    rdfs:label "Material"@en ;
+    rdfs:subClassOf cls:PRODUCT .
+
+cls:ORG a owl:Class ;
+    rdfs:label "Org"@en .
+
+cls:RISK a owl:Class ;
+    rdfs:label "Risk"@en ;
+    rdfs:subClassOf cls:CONCEPT .
+
+cls:SUPPLIER a owl:Class ;
+    rdfs:label "Supplier"@en ;
+    rdfs:subClassOf cls:ORG .
+

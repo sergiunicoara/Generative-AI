@@ -1,0 +1,45 @@
+# DO NOT EDIT: generated from the domain ontology YAML by graphrag/graph/ontology_owl_export.py
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix sh: <http://www.w3.org/ns/shacl#> .
+@prefix shape: <https://graphrag.example.com/ontology/synthetic-sustainability-supply-chain/shape#> .
+
+shape:HAS_EVIDENCE a sh:NodeShape ;
+    sh:message "The subject of HAS_EVIDENCE must be one of: ASSESSMENT, EMISSIONS_RECORD, RISK." ;
+    sh:or ( [ sh:class <https://graphrag.example.com/ontology/synthetic-sustainability-supply-chain/class#ASSESSMENT> ] [ sh:class <https://graphrag.example.com/ontology/synthetic-sustainability-supply-chain/class#EMISSIONS_RECORD> ] [ sh:class <https://graphrag.example.com/ontology/synthetic-sustainability-supply-chain/class#RISK> ] ) ;
+    sh:property [ sh:message "Every object of HAS_EVIDENCE must be one of: EVIDENCE." ;
+            sh:or ( [ sh:class <https://graphrag.example.com/ontology/synthetic-sustainability-supply-chain/class#EVIDENCE> ] ) ;
+            sh:path <https://graphrag.example.com/ontology/synthetic-sustainability-supply-chain/relation#HAS_EVIDENCE> ] ;
+    sh:targetSubjectsOf <https://graphrag.example.com/ontology/synthetic-sustainability-supply-chain/relation#HAS_EVIDENCE> .
+
+shape:HAS_RISK a sh:NodeShape ;
+    sh:message "The subject of HAS_RISK must be one of: SUPPLIER, FACILITY, MATERIAL." ;
+    sh:or ( [ sh:class <https://graphrag.example.com/ontology/synthetic-sustainability-supply-chain/class#SUPPLIER> ] [ sh:class <https://graphrag.example.com/ontology/synthetic-sustainability-supply-chain/class#FACILITY> ] [ sh:class <https://graphrag.example.com/ontology/synthetic-sustainability-supply-chain/class#MATERIAL> ] ) ;
+    sh:property [ sh:message "Every object of HAS_RISK must be one of: RISK." ;
+            sh:or ( [ sh:class <https://graphrag.example.com/ontology/synthetic-sustainability-supply-chain/class#RISK> ] ) ;
+            sh:path <https://graphrag.example.com/ontology/synthetic-sustainability-supply-chain/relation#HAS_RISK> ] ;
+    sh:targetSubjectsOf <https://graphrag.example.com/ontology/synthetic-sustainability-supply-chain/relation#HAS_RISK> .
+
+shape:OPERATES a sh:NodeShape ;
+    sh:message "The subject of OPERATES must be one of: SUPPLIER." ;
+    sh:or ( [ sh:class <https://graphrag.example.com/ontology/synthetic-sustainability-supply-chain/class#SUPPLIER> ] ) ;
+    sh:property [ sh:message "Every object of OPERATES must be one of: FACILITY." ;
+            sh:or ( [ sh:class <https://graphrag.example.com/ontology/synthetic-sustainability-supply-chain/class#FACILITY> ] ) ;
+            sh:path <https://graphrag.example.com/ontology/synthetic-sustainability-supply-chain/relation#OPERATES> ] ;
+    sh:targetSubjectsOf <https://graphrag.example.com/ontology/synthetic-sustainability-supply-chain/relation#OPERATES> .
+
+shape:REPORTED a sh:NodeShape ;
+    sh:message "The subject of REPORTED must be one of: SUPPLIER." ;
+    sh:or ( [ sh:class <https://graphrag.example.com/ontology/synthetic-sustainability-supply-chain/class#SUPPLIER> ] ) ;
+    sh:property [ sh:message "Every object of REPORTED must be one of: EMISSIONS_RECORD." ;
+            sh:or ( [ sh:class <https://graphrag.example.com/ontology/synthetic-sustainability-supply-chain/class#EMISSIONS_RECORD> ] ) ;
+            sh:path <https://graphrag.example.com/ontology/synthetic-sustainability-supply-chain/relation#REPORTED> ] ;
+    sh:targetSubjectsOf <https://graphrag.example.com/ontology/synthetic-sustainability-supply-chain/relation#REPORTED> .
+
+shape:SUPPLIES a sh:NodeShape ;
+    sh:message "The subject of SUPPLIES must be one of: SUPPLIER." ;
+    sh:or ( [ sh:class <https://graphrag.example.com/ontology/synthetic-sustainability-supply-chain/class#SUPPLIER> ] ) ;
+    sh:property [ sh:message "Every object of SUPPLIES must be one of: MATERIAL." ;
+            sh:or ( [ sh:class <https://graphrag.example.com/ontology/synthetic-sustainability-supply-chain/class#MATERIAL> ] ) ;
+            sh:path <https://graphrag.example.com/ontology/synthetic-sustainability-supply-chain/relation#SUPPLIES> ] ;
+    sh:targetSubjectsOf <https://graphrag.example.com/ontology/synthetic-sustainability-supply-chain/relation#SUPPLIES> .
+

@@ -1,0 +1,157 @@
+# DO NOT EDIT: generated from the domain ontology YAML by graphrag/graph/ontology_owl_export.py
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix sh: <http://www.w3.org/ns/shacl#> .
+@prefix shape: <https://graphrag.example.com/ontology/telecom-oss/shape#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+
+shape:COMMITS_SLA a sh:NodeShape ;
+    sh:message "The subject of COMMITS_SLA must be one of: SERVICE_ORDER." ;
+    sh:or ( [ sh:class <https://graphrag.example.com/ontology/telecom-oss/class#SERVICE_ORDER> ] ) ;
+    sh:property [ sh:message "Every object of COMMITS_SLA must be one of: SLA_COMMITMENT." ;
+            sh:or ( [ sh:class <https://graphrag.example.com/ontology/telecom-oss/class#SLA_COMMITMENT> ] ) ;
+            sh:path <https://graphrag.example.com/ontology/telecom-oss/relation#COMMITS_SLA> ] ;
+    sh:targetSubjectsOf <https://graphrag.example.com/ontology/telecom-oss/relation#COMMITS_SLA> .
+
+shape:CONTAINS_TASK a sh:NodeShape ;
+    sh:message "The subject of CONTAINS_TASK must be one of: SERVICE_ORDER." ;
+    sh:or ( [ sh:class <https://graphrag.example.com/ontology/telecom-oss/class#SERVICE_ORDER> ] ) ;
+    sh:property [ sh:message "Every object of CONTAINS_TASK must be one of: PROVISIONING_TASK, ACTIVATION_TASK." ;
+            sh:or ( [ sh:class <https://graphrag.example.com/ontology/telecom-oss/class#PROVISIONING_TASK> ] [ sh:class <https://graphrag.example.com/ontology/telecom-oss/class#ACTIVATION_TASK> ] ) ;
+            sh:path <https://graphrag.example.com/ontology/telecom-oss/relation#CONTAINS_TASK> ] ;
+    sh:targetSubjectsOf <https://graphrag.example.com/ontology/telecom-oss/relation#CONTAINS_TASK> .
+
+shape:DECOMMISSIONS a sh:NodeShape ;
+    sh:message "The subject of DECOMMISSIONS must be one of: CMDB_CHANGE_RECORD, DECOMMISSION_EVENT." ;
+    sh:or ( [ sh:class <https://graphrag.example.com/ontology/telecom-oss/class#CMDB_CHANGE_RECORD> ] [ sh:class <https://graphrag.example.com/ontology/telecom-oss/class#DECOMMISSION_EVENT> ] ) ;
+    sh:property [ sh:message "Every object of DECOMMISSIONS must be one of: NETWORK_ELEMENT, CIRCUIT, CONFIGURATION_ITEM." ;
+            sh:or ( [ sh:class <https://graphrag.example.com/ontology/telecom-oss/class#NETWORK_ELEMENT> ] [ sh:class <https://graphrag.example.com/ontology/telecom-oss/class#CIRCUIT> ] [ sh:class <https://graphrag.example.com/ontology/telecom-oss/class#CONFIGURATION_ITEM> ] ) ;
+            sh:path <https://graphrag.example.com/ontology/telecom-oss/relation#DECOMMISSIONS> ] ;
+    sh:targetSubjectsOf <https://graphrag.example.com/ontology/telecom-oss/relation#DECOMMISSIONS> .
+
+shape:GOVERNED_BY a sh:NodeShape ;
+    sh:message "The subject of GOVERNED_BY must be one of: SERVICE_ORDER, PROVISIONING_TASK, ACTIVATION_TASK, NETWORK_ELEMENT, CIRCUIT." ;
+    sh:or ( [ sh:class <https://graphrag.example.com/ontology/telecom-oss/class#SERVICE_ORDER> ] [ sh:class <https://graphrag.example.com/ontology/telecom-oss/class#PROVISIONING_TASK> ] [ sh:class <https://graphrag.example.com/ontology/telecom-oss/class#ACTIVATION_TASK> ] [ sh:class <https://graphrag.example.com/ontology/telecom-oss/class#NETWORK_ELEMENT> ] [ sh:class <https://graphrag.example.com/ontology/telecom-oss/class#CIRCUIT> ] ) ;
+    sh:property [ sh:message "Every object of GOVERNED_BY must be one of: PROVISIONING_PROCEDURE, CMDB_CHANGE_RECORD." ;
+            sh:or ( [ sh:class <https://graphrag.example.com/ontology/telecom-oss/class#PROVISIONING_PROCEDURE> ] [ sh:class <https://graphrag.example.com/ontology/telecom-oss/class#CMDB_CHANGE_RECORD> ] ) ;
+            sh:path <https://graphrag.example.com/ontology/telecom-oss/relation#GOVERNED_BY> ] ;
+    sh:targetSubjectsOf <https://graphrag.example.com/ontology/telecom-oss/relation#GOVERNED_BY> .
+
+shape:GOVERNS a sh:NodeShape ;
+    sh:message "The subject of GOVERNS must be one of: PROVISIONING_PROCEDURE, CMDB_CHANGE_RECORD." ;
+    sh:or ( [ sh:class <https://graphrag.example.com/ontology/telecom-oss/class#PROVISIONING_PROCEDURE> ] [ sh:class <https://graphrag.example.com/ontology/telecom-oss/class#CMDB_CHANGE_RECORD> ] ) ;
+    sh:property [ sh:message "Every object of GOVERNS must be one of: SERVICE_ORDER, PROVISIONING_TASK, ACTIVATION_TASK, NETWORK_ELEMENT, CIRCUIT." ;
+            sh:or ( [ sh:class <https://graphrag.example.com/ontology/telecom-oss/class#SERVICE_ORDER> ] [ sh:class <https://graphrag.example.com/ontology/telecom-oss/class#PROVISIONING_TASK> ] [ sh:class <https://graphrag.example.com/ontology/telecom-oss/class#ACTIVATION_TASK> ] [ sh:class <https://graphrag.example.com/ontology/telecom-oss/class#NETWORK_ELEMENT> ] [ sh:class <https://graphrag.example.com/ontology/telecom-oss/class#CIRCUIT> ] ) ;
+            sh:path <https://graphrag.example.com/ontology/telecom-oss/relation#GOVERNS> ] ;
+    sh:targetSubjectsOf <https://graphrag.example.com/ontology/telecom-oss/relation#GOVERNS> .
+
+shape:HAS_STATUS a sh:NodeShape ;
+    sh:message "The subject of HAS_STATUS must be one of: CONFIGURATION_ITEM, NETWORK_ELEMENT, CIRCUIT." ;
+    sh:or ( [ sh:class <https://graphrag.example.com/ontology/telecom-oss/class#CONFIGURATION_ITEM> ] [ sh:class <https://graphrag.example.com/ontology/telecom-oss/class#NETWORK_ELEMENT> ] [ sh:class <https://graphrag.example.com/ontology/telecom-oss/class#CIRCUIT> ] ) ;
+    sh:property [ sh:maxCount 1 ;
+            sh:message "Every object of HAS_STATUS must be one of: CI_STATUS." ;
+            sh:or ( [ sh:class <https://graphrag.example.com/ontology/telecom-oss/class#CI_STATUS> ] ) ;
+            sh:path <https://graphrag.example.com/ontology/telecom-oss/relation#HAS_STATUS> ] ;
+    sh:targetSubjectsOf <https://graphrag.example.com/ontology/telecom-oss/relation#HAS_STATUS> .
+
+shape:HOSTS a sh:NodeShape ;
+    sh:message "The subject of HOSTS must be one of: CIRCUIT, NETWORK_ELEMENT, PORT." ;
+    sh:or ( [ sh:class <https://graphrag.example.com/ontology/telecom-oss/class#CIRCUIT> ] [ sh:class <https://graphrag.example.com/ontology/telecom-oss/class#NETWORK_ELEMENT> ] [ sh:class <https://graphrag.example.com/ontology/telecom-oss/class#PORT> ] ) ;
+    sh:property [ sh:message "Every object of HOSTS must be one of: SERVICE_INSTANCE." ;
+            sh:or ( [ sh:class <https://graphrag.example.com/ontology/telecom-oss/class#SERVICE_INSTANCE> ] ) ;
+            sh:path <https://graphrag.example.com/ontology/telecom-oss/relation#HOSTS> ] ;
+    sh:targetSubjectsOf <https://graphrag.example.com/ontology/telecom-oss/relation#HOSTS> .
+
+shape:MANDATES_SLA a sh:NodeShape ;
+    sh:message "The subject of MANDATES_SLA must be one of: PROVISIONING_PROCEDURE." ;
+    sh:or ( [ sh:class <https://graphrag.example.com/ontology/telecom-oss/class#PROVISIONING_PROCEDURE> ] ) ;
+    sh:property [ sh:maxCount 1 ;
+            sh:message "Every object of MANDATES_SLA must be one of: SLA_COMMITMENT." ;
+            sh:or ( [ sh:class <https://graphrag.example.com/ontology/telecom-oss/class#SLA_COMMITMENT> ] ) ;
+            sh:path <https://graphrag.example.com/ontology/telecom-oss/relation#MANDATES_SLA> ] ;
+    sh:targetSubjectsOf <https://graphrag.example.com/ontology/telecom-oss/relation#MANDATES_SLA> .
+
+shape:OPERATES a sh:NodeShape ;
+    sh:message "The subject of OPERATES must be one of: OPERATOR, NETOPS_TEAM." ;
+    sh:or ( [ sh:class <https://graphrag.example.com/ontology/telecom-oss/class#OPERATOR> ] [ sh:class <https://graphrag.example.com/ontology/telecom-oss/class#NETOPS_TEAM> ] ) ;
+    sh:property [ sh:message "Every object of OPERATES must be one of: NETWORK_ELEMENT, CIRCUIT." ;
+            sh:or ( [ sh:class <https://graphrag.example.com/ontology/telecom-oss/class#NETWORK_ELEMENT> ] [ sh:class <https://graphrag.example.com/ontology/telecom-oss/class#CIRCUIT> ] ) ;
+            sh:path <https://graphrag.example.com/ontology/telecom-oss/relation#OPERATES> ] ;
+    sh:targetSubjectsOf <https://graphrag.example.com/ontology/telecom-oss/relation#OPERATES> .
+
+shape:PROVISIONS a sh:NodeShape ;
+    sh:message "The subject of PROVISIONS must be one of: SERVICE_ORDER." ;
+    sh:or ( [ sh:class <https://graphrag.example.com/ontology/telecom-oss/class#SERVICE_ORDER> ] ) ;
+    sh:property [ sh:message "Every object of PROVISIONS must be one of: SERVICE_INSTANCE." ;
+            sh:or ( [ sh:class <https://graphrag.example.com/ontology/telecom-oss/class#SERVICE_INSTANCE> ] ) ;
+            sh:path <https://graphrag.example.com/ontology/telecom-oss/relation#PROVISIONS> ] ;
+    sh:targetSubjectsOf <https://graphrag.example.com/ontology/telecom-oss/relation#PROVISIONS> .
+
+shape:RAISED_FOR a sh:NodeShape ;
+    sh:message "The subject of RAISED_FOR must be one of: CHANGE_TICKET, CMDB_CHANGE_RECORD." ;
+    sh:or ( [ sh:class <https://graphrag.example.com/ontology/telecom-oss/class#CHANGE_TICKET> ] [ sh:class <https://graphrag.example.com/ontology/telecom-oss/class#CMDB_CHANGE_RECORD> ] ) ;
+    sh:property [ sh:message "Every object of RAISED_FOR must be one of: CONFIGURATION_ITEM, NETWORK_ELEMENT, CIRCUIT." ;
+            sh:or ( [ sh:class <https://graphrag.example.com/ontology/telecom-oss/class#CONFIGURATION_ITEM> ] [ sh:class <https://graphrag.example.com/ontology/telecom-oss/class#NETWORK_ELEMENT> ] [ sh:class <https://graphrag.example.com/ontology/telecom-oss/class#CIRCUIT> ] ) ;
+            sh:path <https://graphrag.example.com/ontology/telecom-oss/relation#RAISED_FOR> ] ;
+    sh:targetSubjectsOf <https://graphrag.example.com/ontology/telecom-oss/relation#RAISED_FOR> .
+
+shape:RECORDS_STATUS_OF a sh:NodeShape ;
+    sh:message "The subject of RECORDS_STATUS_OF must be one of: CMDB_CHANGE_RECORD, NETWORK_INVENTORY_RECORD." ;
+    sh:or ( [ sh:class <https://graphrag.example.com/ontology/telecom-oss/class#CMDB_CHANGE_RECORD> ] [ sh:class <https://graphrag.example.com/ontology/telecom-oss/class#NETWORK_INVENTORY_RECORD> ] ) ;
+    sh:property [ sh:message "Every object of RECORDS_STATUS_OF must be one of: NETWORK_ELEMENT, CIRCUIT, CONFIGURATION_ITEM." ;
+            sh:or ( [ sh:class <https://graphrag.example.com/ontology/telecom-oss/class#NETWORK_ELEMENT> ] [ sh:class <https://graphrag.example.com/ontology/telecom-oss/class#CIRCUIT> ] [ sh:class <https://graphrag.example.com/ontology/telecom-oss/class#CONFIGURATION_ITEM> ] ) ;
+            sh:path <https://graphrag.example.com/ontology/telecom-oss/relation#RECORDS_STATUS_OF> ] ;
+    sh:targetSubjectsOf <https://graphrag.example.com/ontology/telecom-oss/relation#RECORDS_STATUS_OF> .
+
+shape:REQUESTS_ACTIVATION_ON a sh:NodeShape ;
+    sh:message "The subject of REQUESTS_ACTIVATION_ON must be one of: SERVICE_ORDER, PROVISIONING_TASK, ACTIVATION_TASK." ;
+    sh:or ( [ sh:class <https://graphrag.example.com/ontology/telecom-oss/class#SERVICE_ORDER> ] [ sh:class <https://graphrag.example.com/ontology/telecom-oss/class#PROVISIONING_TASK> ] [ sh:class <https://graphrag.example.com/ontology/telecom-oss/class#ACTIVATION_TASK> ] ) ;
+    sh:property [ sh:message "Every object of REQUESTS_ACTIVATION_ON must be one of: CIRCUIT, NETWORK_ELEMENT, CONFIGURATION_ITEM." ;
+            sh:or ( [ sh:class <https://graphrag.example.com/ontology/telecom-oss/class#CIRCUIT> ] [ sh:class <https://graphrag.example.com/ontology/telecom-oss/class#NETWORK_ELEMENT> ] [ sh:class <https://graphrag.example.com/ontology/telecom-oss/class#CONFIGURATION_ITEM> ] ) ;
+            sh:path <https://graphrag.example.com/ontology/telecom-oss/relation#REQUESTS_ACTIVATION_ON> ] ;
+    sh:targetSubjectsOf <https://graphrag.example.com/ontology/telecom-oss/relation#REQUESTS_ACTIVATION_ON> .
+
+shape:RUNS_ON a sh:NodeShape ;
+    sh:message "The subject of RUNS_ON must be one of: SERVICE_INSTANCE." ;
+    sh:or ( [ sh:class <https://graphrag.example.com/ontology/telecom-oss/class#SERVICE_INSTANCE> ] ) ;
+    sh:property [ sh:message "Every object of RUNS_ON must be one of: CIRCUIT, NETWORK_ELEMENT, PORT." ;
+            sh:or ( [ sh:class <https://graphrag.example.com/ontology/telecom-oss/class#CIRCUIT> ] [ sh:class <https://graphrag.example.com/ontology/telecom-oss/class#NETWORK_ELEMENT> ] [ sh:class <https://graphrag.example.com/ontology/telecom-oss/class#PORT> ] ) ;
+            sh:path <https://graphrag.example.com/ontology/telecom-oss/relation#RUNS_ON> ] ;
+    sh:targetSubjectsOf <https://graphrag.example.com/ontology/telecom-oss/relation#RUNS_ON> .
+
+shape:SLA_COMMITMENT_OF a sh:NodeShape ;
+    sh:property [ sh:maxCount 1 ;
+            sh:path <https://graphrag.example.com/ontology/telecom-oss/relation#SLA_COMMITMENT_OF> ] ;
+    sh:targetSubjectsOf <https://graphrag.example.com/ontology/telecom-oss/relation#SLA_COMMITMENT_OF> .
+
+shape:SUBSCRIBES_TO a sh:NodeShape ;
+    sh:message "The subject of SUBSCRIBES_TO must be one of: SUBSCRIBER_ORG." ;
+    sh:or ( [ sh:class <https://graphrag.example.com/ontology/telecom-oss/class#SUBSCRIBER_ORG> ] ) ;
+    sh:property [ sh:message "Every object of SUBSCRIBES_TO must be one of: SERVICE_INSTANCE." ;
+            sh:or ( [ sh:class <https://graphrag.example.com/ontology/telecom-oss/class#SERVICE_INSTANCE> ] ) ;
+            sh:path <https://graphrag.example.com/ontology/telecom-oss/relation#SUBSCRIBES_TO> ] ;
+    sh:targetSubjectsOf <https://graphrag.example.com/ontology/telecom-oss/relation#SUBSCRIBES_TO> .
+
+shape:TERMINATES_ON a sh:NodeShape ;
+    sh:message "The subject of TERMINATES_ON must be one of: CIRCUIT." ;
+    sh:or ( [ sh:class <https://graphrag.example.com/ontology/telecom-oss/class#CIRCUIT> ] ) ;
+    sh:property [ sh:message "Every object of TERMINATES_ON must be one of: PORT, NETWORK_ELEMENT." ;
+            sh:or ( [ sh:class <https://graphrag.example.com/ontology/telecom-oss/class#PORT> ] [ sh:class <https://graphrag.example.com/ontology/telecom-oss/class#NETWORK_ELEMENT> ] ) ;
+            sh:path <https://graphrag.example.com/ontology/telecom-oss/relation#TERMINATES_ON> ] ;
+    sh:targetSubjectsOf <https://graphrag.example.com/ontology/telecom-oss/relation#TERMINATES_ON> .
+
+shape:TRACKED_AS a sh:NodeShape ;
+    sh:message "The subject of TRACKED_AS must be one of: NETWORK_ELEMENT, CIRCUIT, PORT, SERVICE_INSTANCE." ;
+    sh:or ( [ sh:class <https://graphrag.example.com/ontology/telecom-oss/class#NETWORK_ELEMENT> ] [ sh:class <https://graphrag.example.com/ontology/telecom-oss/class#CIRCUIT> ] [ sh:class <https://graphrag.example.com/ontology/telecom-oss/class#PORT> ] [ sh:class <https://graphrag.example.com/ontology/telecom-oss/class#SERVICE_INSTANCE> ] ) ;
+    sh:property [ sh:message "Every object of TRACKED_AS must be one of: CONFIGURATION_ITEM." ;
+            sh:or ( [ sh:class <https://graphrag.example.com/ontology/telecom-oss/class#CONFIGURATION_ITEM> ] ) ;
+            sh:path <https://graphrag.example.com/ontology/telecom-oss/relation#TRACKED_AS> ] ;
+    sh:targetSubjectsOf <https://graphrag.example.com/ontology/telecom-oss/relation#TRACKED_AS> .
+
+shape:VALIDATES_AGAINST a sh:NodeShape ;
+    sh:message "The subject of VALIDATES_AGAINST must be one of: SERVICE_ORDER, PROVISIONING_TASK." ;
+    sh:or ( [ sh:class <https://graphrag.example.com/ontology/telecom-oss/class#SERVICE_ORDER> ] [ sh:class <https://graphrag.example.com/ontology/telecom-oss/class#PROVISIONING_TASK> ] ) ;
+    sh:property [ sh:message "Every object of VALIDATES_AGAINST must be one of: NETWORK_INVENTORY_RECORD, CMDB_CHANGE_RECORD." ;
+            sh:or ( [ sh:class <https://graphrag.example.com/ontology/telecom-oss/class#NETWORK_INVENTORY_RECORD> ] [ sh:class <https://graphrag.example.com/ontology/telecom-oss/class#CMDB_CHANGE_RECORD> ] ) ;
+            sh:path <https://graphrag.example.com/ontology/telecom-oss/relation#VALIDATES_AGAINST> ] ;
+    sh:targetSubjectsOf <https://graphrag.example.com/ontology/telecom-oss/relation#VALIDATES_AGAINST> .
+

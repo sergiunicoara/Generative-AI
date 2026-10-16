@@ -1,0 +1,239 @@
+# DO NOT EDIT: generated from the domain ontology YAML by graphrag/graph/ontology_owl_export.py
+@prefix cls: <https://graphrag.example.com/ontology/telecom-oss/class#> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix rel: <https://graphrag.example.com/ontology/telecom-oss/relation#> .
+
+<https://graphrag.example.com/ontology/telecom-oss> a owl:Ontology ;
+    owl:versionInfo "1.0.0" .
+
+rel:COMMITS_SLA a owl:ObjectProperty ;
+    rdfs:label "Commits sla"@en ;
+    rdfs:domain cls:SERVICE_ORDER ;
+    rdfs:range cls:SLA_COMMITMENT .
+
+rel:CONTAINS_TASK a owl:ObjectProperty ;
+    rdfs:label "Contains task"@en ;
+    rdfs:domain cls:SERVICE_ORDER ;
+    rdfs:range [ a owl:Class ;
+            owl:unionOf ( cls:PROVISIONING_TASK cls:ACTIVATION_TASK ) ] ;
+    owl:inverseOf rel:PART_OF_ORDER .
+
+rel:DECOMMISSIONS a owl:ObjectProperty,
+        owl:TransitiveProperty ;
+    rdfs:label "Decommissions"@en ;
+    rdfs:domain [ a owl:Class ;
+            owl:unionOf ( cls:CMDB_CHANGE_RECORD cls:DECOMMISSION_EVENT ) ] ;
+    rdfs:range [ a owl:Class ;
+            owl:unionOf ( cls:NETWORK_ELEMENT cls:CIRCUIT cls:CONFIGURATION_ITEM ) ] .
+
+rel:GOVERNS a owl:ObjectProperty ;
+    rdfs:label "Governs"@en ;
+    rdfs:domain [ a owl:Class ;
+            owl:unionOf ( cls:PROVISIONING_PROCEDURE cls:CMDB_CHANGE_RECORD ) ] ;
+    rdfs:range [ a owl:Class ;
+            owl:unionOf ( cls:SERVICE_ORDER cls:PROVISIONING_TASK cls:ACTIVATION_TASK cls:NETWORK_ELEMENT cls:CIRCUIT ) ] ;
+    owl:inverseOf rel:GOVERNED_BY .
+
+rel:HAS_STATUS a owl:FunctionalProperty,
+        owl:ObjectProperty ;
+    rdfs:label "Has status"@en ;
+    rdfs:domain [ a owl:Class ;
+            owl:unionOf ( cls:CONFIGURATION_ITEM cls:NETWORK_ELEMENT cls:CIRCUIT ) ] ;
+    rdfs:range cls:CI_STATUS .
+
+rel:MANDATES_SLA a owl:FunctionalProperty,
+        owl:ObjectProperty ;
+    rdfs:label "Mandates sla"@en ;
+    rdfs:domain cls:PROVISIONING_PROCEDURE ;
+    rdfs:range cls:SLA_COMMITMENT .
+
+rel:OPERATES a owl:ObjectProperty ;
+    rdfs:label "Operates"@en ;
+    rdfs:domain [ a owl:Class ;
+            owl:unionOf ( cls:OPERATOR cls:NETOPS_TEAM ) ] ;
+    rdfs:range [ a owl:Class ;
+            owl:unionOf ( cls:NETWORK_ELEMENT cls:CIRCUIT ) ] ;
+    owl:inverseOf rel:OPERATED_BY .
+
+rel:PROVISIONS a owl:ObjectProperty ;
+    rdfs:label "Provisions"@en ;
+    rdfs:domain cls:SERVICE_ORDER ;
+    rdfs:range cls:SERVICE_INSTANCE ;
+    owl:inverseOf rel:PROVISIONED_BY .
+
+rel:RAISED_FOR a owl:ObjectProperty ;
+    rdfs:label "Raised for"@en ;
+    rdfs:domain [ a owl:Class ;
+            owl:unionOf ( cls:CHANGE_TICKET cls:CMDB_CHANGE_RECORD ) ] ;
+    rdfs:range [ a owl:Class ;
+            owl:unionOf ( cls:CONFIGURATION_ITEM cls:NETWORK_ELEMENT cls:CIRCUIT ) ] .
+
+rel:RECORDS_STATUS_OF a owl:ObjectProperty ;
+    rdfs:label "Records status of"@en ;
+    rdfs:domain [ a owl:Class ;
+            owl:unionOf ( cls:CMDB_CHANGE_RECORD cls:NETWORK_INVENTORY_RECORD ) ] ;
+    rdfs:range [ a owl:Class ;
+            owl:unionOf ( cls:NETWORK_ELEMENT cls:CIRCUIT cls:CONFIGURATION_ITEM ) ] ;
+    owl:inverseOf rel:STATUS_RECORDED_BY .
+
+rel:REQUESTS_ACTIVATION_ON a owl:ObjectProperty ;
+    rdfs:label "Requests activation on"@en ;
+    rdfs:domain [ a owl:Class ;
+            owl:unionOf ( cls:SERVICE_ORDER cls:PROVISIONING_TASK cls:ACTIVATION_TASK ) ] ;
+    rdfs:range [ a owl:Class ;
+            owl:unionOf ( cls:CIRCUIT cls:NETWORK_ELEMENT cls:CONFIGURATION_ITEM ) ] .
+
+rel:RUNS_ON a owl:ObjectProperty ;
+    rdfs:label "Runs on"@en ;
+    rdfs:domain cls:SERVICE_INSTANCE ;
+    rdfs:range [ a owl:Class ;
+            owl:unionOf ( cls:CIRCUIT cls:NETWORK_ELEMENT cls:PORT ) ] ;
+    owl:inverseOf rel:HOSTS .
+
+rel:SLA_COMMITMENT_OF a owl:FunctionalProperty,
+        owl:ObjectProperty ;
+    rdfs:label "Sla commitment of"@en .
+
+rel:SUBSCRIBES_TO a owl:ObjectProperty ;
+    rdfs:label "Subscribes to"@en ;
+    rdfs:domain cls:SUBSCRIBER_ORG ;
+    rdfs:range cls:SERVICE_INSTANCE ;
+    owl:inverseOf rel:SERVES_SUBSCRIBER .
+
+rel:TERMINATES_ON a owl:ObjectProperty ;
+    rdfs:label "Terminates on"@en ;
+    rdfs:domain cls:CIRCUIT ;
+    rdfs:range [ a owl:Class ;
+            owl:unionOf ( cls:PORT cls:NETWORK_ELEMENT ) ] .
+
+rel:TRACKED_AS a owl:ObjectProperty ;
+    rdfs:label "Tracked as"@en ;
+    rdfs:domain [ a owl:Class ;
+            owl:unionOf ( cls:NETWORK_ELEMENT cls:CIRCUIT cls:PORT cls:SERVICE_INSTANCE ) ] ;
+    rdfs:range cls:CONFIGURATION_ITEM .
+
+rel:VALIDATES_AGAINST a owl:ObjectProperty ;
+    rdfs:label "Validates against"@en ;
+    rdfs:domain [ a owl:Class ;
+            owl:unionOf ( cls:SERVICE_ORDER cls:PROVISIONING_TASK ) ] ;
+    rdfs:range [ a owl:Class ;
+            owl:unionOf ( cls:NETWORK_INVENTORY_RECORD cls:CMDB_CHANGE_RECORD ) ] .
+
+cls:CHANGE_TICKET a owl:Class ;
+    rdfs:label "Change ticket"@en ;
+    rdfs:subClassOf cls:CONCEPT .
+
+cls:CI_STATUS a owl:Class ;
+    rdfs:label "Ci status"@en ;
+    rdfs:subClassOf cls:CONCEPT .
+
+cls:DECOMMISSION_EVENT a owl:Class ;
+    rdfs:label "Decommission event"@en ;
+    rdfs:subClassOf cls:EVENT .
+
+cls:EVENT a owl:Class ;
+    rdfs:label "Event"@en .
+
+cls:NETOPS_TEAM a owl:Class ;
+    rdfs:label "Netops team"@en ;
+    rdfs:subClassOf cls:ORG .
+
+cls:OPERATOR a owl:Class ;
+    rdfs:label "Operator"@en ;
+    rdfs:subClassOf cls:ORG .
+
+cls:SUBSCRIBER_ORG a owl:Class ;
+    rdfs:label "Subscriber org"@en ;
+    rdfs:subClassOf cls:ORG .
+
+rel:GOVERNED_BY a owl:ObjectProperty ;
+    rdfs:label "Governed by"@en ;
+    rdfs:domain [ a owl:Class ;
+            owl:unionOf ( cls:SERVICE_ORDER cls:PROVISIONING_TASK cls:ACTIVATION_TASK cls:NETWORK_ELEMENT cls:CIRCUIT ) ] ;
+    rdfs:range [ a owl:Class ;
+            owl:unionOf ( cls:PROVISIONING_PROCEDURE cls:CMDB_CHANGE_RECORD ) ] .
+
+rel:HOSTS a owl:ObjectProperty ;
+    rdfs:label "Hosts"@en ;
+    rdfs:domain [ a owl:Class ;
+            owl:unionOf ( cls:CIRCUIT cls:NETWORK_ELEMENT cls:PORT ) ] ;
+    rdfs:range cls:SERVICE_INSTANCE .
+
+rel:OPERATED_BY a owl:ObjectProperty ;
+    rdfs:label "Operated by"@en .
+
+rel:PART_OF_ORDER a owl:ObjectProperty ;
+    rdfs:label "Part of order"@en .
+
+rel:PROVISIONED_BY a owl:ObjectProperty ;
+    rdfs:label "Provisioned by"@en .
+
+rel:SERVES_SUBSCRIBER a owl:ObjectProperty ;
+    rdfs:label "Serves subscriber"@en .
+
+rel:STATUS_RECORDED_BY a owl:ObjectProperty ;
+    rdfs:label "Status recorded by"@en .
+
+cls:NETWORK_INVENTORY_RECORD a owl:Class ;
+    rdfs:label "Network inventory record"@en ;
+    rdfs:subClassOf cls:OSS_DOCUMENT .
+
+cls:SLA_COMMITMENT a owl:Class ;
+    rdfs:label "Sla commitment"@en ;
+    rdfs:subClassOf cls:CONCEPT .
+
+cls:ORG a owl:Class ;
+    rdfs:label "Org"@en .
+
+cls:PROVISIONING_PROCEDURE a owl:Class ;
+    rdfs:label "Provisioning procedure"@en ;
+    rdfs:subClassOf cls:OSS_DOCUMENT .
+
+cls:ACTIVATION_TASK a owl:Class ;
+    rdfs:label "Activation task"@en ;
+    rdfs:subClassOf cls:CONCEPT .
+
+cls:OSS_DOCUMENT a owl:Class ;
+    rdfs:label "Oss document"@en ;
+    rdfs:subClassOf cls:CONCEPT .
+
+cls:PORT a owl:Class ;
+    rdfs:label "Port"@en ;
+    rdfs:subClassOf cls:PRODUCT .
+
+cls:PRODUCT a owl:Class ;
+    rdfs:label "Product"@en .
+
+cls:PROVISIONING_TASK a owl:Class ;
+    rdfs:label "Provisioning task"@en ;
+    rdfs:subClassOf cls:CONCEPT .
+
+cls:SERVICE_INSTANCE a owl:Class ;
+    rdfs:label "Service instance"@en ;
+    rdfs:subClassOf cls:PRODUCT .
+
+cls:CMDB_CHANGE_RECORD a owl:Class ;
+    rdfs:label "Cmdb change record"@en ;
+    rdfs:subClassOf cls:OSS_DOCUMENT .
+
+cls:CONCEPT a owl:Class ;
+    rdfs:label "Concept"@en .
+
+cls:CONFIGURATION_ITEM a owl:Class ;
+    rdfs:label "Configuration item"@en ;
+    rdfs:subClassOf cls:PRODUCT .
+
+cls:SERVICE_ORDER a owl:Class ;
+    rdfs:label "Service order"@en ;
+    rdfs:subClassOf cls:OSS_DOCUMENT .
+
+cls:CIRCUIT a owl:Class ;
+    rdfs:label "Circuit"@en ;
+    rdfs:subClassOf cls:PRODUCT .
+
+cls:NETWORK_ELEMENT a owl:Class ;
+    rdfs:label "Network element"@en ;
+    rdfs:subClassOf cls:PRODUCT .
+

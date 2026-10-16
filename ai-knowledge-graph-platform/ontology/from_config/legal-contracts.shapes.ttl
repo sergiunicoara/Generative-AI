@@ -1,0 +1,87 @@
+# DO NOT EDIT: generated from the domain ontology YAML by graphrag/graph/ontology_owl_export.py
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix sh: <http://www.w3.org/ns/shacl#> .
+@prefix shape: <https://graphrag.example.com/ontology/legal-contracts/shape#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+
+shape:AMENDS a sh:NodeShape ;
+    sh:message "The subject of AMENDS must be one of: AMENDMENT, SIDE_LETTER." ;
+    sh:or ( [ sh:class <https://graphrag.example.com/ontology/legal-contracts/class#AMENDMENT> ] [ sh:class <https://graphrag.example.com/ontology/legal-contracts/class#SIDE_LETTER> ] ) ;
+    sh:property [ sh:message "Every object of AMENDS must be one of: CONTRACT, CONTRACT_VERSION, CLAUSE." ;
+            sh:or ( [ sh:class <https://graphrag.example.com/ontology/legal-contracts/class#CONTRACT> ] [ sh:class <https://graphrag.example.com/ontology/legal-contracts/class#CONTRACT_VERSION> ] [ sh:class <https://graphrag.example.com/ontology/legal-contracts/class#CLAUSE> ] ) ;
+            sh:path <https://graphrag.example.com/ontology/legal-contracts/relation#AMENDS> ] ;
+    sh:targetSubjectsOf <https://graphrag.example.com/ontology/legal-contracts/relation#AMENDS> .
+
+shape:GOVERNED_BY a sh:NodeShape ;
+    sh:message "The subject of GOVERNED_BY must be one of: CONTRACT, CONTRACT_VERSION, AMENDMENT, FUND_DOCUMENT." ;
+    sh:or ( [ sh:class <https://graphrag.example.com/ontology/legal-contracts/class#CONTRACT> ] [ sh:class <https://graphrag.example.com/ontology/legal-contracts/class#CONTRACT_VERSION> ] [ sh:class <https://graphrag.example.com/ontology/legal-contracts/class#AMENDMENT> ] [ sh:class <https://graphrag.example.com/ontology/legal-contracts/class#FUND_DOCUMENT> ] ) ;
+    sh:property [ sh:maxCount 1 ;
+            sh:message "Every object of GOVERNED_BY must be one of: GOVERNING_LAW, JURISDICTION." ;
+            sh:or ( [ sh:class <https://graphrag.example.com/ontology/legal-contracts/class#GOVERNING_LAW> ] [ sh:class <https://graphrag.example.com/ontology/legal-contracts/class#JURISDICTION> ] ) ;
+            sh:path <https://graphrag.example.com/ontology/legal-contracts/relation#GOVERNED_BY> ] ;
+    sh:targetSubjectsOf <https://graphrag.example.com/ontology/legal-contracts/relation#GOVERNED_BY> .
+
+shape:GRANTS a sh:NodeShape ;
+    sh:message "The subject of GRANTS must be one of: CONTRACT, CONTRACT_VERSION, AMENDMENT, CLAUSE." ;
+    sh:or ( [ sh:class <https://graphrag.example.com/ontology/legal-contracts/class#CONTRACT> ] [ sh:class <https://graphrag.example.com/ontology/legal-contracts/class#CONTRACT_VERSION> ] [ sh:class <https://graphrag.example.com/ontology/legal-contracts/class#AMENDMENT> ] [ sh:class <https://graphrag.example.com/ontology/legal-contracts/class#CLAUSE> ] ) ;
+    sh:property [ sh:message "Every object of GRANTS must be one of: RIGHT." ;
+            sh:or ( [ sh:class <https://graphrag.example.com/ontology/legal-contracts/class#RIGHT> ] ) ;
+            sh:path <https://graphrag.example.com/ontology/legal-contracts/relation#GRANTS> ] ;
+    sh:targetSubjectsOf <https://graphrag.example.com/ontology/legal-contracts/relation#GRANTS> .
+
+shape:HAS_CLAUSE a sh:NodeShape ;
+    sh:message "The subject of HAS_CLAUSE must be one of: CONTRACT, CONTRACT_VERSION, AMENDMENT, FUND_DOCUMENT." ;
+    sh:or ( [ sh:class <https://graphrag.example.com/ontology/legal-contracts/class#CONTRACT> ] [ sh:class <https://graphrag.example.com/ontology/legal-contracts/class#CONTRACT_VERSION> ] [ sh:class <https://graphrag.example.com/ontology/legal-contracts/class#AMENDMENT> ] [ sh:class <https://graphrag.example.com/ontology/legal-contracts/class#FUND_DOCUMENT> ] ) ;
+    sh:property [ sh:message "Every object of HAS_CLAUSE must be one of: CLAUSE." ;
+            sh:or ( [ sh:class <https://graphrag.example.com/ontology/legal-contracts/class#CLAUSE> ] ) ;
+            sh:path <https://graphrag.example.com/ontology/legal-contracts/relation#HAS_CLAUSE> ] ;
+    sh:targetSubjectsOf <https://graphrag.example.com/ontology/legal-contracts/relation#HAS_CLAUSE> .
+
+shape:IMPOSES a sh:NodeShape ;
+    sh:message "The subject of IMPOSES must be one of: CONTRACT, CONTRACT_VERSION, AMENDMENT, CLAUSE." ;
+    sh:or ( [ sh:class <https://graphrag.example.com/ontology/legal-contracts/class#CONTRACT> ] [ sh:class <https://graphrag.example.com/ontology/legal-contracts/class#CONTRACT_VERSION> ] [ sh:class <https://graphrag.example.com/ontology/legal-contracts/class#AMENDMENT> ] [ sh:class <https://graphrag.example.com/ontology/legal-contracts/class#CLAUSE> ] ) ;
+    sh:property [ sh:message "Every object of IMPOSES must be one of: OBLIGATION." ;
+            sh:or ( [ sh:class <https://graphrag.example.com/ontology/legal-contracts/class#OBLIGATION> ] ) ;
+            sh:path <https://graphrag.example.com/ontology/legal-contracts/relation#IMPOSES> ] ;
+    sh:targetSubjectsOf <https://graphrag.example.com/ontology/legal-contracts/relation#IMPOSES> .
+
+shape:OWES_PAYMENT_UNDER a sh:NodeShape ;
+    sh:message "The subject of OWES_PAYMENT_UNDER must be one of: LEGAL_PARTY." ;
+    sh:or ( [ sh:class <https://graphrag.example.com/ontology/legal-contracts/class#LEGAL_PARTY> ] ) ;
+    sh:property [ sh:message "Every object of OWES_PAYMENT_UNDER must be one of: PAYMENT_TERM, CONTRACT." ;
+            sh:or ( [ sh:class <https://graphrag.example.com/ontology/legal-contracts/class#PAYMENT_TERM> ] [ sh:class <https://graphrag.example.com/ontology/legal-contracts/class#CONTRACT> ] ) ;
+            sh:path <https://graphrag.example.com/ontology/legal-contracts/relation#OWES_PAYMENT_UNDER> ] ;
+    sh:targetSubjectsOf <https://graphrag.example.com/ontology/legal-contracts/relation#OWES_PAYMENT_UNDER> .
+
+shape:PARTY_TO a sh:NodeShape ;
+    sh:message "The subject of PARTY_TO must be one of: LEGAL_PARTY." ;
+    sh:or ( [ sh:class <https://graphrag.example.com/ontology/legal-contracts/class#LEGAL_PARTY> ] ) ;
+    sh:property [ sh:message "Every object of PARTY_TO must be one of: CONTRACT, FUND_DOCUMENT." ;
+            sh:or ( [ sh:class <https://graphrag.example.com/ontology/legal-contracts/class#CONTRACT> ] [ sh:class <https://graphrag.example.com/ontology/legal-contracts/class#FUND_DOCUMENT> ] ) ;
+            sh:path <https://graphrag.example.com/ontology/legal-contracts/relation#PARTY_TO> ] ;
+    sh:targetSubjectsOf <https://graphrag.example.com/ontology/legal-contracts/relation#PARTY_TO> .
+
+shape:REQUIRES_NOTICE a sh:NodeShape ;
+    sh:message "The subject of REQUIRES_NOTICE must be one of: CONTRACT, CLAUSE, OBLIGATION." ;
+    sh:or ( [ sh:class <https://graphrag.example.com/ontology/legal-contracts/class#CONTRACT> ] [ sh:class <https://graphrag.example.com/ontology/legal-contracts/class#CLAUSE> ] [ sh:class <https://graphrag.example.com/ontology/legal-contracts/class#OBLIGATION> ] ) ;
+    sh:property [ sh:message "Every object of REQUIRES_NOTICE must be one of: NOTICE." ;
+            sh:or ( [ sh:class <https://graphrag.example.com/ontology/legal-contracts/class#NOTICE> ] ) ;
+            sh:path <https://graphrag.example.com/ontology/legal-contracts/relation#REQUIRES_NOTICE> ] ;
+    sh:targetSubjectsOf <https://graphrag.example.com/ontology/legal-contracts/relation#REQUIRES_NOTICE> .
+
+shape:SIGNED_BY a sh:NodeShape ;
+    sh:message "The subject of SIGNED_BY must be one of: CONTRACT, AMENDMENT, FUND_DOCUMENT." ;
+    sh:or ( [ sh:class <https://graphrag.example.com/ontology/legal-contracts/class#CONTRACT> ] [ sh:class <https://graphrag.example.com/ontology/legal-contracts/class#AMENDMENT> ] [ sh:class <https://graphrag.example.com/ontology/legal-contracts/class#FUND_DOCUMENT> ] ) ;
+    sh:property [ sh:message "Every object of SIGNED_BY must be one of: SIGNATORY, LEGAL_PARTY." ;
+            sh:or ( [ sh:class <https://graphrag.example.com/ontology/legal-contracts/class#SIGNATORY> ] [ sh:class <https://graphrag.example.com/ontology/legal-contracts/class#LEGAL_PARTY> ] ) ;
+            sh:path <https://graphrag.example.com/ontology/legal-contracts/relation#SIGNED_BY> ] ;
+    sh:targetSubjectsOf <https://graphrag.example.com/ontology/legal-contracts/relation#SIGNED_BY> .
+
+shape:SUPERSEDES a sh:NodeShape ;
+    sh:message "The subject of SUPERSEDES must be one of: CONTRACT, CONTRACT_VERSION, AMENDMENT, FUND_DOCUMENT." ;
+    sh:or ( [ sh:class <https://graphrag.example.com/ontology/legal-contracts/class#CONTRACT> ] [ sh:class <https://graphrag.example.com/ontology/legal-contracts/class#CONTRACT_VERSION> ] [ sh:class <https://graphrag.example.com/ontology/legal-contracts/class#AMENDMENT> ] [ sh:class <https://graphrag.example.com/ontology/legal-contracts/class#FUND_DOCUMENT> ] ) ;
+    sh:property [ sh:message "Every object of SUPERSEDES must be one of: CONTRACT, CONTRACT_VERSION, AMENDMENT, FUND_DOCUMENT." ;
+            sh:or ( [ sh:class <https://graphrag.example.com/ontology/legal-contracts/class#CONTRACT> ] [ sh:class <https://graphrag.example.com/ontology/legal-contracts/class#CONTRACT_VERSION> ] [ sh:class <https://graphrag.example.com/ontology/legal-contracts/class#AMENDMENT> ] [ sh:class <https://graphrag.example.com/ontology/legal-contracts/class#FUND_DOCUMENT> ] ) ;
+            sh:path <https://graphrag.example.com/ontology/legal-contracts/relation#SUPERSEDES> ] ;
+    sh:targetSubjectsOf <https://graphrag.example.com/ontology/legal-contracts/relation#SUPERSEDES> .
+

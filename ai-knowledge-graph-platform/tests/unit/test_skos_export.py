@@ -75,3 +75,46 @@ def test_the_shipped_automotive_ontology_exports_and_round_trips(tmp_path):
 def test_missing_file_raises(tmp_path):
     with pytest.raises(FileNotFoundError):
         export_skos(tmp_path / "missing.yml")
+
+
+# ── label-based mappings and shipped vocabulary ───────────────────────────────
+
+from graphrag.graph.skos_export import add_label_mappings  # noqa: E402
+
+EXTERNAL = """
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+@prefix x: <http://other.example/> .
+x:Supplier skos:prefLabel "supplier"@en .
+x:Org skos:prefLabel "Organisation"@en ; skos:altLabel "org"@en .
+x:Vendor skos:prefLabel "Vendor"@en .
+x:Unrelated skos:prefLabel "Banana"@en .
+"""
+
+
+def test_label_mappings_give_exact_for_pref_labels_and_close_for_alt_labels_only():
+    g = ontology_to_skos(ONTOLOGY)
+    counts = add_label_mappings(g, Graph().parse(data=EXTERNAL, format="turtle"))
+    # SUPPLIER ("Supplier") equals x:Supplier after case folding; its synonym "vendor" matches x:Vendor's pref label
+    assert (_c("SUPPLIER"), SKOS.exactMatch, URIRef("http://other.example/Supplier")) in g
+    assert (_c("SUPPLIER"), SKOS.closeMatch, URIRef("http://other.example/Vendor")) in g
+    # ORG ("Org") equals x:Org's alt label only
+    assert (_c("ORG"), SKOS.closeMatch, URIRef("http://other.example/Org")) in g
+    assert (_c("ORG"), SKOS.exactMatch, URIRef("http://other.example/Org")) not in g
+    assert counts == {"exactMatch": 1, "closeMatch": 2}
+    assert not any(o == URIRef("http://other.example/Unrelated") for _, o in g.subject_objects(SKOS.closeMatch))
+
+
+def test_label_mappings_add_nothing_when_no_labels_match():
+    g = ontology_to_skos(ONTOLOGY)
+    before = len(g)
+    other = Graph().parse(data='@prefix skos: <http://www.w3.org/2004/02/skos/core#> .\n'
+                               '<http://o/z> skos:prefLabel "zzz" .', format="turtle")
+    assert add_label_mappings(g, other) == {"exactMatch": 0, "closeMatch": 0} and len(g) == before
+
+
+def test_shipped_vocabulary_reaches_the_skos_output():
+    g = export_skos(ROOT / "config" / "ontologies" / "aerospace_regulatory.yml")
+    base = "https://graphrag.example.com/taxonomy/aerospace-regulatory#"
+    ad = URIRef(base + "AIRWORTHINESS_DIRECTIVE")
+    assert "AD" in {str(o) for o in g.objects(ad, SKOS.altLabel)}
+    assert any("mandatory" in str(o) for o in g.objects(ad, SKOS.definition))

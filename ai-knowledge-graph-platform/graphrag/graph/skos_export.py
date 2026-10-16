@@ -81,6 +81,38 @@ def ontology_to_skos(ontology: dict, *, mappings: dict[str, list[tuple[str, str]
     return g
 
 
+def _norm(label: str) -> str:
+    return " ".join(str(label).casefold().replace("_", " ").replace("-", " ").split())
+
+
+def add_label_mappings(g: Graph, external: Graph) -> dict[str, int]:
+    """Link this scheme's concepts to an external SKOS file by label, deterministically and with no model.
+
+    ``skos:exactMatch`` when the preferred labels are equal after case/underscore/hyphen folding; ``skos:closeMatch``
+    when only an alternative label on either side matches. A concept that matches several external concepts is
+    linked to each, so a human can review the ambiguity; nothing is guessed from similarity. Returns the counts.
+    """
+    index: dict[str, dict[str, set[URIRef]]] = {"pref": {}, "alt": {}}
+    for kind, predicate in (("pref", SKOS.prefLabel), ("alt", SKOS.altLabel)):
+        for subject, label in external.subject_objects(predicate):
+            if isinstance(subject, URIRef):
+                index[kind].setdefault(_norm(label), set()).add(subject)
+    counts = {"exactMatch": 0, "closeMatch": 0}
+    for concept in set(g.subjects(RDF.type, SKOS.Concept)):
+        own_pref = {_norm(o) for o in g.objects(concept, SKOS.prefLabel)}
+        own_alt = {_norm(o) for o in g.objects(concept, SKOS.altLabel)}
+        exact = {u for label in own_pref for u in index["pref"].get(label, ())}
+        close = {u for label in own_alt for u in index["pref"].get(label, ())}
+        close |= {u for label in own_pref | own_alt for u in index["alt"].get(label, ())}
+        for target in sorted(exact):
+            g.add((concept, SKOS.exactMatch, target))
+            counts["exactMatch"] += 1
+        for target in sorted(close - exact):
+            g.add((concept, SKOS.closeMatch, target))
+            counts["closeMatch"] += 1
+    return counts
+
+
 def export_skos(yaml_path: str | Path, out_path: str | Path | None = None, *, rdf_format: str = "turtle") -> Graph:
     ontology = load_domain_ontology(yaml_path)
     if not ontology:

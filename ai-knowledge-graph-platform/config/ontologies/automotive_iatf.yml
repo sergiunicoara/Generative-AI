@@ -230,3 +230,41 @@ supersession_chains:
     predecessor: PQ-07-rev1.txt
   - successor:   IL-INS-03-rev4.txt
     predecessor: IL-INS-03-rev2.txt
+
+# ── Vocabulary ────────────────────────────────────────────────────────────────
+# Definitions restate the notes beside each type in type_hierarchy above; synonyms are the abbreviations used in the
+# corpus. Read by graphrag/graph/skos_export.py (skos:definition / skos:altLabel).
+vocabulary:
+  SUPPLIER:
+    definition: "An organisation that supplies parts to a client, such as PlastiAuto SRL or a sub-tier supplier."
+  CLIENT_ORG:
+    definition: "A client organisation that buys from suppliers and issues client-specific requirements."
+  QUALITY_DOCUMENT:
+    definition: "Any controlled document of the quality management system."
+  CLIENT_REQUIREMENT:
+    definition: "A client-specific requirement document (CSR-CLIENT-*), the highest-authority quality document."
+    synonyms: ["CSR"]
+  QUALITY_MANUAL:
+    definition: "The top-level internal quality management system document (MC-01)."
+  INTERNAL_PROCEDURE:
+    definition: "An internal procedure, instruction or plan of the supplier (PQ-*, IL-*, RFA-*, PC-*, PFMEA-*, PPAP-*)."
+  FORM_RECORD:
+    definition: "A working form or register (FP-*, REG-*)."
+  STANDARD:
+    definition: "A published standard or framework, such as IATF 16949, ISO 9001, ISO 14001 or ISO 45001."
+  KPI:
+    definition: "A performance indicator, such as on-time delivery, defect rate in PPM, first pass yield or Cpk."
+    synonyms: ["key performance indicator"]
+  QUALITY_PROCESS:
+    definition: "A quality process such as an audit, first article inspection, SPC, MSA, PPAP or 8D."
+  AUDIT:
+    definition: "An examination of a supplier or process against a requirement."
+  NONCONFORMITY:
+    definition: "A recorded failure to meet a requirement, classed as minor, major or critical."
+    synonyms: ["NCR"]
+  SUPPLIER_CLASSIFICATION:
+    definition: "A supplier's standing: preferred, standard, on watch or suspended."
+  REEVALUATION_FREQUENCY:
+    definition: "How often a supplier is reevaluated: semestrial or annual."
+  AUTOMOTIVE_COMPONENT:
+    definition: "A part or component covered by first article inspection or PPAP."

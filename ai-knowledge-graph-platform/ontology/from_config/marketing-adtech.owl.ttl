@@ -1,0 +1,302 @@
+# DO NOT EDIT: generated from the domain ontology YAML by graphrag/graph/ontology_owl_export.py
+@prefix cls: <https://graphrag.example.com/ontology/marketing-adtech/class#> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix rel: <https://graphrag.example.com/ontology/marketing-adtech/relation#> .
+
+<https://graphrag.example.com/ontology/marketing-adtech> a owl:Ontology ;
+    owl:versionInfo "1.0.0" .
+
+rel:ACTIVATED_VIA a owl:ObjectProperty ;
+    rdfs:label "Activated via"@en ;
+    rdfs:domain [ a owl:Class ;
+            owl:unionOf ( cls:CAMPAIGN cls:LINE_ITEM ) ] ;
+    rdfs:range cls:DSP .
+
+rel:APPROVED_UNDER a owl:ObjectProperty ;
+    rdfs:label "Approved under"@en ;
+    rdfs:domain cls:CAMPAIGN_BRIEF ;
+    rdfs:range cls:BRAND_GUIDELINE .
+
+rel:BELONGS_TO a owl:ObjectProperty,
+        owl:TransitiveProperty ;
+    rdfs:label "Belongs to"@en ;
+    rdfs:domain cls:LINE_ITEM ;
+    rdfs:range cls:CAMPAIGN ;
+    owl:inverseOf rel:CONTAINS_LINE_ITEM .
+
+rel:BID_USING a owl:FunctionalProperty,
+        owl:ObjectProperty ;
+    rdfs:label "Bid using"@en ;
+    rdfs:domain cls:LINE_ITEM ;
+    rdfs:range cls:BIDDING_STRATEGY .
+
+rel:BUYS_ON_BEHALF_OF a owl:ObjectProperty ;
+    rdfs:label "Buys on behalf of"@en ;
+    rdfs:domain cls:AGENCY ;
+    rdfs:range cls:ADVERTISER ;
+    owl:inverseOf rel:REPRESENTED_BY .
+
+rel:CLASSIFIED_AS a owl:FunctionalProperty,
+        owl:ObjectProperty ;
+    rdfs:label "Classified as"@en .
+
+rel:COMPLIES_WITH a owl:ObjectProperty ;
+    rdfs:label "Complies with"@en ;
+    rdfs:domain [ a owl:Class ;
+            owl:unionOf ( cls:CAMPAIGN cls:LINE_ITEM cls:DSP cls:SSP ) ] ;
+    rdfs:range cls:PRIVACY_REGULATION .
+
+rel:EXCLUDES_CATEGORY a owl:ObjectProperty ;
+    rdfs:label "Excludes category"@en ;
+    rdfs:domain [ a owl:Class ;
+            owl:unionOf ( cls:STATEMENT_OF_WORK cls:DATA_PRIVACY_POLICY cls:BRAND_SAFETY_POLICY ) ] ;
+    rdfs:range [ a owl:Class ;
+            owl:unionOf ( cls:EXCLUDED_CATEGORY cls:ADJACENCY_VERTICAL ) ] .
+
+rel:EXTENDS_ADJACENCY a owl:ObjectProperty ;
+    rdfs:label "Extends adjacency"@en ;
+    rdfs:domain [ a owl:Class ;
+            owl:unionOf ( cls:CAMPAIGN_BRIEF cls:CAMPAIGN ) ] ;
+    rdfs:range cls:ADJACENCY_VERTICAL .
+
+rel:GOVERNED_BY_DEAL a owl:FunctionalProperty,
+        owl:ObjectProperty ;
+    rdfs:label "Governed by deal"@en ;
+    rdfs:domain cls:LINE_ITEM ;
+    rdfs:range cls:DEAL .
+
+rel:GOVERNS a owl:ObjectProperty ;
+    rdfs:label "Governs"@en ;
+    rdfs:domain [ a owl:Class ;
+            owl:unionOf ( cls:STATEMENT_OF_WORK cls:DATA_PRIVACY_POLICY cls:BRAND_GUIDELINE ) ] ;
+    rdfs:range [ a owl:Class ;
+            owl:unionOf ( cls:CAMPAIGN cls:LINE_ITEM cls:ADVERTISER cls:AGENCY ) ] ;
+    owl:inverseOf rel:GOVERNED_BY .
+
+rel:MANAGES a owl:ObjectProperty ;
+    rdfs:label "Manages"@en ;
+    rdfs:domain cls:AGENCY ;
+    rdfs:range [ a owl:Class ;
+            owl:unionOf ( cls:CAMPAIGN cls:MEDIA_PLAN ) ] ;
+    owl:inverseOf rel:MANAGED_BY .
+
+rel:MANDATES a owl:ObjectProperty ;
+    rdfs:label "Mandates"@en ;
+    rdfs:domain [ a owl:Class ;
+            owl:unionOf ( cls:ADVERTISER cls:AGENCY cls:PRIVACY_REGULATION ) ] ;
+    rdfs:range [ a owl:Class ;
+            owl:unionOf ( cls:BRAND_SAFETY_POLICY cls:FREQUENCY_CAP cls:CAMPAIGN cls:LINE_ITEM ) ] ;
+    owl:inverseOf rel:MANDATED_BY .
+
+rel:MONITORED_BY a owl:ObjectProperty ;
+    rdfs:label "Monitored by"@en ;
+    rdfs:domain [ a owl:Class ;
+            owl:unionOf ( cls:CAMPAIGN cls:LINE_ITEM ) ] ;
+    rdfs:range cls:KPI .
+
+rel:PART_OF a owl:ObjectProperty ;
+    rdfs:label "Part of"@en ;
+    rdfs:domain cls:CAMPAIGN ;
+    rdfs:range cls:MEDIA_PLAN ;
+    owl:inverseOf rel:INCLUDES_CAMPAIGN .
+
+rel:PREVAILS_OVER a owl:ObjectProperty ;
+    rdfs:label "Prevails over"@en ;
+    rdfs:domain [ a owl:Class ;
+            owl:unionOf ( cls:STATEMENT_OF_WORK cls:DATA_PRIVACY_POLICY ) ] ;
+    rdfs:range [ a owl:Class ;
+            owl:unionOf ( cls:MEDIA_PLAN cls:CAMPAIGN cls:CAMPAIGN_BRIEF cls:BRAND_GUIDELINE ) ] .
+
+rel:PROHIBITS_INFERENCE a owl:ObjectProperty ;
+    rdfs:label "Prohibits inference"@en ;
+    rdfs:domain cls:DATA_PRIVACY_POLICY ;
+    rdfs:range cls:SENSITIVE_CATEGORY .
+
+rel:REQUIRES_CONSENT a owl:ObjectProperty ;
+    rdfs:label "Requires consent"@en ;
+    rdfs:domain [ a owl:Class ;
+            owl:unionOf ( cls:LINE_ITEM cls:CAMPAIGN ) ] ;
+    rdfs:range cls:CONSENT_SIGNAL .
+
+rel:SERVES_ON a owl:ObjectProperty ;
+    rdfs:label "Serves on"@en ;
+    rdfs:domain [ a owl:Class ;
+            owl:unionOf ( cls:LINE_ITEM cls:CREATIVE ) ] ;
+    rdfs:range [ a owl:Class ;
+            owl:unionOf ( cls:PUBLISHER cls:INVENTORY_TYPE ) ] .
+
+rel:SOURCES_INVENTORY_FROM a owl:ObjectProperty ;
+    rdfs:label "Sources inventory from"@en ;
+    rdfs:domain cls:DSP ;
+    rdfs:range [ a owl:Class ;
+            owl:unionOf ( cls:SSP cls:AD_EXCHANGE ) ] ;
+    owl:inverseOf rel:SUPPLIES_INVENTORY_TO .
+
+rel:SUPERSEDES a owl:ObjectProperty,
+        owl:TransitiveProperty ;
+    rdfs:label "Supersedes"@en ;
+    rdfs:domain [ a owl:Class ;
+            owl:unionOf ( cls:MARKETING_DOCUMENT cls:STATEMENT_OF_WORK cls:BRAND_GUIDELINE cls:DATA_PRIVACY_POLICY ) ] ;
+    rdfs:range [ a owl:Class ;
+            owl:unionOf ( cls:MARKETING_DOCUMENT cls:STATEMENT_OF_WORK cls:BRAND_GUIDELINE cls:DATA_PRIVACY_POLICY ) ] .
+
+rel:TARGETS a owl:ObjectProperty ;
+    rdfs:label "Targets"@en ;
+    rdfs:domain [ a owl:Class ;
+            owl:unionOf ( cls:LINE_ITEM cls:CAMPAIGN cls:CAMPAIGN_BRIEF ) ] ;
+    rdfs:range cls:AUDIENCE_SEGMENT .
+
+rel:USES_CREATIVE a owl:ObjectProperty ;
+    rdfs:label "Uses creative"@en ;
+    rdfs:domain cls:LINE_ITEM ;
+    rdfs:range cls:CREATIVE ;
+    owl:inverseOf rel:USED_IN_LINE_ITEM .
+
+cls:AD_EXCHANGE a owl:Class ;
+    rdfs:label "Ad exchange"@en ;
+    rdfs:subClassOf cls:ORG .
+
+cls:AUDIENCE_SEGMENT a owl:Class ;
+    rdfs:label "Audience segment"@en ;
+    rdfs:subClassOf cls:CONCEPT .
+
+cls:BIDDING_STRATEGY a owl:Class ;
+    rdfs:label "Bidding strategy"@en ;
+    rdfs:subClassOf cls:CONCEPT .
+
+cls:CONSENT_SIGNAL a owl:Class ;
+    rdfs:label "Consent signal"@en ;
+    rdfs:subClassOf cls:CONCEPT .
+
+cls:DEAL a owl:Class ;
+    rdfs:label "Deal"@en ;
+    rdfs:subClassOf cls:CONCEPT .
+
+cls:EXCLUDED_CATEGORY a owl:Class ;
+    rdfs:label "Excluded category"@en ;
+    rdfs:subClassOf cls:CONCEPT .
+
+cls:INVENTORY_TYPE a owl:Class ;
+    rdfs:label "Inventory type"@en ;
+    rdfs:subClassOf cls:CONCEPT .
+
+cls:KPI a owl:Class ;
+    rdfs:label "Kpi"@en ;
+    rdfs:subClassOf cls:CONCEPT .
+
+cls:PUBLISHER a owl:Class ;
+    rdfs:label "Publisher"@en ;
+    rdfs:subClassOf cls:ORG .
+
+cls:SENSITIVE_CATEGORY a owl:Class ;
+    rdfs:label "Sensitive category"@en ;
+    rdfs:subClassOf cls:CONCEPT .
+
+rel:CONTAINS_LINE_ITEM a owl:ObjectProperty ;
+    rdfs:label "Contains line item"@en .
+
+rel:GOVERNED_BY a owl:ObjectProperty ;
+    rdfs:label "Governed by"@en ;
+    rdfs:domain [ a owl:Class ;
+            owl:unionOf ( cls:CAMPAIGN cls:LINE_ITEM cls:ADVERTISER cls:AGENCY ) ] ;
+    rdfs:range [ a owl:Class ;
+            owl:unionOf ( cls:STATEMENT_OF_WORK cls:DATA_PRIVACY_POLICY cls:BRAND_GUIDELINE ) ] .
+
+rel:INCLUDES_CAMPAIGN a owl:ObjectProperty ;
+    rdfs:label "Includes campaign"@en .
+
+rel:MANAGED_BY a owl:ObjectProperty ;
+    rdfs:label "Managed by"@en .
+
+rel:MANDATED_BY a owl:ObjectProperty ;
+    rdfs:label "Mandated by"@en ;
+    rdfs:domain [ a owl:Class ;
+            owl:unionOf ( cls:BRAND_SAFETY_POLICY cls:FREQUENCY_CAP cls:CAMPAIGN cls:LINE_ITEM ) ] ;
+    rdfs:range [ a owl:Class ;
+            owl:unionOf ( cls:ADVERTISER cls:AGENCY cls:PRIVACY_REGULATION ) ] .
+
+rel:REPRESENTED_BY a owl:ObjectProperty ;
+    rdfs:label "Represented by"@en .
+
+rel:SUPPLIES_INVENTORY_TO a owl:ObjectProperty ;
+    rdfs:label "Supplies inventory to"@en .
+
+rel:USED_IN_LINE_ITEM a owl:ObjectProperty ;
+    rdfs:label "Used in line item"@en .
+
+cls:ADJACENCY_VERTICAL a owl:Class ;
+    rdfs:label "Adjacency vertical"@en ;
+    rdfs:subClassOf cls:CONCEPT .
+
+cls:CREATIVE a owl:Class ;
+    rdfs:label "Creative"@en ;
+    rdfs:subClassOf cls:CONCEPT .
+
+cls:FREQUENCY_CAP a owl:Class ;
+    rdfs:label "Frequency cap"@en ;
+    rdfs:subClassOf cls:CONCEPT .
+
+cls:SSP a owl:Class ;
+    rdfs:label "Ssp"@en ;
+    rdfs:subClassOf cls:ORG .
+
+cls:BRAND_SAFETY_POLICY a owl:Class ;
+    rdfs:label "Brand safety policy"@en ;
+    rdfs:subClassOf cls:CONCEPT .
+
+cls:DSP a owl:Class ;
+    rdfs:label "Dsp"@en ;
+    rdfs:subClassOf cls:ORG .
+
+cls:PRIVACY_REGULATION a owl:Class ;
+    rdfs:label "Privacy regulation"@en ;
+    rdfs:subClassOf cls:CONCEPT .
+
+cls:CAMPAIGN_BRIEF a owl:Class ;
+    rdfs:label "Campaign brief"@en ;
+    rdfs:subClassOf cls:MARKETING_DOCUMENT .
+
+cls:MEDIA_PLAN a owl:Class ;
+    rdfs:label "Media plan"@en ;
+    rdfs:subClassOf cls:CONCEPT .
+
+cls:ADVERTISER a owl:Class ;
+    rdfs:label "Advertiser"@en ;
+    rdfs:subClassOf cls:ORG .
+
+cls:AGENCY a owl:Class ;
+    rdfs:label "Agency"@en ;
+    rdfs:subClassOf cls:ORG .
+
+cls:BRAND_GUIDELINE a owl:Class ;
+    rdfs:label "Brand guideline"@en ;
+    rdfs:subClassOf cls:MARKETING_DOCUMENT .
+
+cls:MARKETING_DOCUMENT a owl:Class ;
+    rdfs:label "Marketing document"@en ;
+    rdfs:subClassOf cls:CONCEPT .
+
+cls:ORG a owl:Class ;
+    rdfs:label "Org"@en .
+
+cls:STATEMENT_OF_WORK a owl:Class ;
+    rdfs:label "Statement of work"@en ;
+    rdfs:subClassOf cls:MARKETING_DOCUMENT .
+
+cls:DATA_PRIVACY_POLICY a owl:Class ;
+    rdfs:label "Data privacy policy"@en ;
+    rdfs:subClassOf cls:MARKETING_DOCUMENT .
+
+cls:LINE_ITEM a owl:Class ;
+    rdfs:label "Line item"@en ;
+    rdfs:subClassOf cls:CAMPAIGN .
+
+cls:CAMPAIGN a owl:Class ;
+    rdfs:label "Campaign"@en ;
+    rdfs:subClassOf cls:MEDIA_PLAN .
+
+cls:CONCEPT a owl:Class ;
+    rdfs:label "Concept"@en .
+

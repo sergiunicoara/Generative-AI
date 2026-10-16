@@ -32,9 +32,12 @@ from pathlib import Path
 
 import structlog
 from rdflib import Graph
+from rdflib import URIRef
 from rdflib.namespace import OWL
 
 log = structlog.get_logger(__name__)
+
+_OWLRL_ERROR = URIRef("http://www.daml.org/2002/03/agents/agent-ont#error")
 
 
 class OWLRLReasoner:
@@ -117,21 +120,26 @@ class OWLRLReasoner:
                  new_triples=added, total=len(self._g))
         return added
 
-    def is_consistent(self) -> bool:
-        """Return False if OWL-RL entailment derives owl:Nothing.
+    def inconsistencies(self) -> list[str]:
+        """Messages for every contradiction the closure found.
 
-        Under OWL-RL semantics a graph is inconsistent when an individual
-        is typed as ``owl:Nothing`` (the empty class) — i.e. there exists a
-        triple ``(individual, rdf:type, owl:Nothing)``.  The ``owlrl``
-        reasoner materialises such a triple when it detects a contradiction.
-
-        Returns
-        -------
-        bool
-            ``True`` if the graph is consistent, ``False`` otherwise.
+        owlrl reports some contradictions (a disjointness violation, ``sameAs`` together with ``differentFrom``)
+        only as ``agent-ont#error`` annotations, without typing anything as ``owl:Nothing``; others do add
+        ``(x, rdf:type, owl:Nothing)``. Both kinds are returned. Meaningful only after ``apply_closure()``.
         """
         from rdflib.namespace import RDF
-        return not any(self._g.subjects(RDF.type, OWL.Nothing))
+
+        messages = [str(o) for o in self._g.objects(None, _OWLRL_ERROR)]
+        messages += [f"{s} is typed as owl:Nothing" for s in self._g.subjects(RDF.type, OWL.Nothing)]
+        return sorted(set(messages))
+
+    def is_consistent(self) -> bool:
+        """Return False if the closure found any contradiction (see ``inconsistencies``).
+
+        Under OWL-RL a graph is inconsistent when an individual is typed ``owl:Nothing`` or when owlrl reports a
+        violated axiom such as disjoint classes sharing an individual.
+        """
+        return not self.inconsistencies()
 
     def inferred_triples(self, original: Graph) -> list[tuple]:
         """Return only the triples added by the OWL-RL closure.

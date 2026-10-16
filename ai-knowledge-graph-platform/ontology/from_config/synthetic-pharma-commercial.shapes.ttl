@@ -1,0 +1,69 @@
+# DO NOT EDIT: generated from the domain ontology YAML by graphrag/graph/ontology_owl_export.py
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix sh: <http://www.w3.org/ns/shacl#> .
+@prefix shape: <https://graphrag.example.com/ontology/synthetic-pharma-commercial/shape#> .
+
+shape:APPLIES_TO a sh:NodeShape ;
+    sh:message "The subject of APPLIES_TO must be one of: COMMERCIAL_POLICY." ;
+    sh:or ( [ sh:class <https://graphrag.example.com/ontology/synthetic-pharma-commercial/class#COMMERCIAL_POLICY> ] ) ;
+    sh:property [ sh:message "Every object of APPLIES_TO must be one of: COMMERCIAL_CONTENT, PHARMA_PRODUCT, MARKET." ;
+            sh:or ( [ sh:class <https://graphrag.example.com/ontology/synthetic-pharma-commercial/class#COMMERCIAL_CONTENT> ] [ sh:class <https://graphrag.example.com/ontology/synthetic-pharma-commercial/class#PHARMA_PRODUCT> ] [ sh:class <https://graphrag.example.com/ontology/synthetic-pharma-commercial/class#MARKET> ] ) ;
+            sh:path <https://graphrag.example.com/ontology/synthetic-pharma-commercial/relation#APPLIES_TO> ] ;
+    sh:targetSubjectsOf <https://graphrag.example.com/ontology/synthetic-pharma-commercial/relation#APPLIES_TO> .
+
+shape:APPROVED_FOR a sh:NodeShape ;
+    sh:message "The subject of APPROVED_FOR must be one of: COMMERCIAL_CONTENT." ;
+    sh:or ( [ sh:class <https://graphrag.example.com/ontology/synthetic-pharma-commercial/class#COMMERCIAL_CONTENT> ] ) ;
+    sh:property [ sh:message "Every object of APPROVED_FOR must be one of: MARKET, INDICATION, MEDICAL_SPECIALTY." ;
+            sh:or ( [ sh:class <https://graphrag.example.com/ontology/synthetic-pharma-commercial/class#MARKET> ] [ sh:class <https://graphrag.example.com/ontology/synthetic-pharma-commercial/class#INDICATION> ] [ sh:class <https://graphrag.example.com/ontology/synthetic-pharma-commercial/class#MEDICAL_SPECIALTY> ] ) ;
+            sh:path <https://graphrag.example.com/ontology/synthetic-pharma-commercial/relation#APPROVED_FOR> ] ;
+    sh:targetSubjectsOf <https://graphrag.example.com/ontology/synthetic-pharma-commercial/relation#APPROVED_FOR> .
+
+shape:GOVERNS a sh:NodeShape ;
+    sh:message "The subject of GOVERNS must be one of: COMMERCIAL_POLICY." ;
+    sh:or ( [ sh:class <https://graphrag.example.com/ontology/synthetic-pharma-commercial/class#COMMERCIAL_POLICY> ] ) ;
+    sh:property [ sh:message "Every object of GOVERNS must be one of: COMMERCIAL_CAMPAIGN, HCP_INTERACTION, COMMERCIAL_CONTENT." ;
+            sh:or ( [ sh:class <https://graphrag.example.com/ontology/synthetic-pharma-commercial/class#COMMERCIAL_CAMPAIGN> ] [ sh:class <https://graphrag.example.com/ontology/synthetic-pharma-commercial/class#HCP_INTERACTION> ] [ sh:class <https://graphrag.example.com/ontology/synthetic-pharma-commercial/class#COMMERCIAL_CONTENT> ] ) ;
+            sh:path <https://graphrag.example.com/ontology/synthetic-pharma-commercial/relation#GOVERNS> ] ;
+    sh:targetSubjectsOf <https://graphrag.example.com/ontology/synthetic-pharma-commercial/relation#GOVERNS> .
+
+shape:SPECIALIZES_IN a sh:NodeShape ;
+    sh:message "The subject of SPECIALIZES_IN must be one of: PERSON." ;
+    sh:or ( [ sh:class <https://graphrag.example.com/ontology/synthetic-pharma-commercial/class#PERSON> ] ) ;
+    sh:property [ sh:message "Every object of SPECIALIZES_IN must be one of: MEDICAL_SPECIALTY." ;
+            sh:or ( [ sh:class <https://graphrag.example.com/ontology/synthetic-pharma-commercial/class#MEDICAL_SPECIALTY> ] ) ;
+            sh:path <https://graphrag.example.com/ontology/synthetic-pharma-commercial/relation#SPECIALIZES_IN> ] ;
+    sh:targetSubjectsOf <https://graphrag.example.com/ontology/synthetic-pharma-commercial/relation#SPECIALIZES_IN> .
+
+shape:SUPERSEDES a sh:NodeShape ;
+    sh:message "The subject of SUPERSEDES must be one of: COMMERCIAL_CONTENT." ;
+    sh:or ( [ sh:class <https://graphrag.example.com/ontology/synthetic-pharma-commercial/class#COMMERCIAL_CONTENT> ] ) ;
+    sh:property [ sh:message "Every object of SUPERSEDES must be one of: COMMERCIAL_CONTENT." ;
+            sh:or ( [ sh:class <https://graphrag.example.com/ontology/synthetic-pharma-commercial/class#COMMERCIAL_CONTENT> ] ) ;
+            sh:path <https://graphrag.example.com/ontology/synthetic-pharma-commercial/relation#SUPERSEDES> ] ;
+    sh:targetSubjectsOf <https://graphrag.example.com/ontology/synthetic-pharma-commercial/relation#SUPERSEDES> .
+
+shape:SUPPORTED_BY a sh:NodeShape ;
+    sh:message "The subject of SUPPORTED_BY must be one of: MEDICAL_CLAIM." ;
+    sh:or ( [ sh:class <https://graphrag.example.com/ontology/synthetic-pharma-commercial/class#MEDICAL_CLAIM> ] ) ;
+    sh:property [ sh:message "Every object of SUPPORTED_BY must be one of: COMMERCIAL_CONTENT." ;
+            sh:or ( [ sh:class <https://graphrag.example.com/ontology/synthetic-pharma-commercial/class#COMMERCIAL_CONTENT> ] ) ;
+            sh:path <https://graphrag.example.com/ontology/synthetic-pharma-commercial/relation#SUPPORTED_BY> ] ;
+    sh:targetSubjectsOf <https://graphrag.example.com/ontology/synthetic-pharma-commercial/relation#SUPPORTED_BY> .
+
+shape:TREATS a sh:NodeShape ;
+    sh:message "The subject of TREATS must be one of: PHARMA_PRODUCT." ;
+    sh:or ( [ sh:class <https://graphrag.example.com/ontology/synthetic-pharma-commercial/class#PHARMA_PRODUCT> ] ) ;
+    sh:property [ sh:message "Every object of TREATS must be one of: INDICATION." ;
+            sh:or ( [ sh:class <https://graphrag.example.com/ontology/synthetic-pharma-commercial/class#INDICATION> ] ) ;
+            sh:path <https://graphrag.example.com/ontology/synthetic-pharma-commercial/relation#TREATS> ] ;
+    sh:targetSubjectsOf <https://graphrag.example.com/ontology/synthetic-pharma-commercial/relation#TREATS> .
+
+shape:USES_CONTENT a sh:NodeShape ;
+    sh:message "The subject of USES_CONTENT must be one of: COMMERCIAL_CAMPAIGN, HCP_INTERACTION." ;
+    sh:or ( [ sh:class <https://graphrag.example.com/ontology/synthetic-pharma-commercial/class#COMMERCIAL_CAMPAIGN> ] [ sh:class <https://graphrag.example.com/ontology/synthetic-pharma-commercial/class#HCP_INTERACTION> ] ) ;
+    sh:property [ sh:message "Every object of USES_CONTENT must be one of: COMMERCIAL_CONTENT." ;
+            sh:or ( [ sh:class <https://graphrag.example.com/ontology/synthetic-pharma-commercial/class#COMMERCIAL_CONTENT> ] ) ;
+            sh:path <https://graphrag.example.com/ontology/synthetic-pharma-commercial/relation#USES_CONTENT> ] ;
+    sh:targetSubjectsOf <https://graphrag.example.com/ontology/synthetic-pharma-commercial/relation#USES_CONTENT> .
+

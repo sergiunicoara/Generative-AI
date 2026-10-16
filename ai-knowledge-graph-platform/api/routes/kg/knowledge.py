@@ -1137,6 +1137,7 @@ async def reason_rdf(request: ReasonRdfRequest, tenant: str = Depends(get_tenant
     inferred = reasoner.inferred_triples(original)
     return {
         "consistent": reasoner.is_consistent(),
+        "inconsistencies": reasoner.inconsistencies()[:limit],
         "new_triples": added,
         "inferred": [[t.n3() for t in triple] for triple in inferred[:limit]],
         "truncated": len(inferred) > limit,

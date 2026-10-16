@@ -1,0 +1,235 @@
+# DO NOT EDIT: generated from the domain ontology YAML by graphrag/graph/ontology_owl_export.py
+@prefix cls: <https://graphrag.example.com/ontology/aerospace-regulatory/class#> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix rel: <https://graphrag.example.com/ontology/aerospace-regulatory/relation#> .
+
+<https://graphrag.example.com/ontology/aerospace-regulatory> a owl:Ontology ;
+    owl:versionInfo "1.0.0" .
+
+cls:AIRCRAFT_FLIGHT_MANUAL a owl:Class ;
+    rdfs:label "Aircraft flight manual"@en ;
+    rdfs:subClassOf cls:CONCEPT .
+
+cls:AIRWORTHINESS_APPROVAL a owl:Class ;
+    rdfs:label "Airworthiness approval"@en ;
+    rdfs:subClassOf cls:REGULATION .
+
+cls:FLIGHT_OPERATION a owl:Class ;
+    rdfs:label "Flight operation"@en ;
+    rdfs:subClassOf cls:EVENT .
+
+cls:LINE_REPLACEABLE_UNIT a owl:Class ;
+    rdfs:label "Line replaceable unit"@en ;
+    rdfs:subClassOf cls:AIRCRAFT_COMPONENT .
+
+cls:SERVICE_INFORMATION_LETTER a owl:Class ;
+    rdfs:label "Service information letter"@en ;
+    rdfs:subClassOf cls:CONCEPT .
+
+cls:SPECIAL_AIRWORTHINESS_INFO a owl:Class ;
+    rdfs:label "Special airworthiness info"@en ;
+    rdfs:subClassOf cls:REGULATION .
+
+cls:STANDARDS_BODY a owl:Class ;
+    rdfs:label "Standards body"@en ;
+    rdfs:subClassOf cls:ORG .
+
+cls:SUPPLEMENTAL_TYPE_CERTIFICATE a owl:Class ;
+    rdfs:label "Supplemental type certificate"@en ;
+    rdfs:subClassOf cls:TYPE_CERTIFICATE .
+
+cls:TECHNICAL_STANDARD_ORDER a owl:Class ;
+    rdfs:label "Technical standard order"@en ;
+    rdfs:subClassOf cls:REGULATION .
+
+rel:ADDRESSES a owl:ObjectProperty ;
+    rdfs:label "Addresses"@en ;
+    rdfs:domain [ a owl:Class ;
+            owl:unionOf ( cls:AIRWORTHINESS_DIRECTIVE cls:SERVICE_BULLETIN cls:ENGINEERING_ORDER ) ] ;
+    rdfs:range [ a owl:Class ;
+            owl:unionOf ( cls:FAILURE_MODE cls:HAZARD ) ] .
+
+rel:AIRWORTHINESS_AUTHORITY_FOR a owl:FunctionalProperty,
+        owl:ObjectProperty ;
+    rdfs:label "Airworthiness authority for"@en .
+
+rel:APPLIES_TO a owl:ObjectProperty ;
+    rdfs:label "Applies to"@en ;
+    rdfs:domain [ a owl:Class ;
+            owl:unionOf ( cls:REGULATION cls:AIRWORTHINESS_DIRECTIVE cls:TYPE_CERTIFICATE ) ] ;
+    rdfs:range [ a owl:Class ;
+            owl:unionOf ( cls:AIRCRAFT_TYPE cls:AIRCRAFT_COMPONENT cls:AIRCRAFT_CONFIGURATION cls:ORG ) ] .
+
+rel:CERTIFIES a owl:ObjectProperty ;
+    rdfs:label "Certifies"@en ;
+    rdfs:domain [ a owl:Class ;
+            owl:unionOf ( cls:REGULATOR cls:CERTIFICATION_AUTHORITY ) ] ;
+    rdfs:range [ a owl:Class ;
+            owl:unionOf ( cls:AIRCRAFT_TYPE cls:AIRCRAFT_COMPONENT cls:ORG ) ] ;
+    owl:inverseOf rel:CERTIFIED_BY .
+
+rel:CORRECTS a owl:ObjectProperty ;
+    rdfs:label "Corrects"@en ;
+    rdfs:domain [ a owl:Class ;
+            owl:unionOf ( cls:SERVICE_BULLETIN cls:ENGINEERING_ORDER cls:AIRWORTHINESS_DIRECTIVE ) ] ;
+    rdfs:range [ a owl:Class ;
+            owl:unionOf ( cls:FAILURE_MODE cls:INCIDENT_OR_ACCIDENT ) ] .
+
+rel:DESIGNED_TO a owl:ObjectProperty ;
+    rdfs:label "Designed to"@en ;
+    rdfs:domain [ a owl:Class ;
+            owl:unionOf ( cls:AIRCRAFT_COMPONENT cls:SOFTWARE_COMPONENT ) ] ;
+    rdfs:range cls:DESIGN_ASSURANCE_LEVEL .
+
+rel:INSPECTED_UNDER a owl:ObjectProperty ;
+    rdfs:label "Inspected under"@en ;
+    rdfs:domain cls:MAINTENANCE_EVENT ;
+    rdfs:range [ a owl:Class ;
+            owl:unionOf ( cls:MAINTENANCE_PROCEDURE cls:AIRWORTHINESS_DIRECTIVE ) ] .
+
+rel:MAINTAINED_BY a owl:ObjectProperty ;
+    rdfs:label "Maintained by"@en ;
+    rdfs:domain [ a owl:Class ;
+            owl:unionOf ( cls:AIRCRAFT_TYPE cls:AIRCRAFT_COMPONENT ) ] ;
+    rdfs:range cls:ORG ;
+    owl:inverseOf rel:MAINTAINS .
+
+rel:MANDATED_BY a owl:ObjectProperty ;
+    rdfs:label "Mandated by"@en ;
+    rdfs:domain [ a owl:Class ;
+            owl:unionOf ( cls:REGULATION cls:MAINTENANCE_PROCEDURE cls:AIRWORTHINESS_LIMITATION ) ] ;
+    rdfs:range [ a owl:Class ;
+            owl:unionOf ( cls:REGULATOR cls:CERTIFICATION_AUTHORITY ) ] ;
+    owl:inverseOf rel:MANDATES .
+
+rel:MANUFACTURED_UNDER a owl:ObjectProperty ;
+    rdfs:label "Manufactured under"@en ;
+    rdfs:domain cls:AIRCRAFT_COMPONENT ;
+    rdfs:range [ a owl:Class ;
+            owl:unionOf ( cls:PARTS_MANUFACTURER_APPROVAL cls:TYPE_CERTIFICATE ) ] .
+
+rel:OPERATED_BY a owl:ObjectProperty ;
+    rdfs:label "Operated by"@en ;
+    rdfs:domain [ a owl:Class ;
+            owl:unionOf ( cls:AIRCRAFT_TYPE cls:AIRCRAFT_CONFIGURATION ) ] ;
+    rdfs:range cls:ORG ;
+    owl:inverseOf rel:OPERATES .
+
+rel:SUPERSEDES a owl:ObjectProperty,
+        owl:TransitiveProperty ;
+    rdfs:label "Supersedes"@en ;
+    rdfs:domain [ a owl:Class ;
+            owl:unionOf ( cls:REGULATION cls:AIRWORTHINESS_DIRECTIVE cls:SERVICE_BULLETIN ) ] ;
+    rdfs:range [ a owl:Class ;
+            owl:unionOf ( cls:REGULATION cls:AIRWORTHINESS_DIRECTIVE cls:SERVICE_BULLETIN ) ] .
+
+rel:TYPE_CERTIFICATE_OF a owl:FunctionalProperty,
+        owl:ObjectProperty ;
+    rdfs:label "Type certificate of"@en .
+
+cls:AIRWORTHINESS_LIMITATION a owl:Class ;
+    rdfs:label "Airworthiness limitation"@en ;
+    rdfs:subClassOf cls:REGULATION .
+
+cls:DESIGN_ASSURANCE_LEVEL a owl:Class ;
+    rdfs:label "Design assurance level"@en ;
+    rdfs:subClassOf cls:CONCEPT .
+
+cls:HAZARD a owl:Class ;
+    rdfs:label "Hazard"@en ;
+    rdfs:subClassOf cls:CONCEPT .
+
+cls:INCIDENT_OR_ACCIDENT a owl:Class ;
+    rdfs:label "Incident or accident"@en ;
+    rdfs:subClassOf cls:EVENT .
+
+cls:MAINTENANCE_EVENT a owl:Class ;
+    rdfs:label "Maintenance event"@en ;
+    rdfs:subClassOf cls:EVENT .
+
+cls:PARTS_MANUFACTURER_APPROVAL a owl:Class ;
+    rdfs:label "Parts manufacturer approval"@en ;
+    rdfs:subClassOf cls:REGULATION .
+
+cls:SOFTWARE_COMPONENT a owl:Class ;
+    rdfs:label "Software component"@en ;
+    rdfs:subClassOf cls:AIRCRAFT_COMPONENT .
+
+rel:CERTIFIED_BY a owl:ObjectProperty ;
+    rdfs:label "Certified by"@en ;
+    rdfs:domain [ a owl:Class ;
+            owl:unionOf ( cls:AIRCRAFT_TYPE cls:AIRCRAFT_COMPONENT cls:ORG ) ] ;
+    rdfs:range [ a owl:Class ;
+            owl:unionOf ( cls:REGULATOR cls:CERTIFICATION_AUTHORITY ) ] .
+
+rel:MAINTAINS a owl:ObjectProperty ;
+    rdfs:label "Maintains"@en .
+
+rel:MANDATES a owl:ObjectProperty ;
+    rdfs:label "Mandates"@en .
+
+rel:OPERATES a owl:ObjectProperty ;
+    rdfs:label "Operates"@en .
+
+cls:AIRCRAFT_CONFIGURATION a owl:Class ;
+    rdfs:label "Aircraft configuration"@en ;
+    rdfs:subClassOf cls:PRODUCT .
+
+cls:ENGINEERING_ORDER a owl:Class ;
+    rdfs:label "Engineering order"@en ;
+    rdfs:subClassOf cls:CONCEPT .
+
+cls:FAILURE_MODE a owl:Class ;
+    rdfs:label "Failure mode"@en ;
+    rdfs:subClassOf cls:CONCEPT .
+
+cls:MAINTENANCE_PROCEDURE a owl:Class ;
+    rdfs:label "Maintenance procedure"@en ;
+    rdfs:subClassOf cls:CONCEPT .
+
+cls:CERTIFICATION_AUTHORITY a owl:Class ;
+    rdfs:label "Certification authority"@en ;
+    rdfs:subClassOf cls:REGULATOR .
+
+cls:EVENT a owl:Class ;
+    rdfs:label "Event"@en .
+
+cls:PRODUCT a owl:Class ;
+    rdfs:label "Product"@en .
+
+cls:TYPE_CERTIFICATE a owl:Class ;
+    rdfs:label "Type certificate"@en ;
+    rdfs:subClassOf cls:REGULATION .
+
+cls:REGULATOR a owl:Class ;
+    rdfs:label "Regulator"@en ;
+    rdfs:subClassOf cls:ORG .
+
+cls:SERVICE_BULLETIN a owl:Class ;
+    rdfs:label "Service bulletin"@en ;
+    rdfs:subClassOf cls:CONCEPT .
+
+cls:AIRCRAFT_TYPE a owl:Class ;
+    rdfs:label "Aircraft type"@en ;
+    rdfs:subClassOf cls:PRODUCT .
+
+cls:AIRWORTHINESS_DIRECTIVE a owl:Class ;
+    rdfs:label "Airworthiness directive"@en ;
+    rdfs:subClassOf cls:REGULATION .
+
+cls:ORG a owl:Class ;
+    rdfs:label "Org"@en .
+
+cls:AIRCRAFT_COMPONENT a owl:Class ;
+    rdfs:label "Aircraft component"@en ;
+    rdfs:subClassOf cls:PRODUCT .
+
+cls:CONCEPT a owl:Class ;
+    rdfs:label "Concept"@en .
+
+cls:REGULATION a owl:Class ;
+    rdfs:label "Regulation"@en ;
+    rdfs:subClassOf cls:CONCEPT .
+

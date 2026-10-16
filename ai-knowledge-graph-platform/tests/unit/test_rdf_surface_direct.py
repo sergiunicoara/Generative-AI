@@ -221,7 +221,16 @@ def test_reason_flags_an_inconsistent_graph(tmp_path, monkeypatch):
            "@prefix e: <http://e/> .\n"
            "e:Impossible rdfs:subClassOf owl:Nothing .\ne:x a e:Impossible .\n")
     _export(tmp_path, monkeypatch, ttl)
-    assert _client().post("/reason", json={}).json()["consistent"] is False
+    body = _client().post("/reason", json={}).json()
+    assert body["consistent"] is False and body["inconsistencies"]
+
+
+def test_reason_flags_a_disjointness_violation_with_its_message(tmp_path, monkeypatch):
+    ttl = ("@prefix owl: <http://www.w3.org/2002/07/owl#> .\n@prefix e: <http://e/> .\n"
+           "e:A owl:disjointWith e:B .\ne:x a e:A, e:B .\n")
+    _export(tmp_path, monkeypatch, ttl)
+    body = _client().post("/reason", json={}).json()
+    assert body["consistent"] is False and any("Disjoint classes" in m for m in body["inconsistencies"])
 
 
 def test_oversized_export_is_refused_with_413(tmp_path, monkeypatch):

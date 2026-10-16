@@ -180,3 +180,29 @@ class TestSourceCodeQuality:
         # Should not contain raw string concatenation like "@prefix" + ...
         assert '+ "@prefix"' not in src
         assert '+ "rdf:"' not in src
+
+
+# ── contradictions owlrl reports only as error annotations ─────────────────────
+
+class TestContradictionsReportedAsErrors:
+    def _closed(self, ttl: str) -> OWLRLReasoner:
+        from rdflib import Graph
+        reasoner = OWLRLReasoner(Graph().parse(data=ttl, format="turtle"))
+        reasoner.apply_closure()
+        return reasoner
+
+    def test_disjoint_classes_sharing_an_individual_are_inconsistent(self) -> None:
+        reasoner = self._closed("@prefix owl: <http://www.w3.org/2002/07/owl#> .\n@prefix e: <http://e/> .\n"
+                                "e:A owl:disjointWith e:B .\ne:x a e:A, e:B .\n")
+        assert reasoner.is_consistent() is False
+        assert any("Disjoint classes" in m for m in reasoner.inconsistencies())
+
+    def test_same_as_together_with_different_from_is_inconsistent(self) -> None:
+        reasoner = self._closed("@prefix owl: <http://www.w3.org/2002/07/owl#> .\n@prefix e: <http://e/> .\n"
+                                "e:a owl:sameAs e:b .\ne:a owl:differentFrom e:b .\n")
+        assert reasoner.is_consistent() is False
+
+    def test_disjoint_classes_with_separate_individuals_stay_consistent(self) -> None:
+        reasoner = self._closed("@prefix owl: <http://www.w3.org/2002/07/owl#> .\n@prefix e: <http://e/> .\n"
+                                "e:A owl:disjointWith e:B .\ne:x a e:A .\ne:y a e:B .\n")
+        assert reasoner.is_consistent() is True and reasoner.inconsistencies() == []

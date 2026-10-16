@@ -1,0 +1,164 @@
+# DO NOT EDIT: generated from the domain ontology YAML by graphrag/graph/ontology_owl_export.py
+@prefix cls: <https://graphrag.example.com/ontology/legal-contracts/class#> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix rel: <https://graphrag.example.com/ontology/legal-contracts/relation#> .
+
+<https://graphrag.example.com/ontology/legal-contracts> a owl:Ontology ;
+    owl:versionInfo "1.0.0" .
+
+cls:PROSPECTUS a owl:Class ;
+    rdfs:label "Prospectus"@en ;
+    rdfs:subClassOf cls:FUND_DOCUMENT .
+
+cls:STATEMENT_OF_WORK a owl:Class ;
+    rdfs:label "Statement of work"@en ;
+    rdfs:subClassOf cls:CONTRACT .
+
+rel:AMENDS a owl:ObjectProperty ;
+    rdfs:label "Amends"@en ;
+    rdfs:domain [ a owl:Class ;
+            owl:unionOf ( cls:AMENDMENT cls:SIDE_LETTER ) ] ;
+    rdfs:range [ a owl:Class ;
+            owl:unionOf ( cls:CONTRACT cls:CONTRACT_VERSION cls:CLAUSE ) ] .
+
+rel:GOVERNED_BY a owl:FunctionalProperty,
+        owl:ObjectProperty ;
+    rdfs:label "Governed by"@en ;
+    rdfs:domain [ a owl:Class ;
+            owl:unionOf ( cls:CONTRACT cls:CONTRACT_VERSION cls:AMENDMENT cls:FUND_DOCUMENT ) ] ;
+    rdfs:range [ a owl:Class ;
+            owl:unionOf ( cls:GOVERNING_LAW cls:JURISDICTION ) ] .
+
+rel:GRANTS a owl:ObjectProperty ;
+    rdfs:label "Grants"@en ;
+    rdfs:domain [ a owl:Class ;
+            owl:unionOf ( cls:CONTRACT cls:CONTRACT_VERSION cls:AMENDMENT cls:CLAUSE ) ] ;
+    rdfs:range cls:RIGHT .
+
+rel:HAS_CLAUSE a owl:ObjectProperty ;
+    rdfs:label "Has clause"@en ;
+    rdfs:domain [ a owl:Class ;
+            owl:unionOf ( cls:CONTRACT cls:CONTRACT_VERSION cls:AMENDMENT cls:FUND_DOCUMENT ) ] ;
+    rdfs:range cls:CLAUSE ;
+    owl:inverseOf rel:CLAUSE_OF .
+
+rel:IMPOSES a owl:ObjectProperty ;
+    rdfs:label "Imposes"@en ;
+    rdfs:domain [ a owl:Class ;
+            owl:unionOf ( cls:CONTRACT cls:CONTRACT_VERSION cls:AMENDMENT cls:CLAUSE ) ] ;
+    rdfs:range cls:OBLIGATION ;
+    owl:inverseOf rel:IMPOSED_BY .
+
+rel:OWES_PAYMENT_UNDER a owl:ObjectProperty ;
+    rdfs:label "Owes payment under"@en ;
+    rdfs:domain cls:LEGAL_PARTY ;
+    rdfs:range [ a owl:Class ;
+            owl:unionOf ( cls:PAYMENT_TERM cls:CONTRACT ) ] .
+
+rel:PARTY_TO a owl:ObjectProperty ;
+    rdfs:label "Party to"@en ;
+    rdfs:domain cls:LEGAL_PARTY ;
+    rdfs:range [ a owl:Class ;
+            owl:unionOf ( cls:CONTRACT cls:FUND_DOCUMENT ) ] ;
+    owl:inverseOf rel:HAS_PARTY .
+
+rel:REQUIRES_NOTICE a owl:ObjectProperty ;
+    rdfs:label "Requires notice"@en ;
+    rdfs:domain [ a owl:Class ;
+            owl:unionOf ( cls:CONTRACT cls:CLAUSE cls:OBLIGATION ) ] ;
+    rdfs:range cls:NOTICE .
+
+rel:SIGNED_BY a owl:ObjectProperty ;
+    rdfs:label "Signed by"@en ;
+    rdfs:domain [ a owl:Class ;
+            owl:unionOf ( cls:CONTRACT cls:AMENDMENT cls:FUND_DOCUMENT ) ] ;
+    rdfs:range [ a owl:Class ;
+            owl:unionOf ( cls:SIGNATORY cls:LEGAL_PARTY ) ] .
+
+rel:SUPERSEDES a owl:ObjectProperty,
+        owl:TransitiveProperty ;
+    rdfs:label "Supersedes"@en ;
+    rdfs:domain [ a owl:Class ;
+            owl:unionOf ( cls:CONTRACT cls:CONTRACT_VERSION cls:AMENDMENT cls:FUND_DOCUMENT ) ] ;
+    rdfs:range [ a owl:Class ;
+            owl:unionOf ( cls:CONTRACT cls:CONTRACT_VERSION cls:AMENDMENT cls:FUND_DOCUMENT ) ] .
+
+cls:GOVERNING_LAW a owl:Class ;
+    rdfs:label "Governing law"@en ;
+    rdfs:subClassOf cls:CONCEPT .
+
+cls:JURISDICTION a owl:Class ;
+    rdfs:label "Jurisdiction"@en ;
+    rdfs:subClassOf cls:LOCATION .
+
+cls:LOCATION a owl:Class ;
+    rdfs:label "Location"@en .
+
+cls:NOTICE a owl:Class ;
+    rdfs:label "Notice"@en ;
+    rdfs:subClassOf cls:CONCEPT .
+
+cls:ORG a owl:Class ;
+    rdfs:label "Org"@en .
+
+cls:PAYMENT_TERM a owl:Class ;
+    rdfs:label "Payment term"@en ;
+    rdfs:subClassOf cls:CONCEPT .
+
+cls:PERSON a owl:Class ;
+    rdfs:label "Person"@en .
+
+cls:RIGHT a owl:Class ;
+    rdfs:label "Right"@en ;
+    rdfs:subClassOf cls:CONCEPT .
+
+cls:SIDE_LETTER a owl:Class ;
+    rdfs:label "Side letter"@en ;
+    rdfs:subClassOf cls:CONTRACT .
+
+cls:SIGNATORY a owl:Class ;
+    rdfs:label "Signatory"@en ;
+    rdfs:subClassOf cls:PERSON .
+
+rel:CLAUSE_OF a owl:ObjectProperty ;
+    rdfs:label "Clause of"@en .
+
+rel:HAS_PARTY a owl:ObjectProperty ;
+    rdfs:label "Has party"@en .
+
+rel:IMPOSED_BY a owl:ObjectProperty ;
+    rdfs:label "Imposed by"@en .
+
+cls:OBLIGATION a owl:Class ;
+    rdfs:label "Obligation"@en ;
+    rdfs:subClassOf cls:CONCEPT .
+
+cls:LEGAL_PARTY a owl:Class ;
+    rdfs:label "Legal party"@en ;
+    rdfs:subClassOf cls:ORG .
+
+cls:CLAUSE a owl:Class ;
+    rdfs:label "Clause"@en ;
+    rdfs:subClassOf cls:CONCEPT .
+
+cls:CONTRACT_VERSION a owl:Class ;
+    rdfs:label "Contract version"@en ;
+    rdfs:subClassOf cls:CONTRACT .
+
+cls:FUND_DOCUMENT a owl:Class ;
+    rdfs:label "Fund document"@en ;
+    rdfs:subClassOf cls:CONCEPT .
+
+cls:AMENDMENT a owl:Class ;
+    rdfs:label "Amendment"@en ;
+    rdfs:subClassOf cls:CONTRACT .
+
+cls:CONCEPT a owl:Class ;
+    rdfs:label "Concept"@en .
+
+cls:CONTRACT a owl:Class ;
+    rdfs:label "Contract"@en ;
+    rdfs:subClassOf cls:CONCEPT .
+

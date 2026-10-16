@@ -1,0 +1,110 @@
+# DO NOT EDIT: generated from the domain ontology YAML by graphrag/graph/ontology_owl_export.py
+@prefix cls: <https://graphrag.example.com/ontology/synthetic-pharma-commercial/class#> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix rel: <https://graphrag.example.com/ontology/synthetic-pharma-commercial/relation#> .
+
+<https://graphrag.example.com/ontology/synthetic-pharma-commercial> a owl:Ontology ;
+    owl:versionInfo "1.0.0" .
+
+cls:CONTENT_LIBRARY a owl:Class ;
+    rdfs:label "Content library"@en ;
+    rdfs:subClassOf cls:CONCEPT .
+
+rel:APPLIES_TO a owl:ObjectProperty ;
+    rdfs:label "Applies to"@en ;
+    rdfs:domain cls:COMMERCIAL_POLICY ;
+    rdfs:range [ a owl:Class ;
+            owl:unionOf ( cls:COMMERCIAL_CONTENT cls:PHARMA_PRODUCT cls:MARKET ) ] .
+
+rel:APPROVED_FOR a owl:ObjectProperty ;
+    rdfs:label "Approved for"@en ;
+    rdfs:domain cls:COMMERCIAL_CONTENT ;
+    rdfs:range [ a owl:Class ;
+            owl:unionOf ( cls:MARKET cls:INDICATION cls:MEDICAL_SPECIALTY ) ] .
+
+rel:GOVERNS a owl:ObjectProperty ;
+    rdfs:label "Governs"@en ;
+    rdfs:domain cls:COMMERCIAL_POLICY ;
+    rdfs:range [ a owl:Class ;
+            owl:unionOf ( cls:COMMERCIAL_CAMPAIGN cls:HCP_INTERACTION cls:COMMERCIAL_CONTENT ) ] .
+
+rel:SPECIALIZES_IN a owl:ObjectProperty ;
+    rdfs:label "Specializes in"@en ;
+    rdfs:domain cls:PERSON ;
+    rdfs:range cls:MEDICAL_SPECIALTY .
+
+rel:SUPERSEDES a owl:ObjectProperty,
+        owl:TransitiveProperty ;
+    rdfs:label "Supersedes"@en ;
+    rdfs:domain cls:COMMERCIAL_CONTENT ;
+    rdfs:range cls:COMMERCIAL_CONTENT .
+
+rel:SUPPORTED_BY a owl:ObjectProperty ;
+    rdfs:label "Supported by"@en ;
+    rdfs:domain cls:MEDICAL_CLAIM ;
+    rdfs:range cls:COMMERCIAL_CONTENT .
+
+rel:TREATS a owl:ObjectProperty ;
+    rdfs:label "Treats"@en ;
+    rdfs:domain cls:PHARMA_PRODUCT ;
+    rdfs:range cls:INDICATION .
+
+rel:USES_CONTENT a owl:ObjectProperty ;
+    rdfs:label "Uses content"@en ;
+    rdfs:domain [ a owl:Class ;
+            owl:unionOf ( cls:COMMERCIAL_CAMPAIGN cls:HCP_INTERACTION ) ] ;
+    rdfs:range cls:COMMERCIAL_CONTENT .
+
+cls:LOCATION a owl:Class ;
+    rdfs:label "Location"@en .
+
+cls:MEDICAL_CLAIM a owl:Class ;
+    rdfs:label "Medical claim"@en ;
+    rdfs:subClassOf cls:CONCEPT .
+
+cls:PERSON a owl:Class ;
+    rdfs:label "Person"@en .
+
+cls:PRODUCT a owl:Class ;
+    rdfs:label "Product"@en .
+
+cls:COMMERCIAL_CAMPAIGN a owl:Class ;
+    rdfs:label "Commercial campaign"@en ;
+    rdfs:subClassOf cls:EVENT .
+
+cls:COMMERCIAL_POLICY a owl:Class ;
+    rdfs:label "Commercial policy"@en ;
+    rdfs:subClassOf cls:CONCEPT .
+
+cls:EVENT a owl:Class ;
+    rdfs:label "Event"@en .
+
+cls:HCP_INTERACTION a owl:Class ;
+    rdfs:label "Hcp interaction"@en ;
+    rdfs:subClassOf cls:EVENT .
+
+cls:INDICATION a owl:Class ;
+    rdfs:label "Indication"@en ;
+    rdfs:subClassOf cls:CONCEPT .
+
+cls:MARKET a owl:Class ;
+    rdfs:label "Market"@en ;
+    rdfs:subClassOf cls:LOCATION .
+
+cls:MEDICAL_SPECIALTY a owl:Class ;
+    rdfs:label "Medical specialty"@en ;
+    rdfs:subClassOf cls:CONCEPT .
+
+cls:PHARMA_PRODUCT a owl:Class ;
+    rdfs:label "Pharma product"@en ;
+    rdfs:subClassOf cls:PRODUCT .
+
+cls:CONCEPT a owl:Class ;
+    rdfs:label "Concept"@en .
+
+cls:COMMERCIAL_CONTENT a owl:Class ;
+    rdfs:label "Commercial content"@en ;
+    rdfs:subClassOf cls:CONCEPT .
+

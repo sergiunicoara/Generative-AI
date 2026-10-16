@@ -1,0 +1,112 @@
+# DO NOT EDIT: generated from the domain ontology YAML by graphrag/graph/ontology_owl_export.py
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix sh: <http://www.w3.org/ns/shacl#> .
+@prefix shape: <https://graphrag.example.com/ontology/aerospace-regulatory/shape#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+
+shape:ADDRESSES a sh:NodeShape ;
+    sh:message "The subject of ADDRESSES must be one of: AIRWORTHINESS_DIRECTIVE, SERVICE_BULLETIN, ENGINEERING_ORDER." ;
+    sh:or ( [ sh:class <https://graphrag.example.com/ontology/aerospace-regulatory/class#AIRWORTHINESS_DIRECTIVE> ] [ sh:class <https://graphrag.example.com/ontology/aerospace-regulatory/class#SERVICE_BULLETIN> ] [ sh:class <https://graphrag.example.com/ontology/aerospace-regulatory/class#ENGINEERING_ORDER> ] ) ;
+    sh:property [ sh:message "Every object of ADDRESSES must be one of: FAILURE_MODE, HAZARD." ;
+            sh:or ( [ sh:class <https://graphrag.example.com/ontology/aerospace-regulatory/class#FAILURE_MODE> ] [ sh:class <https://graphrag.example.com/ontology/aerospace-regulatory/class#HAZARD> ] ) ;
+            sh:path <https://graphrag.example.com/ontology/aerospace-regulatory/relation#ADDRESSES> ] ;
+    sh:targetSubjectsOf <https://graphrag.example.com/ontology/aerospace-regulatory/relation#ADDRESSES> .
+
+shape:AIRWORTHINESS_AUTHORITY_FOR a sh:NodeShape ;
+    sh:property [ sh:maxCount 1 ;
+            sh:path <https://graphrag.example.com/ontology/aerospace-regulatory/relation#AIRWORTHINESS_AUTHORITY_FOR> ] ;
+    sh:targetSubjectsOf <https://graphrag.example.com/ontology/aerospace-regulatory/relation#AIRWORTHINESS_AUTHORITY_FOR> .
+
+shape:APPLIES_TO a sh:NodeShape ;
+    sh:message "The subject of APPLIES_TO must be one of: REGULATION, AIRWORTHINESS_DIRECTIVE, TYPE_CERTIFICATE." ;
+    sh:or ( [ sh:class <https://graphrag.example.com/ontology/aerospace-regulatory/class#REGULATION> ] [ sh:class <https://graphrag.example.com/ontology/aerospace-regulatory/class#AIRWORTHINESS_DIRECTIVE> ] [ sh:class <https://graphrag.example.com/ontology/aerospace-regulatory/class#TYPE_CERTIFICATE> ] ) ;
+    sh:property [ sh:message "Every object of APPLIES_TO must be one of: AIRCRAFT_TYPE, AIRCRAFT_COMPONENT, AIRCRAFT_CONFIGURATION, ORG." ;
+            sh:or ( [ sh:class <https://graphrag.example.com/ontology/aerospace-regulatory/class#AIRCRAFT_TYPE> ] [ sh:class <https://graphrag.example.com/ontology/aerospace-regulatory/class#AIRCRAFT_COMPONENT> ] [ sh:class <https://graphrag.example.com/ontology/aerospace-regulatory/class#AIRCRAFT_CONFIGURATION> ] [ sh:class <https://graphrag.example.com/ontology/aerospace-regulatory/class#ORG> ] ) ;
+            sh:path <https://graphrag.example.com/ontology/aerospace-regulatory/relation#APPLIES_TO> ] ;
+    sh:targetSubjectsOf <https://graphrag.example.com/ontology/aerospace-regulatory/relation#APPLIES_TO> .
+
+shape:CERTIFIED_BY a sh:NodeShape ;
+    sh:message "The subject of CERTIFIED_BY must be one of: AIRCRAFT_TYPE, AIRCRAFT_COMPONENT, ORG." ;
+    sh:or ( [ sh:class <https://graphrag.example.com/ontology/aerospace-regulatory/class#AIRCRAFT_TYPE> ] [ sh:class <https://graphrag.example.com/ontology/aerospace-regulatory/class#AIRCRAFT_COMPONENT> ] [ sh:class <https://graphrag.example.com/ontology/aerospace-regulatory/class#ORG> ] ) ;
+    sh:property [ sh:message "Every object of CERTIFIED_BY must be one of: REGULATOR, CERTIFICATION_AUTHORITY." ;
+            sh:or ( [ sh:class <https://graphrag.example.com/ontology/aerospace-regulatory/class#REGULATOR> ] [ sh:class <https://graphrag.example.com/ontology/aerospace-regulatory/class#CERTIFICATION_AUTHORITY> ] ) ;
+            sh:path <https://graphrag.example.com/ontology/aerospace-regulatory/relation#CERTIFIED_BY> ] ;
+    sh:targetSubjectsOf <https://graphrag.example.com/ontology/aerospace-regulatory/relation#CERTIFIED_BY> .
+
+shape:CERTIFIES a sh:NodeShape ;
+    sh:message "The subject of CERTIFIES must be one of: REGULATOR, CERTIFICATION_AUTHORITY." ;
+    sh:or ( [ sh:class <https://graphrag.example.com/ontology/aerospace-regulatory/class#REGULATOR> ] [ sh:class <https://graphrag.example.com/ontology/aerospace-regulatory/class#CERTIFICATION_AUTHORITY> ] ) ;
+    sh:property [ sh:message "Every object of CERTIFIES must be one of: AIRCRAFT_TYPE, AIRCRAFT_COMPONENT, ORG." ;
+            sh:or ( [ sh:class <https://graphrag.example.com/ontology/aerospace-regulatory/class#AIRCRAFT_TYPE> ] [ sh:class <https://graphrag.example.com/ontology/aerospace-regulatory/class#AIRCRAFT_COMPONENT> ] [ sh:class <https://graphrag.example.com/ontology/aerospace-regulatory/class#ORG> ] ) ;
+            sh:path <https://graphrag.example.com/ontology/aerospace-regulatory/relation#CERTIFIES> ] ;
+    sh:targetSubjectsOf <https://graphrag.example.com/ontology/aerospace-regulatory/relation#CERTIFIES> .
+
+shape:CORRECTS a sh:NodeShape ;
+    sh:message "The subject of CORRECTS must be one of: SERVICE_BULLETIN, ENGINEERING_ORDER, AIRWORTHINESS_DIRECTIVE." ;
+    sh:or ( [ sh:class <https://graphrag.example.com/ontology/aerospace-regulatory/class#SERVICE_BULLETIN> ] [ sh:class <https://graphrag.example.com/ontology/aerospace-regulatory/class#ENGINEERING_ORDER> ] [ sh:class <https://graphrag.example.com/ontology/aerospace-regulatory/class#AIRWORTHINESS_DIRECTIVE> ] ) ;
+    sh:property [ sh:message "Every object of CORRECTS must be one of: FAILURE_MODE, INCIDENT_OR_ACCIDENT." ;
+            sh:or ( [ sh:class <https://graphrag.example.com/ontology/aerospace-regulatory/class#FAILURE_MODE> ] [ sh:class <https://graphrag.example.com/ontology/aerospace-regulatory/class#INCIDENT_OR_ACCIDENT> ] ) ;
+            sh:path <https://graphrag.example.com/ontology/aerospace-regulatory/relation#CORRECTS> ] ;
+    sh:targetSubjectsOf <https://graphrag.example.com/ontology/aerospace-regulatory/relation#CORRECTS> .
+
+shape:DESIGNED_TO a sh:NodeShape ;
+    sh:message "The subject of DESIGNED_TO must be one of: AIRCRAFT_COMPONENT, SOFTWARE_COMPONENT." ;
+    sh:or ( [ sh:class <https://graphrag.example.com/ontology/aerospace-regulatory/class#AIRCRAFT_COMPONENT> ] [ sh:class <https://graphrag.example.com/ontology/aerospace-regulatory/class#SOFTWARE_COMPONENT> ] ) ;
+    sh:property [ sh:message "Every object of DESIGNED_TO must be one of: DESIGN_ASSURANCE_LEVEL." ;
+            sh:or ( [ sh:class <https://graphrag.example.com/ontology/aerospace-regulatory/class#DESIGN_ASSURANCE_LEVEL> ] ) ;
+            sh:path <https://graphrag.example.com/ontology/aerospace-regulatory/relation#DESIGNED_TO> ] ;
+    sh:targetSubjectsOf <https://graphrag.example.com/ontology/aerospace-regulatory/relation#DESIGNED_TO> .
+
+shape:INSPECTED_UNDER a sh:NodeShape ;
+    sh:message "The subject of INSPECTED_UNDER must be one of: MAINTENANCE_EVENT." ;
+    sh:or ( [ sh:class <https://graphrag.example.com/ontology/aerospace-regulatory/class#MAINTENANCE_EVENT> ] ) ;
+    sh:property [ sh:message "Every object of INSPECTED_UNDER must be one of: MAINTENANCE_PROCEDURE, AIRWORTHINESS_DIRECTIVE." ;
+            sh:or ( [ sh:class <https://graphrag.example.com/ontology/aerospace-regulatory/class#MAINTENANCE_PROCEDURE> ] [ sh:class <https://graphrag.example.com/ontology/aerospace-regulatory/class#AIRWORTHINESS_DIRECTIVE> ] ) ;
+            sh:path <https://graphrag.example.com/ontology/aerospace-regulatory/relation#INSPECTED_UNDER> ] ;
+    sh:targetSubjectsOf <https://graphrag.example.com/ontology/aerospace-regulatory/relation#INSPECTED_UNDER> .
+
+shape:MAINTAINED_BY a sh:NodeShape ;
+    sh:message "The subject of MAINTAINED_BY must be one of: AIRCRAFT_TYPE, AIRCRAFT_COMPONENT." ;
+    sh:or ( [ sh:class <https://graphrag.example.com/ontology/aerospace-regulatory/class#AIRCRAFT_TYPE> ] [ sh:class <https://graphrag.example.com/ontology/aerospace-regulatory/class#AIRCRAFT_COMPONENT> ] ) ;
+    sh:property [ sh:message "Every object of MAINTAINED_BY must be one of: ORG." ;
+            sh:or ( [ sh:class <https://graphrag.example.com/ontology/aerospace-regulatory/class#ORG> ] ) ;
+            sh:path <https://graphrag.example.com/ontology/aerospace-regulatory/relation#MAINTAINED_BY> ] ;
+    sh:targetSubjectsOf <https://graphrag.example.com/ontology/aerospace-regulatory/relation#MAINTAINED_BY> .
+
+shape:MANDATED_BY a sh:NodeShape ;
+    sh:message "The subject of MANDATED_BY must be one of: REGULATION, MAINTENANCE_PROCEDURE, AIRWORTHINESS_LIMITATION." ;
+    sh:or ( [ sh:class <https://graphrag.example.com/ontology/aerospace-regulatory/class#REGULATION> ] [ sh:class <https://graphrag.example.com/ontology/aerospace-regulatory/class#MAINTENANCE_PROCEDURE> ] [ sh:class <https://graphrag.example.com/ontology/aerospace-regulatory/class#AIRWORTHINESS_LIMITATION> ] ) ;
+    sh:property [ sh:message "Every object of MANDATED_BY must be one of: REGULATOR, CERTIFICATION_AUTHORITY." ;
+            sh:or ( [ sh:class <https://graphrag.example.com/ontology/aerospace-regulatory/class#REGULATOR> ] [ sh:class <https://graphrag.example.com/ontology/aerospace-regulatory/class#CERTIFICATION_AUTHORITY> ] ) ;
+            sh:path <https://graphrag.example.com/ontology/aerospace-regulatory/relation#MANDATED_BY> ] ;
+    sh:targetSubjectsOf <https://graphrag.example.com/ontology/aerospace-regulatory/relation#MANDATED_BY> .
+
+shape:MANUFACTURED_UNDER a sh:NodeShape ;
+    sh:message "The subject of MANUFACTURED_UNDER must be one of: AIRCRAFT_COMPONENT." ;
+    sh:or ( [ sh:class <https://graphrag.example.com/ontology/aerospace-regulatory/class#AIRCRAFT_COMPONENT> ] ) ;
+    sh:property [ sh:message "Every object of MANUFACTURED_UNDER must be one of: PARTS_MANUFACTURER_APPROVAL, TYPE_CERTIFICATE." ;
+            sh:or ( [ sh:class <https://graphrag.example.com/ontology/aerospace-regulatory/class#PARTS_MANUFACTURER_APPROVAL> ] [ sh:class <https://graphrag.example.com/ontology/aerospace-regulatory/class#TYPE_CERTIFICATE> ] ) ;
+            sh:path <https://graphrag.example.com/ontology/aerospace-regulatory/relation#MANUFACTURED_UNDER> ] ;
+    sh:targetSubjectsOf <https://graphrag.example.com/ontology/aerospace-regulatory/relation#MANUFACTURED_UNDER> .
+
+shape:OPERATED_BY a sh:NodeShape ;
+    sh:message "The subject of OPERATED_BY must be one of: AIRCRAFT_TYPE, AIRCRAFT_CONFIGURATION." ;
+    sh:or ( [ sh:class <https://graphrag.example.com/ontology/aerospace-regulatory/class#AIRCRAFT_TYPE> ] [ sh:class <https://graphrag.example.com/ontology/aerospace-regulatory/class#AIRCRAFT_CONFIGURATION> ] ) ;
+    sh:property [ sh:message "Every object of OPERATED_BY must be one of: ORG." ;
+            sh:or ( [ sh:class <https://graphrag.example.com/ontology/aerospace-regulatory/class#ORG> ] ) ;
+            sh:path <https://graphrag.example.com/ontology/aerospace-regulatory/relation#OPERATED_BY> ] ;
+    sh:targetSubjectsOf <https://graphrag.example.com/ontology/aerospace-regulatory/relation#OPERATED_BY> .
+
+shape:SUPERSEDES a sh:NodeShape ;
+    sh:message "The subject of SUPERSEDES must be one of: REGULATION, AIRWORTHINESS_DIRECTIVE, SERVICE_BULLETIN." ;
+    sh:or ( [ sh:class <https://graphrag.example.com/ontology/aerospace-regulatory/class#REGULATION> ] [ sh:class <https://graphrag.example.com/ontology/aerospace-regulatory/class#AIRWORTHINESS_DIRECTIVE> ] [ sh:class <https://graphrag.example.com/ontology/aerospace-regulatory/class#SERVICE_BULLETIN> ] ) ;
+    sh:property [ sh:message "Every object of SUPERSEDES must be one of: REGULATION, AIRWORTHINESS_DIRECTIVE, SERVICE_BULLETIN." ;
+            sh:or ( [ sh:class <https://graphrag.example.com/ontology/aerospace-regulatory/class#REGULATION> ] [ sh:class <https://graphrag.example.com/ontology/aerospace-regulatory/class#AIRWORTHINESS_DIRECTIVE> ] [ sh:class <https://graphrag.example.com/ontology/aerospace-regulatory/class#SERVICE_BULLETIN> ] ) ;
+            sh:path <https://graphrag.example.com/ontology/aerospace-regulatory/relation#SUPERSEDES> ] ;
+    sh:targetSubjectsOf <https://graphrag.example.com/ontology/aerospace-regulatory/relation#SUPERSEDES> .
+
+shape:TYPE_CERTIFICATE_OF a sh:NodeShape ;
+    sh:property [ sh:maxCount 1 ;
+            sh:path <https://graphrag.example.com/ontology/aerospace-regulatory/relation#TYPE_CERTIFICATE_OF> ] ;
+    sh:targetSubjectsOf <https://graphrag.example.com/ontology/aerospace-regulatory/relation#TYPE_CERTIFICATE_OF> .
+

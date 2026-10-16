@@ -197,3 +197,71 @@ authority_levels:
   MANUFACTURER_SERVICE_DOC: 3  # Service Bulletins, Service Letters
   OPERATOR_PROCEDURE: 4      # Airline MEL, maintenance programme
   INFORMAL: 5                # meeting notes, email, internal wiki
+
+# ── Vocabulary ────────────────────────────────────────────────────────────────
+# Definitions restate the notes beside each type in type_hierarchy above; synonyms are the abbreviations given there.
+# Read by graphrag/graph/skos_export.py (skos:definition / skos:altLabel).
+vocabulary:
+  REGULATOR:
+    definition: "A regulatory body with control authority, such as the FAA or EASA."
+  CERTIFICATION_AUTHORITY:
+    definition: "A regulator that issues type certificates."
+  STANDARDS_BODY:
+    definition: "An organisation that publishes standards, such as RTCA, SAE, EUROCAE or ISO."
+  AIRCRAFT_TYPE:
+    definition: "A type of aircraft, such as the Boeing 737 or the Airbus A320."
+  AIRCRAFT_CONFIGURATION:
+    definition: "A specific variant of an aircraft type."
+  AIRCRAFT_COMPONENT:
+    definition: "A line replaceable unit, sub-assembly or part."
+  LINE_REPLACEABLE_UNIT:
+    definition: "A component that can be replaced on the line."
+    synonyms: ["LRU"]
+  REGULATION:
+    definition: "A regulatory text, such as 14 CFR, CS-25 or ITAR."
+  AIRWORTHINESS_DIRECTIVE:
+    definition: "A mandatory regulatory directive issued by the FAA or EASA."
+    synonyms: ["AD"]
+  AIRWORTHINESS_LIMITATION:
+    definition: "A life limit on a component."
+    synonyms: ["ALI", "AWL"]
+  SPECIAL_AIRWORTHINESS_INFO:
+    definition: "Non-mandatory guidance, such as a special airworthiness information bulletin."
+    synonyms: ["SAIB"]
+  TYPE_CERTIFICATE:
+    definition: "An approval of an aircraft type design."
+    synonyms: ["TC"]
+  SUPPLEMENTAL_TYPE_CERTIFICATE:
+    definition: "A type certificate that approves a change to an existing type design."
+    synonyms: ["STC"]
+  PARTS_MANUFACTURER_APPROVAL:
+    definition: "An authorisation to manufacture replacement parts."
+    synonyms: ["PMA"]
+  TECHNICAL_STANDARD_ORDER:
+    definition: "An authorisation for an article to be produced to a technical standard."
+    synonyms: ["TSO"]
+  MAINTENANCE_PROCEDURE:
+    definition: "A maintenance procedure from a manual such as the AMM, CMM, SRM or IPC."
+  SERVICE_BULLETIN:
+    definition: "A maintenance recommendation from the manufacturer."
+  SERVICE_INFORMATION_LETTER:
+    definition: "An advisory, non-mandatory letter from the manufacturer."
+    synonyms: ["SIL"]
+  ENGINEERING_ORDER:
+    definition: "An internal modification or repair instruction."
+  AIRCRAFT_FLIGHT_MANUAL:
+    definition: "A manual stating the operational limits of an aircraft."
+    synonyms: ["AFM", "POH"]
+  FAILURE_MODE:
+    definition: "A specific failure mechanism."
+  HAZARD:
+    definition: "A safety hazard, as assessed under ARP4761."
+  DESIGN_ASSURANCE_LEVEL:
+    definition: "The assurance level A to E assigned under DO-178C or DO-254."
+    synonyms: ["DAL"]
+  FLIGHT_OPERATION:
+    definition: "A specific flight or sortie."
+  MAINTENANCE_EVENT:
+    definition: "An inspection, repair or modification."
+  INCIDENT_OR_ACCIDENT:
+    definition: "A service difficulty report, safety report or accident report."

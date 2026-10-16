@@ -1,0 +1,69 @@
+{
+  "prefixes": {
+    "a": "https://example.automotive.demo/ontology#",
+    "i": "https://example.automotive.demo/instance#",
+    "e": "https://example.energy.demo/ontology#"
+  },
+  "cases": [
+    {
+      "id": "AUTO-CQ1", "domain": "automotive", "level": "schema",
+      "question": "Which classes are kinds of Organization?",
+      "sparql": "SELECT ?v WHERE { ?c rdfs:subClassOf a:Organization . BIND(STRAFTER(STR(?c), '#') AS ?v) }",
+      "expected": ["ClientOrg", "Supplier"]
+    },
+    {
+      "id": "AUTO-CQ2", "domain": "automotive", "level": "schema",
+      "question": "Which properties can a Supplier have?",
+      "sparql": "SELECT ?v WHERE { ?p rdfs:domain a:Supplier . BIND(STRAFTER(STR(?p), '#') AS ?v) }",
+      "expected": ["classification", "compliesWith", "reevaluationFrequencyMonths", "supplierId", "suppliesTo"]
+    },
+    {
+      "id": "AUTO-CQ3", "domain": "automotive", "level": "schema",
+      "question": "Which classes are identified by documentId?",
+      "sparql": "SELECT ?v WHERE { ?c owl:hasKey/rdf:rest*/rdf:first a:documentId . BIND(STRAFTER(STR(?c), '#') AS ?v) }",
+      "expected": ["ClientRequirement", "FormRecord", "InternalProcedure", "QualityDocument", "QualityManual"]
+    },
+    {
+      "id": "AUTO-CQ4", "domain": "automotive", "level": "instance",
+      "question": "Which suppliers have an audit with a major nonconformity that is still open?",
+      "sparql": "SELECT ?v WHERE { ?n a a:Nonconformity ; a:severity 'major' ; a:identifiedIn ?au . ?au a:audits ?s . FILTER NOT EXISTS { ?n a:closedAt ?c } ?s a:supplierId ?v }",
+      "expected": ["S-002"]
+    },
+    {
+      "id": "AUTO-CQ5", "domain": "automotive", "level": "instance",
+      "question": "Which quality documents are current, meaning no other document supersedes them?",
+      "sparql": "SELECT ?v WHERE { ?d a/rdfs:subClassOf* a:QualityDocument ; a:documentId ?v . FILTER NOT EXISTS { ?x a:supersedes ?d } }",
+      "expected": ["CSR-CLIENT-2023", "PQ-07-rev3"]
+    },
+    {
+      "id": "AUTO-CQ6", "domain": "automotive", "level": "instance",
+      "question": "Which client organisations are escalated to for nonconformities found at conditionally approved suppliers?",
+      "sparql": "SELECT ?v WHERE { ?n a:escalatesTo ?c ; a:identifiedIn ?au . ?au a:audits ?s . ?s a:classification 'conditional' . BIND(STRAFTER(STR(?c), '#') AS ?v) }",
+      "expected": ["C1"]
+    },
+    {
+      "id": "AUTO-CQ7", "domain": "automotive", "level": "instance",
+      "question": "Which audits have no recorded auditor?",
+      "sparql": "SELECT ?v WHERE { ?au a a:Audit . FILTER NOT EXISTS { ?au a:auditorId ?x } BIND(STRAFTER(STR(?au), '#') AS ?v) }",
+      "expected": []
+    },
+    {
+      "id": "AUTO-CQ8", "domain": "automotive", "level": "instance",
+      "question": "How many nonconformities exist per severity?",
+      "sparql": "SELECT ?v WHERE { { SELECT ?sev (COUNT(?n) AS ?k) WHERE { ?n a a:Nonconformity ; a:severity ?sev } GROUP BY ?sev } BIND(CONCAT(?sev, '=', STR(?k)) AS ?v) }",
+      "expected": ["major=1", "minor=1"]
+    },
+    {
+      "id": "ENERGY-CQ1", "domain": "energy", "level": "schema",
+      "question": "Which classes are kinds of Asset?",
+      "sparql": "SELECT ?v WHERE { ?c rdfs:subClassOf e:Asset . BIND(STRAFTER(STR(?c), '#') AS ?v) }",
+      "expected": ["WindTurbine"]
+    },
+    {
+      "id": "ENERGY-CQ2", "domain": "energy", "level": "schema",
+      "question": "Which relations point at an Asset?",
+      "sparql": "SELECT ?v WHERE { ?p rdfs:range e:Asset . BIND(STRAFTER(STR(?p), '#') AS ?v) }",
+      "expected": ["concernsAsset", "forAsset", "hasAsset", "observedAsset"]
+    }
+  ]
+}

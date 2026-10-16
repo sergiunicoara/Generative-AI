@@ -1,0 +1,21 @@
+# Small hand-written instance data for the automotive IATF competency questions.
+# Merged with ontology/automotive/automotive-iatf-quality.ttl by the test. Not corpus data.
+@prefix a: <https://example.automotive.demo/ontology#> .
+@prefix i: <https://example.automotive.demo/instance#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+
+i:S1 a a:Supplier ; a:supplierId "S-001" ; a:classification "approved" ; a:suppliesTo i:C1 .
+i:S2 a a:Supplier ; a:supplierId "S-002" ; a:classification "conditional" ; a:suppliesTo i:C1 .
+i:S3 a a:Supplier ; a:supplierId "S-003" ; a:classification "approved" .
+i:C1 a a:ClientOrg ; a:sourcesFrom i:S1, i:S2 .
+
+i:A1 a a:Audit ; a:audits i:S2 ; a:outcome "conditional" ; a:auditorId "aud-7" .
+i:A2 a a:Audit ; a:audits i:S3 ; a:outcome "pass" ; a:auditorId "aud-9" .
+
+i:N1 a a:Nonconformity ; a:identifiedIn i:A1 ; a:severity "major" ; a:escalatesTo i:C1 .
+i:N2 a a:Nonconformity ; a:identifiedIn i:A1 ; a:severity "minor" ; a:closedAt "2026-03-01T00:00:00Z"^^xsd:dateTime .
+
+i:P2 a a:InternalProcedure ; a:documentId "PQ-07-rev2" .
+i:P3 a a:InternalProcedure ; a:documentId "PQ-07-rev3" ; a:supersedes i:P2 .
+i:R0 a a:ClientRequirement ; a:documentId "CSR-CLIENT-2021" .
+i:R1 a a:ClientRequirement ; a:documentId "CSR-CLIENT-2023" ; a:supersedes i:R0 .

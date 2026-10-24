@@ -63,7 +63,9 @@
       "title": "Find outcome-backed Context Graph precedents",
       "kind": "read",
       "risk": "moderate",
-      "required_scopes": [],
+      "required_scopes": [
+        "read"
+      ],
       "arg_schema_keys": [
         "limit",
         "policy_version_id",
@@ -82,7 +84,9 @@
       "title": "Grounded hybrid GraphRAG answer with citations",
       "kind": "read",
       "risk": "moderate",
-      "required_scopes": [],
+      "required_scopes": [
+        "read"
+      ],
       "arg_schema_keys": [
         "mode",
         "question",
@@ -102,7 +106,9 @@
       "title": "Resolve an entity and return tenant-scoped graph evidence",
       "kind": "read",
       "risk": "safe",
-      "required_scopes": [],
+      "required_scopes": [
+        "read"
+      ],
       "arg_schema_keys": [
         "as_of",
         "limit",
@@ -122,7 +128,9 @@
       "title": "Controlled natural-language graph fact query",
       "kind": "read",
       "risk": "safe",
-      "required_scopes": [],
+      "required_scopes": [
+        "read"
+      ],
       "arg_schema_keys": [
         "limit",
         "question",
@@ -141,7 +149,9 @@
       "title": "Knowledge graph tenant statistics",
       "kind": "read",
       "risk": "safe",
-      "required_scopes": [],
+      "required_scopes": [
+        "read"
+      ],
       "arg_schema_keys": [
         "tenant"
       ],
@@ -154,13 +164,39 @@
       ]
     },
     {
+      "capability_id": "kg.knowledge.evaluate",
+      "version": "1.0.0",
+      "qualified_name": "kg.knowledge.evaluate@1.0.0",
+      "title": "Evaluate which contextual knowledge applies and whether it is satisfied",
+      "kind": "read",
+      "risk": "moderate",
+      "required_scopes": [
+        "read"
+      ],
+      "arg_schema_keys": [
+        "context",
+        "domain",
+        "expect_applicable_knowledge",
+        "facts",
+        "semantic_candidates",
+        "tenant"
+      ],
+      "dry_run_ok": true,
+      "requires_approval": false,
+      "deprecated": false,
+      "replacement": null,
+      "legacy_aliases": []
+    },
+    {
       "capability_id": "platform.capabilities.discover",
       "version": "1.0.0",
       "qualified_name": "platform.capabilities.discover@1.0.0",
       "title": "Discover MCP capabilities available to the authenticated caller",
       "kind": "read",
       "risk": "safe",
-      "required_scopes": [],
+      "required_scopes": [
+        "read"
+      ],
       "arg_schema_keys": [],
       "dry_run_ok": true,
       "requires_approval": false,

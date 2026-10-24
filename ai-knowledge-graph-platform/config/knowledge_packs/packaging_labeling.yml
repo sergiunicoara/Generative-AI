@@ -1,0 +1,480 @@
+# Synthetic packaging/labeling knowledge pack -- DEMONSTRATION DATA ONLY.
+#
+# Every requirement below is invented to exercise the contextual-knowledge
+# evaluator. Markets ("NORTHLAND", "SOUTHLAND"), customers, brands, products and
+# document ids are fictional. Nothing here restates, summarises or approximates
+# an FDA, EMA, QRD or any other real regulatory requirement, and nothing here
+# has been reviewed by a domain expert.
+domain: packaging_labeling
+tenant: packaging_demo
+pack_version: "2026.10.24-demo"
+description: >
+  One OTC tablet carton family (PX-200, PX-200-MINI) assessed in two fictional
+  markets, with customer and brand guidance, a mandatory baseline, an authorised
+  exception, an unauthorised override attempt, contradictory requirements, a
+  temporal revision, and entries in every lifecycle state.
+disclaimer: >
+  Demonstration rules, not regulatory requirements. Do not use for compliance.
+
+x-common: &common
+  tenant: packaging_demo
+  access: {mode: tenant, state: known}
+  reviewed_by: "user:demo-curator"
+  constraint_provenance: &prov {authored_by: "user:demo-curator", approval_ref: "DEMO-APPROVAL-2026-001"}
+
+x-all-dims: &anywhere
+  customer: {mode: any}
+  brand: {mode: any}
+  market: {mode: any}
+  product: {mode: any}
+  product_family: {mode: any}
+  workflow: {mode: any}
+
+items:
+  - <<: *common
+    id: PKG-001
+    version: 1
+    title: Batch code printed on every OTC tablet carton
+    statement: "DEMO RULE. Every OTC tablet carton carries a printed batch code."
+    subject_key: label.batch_code
+    modality: mandatory
+    authority: regulatory
+    status: published
+    review_ref: DEMO-REVIEW-001
+    applicability:
+      <<: *anywhere
+      product_family: {mode: in, values: [otc_tablets]}
+      workflow: {mode: in, values: [label_review, artwork_change]}
+      valid_from: "2026-01-01T00:00:00Z"
+    constraint:
+      all_of:
+        - {fact: label.batch_code_present, operator: eq, value: true}
+    sources:
+      - {source_id: DEMO-STD-PKG-01, locator: "section 2.1", quote: "Batch code is printed on the carton."}
+    recorded_at: "2025-12-15T00:00:00Z"
+
+  - <<: *common
+    id: PKG-007
+    version: 1
+    title: Baseline minimum font size (all markets)
+    statement: "DEMO RULE. Body text on OTC tablet cartons is at least 6 pt."
+    subject_key: label.min_font
+    modality: mandatory
+    authority: regulatory
+    status: published
+    review_ref: DEMO-REVIEW-007
+    applicability:
+      <<: *anywhere
+      product_family: {mode: in, values: [otc_tablets]}
+      valid_from: "2026-01-01T00:00:00Z"
+    constraint:
+      all_of:
+        - {fact: label.min_font_pt, operator: gte, value: 6}
+    sources:
+      - {source_id: DEMO-STD-PKG-01, locator: "section 3.1"}
+    recorded_at: "2025-12-15T00:00:00Z"
+
+  - <<: *common
+    id: PKG-002
+    version: 1
+    title: Northland minimum font size, revision 1
+    statement: "DEMO RULE. In Northland, body text is at least 7 pt."
+    subject_key: label.min_font
+    series: northland.min_font
+    modality: mandatory
+    authority: regulatory
+    status: published
+    review_ref: DEMO-REVIEW-002
+    applicability:
+      <<: *anywhere
+      market: {mode: in, values: [NORTHLAND]}
+      product_family: {mode: in, values: [otc_tablets]}
+      valid_from: "2026-01-01T00:00:00Z"
+    constraint:
+      all_of:
+        - {fact: label.min_font_pt, operator: gte, value: 7}
+    sources:
+      - {source_id: DEMO-NL-GUIDE-R1, locator: "rule 4"}
+    recorded_at: "2025-12-15T00:00:00Z"
+
+  - <<: *common
+    id: PKG-011
+    version: 1
+    title: Northland minimum font size, revision 2
+    statement: "DEMO RULE. From 1 July 2026, in Northland, body text is at least 8 pt."
+    subject_key: label.min_font
+    series: northland.min_font
+    modality: mandatory
+    authority: regulatory
+    status: published
+    review_ref: DEMO-REVIEW-011
+    supersedes: [PKG-002]
+    applicability:
+      <<: *anywhere
+      market: {mode: in, values: [NORTHLAND]}
+      product_family: {mode: in, values: [otc_tablets]}
+      valid_from: "2026-07-01T00:00:00Z"
+    constraint:
+      all_of:
+        - {fact: label.min_font_pt, operator: gte, value: 8}
+    sources:
+      - {source_id: DEMO-NL-GUIDE-R2, locator: "rule 4"}
+    recorded_at: "2026-06-15T00:00:00Z"
+
+  - <<: *common
+    id: PKG-003
+    version: 1
+    title: Southland local-language text
+    statement: "DEMO RULE. Southland cartons include Southlandic ('sl') text."
+    subject_key: label.languages
+    modality: mandatory
+    authority: regulatory
+    status: published
+    review_ref: DEMO-REVIEW-003
+    applicability:
+      <<: *anywhere
+      market: {mode: in, values: [SOUTHLAND]}
+    constraint:
+      all_of:
+        - {fact: label.languages, operator: contains, value: sl}
+    sources:
+      - {source_id: DEMO-SL-GUIDE-R1, locator: "rule 2"}
+    recorded_at: "2025-12-15T00:00:00Z"
+
+  - <<: *common
+    id: PKG-004
+    version: 1
+    title: Sunleaf brand panel colour (brand guidance)
+    statement: "DEMO GUIDANCE. Sunleaf cartons use the green brand panel."
+    subject_key: brand.panel_color
+    modality: recommended
+    authority: brand
+    status: published
+    review_ref: DEMO-REVIEW-004
+    applicability:
+      <<: *anywhere
+      brand: {mode: in, values: [SUNLEAF]}
+    constraint:
+      all_of:
+        - {fact: label.brand_panel_color, operator: eq, value: green}
+    sources:
+      - {source_id: DEMO-SUNLEAF-BRANDBOOK, locator: "p. 12"}
+    recorded_at: "2025-12-15T00:00:00Z"
+
+  - <<: *common
+    id: PKG-005
+    version: 1
+    title: No 'clinically proven' front-panel claim in Northland
+    statement: "DEMO RULE. Northland front panels do not carry a 'clinically proven' claim."
+    subject_key: label.front_claims.clinically_proven
+    modality: prohibited
+    authority: regulatory
+    status: published
+    review_ref: DEMO-REVIEW-005
+    applicability:
+      <<: *anywhere
+      market: {mode: in, values: [NORTHLAND]}
+    constraint:
+      all_of:
+        - {fact: label.front_claims, operator: contains, value: clinically_proven}
+    sources:
+      - {source_id: DEMO-NL-GUIDE-R1, locator: "rule 9"}
+    recorded_at: "2025-12-15T00:00:00Z"
+
+  - <<: *common
+    id: PKG-006
+    version: 1
+    title: MegaMart permits the 'clinically proven' claim (customer guidance)
+    statement: "DEMO GUIDANCE. MegaMart artwork may carry a 'clinically proven' claim."
+    subject_key: label.front_claims.clinically_proven
+    modality: permitted
+    authority: customer
+    status: published
+    review_ref: DEMO-REVIEW-006
+    applicability:
+      <<: *anywhere
+      customer: {mode: in, values: [MEGAMART]}
+    sources:
+      - {source_id: DEMO-MEGAMART-SPEC, locator: "claims 1.3"}
+    recorded_at: "2025-12-15T00:00:00Z"
+
+  - <<: *common
+    id: PKG-008
+    version: 1
+    title: Sunleaf mini-pack font size (brand rule claiming an override)
+    statement: "DEMO RULE. Sunleaf mini-packs may use 5 pt body text, overriding the baseline."
+    subject_key: label.min_font
+    modality: mandatory
+    authority: brand
+    status: published
+    review_ref: DEMO-REVIEW-008
+    overrides: [PKG-007]
+    applicability:
+      <<: *anywhere
+      brand: {mode: in, values: [SUNLEAF]}
+      product: {mode: in, values: [PX-200-MINI]}
+    constraint:
+      all_of:
+        - {fact: label.min_font_pt, operator: gte, value: 5}
+    sources:
+      - {source_id: DEMO-SUNLEAF-BRANDBOOK, locator: "p. 30"}
+    recorded_at: "2025-12-15T00:00:00Z"
+
+  - <<: *common
+    id: PKG-009
+    version: 1
+    title: Southland storage statement
+    statement: "DEMO RULE. Southland cartons state 'Store below 25 C'."
+    subject_key: label.storage_statement
+    modality: mandatory
+    authority: regulatory
+    status: published
+    review_ref: DEMO-REVIEW-009
+    applicability:
+      <<: *anywhere
+      market: {mode: in, values: [SOUTHLAND]}
+    constraint:
+      all_of:
+        - {fact: label.storage_statement, operator: eq, value: "Store below 25 C"}
+    sources:
+      - {source_id: DEMO-SL-GUIDE-R1, locator: "rule 6"}
+    recorded_at: "2025-12-15T00:00:00Z"
+
+  - <<: *common
+    id: PKG-010
+    version: 1
+    title: MegaMart storage statement (customer rule)
+    statement: "DEMO RULE. MegaMart cartons state 'Store below 30 C'."
+    subject_key: label.storage_statement
+    modality: mandatory
+    authority: customer
+    status: published
+    review_ref: DEMO-REVIEW-010
+    applicability:
+      <<: *anywhere
+      customer: {mode: in, values: [MEGAMART]}
+    constraint:
+      all_of:
+        - {fact: label.storage_statement, operator: eq, value: "Store below 30 C"}
+    sources:
+      - {source_id: DEMO-MEGAMART-SPEC, locator: "storage 2.4"}
+    recorded_at: "2025-12-15T00:00:00Z"
+
+  - <<: *common
+    id: PKG-012
+    version: 1
+    title: Allergen statement present (absence is a violation)
+    statement: "DEMO RULE. Every carton carries an allergen statement; an absent statement is non-compliant."
+    subject_key: label.allergen_statement
+    modality: mandatory
+    authority: regulatory
+    status: published
+    review_ref: DEMO-REVIEW-012
+    applicability:
+      <<: *anywhere
+      product_family: {mode: in, values: [otc_tablets]}
+    constraint:
+      all_of:
+        - {fact: label.allergen_statement, operator: not_empty, when_missing: violation}
+    sources:
+      - {source_id: DEMO-STD-PKG-01, locator: "section 5"}
+    recorded_at: "2025-12-15T00:00:00Z"
+
+  - <<: *common
+    id: PKG-015
+    version: 1
+    title: Northland registration number (restricted to regulatory affairs)
+    statement: "DEMO RULE. Northland cartons show the product registration number."
+    subject_key: label.registration_number
+    modality: mandatory
+    authority: regulatory
+    status: published
+    review_ref: DEMO-REVIEW-015
+    access:
+      mode: restricted
+      state: known
+      allow_principals: ["group:regulatory-affairs"]
+      requires_group_resolution: true
+    applicability:
+      <<: *anywhere
+      market: {mode: in, values: [NORTHLAND]}
+    constraint:
+      all_of:
+        - {fact: label.registration_number_present, operator: eq, value: true}
+    sources:
+      - {source_id: DEMO-NL-REG-MEMO, locator: "1"}
+    recorded_at: "2025-12-15T00:00:00Z"
+
+  - <<: *common
+    id: PKG-016
+    version: 1
+    title: Artwork-change sign-off (brand scope not yet curated)
+    statement: "DEMO RULE. Artwork changes in Southland need a recorded sign-off."
+    subject_key: workflow.artwork_signoff
+    modality: mandatory
+    authority: internal
+    status: published
+    review_ref: DEMO-REVIEW-016
+    applicability:
+      # brand intentionally undeclared: applicability metadata unknown.
+      customer: {mode: any}
+      market: {mode: in, values: [SOUTHLAND]}
+      product: {mode: any}
+      product_family: {mode: any}
+      workflow: {mode: in, values: [artwork_change]}
+    constraint:
+      all_of:
+        - {fact: workflow.signoff_recorded, operator: eq, value: true}
+    sources:
+      - {source_id: DEMO-SOP-ARTWORK, locator: "step 7"}
+    recorded_at: "2025-12-15T00:00:00Z"
+
+  - <<: *common
+    id: PKG-017
+    version: 1
+    title: Export cartons must not omit the export marking (absence is a violation)
+    statement: >-
+      DEMO RULE. In an export review the carton must not omit the export marking; a review
+      with no recorded marking check is treated as an omission.
+    subject_key: label.export_marking
+    modality: prohibited
+    authority: internal
+    status: published
+    review_ref: DEMO-REVIEW-017
+    applicability:
+      <<: *anywhere
+      product_family: {mode: in, values: [otc_tablets]}
+      workflow: {mode: in, values: [export_review]}
+    constraint:
+      all_of:
+        - {fact: label.export_marking_omitted, operator: eq, value: true, when_missing: violation}
+    sources:
+      - {source_id: DEMO-SOP-EXPORT, locator: "step 3"}
+    recorded_at: "2025-12-15T00:00:00Z"
+
+  # -- not served: lifecycle states other than published --------------------
+  - tenant: packaging_demo
+    id: PKG-013
+    version: 1
+    title: Extracted obligation awaiting curation
+    statement: "Cartons must include a tamper-evidence notice."
+    subject_key: label.tamper_notice
+    modality: mandatory
+    authority: extracted
+    origin: extracted
+    status: draft
+    confidence: 0.97
+    sources:
+      - {source_id: DEMO-CHUNK-0042, source_type: chunk, quote: "must include a tamper-evidence notice"}
+    recorded_at: "2026-09-01T00:00:00Z"
+
+  - <<: *common
+    id: PKG-014
+    version: 2
+    title: Withdrawn Northland pictogram rule
+    statement: "DEMO RULE (withdrawn). Northland cartons show a dosage pictogram."
+    subject_key: label.pictogram
+    modality: mandatory
+    authority: regulatory
+    status: withdrawn
+    review_ref: DEMO-REVIEW-014-W
+    applicability:
+      <<: *anywhere
+      market: {mode: in, values: [NORTHLAND]}
+    constraint:
+      all_of:
+        - {fact: label.pictogram_present, operator: eq, value: true}
+    sources:
+      - {source_id: DEMO-NL-GUIDE-R1, locator: "rule 11"}
+    recorded_at: "2026-05-01T00:00:00Z"
+
+exceptions:
+  - tenant: packaging_demo
+    id: EXC-001
+    version: 1
+    kind: waiver
+    target_item_ids: [PKG-011]
+    rationale: "DEMO. The PX-200-MINI carton is too small for 8 pt text; the 6 pt baseline still applies."
+    applicability:
+      customer: {mode: any}
+      brand: {mode: any}
+      market: {mode: in, values: [NORTHLAND]}
+      product: {mode: in, values: [PX-200-MINI]}
+      product_family: {mode: any}
+      workflow: {mode: any}
+      valid_from: "2026-07-01T00:00:00Z"
+      valid_to: "2027-07-01T00:00:00Z"
+    granted_by: "user:demo-regulatory-lead"
+    approval_ref: DEMO-WAIVER-2026-07
+    sources:
+      - {source_id: DEMO-NL-WAIVER-LETTER, locator: "1"}
+    status: published
+    access: {mode: tenant, state: known}
+    recorded_at: "2026-06-20T00:00:00Z"
+
+  - tenant: packaging_demo
+    id: EXC-002
+    version: 1
+    kind: precedence
+    target_item_ids: [PKG-009]
+    winner_item_id: PKG-010
+    rationale: "DEMO. For MegaMart mini-packs sold in Southland the customer storage text was approved."
+    applicability:
+      customer: {mode: in, values: [MEGAMART]}
+      brand: {mode: any}
+      market: {mode: in, values: [SOUTHLAND]}
+      product: {mode: in, values: [PX-200-MINI]}
+      product_family: {mode: any}
+      workflow: {mode: any}
+    granted_by: "user:demo-regulatory-lead"
+    approval_ref: DEMO-PRECEDENCE-2026-03
+    sources:
+      - {source_id: DEMO-SL-MEGAMART-AGREEMENT, locator: "annex B"}
+    status: published
+    access: {mode: tenant, state: known}
+    recorded_at: "2026-03-01T00:00:00Z"
+
+  - tenant: packaging_demo
+    id: EXC-003
+    version: 1
+    kind: waiver
+    target_item_ids: [PKG-001]
+    rationale: "DEMO. In Southland the mini-pack batch code is printed on the shipper case instead."
+    applicability:
+      customer: {mode: any}
+      brand: {mode: any}
+      market: {mode: in, values: [SOUTHLAND]}
+      product: {mode: in, values: [PX-200-MINI]}
+      product_family: {mode: any}
+      workflow: {mode: any}
+    granted_by: "user:demo-regulatory-lead"
+    approval_ref: DEMO-WAIVER-2026-09
+    sources:
+      - {source_id: DEMO-SL-SHIPPER-MEMO, locator: "1"}
+    status: published
+    access: {mode: tenant, state: known}
+    recorded_at: "2026-03-01T00:00:00Z"
+
+  - tenant: packaging_demo
+    id: EXC-004
+    version: 1
+    kind: precedence
+    target_item_ids: [PKG-009]
+    winner_item_id: PKG-010
+    rationale: >-
+      DEMO. For Southland mini-packs, where the MegaMart storage rule applies it prevails over the
+      market storage rule. Where it does not apply, the market rule binds as usual.
+    applicability:
+      customer: {mode: any}
+      brand: {mode: any}
+      market: {mode: in, values: [SOUTHLAND]}
+      product: {mode: in, values: [PX-200-MINI]}
+      product_family: {mode: any}
+      workflow: {mode: any}
+    granted_by: "user:demo-regulatory-lead"
+    approval_ref: DEMO-PRECEDENCE-2026-04
+    sources:
+      - {source_id: DEMO-SL-STORAGE-DECISION, locator: "2"}
+    status: published
+    access: {mode: tenant, state: known}
+    recorded_at: "2026-03-01T00:00:00Z"

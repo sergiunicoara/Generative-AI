@@ -614,9 +614,46 @@ def resolve_view(
     )
 
 
+def _knowledge_evaluation(
+    graph: Graph, rows: list[dict[str, Any]], effective: datetime, knowledge: datetime,
+    tenant: str, release: Any,
+) -> dict[str, Any]:
+    """Shared contextual-knowledge evaluation of the guidance in force.
+
+    Additive: it never changes the answer text, status or citations above.
+    """
+    from graphrag.context_graph.knowledge_evaluation import KnowledgeReleaseRef
+    from graphrag.domains.energy.knowledge import (
+        ENERGY_KNOWLEDGE_DOMAIN, bulletin_items, evaluate_maintenance,
+    )
+
+    release = release or KnowledgeReleaseRef(
+        release_id="unversioned-graph", domain=ENERGY_KNOWLEDGE_DOMAIN, version="unversioned",
+    )
+    candidates = _run(graph, "bulletin_candidates.rq", {"KNOWN_AS": format_instant(knowledge)})
+    items = bulletin_items(
+        candidates, tenant=tenant, publication_version=release.release_id,
+        source_type=lambda iri: _source_type(_provenance(graph, iri)),
+    )
+    findings = []
+    for row in rows:
+        observation = _observation_evidence(graph, row, tenant)
+        findings.append({
+            "asset": _local_name(row["asset"]), "component_type": row["componentType"],
+            "temperature": row["temperature"], "observation_source_id": observation.source_id,
+            "observation_source_type": observation.source_type, "locator": observation.field_or_span,
+        })
+    return evaluate_maintenance(
+        items=items, findings=findings,
+        component_types=sorted({str(row["componentType"]) for row in candidates}),
+        tenant=tenant, as_of=effective, known_as=knowledge, release=release,
+    )
+
+
 def answer(
     graph: Graph, question_id: str, *, tenant: str, dataset_tenant: str,
     as_of: str | None = None, known_as: str | None = None, now: str | None = None,
+    knowledge_release: Any = None,
 ) -> dict[str, Any]:
     """Derive the answer and citations for `question_id` from `graph`.
 
@@ -640,7 +677,11 @@ def answer(
     effective, knowledge = resolve_view(graph, as_of=as_of, known_as=known_as, now=now)
     selection = select_bulletin(graph, as_of=effective, known_as=knowledge)
     if not selection.is_current:
-        return _abstain_on_guidance(graph, selection, effective, knowledge, tenant)
+        result = _abstain_on_guidance(graph, selection, effective, knowledge, tenant)
+        if question_id == "maintenance_review":
+            result["knowledge_evaluation"] = _knowledge_evaluation(
+                graph, [], effective, knowledge, tenant, knowledge_release)
+        return result
     result = _DERIVATIONS[question_id](
         graph, selection.bulletin, effective, knowledge, tenant,
     )
@@ -648,6 +689,9 @@ def answer(
         result["guidance"] = {
             "status": "current", "reason": "", "resolution": selection.resolution,
         }
+    if question_id == "maintenance_review":
+        result["knowledge_evaluation"] = _knowledge_evaluation(
+            graph, result["query_rows"], effective, knowledge, tenant, knowledge_release)
     return result
 
 

@@ -14,6 +14,7 @@ The specification-to-implementation runner is documented in
 - `graphrag-tutorial.md` — setup and end-to-end usage
 - `runbook.md` — operations and troubleshooting
 - `mcp-operations.md` — authenticated remote MCP deployment and incident response
+- `contextual-knowledge-evaluation.md` — applicability, validation, conflicts and gated knowledge releases (`kg.knowledge.evaluate`)
 - `local-evidence-runbook.md` — reproducible local MCP, retrieval, write, cost, and load evidence
 - `public-local-evaluation-report.md` — bounded results from the checked-in synthetic local run
 - `graph-validation.md` — publication gate, validation rules, quarantine

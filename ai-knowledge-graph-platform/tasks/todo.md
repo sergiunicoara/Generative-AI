@@ -63,3 +63,75 @@ and docs.
   the audit panel or the history endpoint; `test_energy_demo_routes_expose_no_new_mutation_endpoints`
   and the new `test_publication_history_endpoint_is_read_only` both confirm this
   structurally, not just by inspection.
+
+---
+
+# Contextual knowledge evaluation (2026-10-24)
+
+## Existing / reuse / extend map (from code, not docs)
+
+| Need | Existing (file) | Decision |
+| --- | --- | --- |
+| Trusted tenant + principal | `api/auth/dependencies.py` `get_tenant`, `require_scope`, `assert_request_tenant`; `mcp_server/identity.py` `CallerIdentity`; `enterprise/models.py` `AccessContext.from_claims`, `DocumentAccessPolicy` | **Reuse.** Knowledge items carry a `DocumentAccessPolicy`; a Python twin of `document_access_predicate` filters before anything is exposed. |
+| Obligation extraction | `enterprise/models.py` `ObligationDraft` (no tenant/modality/status) | **Extend by conversion**: `KnowledgeItem.from_obligation_draft()` yields a *draft* with no executable constraint and unknown applicability. `ObligationDraft` unchanged. |
+| Policy evaluation | `context_graph/policy_engine.py` first-match, no unknown state | **Reuse only for the escalation step** (one decision over summary facts). Not used as the multi-obligation evaluator. Reuse `ConditionOperator` as the bounded constraint vocabulary. |
+| Escalation / human review | `business/policy.py`, `CGApproval`, `CGExceptionGrant` | **Reuse pattern**: escalation expressed as a `PolicyVersion`; exceptions modelled with explicit scope/provenance/validity mirroring `CGExceptionGrant`. |
+| Domain applicability | `graph/pharma_commercial.py` exact-equality scope checks, no unknown | Leave as is; new shared service generalises it (multi-dimension, three-valued). |
+| Temporal selection | `domains/energy/answers.py` `select_bulletin` current/missing/expired/conflicting | **Hook point**: shared evaluation added to `maintenance_review` answers; consistency test against `select_bulletin`. |
+| Release / publication | `domains/energy/publication.py` SHACL gate; `governance_store.py` append-only versions + active pointer + rollback | **Extend the durable store** with knowledge-release tables (same engine/DB, no new store). Publisher gate runs contract + conflict lint + regression eval; failure keeps previous active release. Energy answers stamped with the active publication version. |
+| Cache identity | `retrieval/query_cache.py` `QueryCacheContext` (no release/context fields) | **Extend**: add `knowledge_release` + `business_context_fingerprint`, bump schema version; evaluation results cached under tenant+access+context+view+release key. |
+| API/MCP | `mcp_server/registry.py` `CapabilitySpec`, `capabilities/__init__.py`, `server.py`, `api/routes/skills.py`, contract fixture `tests/unit/contracts/mcp_capabilities_v1.json` | **Reuse**: new capability `kg.knowledge.evaluate@1.0.0` + `POST /knowledge/evaluate`; extend `_json_type` for dict args. |
+| Missing | — | three-valued applicability, normative modality, bounded constraint DSL with missing-fact semantics, conflict/exception handling, validation outcome types, knowledge release record. |
+
+## Plan
+- [x] Contracts: `graphrag/context_graph/knowledge.py`
+- [x] Applicability service (applies / does_not_apply / unknown)
+- [x] Constraint validation + conflicts + exceptions + decision (escalation via policy engine)
+- [x] Release publisher gate on the durable governance store; evaluation cache
+- [x] Packaging/labeling synthetic pack + walkthrough
+- [x] Energy integration on `maintenance_review` + publication stamp
+- [x] MCP capability + API route + contract fixture
+- [x] Deterministic eval set + runner with separate metrics
+- [x] Docs + roadmap; targeted tests; final regression run
+
+## Review (2026-10-24)
+- Full unit suite: 3278 passed (703 s), one run at the end. New targeted tests: 62.
+- Eval set: 22/22 synthetic cases; metrics in `evals/knowledge_eval/last_run.json`.
+- Comparator sensitivity proven by mutating 7 expectations (all detected).
+- Not done: RDF/SHACL projection via semantic-model compiler; pack review/publish HTTP route; any live validation.
+- Side fix: `artifacts/mcp-capabilities-v1.json` was stale (read capabilities exported with empty scopes); regenerated.
+
+## Audit and fix (2026-10-24)
+
+Prior results above (3278 / 62 / 22-of-22) were measured before the audit and
+are kept as history. Measurements below are new.
+
+- [x] Reproduce: `tests/unit/context_graph/test_contextual_knowledge_audit.py`
+  (31 tests) written first; against the pre-fix code **28 failed, 3 passed**
+  (the 3 passing were behaviour that must not change: a waiver covering every
+  bound value, ordinary falsity passing a prohibition, an unknown superseder
+  making the older revision unknown). All 8 reported defects confirmed; none
+  rejected.
+- [x] Eval set extended with KE-23..KE-26 (expectations written before the
+  fix). Pre-fix runner: **crashed** on KE-26 (`TypeError: '>=' not supported
+  between 'str' and 'int'`); KE-23/24/25 mismatched (PKG-001 / PKG-009 /
+  PKG-017 suppressed or passed; overall `compliant` instead of `non_compliant`).
+- [x] Fix evaluator: latest version per id before status/access; typed
+  predicates (`invalid` / `fact_type_mismatch`); absence-is-violation fails
+  every modality; coverage-checked waivers/precedence with
+  `partial_exception_refs`; precedence needs an effective winner, else
+  `unresolved_exception` escalation (policy 1.1.0); transitive,
+  order-independent supersession with cycle/unknown/partial handling.
+- [x] Fix contracts: NaN/inf rejected on `Fact` and `Predicate`.
+- [x] Fix release gate: mandatory regression cases; one published version per
+  item/exception id and it must be the latest; content hash covers pack
+  metadata + disclaimer.
+- [x] Consumer example approves only `compliant` with no review flag.
+- [x] Structured failures through registry and HTTP route (type mismatch ->
+  `needs_review`; NaN -> `invalid_request` / 422).
+- [x] Focused: 100 tests (31 audit + 69 knowledge/capability/energy) pass; eval
+  26/26; walkthrough runs.
+- [x] Full unit suite (one run, at the end): **3316 passed**, 28 warnings, 0 failed (749 s).
+- Remaining gaps: partial waivers/supersessions are not unioned; a partially
+  superseded revision reports its full matched context; the eval set is
+  developer-authored (agreement with own expectations, not real-world accuracy).

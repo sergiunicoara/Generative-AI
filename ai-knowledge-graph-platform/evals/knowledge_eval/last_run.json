@@ -1,0 +1,350 @@
+{
+  "dataset": "evals/knowledge_eval/packaging_labeling_cases.json",
+  "label": "SYNTHETIC ENGINEERING EVALUATION - invented rules and expectations, no independent domain review",
+  "result_source": "deterministic in-process evaluation of the YAML pack (no DB, no network, no model)",
+  "cases": {
+    "passed": 26,
+    "total": 26
+  },
+  "metrics": {
+    "applicability_precision": {
+      "value": 1.0,
+      "numerator": 142,
+      "denominator": 142
+    },
+    "applicability_recall": {
+      "value": 1.0,
+      "numerator": 142,
+      "denominator": 142
+    },
+    "validation_outcome_accuracy": {
+      "value": 1.0,
+      "numerator": 69,
+      "denominator": 69
+    },
+    "conflict_precision": {
+      "value": 1.0,
+      "numerator": 6,
+      "denominator": 6
+    },
+    "conflict_recall": {
+      "value": 1.0,
+      "numerator": 6,
+      "denominator": 6
+    },
+    "escalation_accuracy": {
+      "value": 1.0,
+      "numerator": 26,
+      "denominator": 26
+    },
+    "overall_outcome_accuracy": {
+      "value": 1.0,
+      "numerator": 26,
+      "denominator": 26
+    },
+    "citation_correctness": {
+      "value": 1.0,
+      "numerator": 3,
+      "denominator": 3
+    }
+  },
+  "per_case": [
+    {
+      "id": "KE-01",
+      "covers": [
+        "temporal_supersession",
+        "mandatory",
+        "prohibition"
+      ],
+      "passed": true,
+      "mismatches": [],
+      "overall": "compliant",
+      "human_review_required": false,
+      "decision_id": "KD-b160be1ecc58fcf8"
+    },
+    {
+      "id": "KE-02",
+      "covers": [
+        "mandatory",
+        "fail_vs_not_applicable"
+      ],
+      "passed": true,
+      "mismatches": [],
+      "overall": "non_compliant",
+      "human_review_required": false,
+      "decision_id": "KD-4b3464133ef8f94e"
+    },
+    {
+      "id": "KE-03",
+      "covers": [
+        "temporal_validity"
+      ],
+      "passed": true,
+      "mismatches": [],
+      "overall": "compliant",
+      "human_review_required": false,
+      "decision_id": "KD-92adf7342efe5297"
+    },
+    {
+      "id": "KE-04",
+      "covers": [
+        "temporal_validity",
+        "recorded_time"
+      ],
+      "passed": true,
+      "mismatches": [],
+      "overall": "compliant",
+      "human_review_required": false,
+      "decision_id": "KD-34b8bb97389b3f6a"
+    },
+    {
+      "id": "KE-05",
+      "covers": [
+        "authorized_exception"
+      ],
+      "passed": true,
+      "mismatches": [],
+      "overall": "compliant",
+      "human_review_required": false,
+      "decision_id": "KD-6e9387b24ac1a32f"
+    },
+    {
+      "id": "KE-06",
+      "covers": [
+        "unauthorized_override",
+        "specificity_not_exception"
+      ],
+      "passed": true,
+      "mismatches": [],
+      "overall": "needs_review",
+      "human_review_required": true,
+      "decision_id": "KD-81996aa0e9aab21f"
+    },
+    {
+      "id": "KE-07",
+      "covers": [
+        "permission_vs_prohibition"
+      ],
+      "passed": true,
+      "mismatches": [],
+      "overall": "needs_review",
+      "human_review_required": true,
+      "decision_id": "KD-8ee21862c40f9d4e"
+    },
+    {
+      "id": "KE-08",
+      "covers": [
+        "conflicting_requirements"
+      ],
+      "passed": true,
+      "mismatches": [],
+      "overall": "needs_review",
+      "human_review_required": true,
+      "decision_id": "KD-04b4f86e3359f99a"
+    },
+    {
+      "id": "KE-09",
+      "covers": [
+        "authorized_exception",
+        "conflict_resolution"
+      ],
+      "passed": true,
+      "mismatches": [],
+      "overall": "compliant",
+      "human_review_required": false,
+      "decision_id": "KD-777ac1ab7d1d937a"
+    },
+    {
+      "id": "KE-10",
+      "covers": [
+        "missing_context"
+      ],
+      "passed": true,
+      "mismatches": [],
+      "overall": "needs_review",
+      "human_review_required": true,
+      "decision_id": "KD-6ea3161970cd371a"
+    },
+    {
+      "id": "KE-11",
+      "covers": [
+        "insufficient_evidence"
+      ],
+      "passed": true,
+      "mismatches": [],
+      "overall": "needs_review",
+      "human_review_required": true,
+      "decision_id": "KD-0cfeaa94528e4fc2"
+    },
+    {
+      "id": "KE-12",
+      "covers": [
+        "absence_semantics"
+      ],
+      "passed": true,
+      "mismatches": [],
+      "overall": "non_compliant",
+      "human_review_required": false,
+      "decision_id": "KD-21d70bd78cf0d731"
+    },
+    {
+      "id": "KE-13",
+      "covers": [
+        "top_k_regression",
+        "mandatory_vs_advisory"
+      ],
+      "passed": true,
+      "mismatches": [],
+      "overall": "non_compliant",
+      "human_review_required": false,
+      "decision_id": "KD-3a2775e3a0125185"
+    },
+    {
+      "id": "KE-14",
+      "covers": [
+        "document_level_access"
+      ],
+      "passed": true,
+      "mismatches": [],
+      "overall": "compliant",
+      "human_review_required": false,
+      "decision_id": "KD-dc9456e09861e7c1"
+    },
+    {
+      "id": "KE-15",
+      "covers": [
+        "document_level_access"
+      ],
+      "passed": true,
+      "mismatches": [],
+      "overall": "compliant",
+      "human_review_required": false,
+      "decision_id": "KD-d14e39461b6b4d60"
+    },
+    {
+      "id": "KE-16",
+      "covers": [
+        "tenant_isolation"
+      ],
+      "passed": true,
+      "mismatches": [],
+      "overall": "needs_review",
+      "human_review_required": true,
+      "decision_id": "KD-4536b325e70005d9"
+    },
+    {
+      "id": "KE-17",
+      "covers": [
+        "unknown_metadata"
+      ],
+      "passed": true,
+      "mismatches": [],
+      "overall": "needs_review",
+      "human_review_required": true,
+      "decision_id": "KD-8ad5d9cb0447977f"
+    },
+    {
+      "id": "KE-18",
+      "covers": [
+        "lifecycle_status"
+      ],
+      "passed": true,
+      "mismatches": [],
+      "overall": "compliant",
+      "human_review_required": false,
+      "decision_id": "KD-ec4fa6d36615ba6a"
+    },
+    {
+      "id": "KE-19",
+      "covers": [
+        "multiple_values",
+        "orthogonal_context"
+      ],
+      "passed": true,
+      "mismatches": [],
+      "overall": "compliant",
+      "human_review_required": false,
+      "decision_id": "KD-b4fb5d7e752cd9e0"
+    },
+    {
+      "id": "KE-20",
+      "covers": [
+        "mandatory_vs_advisory"
+      ],
+      "passed": true,
+      "mismatches": [],
+      "overall": "compliant",
+      "human_review_required": false,
+      "decision_id": "KD-ac2b134a7238afbe"
+    },
+    {
+      "id": "KE-21",
+      "covers": [
+        "prohibition"
+      ],
+      "passed": true,
+      "mismatches": [],
+      "overall": "non_compliant",
+      "human_review_required": false,
+      "decision_id": "KD-ff359e020dd92e24"
+    },
+    {
+      "id": "KE-22",
+      "covers": [
+        "orthogonal_context"
+      ],
+      "passed": true,
+      "mismatches": [],
+      "overall": "needs_review",
+      "human_review_required": true,
+      "decision_id": "KD-cccb91beffa32042"
+    },
+    {
+      "id": "KE-23",
+      "covers": [
+        "partial_exception_coverage",
+        "multiple_values"
+      ],
+      "passed": true,
+      "mismatches": [],
+      "overall": "non_compliant",
+      "human_review_required": false,
+      "decision_id": "KD-ed9654e1ae269623"
+    },
+    {
+      "id": "KE-24",
+      "covers": [
+        "precedence_effective_winner"
+      ],
+      "passed": true,
+      "mismatches": [],
+      "overall": "non_compliant",
+      "human_review_required": false,
+      "decision_id": "KD-1228a2b788f09c6c"
+    },
+    {
+      "id": "KE-25",
+      "covers": [
+        "absence_semantics",
+        "prohibition"
+      ],
+      "passed": true,
+      "mismatches": [],
+      "overall": "non_compliant",
+      "human_review_required": false,
+      "decision_id": "KD-4ddd045bfaa83f88"
+    },
+    {
+      "id": "KE-26",
+      "covers": [
+        "fact_types",
+        "insufficient_evidence"
+      ],
+      "passed": true,
+      "mismatches": [],
+      "overall": "needs_review",
+      "human_review_required": true,
+      "decision_id": "KD-b1cc849f573aaa6f"
+    }
+  ]
+}

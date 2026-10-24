@@ -309,11 +309,23 @@ class EnergyDemoService:
         answers "as we knew it then", which is what keeps a historical answer
         from citing evidence recorded after the instant it asks about.
         """
+        from graphrag.context_graph.knowledge_evaluation import KnowledgeReleaseRef
+        from graphrag.domains.energy.knowledge import ENERGY_KNOWLEDGE_DOMAIN
+
+        report = self.publication_report()
+        release = KnowledgeReleaseRef(
+            release_id=report.version_id, domain=ENERGY_KNOWLEDGE_DOMAIN,
+            version=report.published_at,
+        )
         try:
-            return energy_answers.answer(
+            result = energy_answers.answer(
                 self.graph, question_id, tenant=tenant, dataset_tenant=self.tenant,
-                as_of=as_of, known_as=known_as,
+                as_of=as_of, known_as=known_as, knowledge_release=release,
             )
+            if result.get("status") != "not_found":
+                # Every answer names the publication it was derived from.
+                result["publication_version_id"] = report.version_id
+            return result
         except energy_answers.EnergyAnswerError as exc:
             # Preserve the historical contract: an unknown question id is a
             # plain ValueError, which api/routes/energy_demo.py turns into a

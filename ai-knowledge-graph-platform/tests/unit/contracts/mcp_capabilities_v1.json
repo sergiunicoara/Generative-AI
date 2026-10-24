@@ -152,6 +152,28 @@
     "version": "1.0.0"
   },
   {
+    "arg_schema_keys": [
+      "context",
+      "domain",
+      "expect_applicable_knowledge",
+      "facts",
+      "semantic_candidates",
+      "tenant"
+    ],
+    "capability_id": "kg.knowledge.evaluate",
+    "deprecated": false,
+    "dry_run_ok": true,
+    "kind": "read",
+    "legacy_aliases": [],
+    "qualified_name": "kg.knowledge.evaluate@1.0.0",
+    "replacement": null,
+    "required_scopes": ["read"],
+    "requires_approval": false,
+    "risk": "moderate",
+    "title": "Evaluate which contextual knowledge applies and whether it is satisfied",
+    "version": "1.0.0"
+  },
+  {
     "arg_schema_keys": [],
     "capability_id": "platform.capabilities.discover",
     "deprecated": false,

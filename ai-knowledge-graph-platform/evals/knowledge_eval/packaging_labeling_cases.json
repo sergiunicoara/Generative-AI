@@ -1,0 +1,2683 @@
+{
+  "name": "packaging_labeling contextual-knowledge evaluation",
+  "label": "SYNTHETIC ENGINEERING EVALUATION - invented rules and expectations, no independent domain review",
+  "domain": "packaging_labeling",
+  "pack": "config/knowledge_packs/packaging_labeling.yml",
+  "cases": [
+    {
+      "id": "KE-01",
+      "description": "Compliant PX-200 carton in Northland after revision 2; revision 1 is superseded.",
+      "covers": [
+        "temporal_supersession",
+        "mandatory",
+        "prohibition"
+      ],
+      "tenant": "packaging_demo",
+      "principal": {
+        "sub": "eval-runner"
+      },
+      "context": {
+        "customer": "CORNERSHOP",
+        "brand": "OTHERBRAND",
+        "market": "NORTHLAND",
+        "product": "PX-200",
+        "product_family": "otc_tablets",
+        "workflow": "label_review",
+        "as_of": "2026-08-01T00:00:00Z"
+      },
+      "facts": {
+        "label.batch_code_present": {
+          "value": true,
+          "evidence": [
+            {
+              "source_id": "ARTWORK-PX200-R3",
+              "locator": "artwork spec"
+            }
+          ]
+        },
+        "label.min_font_pt": {
+          "value": 8,
+          "evidence": [
+            {
+              "source_id": "ARTWORK-PX200-R3",
+              "locator": "artwork spec"
+            }
+          ]
+        },
+        "label.front_claims": {
+          "value": [],
+          "evidence": [
+            {
+              "source_id": "ARTWORK-PX200-R3",
+              "locator": "artwork spec"
+            }
+          ]
+        },
+        "label.brand_panel_color": {
+          "value": "green",
+          "evidence": [
+            {
+              "source_id": "ARTWORK-PX200-R3",
+              "locator": "artwork spec"
+            }
+          ]
+        },
+        "label.allergen_statement": {
+          "value": "Contains lactose",
+          "evidence": [
+            {
+              "source_id": "ARTWORK-PX200-R3",
+              "locator": "artwork spec"
+            }
+          ]
+        },
+        "label.registration_number_present": {
+          "value": true,
+          "evidence": [
+            {
+              "source_id": "ARTWORK-PX200-R3",
+              "locator": "artwork spec"
+            }
+          ]
+        }
+      },
+      "expected": {
+        "applicable": [
+          "PKG-001",
+          "PKG-005",
+          "PKG-007",
+          "PKG-011",
+          "PKG-012"
+        ],
+        "unknown": [],
+        "outcomes": {
+          "PKG-001": "pass",
+          "PKG-007": "pass",
+          "PKG-011": "pass",
+          "PKG-005": "pass",
+          "PKG-012": "pass",
+          "PKG-002": "not_evaluated",
+          "PKG-003": "not_evaluated"
+        },
+        "conflicts": [],
+        "human_review_required": false,
+        "overall": "compliant",
+        "citations": {
+          "PKG-001": [
+            "DEMO-STD-PKG-01",
+            "ARTWORK-PX200-R3"
+          ],
+          "PKG-011": [
+            "DEMO-NL-GUIDE-R2",
+            "ARTWORK-PX200-R3"
+          ]
+        }
+      }
+    },
+    {
+      "id": "KE-02",
+      "description": "Same carton with 7 pt text fails the revised Northland rule; the 6 pt baseline still passes.",
+      "covers": [
+        "mandatory",
+        "fail_vs_not_applicable"
+      ],
+      "tenant": "packaging_demo",
+      "principal": {
+        "sub": "eval-runner"
+      },
+      "context": {
+        "customer": "CORNERSHOP",
+        "brand": "OTHERBRAND",
+        "market": "NORTHLAND",
+        "product": "PX-200",
+        "product_family": "otc_tablets",
+        "workflow": "label_review",
+        "as_of": "2026-08-01T00:00:00Z"
+      },
+      "facts": {
+        "label.batch_code_present": {
+          "value": true,
+          "evidence": [
+            {
+              "source_id": "ARTWORK-PX200-R3",
+              "locator": "artwork spec"
+            }
+          ]
+        },
+        "label.min_font_pt": {
+          "value": 7,
+          "evidence": [
+            {
+              "source_id": "ARTWORK-PX200-R3",
+              "locator": "artwork spec"
+            }
+          ]
+        },
+        "label.front_claims": {
+          "value": [],
+          "evidence": [
+            {
+              "source_id": "ARTWORK-PX200-R3",
+              "locator": "artwork spec"
+            }
+          ]
+        },
+        "label.brand_panel_color": {
+          "value": "green",
+          "evidence": [
+            {
+              "source_id": "ARTWORK-PX200-R3",
+              "locator": "artwork spec"
+            }
+          ]
+        },
+        "label.allergen_statement": {
+          "value": "Contains lactose",
+          "evidence": [
+            {
+              "source_id": "ARTWORK-PX200-R3",
+              "locator": "artwork spec"
+            }
+          ]
+        },
+        "label.registration_number_present": {
+          "value": true,
+          "evidence": [
+            {
+              "source_id": "ARTWORK-PX200-R3",
+              "locator": "artwork spec"
+            }
+          ]
+        }
+      },
+      "expected": {
+        "applicable": [
+          "PKG-001",
+          "PKG-005",
+          "PKG-007",
+          "PKG-011",
+          "PKG-012"
+        ],
+        "outcomes": {
+          "PKG-011": "fail",
+          "PKG-007": "pass",
+          "PKG-002": "not_evaluated"
+        },
+        "conflicts": [],
+        "human_review_required": false,
+        "overall": "non_compliant"
+      }
+    },
+    {
+      "id": "KE-03",
+      "description": "Before revision 2 takes effect, revision 1 (7 pt) applies and 7 pt passes.",
+      "covers": [
+        "temporal_validity"
+      ],
+      "tenant": "packaging_demo",
+      "principal": {
+        "sub": "eval-runner"
+      },
+      "context": {
+        "customer": "CORNERSHOP",
+        "brand": "OTHERBRAND",
+        "market": "NORTHLAND",
+        "product": "PX-200",
+        "product_family": "otc_tablets",
+        "workflow": "label_review",
+        "as_of": "2026-03-01T00:00:00Z"
+      },
+      "facts": {
+        "label.batch_code_present": {
+          "value": true,
+          "evidence": [
+            {
+              "source_id": "ARTWORK-PX200-R3",
+              "locator": "artwork spec"
+            }
+          ]
+        },
+        "label.min_font_pt": {
+          "value": 7,
+          "evidence": [
+            {
+              "source_id": "ARTWORK-PX200-R3",
+              "locator": "artwork spec"
+            }
+          ]
+        },
+        "label.front_claims": {
+          "value": [],
+          "evidence": [
+            {
+              "source_id": "ARTWORK-PX200-R3",
+              "locator": "artwork spec"
+            }
+          ]
+        },
+        "label.brand_panel_color": {
+          "value": "green",
+          "evidence": [
+            {
+              "source_id": "ARTWORK-PX200-R3",
+              "locator": "artwork spec"
+            }
+          ]
+        },
+        "label.allergen_statement": {
+          "value": "Contains lactose",
+          "evidence": [
+            {
+              "source_id": "ARTWORK-PX200-R3",
+              "locator": "artwork spec"
+            }
+          ]
+        },
+        "label.registration_number_present": {
+          "value": true,
+          "evidence": [
+            {
+              "source_id": "ARTWORK-PX200-R3",
+              "locator": "artwork spec"
+            }
+          ]
+        }
+      },
+      "expected": {
+        "applicable": [
+          "PKG-001",
+          "PKG-002",
+          "PKG-005",
+          "PKG-007",
+          "PKG-012"
+        ],
+        "outcomes": {
+          "PKG-002": "pass",
+          "PKG-011": "not_evaluated"
+        },
+        "conflicts": [],
+        "human_review_required": false,
+        "overall": "compliant"
+      }
+    },
+    {
+      "id": "KE-04",
+      "description": "Bitemporal view: as_of August but known_as 1 June, revision 2 was not yet recorded.",
+      "covers": [
+        "temporal_validity",
+        "recorded_time"
+      ],
+      "tenant": "packaging_demo",
+      "principal": {
+        "sub": "eval-runner"
+      },
+      "context": {
+        "customer": "CORNERSHOP",
+        "brand": "OTHERBRAND",
+        "market": "NORTHLAND",
+        "product": "PX-200",
+        "product_family": "otc_tablets",
+        "workflow": "label_review",
+        "as_of": "2026-08-01T00:00:00Z",
+        "known_as": "2026-06-01T00:00:00Z"
+      },
+      "facts": {
+        "label.batch_code_present": {
+          "value": true,
+          "evidence": [
+            {
+              "source_id": "ARTWORK-PX200-R3",
+              "locator": "artwork spec"
+            }
+          ]
+        },
+        "label.min_font_pt": {
+          "value": 7,
+          "evidence": [
+            {
+              "source_id": "ARTWORK-PX200-R3",
+              "locator": "artwork spec"
+            }
+          ]
+        },
+        "label.front_claims": {
+          "value": [],
+          "evidence": [
+            {
+              "source_id": "ARTWORK-PX200-R3",
+              "locator": "artwork spec"
+            }
+          ]
+        },
+        "label.brand_panel_color": {
+          "value": "green",
+          "evidence": [
+            {
+              "source_id": "ARTWORK-PX200-R3",
+              "locator": "artwork spec"
+            }
+          ]
+        },
+        "label.allergen_statement": {
+          "value": "Contains lactose",
+          "evidence": [
+            {
+              "source_id": "ARTWORK-PX200-R3",
+              "locator": "artwork spec"
+            }
+          ]
+        },
+        "label.registration_number_present": {
+          "value": true,
+          "evidence": [
+            {
+              "source_id": "ARTWORK-PX200-R3",
+              "locator": "artwork spec"
+            }
+          ]
+        }
+      },
+      "expected": {
+        "applicable": [
+          "PKG-001",
+          "PKG-002",
+          "PKG-005",
+          "PKG-007",
+          "PKG-012"
+        ],
+        "outcomes": {
+          "PKG-002": "pass",
+          "PKG-011": "not_evaluated"
+        },
+        "conflicts": [],
+        "human_review_required": false,
+        "overall": "compliant"
+      }
+    },
+    {
+      "id": "KE-05",
+      "description": "Authorised waiver: the PX-200-MINI carton is exempt from the 8 pt rule; the 6 pt baseline applies.",
+      "covers": [
+        "authorized_exception"
+      ],
+      "tenant": "packaging_demo",
+      "principal": {
+        "sub": "eval-runner"
+      },
+      "context": {
+        "customer": "CORNERSHOP",
+        "brand": "OTHERBRAND",
+        "market": "NORTHLAND",
+        "product": "PX-200-MINI",
+        "product_family": "otc_tablets",
+        "workflow": "label_review",
+        "as_of": "2026-08-01T00:00:00Z"
+      },
+      "facts": {
+        "label.batch_code_present": {
+          "value": true,
+          "evidence": [
+            {
+              "source_id": "ARTWORK-PX200-R3",
+              "locator": "artwork spec"
+            }
+          ]
+        },
+        "label.min_font_pt": {
+          "value": 6,
+          "evidence": [
+            {
+              "source_id": "ARTWORK-PX200-R3",
+              "locator": "artwork spec"
+            }
+          ]
+        },
+        "label.front_claims": {
+          "value": [],
+          "evidence": [
+            {
+              "source_id": "ARTWORK-PX200-R3",
+              "locator": "artwork spec"
+            }
+          ]
+        },
+        "label.brand_panel_color": {
+          "value": "green",
+          "evidence": [
+            {
+              "source_id": "ARTWORK-PX200-R3",
+              "locator": "artwork spec"
+            }
+          ]
+        },
+        "label.allergen_statement": {
+          "value": "Contains lactose",
+          "evidence": [
+            {
+              "source_id": "ARTWORK-PX200-R3",
+              "locator": "artwork spec"
+            }
+          ]
+        },
+        "label.registration_number_present": {
+          "value": true,
+          "evidence": [
+            {
+              "source_id": "ARTWORK-PX200-R3",
+              "locator": "artwork spec"
+            }
+          ]
+        }
+      },
+      "expected": {
+        "applicable": [
+          "PKG-001",
+          "PKG-005",
+          "PKG-007",
+          "PKG-011",
+          "PKG-012"
+        ],
+        "outcomes": {
+          "PKG-011": "not_evaluated",
+          "PKG-007": "pass",
+          "PKG-002": "not_evaluated"
+        },
+        "conflicts": [],
+        "human_review_required": false,
+        "overall": "compliant",
+        "citations": {
+          "PKG-011": [
+            "DEMO-NL-GUIDE-R2"
+          ]
+        }
+      }
+    },
+    {
+      "id": "KE-06",
+      "description": "Unauthorised override: a more specific Sunleaf brand rule claims to override the 6 pt baseline.",
+      "covers": [
+        "unauthorized_override",
+        "specificity_not_exception"
+      ],
+      "tenant": "packaging_demo",
+      "principal": {
+        "sub": "eval-runner"
+      },
+      "context": {
+        "customer": "CORNERSHOP",
+        "brand": "SUNLEAF",
+        "market": "NORTHLAND",
+        "product": "PX-200-MINI",
+        "product_family": "otc_tablets",
+        "workflow": "label_review",
+        "as_of": "2026-08-01T00:00:00Z"
+      },
+      "facts": {
+        "label.batch_code_present": {
+          "value": true,
+          "evidence": [
+            {
+              "source_id": "ARTWORK-PX200-R3",
+              "locator": "artwork spec"
+            }
+          ]
+        },
+        "label.min_font_pt": {
+          "value": 5.5,
+          "evidence": [
+            {
+              "source_id": "ARTWORK-PX200-R3",
+              "locator": "artwork spec"
+            }
+          ]
+        },
+        "label.front_claims": {
+          "value": [],
+          "evidence": [
+            {
+              "source_id": "ARTWORK-PX200-R3",
+              "locator": "artwork spec"
+            }
+          ]
+        },
+        "label.brand_panel_color": {
+          "value": "green",
+          "evidence": [
+            {
+              "source_id": "ARTWORK-PX200-R3",
+              "locator": "artwork spec"
+            }
+          ]
+        },
+        "label.allergen_statement": {
+          "value": "Contains lactose",
+          "evidence": [
+            {
+              "source_id": "ARTWORK-PX200-R3",
+              "locator": "artwork spec"
+            }
+          ]
+        },
+        "label.registration_number_present": {
+          "value": true,
+          "evidence": [
+            {
+              "source_id": "ARTWORK-PX200-R3",
+              "locator": "artwork spec"
+            }
+          ]
+        }
+      },
+      "expected": {
+        "applicable": [
+          "PKG-001",
+          "PKG-004",
+          "PKG-005",
+          "PKG-007",
+          "PKG-008",
+          "PKG-011",
+          "PKG-012"
+        ],
+        "outcomes": {
+          "PKG-007": "conflict",
+          "PKG-008": "conflict",
+          "PKG-011": "not_evaluated",
+          "PKG-004": "pass"
+        },
+        "conflicts": [
+          {
+            "kind": "unauthorized_override",
+            "items": [
+              "PKG-007",
+              "PKG-008"
+            ]
+          }
+        ],
+        "human_review_required": true,
+        "overall": "needs_review"
+      }
+    },
+    {
+      "id": "KE-07",
+      "description": "A customer permission does not override a market prohibition.",
+      "covers": [
+        "permission_vs_prohibition"
+      ],
+      "tenant": "packaging_demo",
+      "principal": {
+        "sub": "eval-runner"
+      },
+      "context": {
+        "customer": "MEGAMART",
+        "brand": "OTHERBRAND",
+        "market": "NORTHLAND",
+        "product": "PX-200",
+        "product_family": "otc_tablets",
+        "workflow": "label_review",
+        "as_of": "2026-08-01T00:00:00Z"
+      },
+      "facts": {
+        "label.batch_code_present": {
+          "value": true,
+          "evidence": [
+            {
+              "source_id": "ARTWORK-PX200-R3",
+              "locator": "artwork spec"
+            }
+          ]
+        },
+        "label.min_font_pt": {
+          "value": 8,
+          "evidence": [
+            {
+              "source_id": "ARTWORK-PX200-R3",
+              "locator": "artwork spec"
+            }
+          ]
+        },
+        "label.front_claims": {
+          "value": [
+            "clinically_proven"
+          ],
+          "evidence": [
+            {
+              "source_id": "ARTWORK-PX200-R3",
+              "locator": "artwork spec"
+            }
+          ]
+        },
+        "label.brand_panel_color": {
+          "value": "green",
+          "evidence": [
+            {
+              "source_id": "ARTWORK-PX200-R3",
+              "locator": "artwork spec"
+            }
+          ]
+        },
+        "label.allergen_statement": {
+          "value": "Contains lactose",
+          "evidence": [
+            {
+              "source_id": "ARTWORK-PX200-R3",
+              "locator": "artwork spec"
+            }
+          ]
+        },
+        "label.registration_number_present": {
+          "value": true,
+          "evidence": [
+            {
+              "source_id": "ARTWORK-PX200-R3",
+              "locator": "artwork spec"
+            }
+          ]
+        },
+        "label.storage_statement": {
+          "value": "Store below 30 C",
+          "evidence": [
+            {
+              "source_id": "ARTWORK-PX200-R3",
+              "locator": "artwork spec"
+            }
+          ]
+        }
+      },
+      "expected": {
+        "applicable": [
+          "PKG-001",
+          "PKG-005",
+          "PKG-006",
+          "PKG-007",
+          "PKG-010",
+          "PKG-011",
+          "PKG-012"
+        ],
+        "outcomes": {
+          "PKG-005": "conflict",
+          "PKG-006": "conflict",
+          "PKG-010": "pass"
+        },
+        "conflicts": [
+          {
+            "kind": "permission_vs_prohibition",
+            "items": [
+              "PKG-005",
+              "PKG-006"
+            ]
+          }
+        ],
+        "human_review_required": true,
+        "overall": "needs_review"
+      }
+    },
+    {
+      "id": "KE-08",
+      "description": "Contradictory mandatory storage statements (market vs customer) with no approved resolution.",
+      "covers": [
+        "conflicting_requirements"
+      ],
+      "tenant": "packaging_demo",
+      "principal": {
+        "sub": "eval-runner"
+      },
+      "context": {
+        "customer": "MEGAMART",
+        "brand": "OTHERBRAND",
+        "market": "SOUTHLAND",
+        "product": "PX-200",
+        "product_family": "otc_tablets",
+        "workflow": "label_review",
+        "as_of": "2026-08-01T00:00:00Z"
+      },
+      "facts": {
+        "label.batch_code_present": {
+          "value": true,
+          "evidence": [
+            {
+              "source_id": "ARTWORK-PX200-R3",
+              "locator": "artwork spec"
+            }
+          ]
+        },
+        "label.min_font_pt": {
+          "value": 8,
+          "evidence": [
+            {
+              "source_id": "ARTWORK-PX200-R3",
+              "locator": "artwork spec"
+            }
+          ]
+        },
+        "label.front_claims": {
+          "value": [],
+          "evidence": [
+            {
+              "source_id": "ARTWORK-PX200-R3",
+              "locator": "artwork spec"
+            }
+          ]
+        },
+        "label.brand_panel_color": {
+          "value": "green",
+          "evidence": [
+            {
+              "source_id": "ARTWORK-PX200-R3",
+              "locator": "artwork spec"
+            }
+          ]
+        },
+        "label.allergen_statement": {
+          "value": "Contains lactose",
+          "evidence": [
+            {
+              "source_id": "ARTWORK-PX200-R3",
+              "locator": "artwork spec"
+            }
+          ]
+        },
+        "label.registration_number_present": {
+          "value": true,
+          "evidence": [
+            {
+              "source_id": "ARTWORK-PX200-R3",
+              "locator": "artwork spec"
+            }
+          ]
+        },
+        "label.languages": {
+          "value": [
+            "sl",
+            "en"
+          ],
+          "evidence": [
+            {
+              "source_id": "ARTWORK-PX200-R3",
+              "locator": "artwork spec"
+            }
+          ]
+        },
+        "label.storage_statement": {
+          "value": "Store below 25 C",
+          "evidence": [
+            {
+              "source_id": "ARTWORK-PX200-R3",
+              "locator": "artwork spec"
+            }
+          ]
+        }
+      },
+      "expected": {
+        "applicable": [
+          "PKG-001",
+          "PKG-003",
+          "PKG-006",
+          "PKG-007",
+          "PKG-009",
+          "PKG-010",
+          "PKG-012"
+        ],
+        "outcomes": {
+          "PKG-009": "conflict",
+          "PKG-010": "conflict",
+          "PKG-003": "pass",
+          "PKG-006": "not_evaluated"
+        },
+        "conflicts": [
+          {
+            "kind": "incompatible_requirements",
+            "items": [
+              "PKG-009",
+              "PKG-010"
+            ]
+          }
+        ],
+        "human_review_required": true,
+        "overall": "needs_review"
+      }
+    },
+    {
+      "id": "KE-09",
+      "description": "The same contradiction for the mini-pack is resolved by an approved precedence exception.",
+      "covers": [
+        "authorized_exception",
+        "conflict_resolution"
+      ],
+      "tenant": "packaging_demo",
+      "principal": {
+        "sub": "eval-runner"
+      },
+      "context": {
+        "customer": "MEGAMART",
+        "brand": "OTHERBRAND",
+        "market": "SOUTHLAND",
+        "product": "PX-200-MINI",
+        "product_family": "otc_tablets",
+        "workflow": "label_review",
+        "as_of": "2026-08-01T00:00:00Z"
+      },
+      "facts": {
+        "label.batch_code_present": {
+          "value": true,
+          "evidence": [
+            {
+              "source_id": "ARTWORK-PX200-R3",
+              "locator": "artwork spec"
+            }
+          ]
+        },
+        "label.min_font_pt": {
+          "value": 8,
+          "evidence": [
+            {
+              "source_id": "ARTWORK-PX200-R3",
+              "locator": "artwork spec"
+            }
+          ]
+        },
+        "label.front_claims": {
+          "value": [],
+          "evidence": [
+            {
+              "source_id": "ARTWORK-PX200-R3",
+              "locator": "artwork spec"
+            }
+          ]
+        },
+        "label.brand_panel_color": {
+          "value": "green",
+          "evidence": [
+            {
+              "source_id": "ARTWORK-PX200-R3",
+              "locator": "artwork spec"
+            }
+          ]
+        },
+        "label.allergen_statement": {
+          "value": "Contains lactose",
+          "evidence": [
+            {
+              "source_id": "ARTWORK-PX200-R3",
+              "locator": "artwork spec"
+            }
+          ]
+        },
+        "label.registration_number_present": {
+          "value": true,
+          "evidence": [
+            {
+              "source_id": "ARTWORK-PX200-R3",
+              "locator": "artwork spec"
+            }
+          ]
+        },
+        "label.languages": {
+          "value": [
+            "sl",
+            "en"
+          ],
+          "evidence": [
+            {
+              "source_id": "ARTWORK-PX200-R3",
+              "locator": "artwork spec"
+            }
+          ]
+        },
+        "label.storage_statement": {
+          "value": "Store below 30 C",
+          "evidence": [
+            {
+              "source_id": "ARTWORK-PX200-R3",
+              "locator": "artwork spec"
+            }
+          ]
+        }
+      },
+      "expected": {
+        "applicable": [
+          "PKG-001",
+          "PKG-003",
+          "PKG-006",
+          "PKG-007",
+          "PKG-009",
+          "PKG-010",
+          "PKG-012"
+        ],
+        "outcomes": {
+          "PKG-009": "not_evaluated",
+          "PKG-010": "pass"
+        },
+        "conflicts": [
+          {
+            "kind": "incompatible_requirements",
+            "items": [
+              "PKG-009",
+              "PKG-010"
+            ],
+            "resolved": true
+          }
+        ],
+        "human_review_required": false,
+        "overall": "compliant"
+      }
+    },
+    {
+      "id": "KE-10",
+      "description": "Market not stated: market-scoped rules are unknown, not silently applied or dropped.",
+      "covers": [
+        "missing_context"
+      ],
+      "tenant": "packaging_demo",
+      "principal": {
+        "sub": "eval-runner"
+      },
+      "context": {
+        "customer": "CORNERSHOP",
+        "brand": "OTHERBRAND",
+        "product": "PX-200",
+        "product_family": "otc_tablets",
+        "workflow": "label_review",
+        "as_of": "2026-08-01T00:00:00Z"
+      },
+      "facts": {
+        "label.batch_code_present": {
+          "value": true,
+          "evidence": [
+            {
+              "source_id": "ARTWORK-PX200-R3",
+              "locator": "artwork spec"
+            }
+          ]
+        },
+        "label.min_font_pt": {
+          "value": 8,
+          "evidence": [
+            {
+              "source_id": "ARTWORK-PX200-R3",
+              "locator": "artwork spec"
+            }
+          ]
+        },
+        "label.front_claims": {
+          "value": [],
+          "evidence": [
+            {
+              "source_id": "ARTWORK-PX200-R3",
+              "locator": "artwork spec"
+            }
+          ]
+        },
+        "label.brand_panel_color": {
+          "value": "green",
+          "evidence": [
+            {
+              "source_id": "ARTWORK-PX200-R3",
+              "locator": "artwork spec"
+            }
+          ]
+        },
+        "label.allergen_statement": {
+          "value": "Contains lactose",
+          "evidence": [
+            {
+              "source_id": "ARTWORK-PX200-R3",
+              "locator": "artwork spec"
+            }
+          ]
+        },
+        "label.registration_number_present": {
+          "value": true,
+          "evidence": [
+            {
+              "source_id": "ARTWORK-PX200-R3",
+              "locator": "artwork spec"
+            }
+          ]
+        }
+      },
+      "expected": {
+        "applicable": [
+          "PKG-001",
+          "PKG-007",
+          "PKG-012"
+        ],
+        "unknown": [
+          "PKG-002",
+          "PKG-003",
+          "PKG-005",
+          "PKG-009",
+          "PKG-011"
+        ],
+        "outcomes": {
+          "PKG-005": "not_evaluated",
+          "PKG-001": "pass"
+        },
+        "conflicts": [],
+        "human_review_required": true,
+        "overall": "needs_review"
+      }
+    },
+    {
+      "id": "KE-11",
+      "description": "Missing and unevidenced facts leave mandatory checks as insufficient evidence.",
+      "covers": [
+        "insufficient_evidence"
+      ],
+      "tenant": "packaging_demo",
+      "principal": {
+        "sub": "eval-runner"
+      },
+      "context": {
+        "customer": "CORNERSHOP",
+        "brand": "OTHERBRAND",
+        "market": "NORTHLAND",
+        "product": "PX-200",
+        "product_family": "otc_tablets",
+        "workflow": "label_review",
+        "as_of": "2026-08-01T00:00:00Z"
+      },
+      "facts": {
+        "label.min_font_pt": {
+          "value": 8,
+          "evidence": []
+        },
+        "label.front_claims": {
+          "value": [],
+          "evidence": [
+            {
+              "source_id": "ARTWORK-PX200-R3",
+              "locator": "artwork spec"
+            }
+          ]
+        },
+        "label.brand_panel_color": {
+          "value": "green",
+          "evidence": [
+            {
+              "source_id": "ARTWORK-PX200-R3",
+              "locator": "artwork spec"
+            }
+          ]
+        },
+        "label.allergen_statement": {
+          "value": "Contains lactose",
+          "evidence": [
+            {
+              "source_id": "ARTWORK-PX200-R3",
+              "locator": "artwork spec"
+            }
+          ]
+        },
+        "label.registration_number_present": {
+          "value": true,
+          "evidence": [
+            {
+              "source_id": "ARTWORK-PX200-R3",
+              "locator": "artwork spec"
+            }
+          ]
+        }
+      },
+      "expected": {
+        "applicable": [
+          "PKG-001",
+          "PKG-005",
+          "PKG-007",
+          "PKG-011",
+          "PKG-012"
+        ],
+        "outcomes": {
+          "PKG-001": "insufficient_evidence",
+          "PKG-007": "insufficient_evidence",
+          "PKG-011": "insufficient_evidence",
+          "PKG-012": "pass"
+        },
+        "conflicts": [],
+        "human_review_required": true,
+        "overall": "needs_review"
+      }
+    },
+    {
+      "id": "KE-12",
+      "description": "Declared absence semantics: a missing allergen statement is a violation, not unknown.",
+      "covers": [
+        "absence_semantics"
+      ],
+      "tenant": "packaging_demo",
+      "principal": {
+        "sub": "eval-runner"
+      },
+      "context": {
+        "customer": "CORNERSHOP",
+        "brand": "OTHERBRAND",
+        "market": "NORTHLAND",
+        "product": "PX-200",
+        "product_family": "otc_tablets",
+        "workflow": "label_review",
+        "as_of": "2026-08-01T00:00:00Z"
+      },
+      "facts": {
+        "label.batch_code_present": {
+          "value": true,
+          "evidence": [
+            {
+              "source_id": "ARTWORK-PX200-R3",
+              "locator": "artwork spec"
+            }
+          ]
+        },
+        "label.min_font_pt": {
+          "value": 8,
+          "evidence": [
+            {
+              "source_id": "ARTWORK-PX200-R3",
+              "locator": "artwork spec"
+            }
+          ]
+        },
+        "label.front_claims": {
+          "value": [],
+          "evidence": [
+            {
+              "source_id": "ARTWORK-PX200-R3",
+              "locator": "artwork spec"
+            }
+          ]
+        },
+        "label.brand_panel_color": {
+          "value": "green",
+          "evidence": [
+            {
+              "source_id": "ARTWORK-PX200-R3",
+              "locator": "artwork spec"
+            }
+          ]
+        },
+        "label.registration_number_present": {
+          "value": true,
+          "evidence": [
+            {
+              "source_id": "ARTWORK-PX200-R3",
+              "locator": "artwork spec"
+            }
+          ]
+        }
+      },
+      "expected": {
+        "applicable": [
+          "PKG-001",
+          "PKG-005",
+          "PKG-007",
+          "PKG-011",
+          "PKG-012"
+        ],
+        "outcomes": {
+          "PKG-012": "fail"
+        },
+        "conflicts": [],
+        "human_review_required": false,
+        "overall": "non_compliant"
+      }
+    },
+    {
+      "id": "KE-13",
+      "description": "Regression: semantically attractive advisory content ranked first does not displace a mandatory rule.",
+      "covers": [
+        "top_k_regression",
+        "mandatory_vs_advisory"
+      ],
+      "tenant": "packaging_demo",
+      "principal": {
+        "sub": "eval-runner"
+      },
+      "context": {
+        "customer": "CORNERSHOP",
+        "brand": "SUNLEAF",
+        "market": "NORTHLAND",
+        "product": "PX-200",
+        "product_family": "otc_tablets",
+        "workflow": "label_review",
+        "as_of": "2026-08-01T00:00:00Z"
+      },
+      "facts": {
+        "label.batch_code_present": {
+          "value": false,
+          "evidence": [
+            {
+              "source_id": "ARTWORK-PX200-R3",
+              "locator": "artwork spec"
+            }
+          ]
+        },
+        "label.min_font_pt": {
+          "value": 8,
+          "evidence": [
+            {
+              "source_id": "ARTWORK-PX200-R3",
+              "locator": "artwork spec"
+            }
+          ]
+        },
+        "label.front_claims": {
+          "value": [],
+          "evidence": [
+            {
+              "source_id": "ARTWORK-PX200-R3",
+              "locator": "artwork spec"
+            }
+          ]
+        },
+        "label.brand_panel_color": {
+          "value": "green",
+          "evidence": [
+            {
+              "source_id": "ARTWORK-PX200-R3",
+              "locator": "artwork spec"
+            }
+          ]
+        },
+        "label.allergen_statement": {
+          "value": "Contains lactose",
+          "evidence": [
+            {
+              "source_id": "ARTWORK-PX200-R3",
+              "locator": "artwork spec"
+            }
+          ]
+        },
+        "label.registration_number_present": {
+          "value": true,
+          "evidence": [
+            {
+              "source_id": "ARTWORK-PX200-R3",
+              "locator": "artwork spec"
+            }
+          ]
+        }
+      },
+      "expected": {
+        "applicable": [
+          "PKG-001",
+          "PKG-004",
+          "PKG-005",
+          "PKG-007",
+          "PKG-011",
+          "PKG-012"
+        ],
+        "outcomes": {
+          "PKG-001": "fail",
+          "PKG-004": "pass"
+        },
+        "conflicts": [],
+        "human_review_required": false,
+        "overall": "non_compliant"
+      },
+      "semantic_candidates": [
+        "PKG-004"
+      ]
+    },
+    {
+      "id": "KE-14",
+      "description": "Restricted rule is evaluated for a caller in the authorised group.",
+      "covers": [
+        "document_level_access"
+      ],
+      "tenant": "packaging_demo",
+      "principal": {
+        "sub": "reg-analyst",
+        "groups": [
+          "regulatory-affairs"
+        ]
+      },
+      "context": {
+        "customer": "CORNERSHOP",
+        "brand": "OTHERBRAND",
+        "market": "NORTHLAND",
+        "product": "PX-200",
+        "product_family": "otc_tablets",
+        "workflow": "label_review",
+        "as_of": "2026-08-01T00:00:00Z"
+      },
+      "facts": {
+        "label.batch_code_present": {
+          "value": true,
+          "evidence": [
+            {
+              "source_id": "ARTWORK-PX200-R3",
+              "locator": "artwork spec"
+            }
+          ]
+        },
+        "label.min_font_pt": {
+          "value": 8,
+          "evidence": [
+            {
+              "source_id": "ARTWORK-PX200-R3",
+              "locator": "artwork spec"
+            }
+          ]
+        },
+        "label.front_claims": {
+          "value": [],
+          "evidence": [
+            {
+              "source_id": "ARTWORK-PX200-R3",
+              "locator": "artwork spec"
+            }
+          ]
+        },
+        "label.brand_panel_color": {
+          "value": "green",
+          "evidence": [
+            {
+              "source_id": "ARTWORK-PX200-R3",
+              "locator": "artwork spec"
+            }
+          ]
+        },
+        "label.allergen_statement": {
+          "value": "Contains lactose",
+          "evidence": [
+            {
+              "source_id": "ARTWORK-PX200-R3",
+              "locator": "artwork spec"
+            }
+          ]
+        },
+        "label.registration_number_present": {
+          "value": true,
+          "evidence": [
+            {
+              "source_id": "ARTWORK-PX200-R3",
+              "locator": "artwork spec"
+            }
+          ]
+        }
+      },
+      "expected": {
+        "applicable": [
+          "PKG-001",
+          "PKG-005",
+          "PKG-007",
+          "PKG-011",
+          "PKG-012",
+          "PKG-015"
+        ],
+        "outcomes": {
+          "PKG-015": "pass"
+        },
+        "conflicts": [],
+        "human_review_required": false,
+        "overall": "compliant"
+      }
+    },
+    {
+      "id": "KE-15",
+      "description": "Restricted rule is invisible to other callers, even when its fact would fail.",
+      "covers": [
+        "document_level_access"
+      ],
+      "tenant": "packaging_demo",
+      "principal": {
+        "sub": "eval-runner"
+      },
+      "context": {
+        "customer": "CORNERSHOP",
+        "brand": "OTHERBRAND",
+        "market": "NORTHLAND",
+        "product": "PX-200",
+        "product_family": "otc_tablets",
+        "workflow": "label_review",
+        "as_of": "2026-08-01T00:00:00Z"
+      },
+      "facts": {
+        "label.batch_code_present": {
+          "value": true,
+          "evidence": [
+            {
+              "source_id": "ARTWORK-PX200-R3",
+              "locator": "artwork spec"
+            }
+          ]
+        },
+        "label.min_font_pt": {
+          "value": 8,
+          "evidence": [
+            {
+              "source_id": "ARTWORK-PX200-R3",
+              "locator": "artwork spec"
+            }
+          ]
+        },
+        "label.front_claims": {
+          "value": [],
+          "evidence": [
+            {
+              "source_id": "ARTWORK-PX200-R3",
+              "locator": "artwork spec"
+            }
+          ]
+        },
+        "label.brand_panel_color": {
+          "value": "green",
+          "evidence": [
+            {
+              "source_id": "ARTWORK-PX200-R3",
+              "locator": "artwork spec"
+            }
+          ]
+        },
+        "label.allergen_statement": {
+          "value": "Contains lactose",
+          "evidence": [
+            {
+              "source_id": "ARTWORK-PX200-R3",
+              "locator": "artwork spec"
+            }
+          ]
+        },
+        "label.registration_number_present": {
+          "value": false,
+          "evidence": [
+            {
+              "source_id": "ARTWORK-PX200-R3",
+              "locator": "artwork spec"
+            }
+          ]
+        }
+      },
+      "expected": {
+        "applicable": [
+          "PKG-001",
+          "PKG-005",
+          "PKG-007",
+          "PKG-011",
+          "PKG-012"
+        ],
+        "outcomes": {
+          "PKG-015": "absent"
+        },
+        "conflicts": [],
+        "human_review_required": false,
+        "overall": "compliant"
+      }
+    },
+    {
+      "id": "KE-16",
+      "description": "Tenant isolation: another tenant sees none of this pack and escalates for missing knowledge.",
+      "covers": [
+        "tenant_isolation"
+      ],
+      "tenant": "other_tenant",
+      "principal": {
+        "sub": "eval-runner"
+      },
+      "context": {
+        "customer": "CORNERSHOP",
+        "brand": "OTHERBRAND",
+        "market": "NORTHLAND",
+        "product": "PX-200",
+        "product_family": "otc_tablets",
+        "workflow": "label_review",
+        "as_of": "2026-08-01T00:00:00Z"
+      },
+      "facts": {
+        "label.batch_code_present": {
+          "value": true,
+          "evidence": [
+            {
+              "source_id": "ARTWORK-PX200-R3",
+              "locator": "artwork spec"
+            }
+          ]
+        },
+        "label.min_font_pt": {
+          "value": 8,
+          "evidence": [
+            {
+              "source_id": "ARTWORK-PX200-R3",
+              "locator": "artwork spec"
+            }
+          ]
+        },
+        "label.front_claims": {
+          "value": [],
+          "evidence": [
+            {
+              "source_id": "ARTWORK-PX200-R3",
+              "locator": "artwork spec"
+            }
+          ]
+        },
+        "label.brand_panel_color": {
+          "value": "green",
+          "evidence": [
+            {
+              "source_id": "ARTWORK-PX200-R3",
+              "locator": "artwork spec"
+            }
+          ]
+        },
+        "label.allergen_statement": {
+          "value": "Contains lactose",
+          "evidence": [
+            {
+              "source_id": "ARTWORK-PX200-R3",
+              "locator": "artwork spec"
+            }
+          ]
+        },
+        "label.registration_number_present": {
+          "value": true,
+          "evidence": [
+            {
+              "source_id": "ARTWORK-PX200-R3",
+              "locator": "artwork spec"
+            }
+          ]
+        }
+      },
+      "expected": {
+        "applicable": [],
+        "unknown": [],
+        "outcomes": {
+          "PKG-001": "absent"
+        },
+        "conflicts": [],
+        "human_review_required": true,
+        "overall": "needs_review"
+      },
+      "expect_applicable_knowledge": true
+    },
+    {
+      "id": "KE-17",
+      "description": "Unknown applicability metadata (undeclared brand scope) escalates instead of applying.",
+      "covers": [
+        "unknown_metadata"
+      ],
+      "tenant": "packaging_demo",
+      "principal": {
+        "sub": "eval-runner"
+      },
+      "context": {
+        "customer": "CORNERSHOP",
+        "brand": "OTHERBRAND",
+        "market": "SOUTHLAND",
+        "product": "PX-200",
+        "product_family": "otc_tablets",
+        "workflow": "artwork_change",
+        "as_of": "2026-08-01T00:00:00Z"
+      },
+      "facts": {
+        "label.batch_code_present": {
+          "value": true,
+          "evidence": [
+            {
+              "source_id": "ARTWORK-PX200-R3",
+              "locator": "artwork spec"
+            }
+          ]
+        },
+        "label.min_font_pt": {
+          "value": 8,
+          "evidence": [
+            {
+              "source_id": "ARTWORK-PX200-R3",
+              "locator": "artwork spec"
+            }
+          ]
+        },
+        "label.front_claims": {
+          "value": [],
+          "evidence": [
+            {
+              "source_id": "ARTWORK-PX200-R3",
+              "locator": "artwork spec"
+            }
+          ]
+        },
+        "label.brand_panel_color": {
+          "value": "green",
+          "evidence": [
+            {
+              "source_id": "ARTWORK-PX200-R3",
+              "locator": "artwork spec"
+            }
+          ]
+        },
+        "label.allergen_statement": {
+          "value": "Contains lactose",
+          "evidence": [
+            {
+              "source_id": "ARTWORK-PX200-R3",
+              "locator": "artwork spec"
+            }
+          ]
+        },
+        "label.registration_number_present": {
+          "value": true,
+          "evidence": [
+            {
+              "source_id": "ARTWORK-PX200-R3",
+              "locator": "artwork spec"
+            }
+          ]
+        },
+        "label.languages": {
+          "value": [
+            "sl",
+            "en"
+          ],
+          "evidence": [
+            {
+              "source_id": "ARTWORK-PX200-R3",
+              "locator": "artwork spec"
+            }
+          ]
+        },
+        "label.storage_statement": {
+          "value": "Store below 25 C",
+          "evidence": [
+            {
+              "source_id": "ARTWORK-PX200-R3",
+              "locator": "artwork spec"
+            }
+          ]
+        },
+        "workflow.signoff_recorded": {
+          "value": true,
+          "evidence": [
+            {
+              "source_id": "ARTWORK-PX200-R3",
+              "locator": "artwork spec"
+            }
+          ]
+        }
+      },
+      "expected": {
+        "applicable": [
+          "PKG-001",
+          "PKG-003",
+          "PKG-007",
+          "PKG-009",
+          "PKG-012"
+        ],
+        "unknown": [
+          "PKG-016"
+        ],
+        "outcomes": {
+          "PKG-016": "not_evaluated"
+        },
+        "conflicts": [],
+        "human_review_required": true,
+        "overall": "needs_review"
+      }
+    },
+    {
+      "id": "KE-18",
+      "description": "Draft and withdrawn entries are never served.",
+      "covers": [
+        "lifecycle_status"
+      ],
+      "tenant": "packaging_demo",
+      "principal": {
+        "sub": "eval-runner"
+      },
+      "context": {
+        "customer": "CORNERSHOP",
+        "brand": "OTHERBRAND",
+        "market": "NORTHLAND",
+        "product": "PX-200",
+        "product_family": "otc_tablets",
+        "workflow": "label_review",
+        "as_of": "2026-08-01T00:00:00Z"
+      },
+      "facts": {
+        "label.batch_code_present": {
+          "value": true,
+          "evidence": [
+            {
+              "source_id": "ARTWORK-PX200-R3",
+              "locator": "artwork spec"
+            }
+          ]
+        },
+        "label.min_font_pt": {
+          "value": 8,
+          "evidence": [
+            {
+              "source_id": "ARTWORK-PX200-R3",
+              "locator": "artwork spec"
+            }
+          ]
+        },
+        "label.front_claims": {
+          "value": [],
+          "evidence": [
+            {
+              "source_id": "ARTWORK-PX200-R3",
+              "locator": "artwork spec"
+            }
+          ]
+        },
+        "label.brand_panel_color": {
+          "value": "green",
+          "evidence": [
+            {
+              "source_id": "ARTWORK-PX200-R3",
+              "locator": "artwork spec"
+            }
+          ]
+        },
+        "label.allergen_statement": {
+          "value": "Contains lactose",
+          "evidence": [
+            {
+              "source_id": "ARTWORK-PX200-R3",
+              "locator": "artwork spec"
+            }
+          ]
+        },
+        "label.registration_number_present": {
+          "value": true,
+          "evidence": [
+            {
+              "source_id": "ARTWORK-PX200-R3",
+              "locator": "artwork spec"
+            }
+          ]
+        },
+        "label.pictogram_present": {
+          "value": false,
+          "evidence": [
+            {
+              "source_id": "ARTWORK-PX200-R3",
+              "locator": "artwork spec"
+            }
+          ]
+        }
+      },
+      "expected": {
+        "applicable": [
+          "PKG-001",
+          "PKG-005",
+          "PKG-007",
+          "PKG-011",
+          "PKG-012"
+        ],
+        "outcomes": {
+          "PKG-013": "absent",
+          "PKG-014": "absent"
+        },
+        "conflicts": [],
+        "human_review_required": false,
+        "overall": "compliant"
+      }
+    },
+    {
+      "id": "KE-19",
+      "description": "One carton sold in two markets: both markets' rules apply together.",
+      "covers": [
+        "multiple_values",
+        "orthogonal_context"
+      ],
+      "tenant": "packaging_demo",
+      "principal": {
+        "sub": "eval-runner"
+      },
+      "context": {
+        "customer": "CORNERSHOP",
+        "brand": "OTHERBRAND",
+        "market": [
+          "NORTHLAND",
+          "SOUTHLAND"
+        ],
+        "product": "PX-200",
+        "product_family": "otc_tablets",
+        "workflow": "label_review",
+        "as_of": "2026-08-01T00:00:00Z"
+      },
+      "facts": {
+        "label.batch_code_present": {
+          "value": true,
+          "evidence": [
+            {
+              "source_id": "ARTWORK-PX200-R3",
+              "locator": "artwork spec"
+            }
+          ]
+        },
+        "label.min_font_pt": {
+          "value": 8,
+          "evidence": [
+            {
+              "source_id": "ARTWORK-PX200-R3",
+              "locator": "artwork spec"
+            }
+          ]
+        },
+        "label.front_claims": {
+          "value": [],
+          "evidence": [
+            {
+              "source_id": "ARTWORK-PX200-R3",
+              "locator": "artwork spec"
+            }
+          ]
+        },
+        "label.brand_panel_color": {
+          "value": "green",
+          "evidence": [
+            {
+              "source_id": "ARTWORK-PX200-R3",
+              "locator": "artwork spec"
+            }
+          ]
+        },
+        "label.allergen_statement": {
+          "value": "Contains lactose",
+          "evidence": [
+            {
+              "source_id": "ARTWORK-PX200-R3",
+              "locator": "artwork spec"
+            }
+          ]
+        },
+        "label.registration_number_present": {
+          "value": true,
+          "evidence": [
+            {
+              "source_id": "ARTWORK-PX200-R3",
+              "locator": "artwork spec"
+            }
+          ]
+        },
+        "label.languages": {
+          "value": [
+            "sl",
+            "en"
+          ],
+          "evidence": [
+            {
+              "source_id": "ARTWORK-PX200-R3",
+              "locator": "artwork spec"
+            }
+          ]
+        },
+        "label.storage_statement": {
+          "value": "Store below 25 C",
+          "evidence": [
+            {
+              "source_id": "ARTWORK-PX200-R3",
+              "locator": "artwork spec"
+            }
+          ]
+        }
+      },
+      "expected": {
+        "applicable": [
+          "PKG-001",
+          "PKG-003",
+          "PKG-005",
+          "PKG-007",
+          "PKG-009",
+          "PKG-011",
+          "PKG-012"
+        ],
+        "outcomes": {
+          "PKG-003": "pass",
+          "PKG-009": "pass",
+          "PKG-011": "pass",
+          "PKG-002": "not_evaluated"
+        },
+        "conflicts": [],
+        "human_review_required": false,
+        "overall": "compliant"
+      }
+    },
+    {
+      "id": "KE-20",
+      "description": "A failed recommendation is reported but does not block; mandatory rules stay in force.",
+      "covers": [
+        "mandatory_vs_advisory"
+      ],
+      "tenant": "packaging_demo",
+      "principal": {
+        "sub": "eval-runner"
+      },
+      "context": {
+        "customer": "CORNERSHOP",
+        "brand": "SUNLEAF",
+        "market": "NORTHLAND",
+        "product": "PX-200",
+        "product_family": "otc_tablets",
+        "workflow": "label_review",
+        "as_of": "2026-08-01T00:00:00Z"
+      },
+      "facts": {
+        "label.batch_code_present": {
+          "value": true,
+          "evidence": [
+            {
+              "source_id": "ARTWORK-PX200-R3",
+              "locator": "artwork spec"
+            }
+          ]
+        },
+        "label.min_font_pt": {
+          "value": 8,
+          "evidence": [
+            {
+              "source_id": "ARTWORK-PX200-R3",
+              "locator": "artwork spec"
+            }
+          ]
+        },
+        "label.front_claims": {
+          "value": [],
+          "evidence": [
+            {
+              "source_id": "ARTWORK-PX200-R3",
+              "locator": "artwork spec"
+            }
+          ]
+        },
+        "label.brand_panel_color": {
+          "value": "red",
+          "evidence": [
+            {
+              "source_id": "ARTWORK-PX200-R3",
+              "locator": "artwork spec"
+            }
+          ]
+        },
+        "label.allergen_statement": {
+          "value": "Contains lactose",
+          "evidence": [
+            {
+              "source_id": "ARTWORK-PX200-R3",
+              "locator": "artwork spec"
+            }
+          ]
+        },
+        "label.registration_number_present": {
+          "value": true,
+          "evidence": [
+            {
+              "source_id": "ARTWORK-PX200-R3",
+              "locator": "artwork spec"
+            }
+          ]
+        }
+      },
+      "expected": {
+        "applicable": [
+          "PKG-001",
+          "PKG-004",
+          "PKG-005",
+          "PKG-007",
+          "PKG-011",
+          "PKG-012"
+        ],
+        "outcomes": {
+          "PKG-004": "fail",
+          "PKG-001": "pass",
+          "PKG-011": "pass"
+        },
+        "conflicts": [],
+        "human_review_required": false,
+        "overall": "compliant"
+      }
+    },
+    {
+      "id": "KE-21",
+      "description": "Prohibited claim present in Northland for a non-MegaMart customer is a violation.",
+      "covers": [
+        "prohibition"
+      ],
+      "tenant": "packaging_demo",
+      "principal": {
+        "sub": "eval-runner"
+      },
+      "context": {
+        "customer": "CORNERSHOP",
+        "brand": "OTHERBRAND",
+        "market": "NORTHLAND",
+        "product": "PX-200",
+        "product_family": "otc_tablets",
+        "workflow": "label_review",
+        "as_of": "2026-08-01T00:00:00Z"
+      },
+      "facts": {
+        "label.batch_code_present": {
+          "value": true,
+          "evidence": [
+            {
+              "source_id": "ARTWORK-PX200-R3",
+              "locator": "artwork spec"
+            }
+          ]
+        },
+        "label.min_font_pt": {
+          "value": 8,
+          "evidence": [
+            {
+              "source_id": "ARTWORK-PX200-R3",
+              "locator": "artwork spec"
+            }
+          ]
+        },
+        "label.front_claims": {
+          "value": [
+            "clinically_proven"
+          ],
+          "evidence": [
+            {
+              "source_id": "ARTWORK-PX200-R3",
+              "locator": "artwork spec"
+            }
+          ]
+        },
+        "label.brand_panel_color": {
+          "value": "green",
+          "evidence": [
+            {
+              "source_id": "ARTWORK-PX200-R3",
+              "locator": "artwork spec"
+            }
+          ]
+        },
+        "label.allergen_statement": {
+          "value": "Contains lactose",
+          "evidence": [
+            {
+              "source_id": "ARTWORK-PX200-R3",
+              "locator": "artwork spec"
+            }
+          ]
+        },
+        "label.registration_number_present": {
+          "value": true,
+          "evidence": [
+            {
+              "source_id": "ARTWORK-PX200-R3",
+              "locator": "artwork spec"
+            }
+          ]
+        }
+      },
+      "expected": {
+        "applicable": [
+          "PKG-001",
+          "PKG-005",
+          "PKG-007",
+          "PKG-011",
+          "PKG-012"
+        ],
+        "outcomes": {
+          "PKG-005": "fail"
+        },
+        "conflicts": [],
+        "human_review_required": false,
+        "overall": "non_compliant"
+      }
+    },
+    {
+      "id": "KE-22",
+      "description": "Orthogonal dimensions: MegaMart + Sunleaf + Southland mini-pack combines customer, brand and market rules.",
+      "covers": [
+        "orthogonal_context"
+      ],
+      "tenant": "packaging_demo",
+      "principal": {
+        "sub": "eval-runner"
+      },
+      "context": {
+        "customer": "MEGAMART",
+        "brand": "SUNLEAF",
+        "market": "SOUTHLAND",
+        "product": "PX-200-MINI",
+        "product_family": "otc_tablets",
+        "workflow": "label_review",
+        "as_of": "2026-08-01T00:00:00Z"
+      },
+      "facts": {
+        "label.batch_code_present": {
+          "value": true,
+          "evidence": [
+            {
+              "source_id": "ARTWORK-PX200-R3",
+              "locator": "artwork spec"
+            }
+          ]
+        },
+        "label.min_font_pt": {
+          "value": 6,
+          "evidence": [
+            {
+              "source_id": "ARTWORK-PX200-R3",
+              "locator": "artwork spec"
+            }
+          ]
+        },
+        "label.front_claims": {
+          "value": [],
+          "evidence": [
+            {
+              "source_id": "ARTWORK-PX200-R3",
+              "locator": "artwork spec"
+            }
+          ]
+        },
+        "label.brand_panel_color": {
+          "value": "green",
+          "evidence": [
+            {
+              "source_id": "ARTWORK-PX200-R3",
+              "locator": "artwork spec"
+            }
+          ]
+        },
+        "label.allergen_statement": {
+          "value": "Contains lactose",
+          "evidence": [
+            {
+              "source_id": "ARTWORK-PX200-R3",
+              "locator": "artwork spec"
+            }
+          ]
+        },
+        "label.registration_number_present": {
+          "value": true,
+          "evidence": [
+            {
+              "source_id": "ARTWORK-PX200-R3",
+              "locator": "artwork spec"
+            }
+          ]
+        },
+        "label.languages": {
+          "value": [
+            "sl",
+            "en"
+          ],
+          "evidence": [
+            {
+              "source_id": "ARTWORK-PX200-R3",
+              "locator": "artwork spec"
+            }
+          ]
+        },
+        "label.storage_statement": {
+          "value": "Store below 30 C",
+          "evidence": [
+            {
+              "source_id": "ARTWORK-PX200-R3",
+              "locator": "artwork spec"
+            }
+          ]
+        }
+      },
+      "expected": {
+        "applicable": [
+          "PKG-001",
+          "PKG-003",
+          "PKG-004",
+          "PKG-006",
+          "PKG-007",
+          "PKG-008",
+          "PKG-009",
+          "PKG-010",
+          "PKG-012"
+        ],
+        "outcomes": {
+          "PKG-009": "not_evaluated",
+          "PKG-010": "pass",
+          "PKG-007": "conflict",
+          "PKG-008": "conflict"
+        },
+        "conflicts": [
+          {
+            "kind": "incompatible_requirements",
+            "items": [
+              "PKG-009",
+              "PKG-010"
+            ],
+            "resolved": true
+          },
+          {
+            "kind": "unauthorized_override",
+            "items": [
+              "PKG-007",
+              "PKG-008"
+            ]
+          }
+        ],
+        "human_review_required": true,
+        "overall": "needs_review"
+      }
+    },
+    {
+      "id": "KE-23",
+      "description": "A waiver scoped to one market does not waive the requirement for the other market in the request.",
+      "covers": [
+        "partial_exception_coverage",
+        "multiple_values"
+      ],
+      "tenant": "packaging_demo",
+      "principal": {
+        "sub": "eval-runner"
+      },
+      "context": {
+        "customer": "CORNERSHOP",
+        "brand": "OTHERBRAND",
+        "market": [
+          "NORTHLAND",
+          "SOUTHLAND"
+        ],
+        "product": "PX-200-MINI",
+        "product_family": "otc_tablets",
+        "workflow": "label_review",
+        "as_of": "2026-08-01T00:00:00Z"
+      },
+      "facts": {
+        "label.batch_code_present": {
+          "value": false,
+          "evidence": [
+            {
+              "source_id": "ARTWORK-PX200-R3",
+              "locator": "artwork spec"
+            }
+          ]
+        },
+        "label.min_font_pt": {
+          "value": 6,
+          "evidence": [
+            {
+              "source_id": "ARTWORK-PX200-R3",
+              "locator": "artwork spec"
+            }
+          ]
+        },
+        "label.front_claims": {
+          "value": [],
+          "evidence": [
+            {
+              "source_id": "ARTWORK-PX200-R3",
+              "locator": "artwork spec"
+            }
+          ]
+        },
+        "label.brand_panel_color": {
+          "value": "green",
+          "evidence": [
+            {
+              "source_id": "ARTWORK-PX200-R3",
+              "locator": "artwork spec"
+            }
+          ]
+        },
+        "label.allergen_statement": {
+          "value": "Contains lactose",
+          "evidence": [
+            {
+              "source_id": "ARTWORK-PX200-R3",
+              "locator": "artwork spec"
+            }
+          ]
+        },
+        "label.registration_number_present": {
+          "value": true,
+          "evidence": [
+            {
+              "source_id": "ARTWORK-PX200-R3",
+              "locator": "artwork spec"
+            }
+          ]
+        },
+        "label.languages": {
+          "value": [
+            "sl",
+            "en"
+          ],
+          "evidence": [
+            {
+              "source_id": "ARTWORK-PX200-R3",
+              "locator": "artwork spec"
+            }
+          ]
+        },
+        "label.storage_statement": {
+          "value": "Store below 25 C",
+          "evidence": [
+            {
+              "source_id": "ARTWORK-PX200-R3",
+              "locator": "artwork spec"
+            }
+          ]
+        }
+      },
+      "expected": {
+        "applicable": [
+          "PKG-001",
+          "PKG-003",
+          "PKG-005",
+          "PKG-007",
+          "PKG-009",
+          "PKG-011",
+          "PKG-012"
+        ],
+        "outcomes": {
+          "PKG-001": "fail",
+          "PKG-011": "not_evaluated",
+          "PKG-007": "pass",
+          "PKG-009": "pass"
+        },
+        "conflicts": [],
+        "human_review_required": false,
+        "overall": "non_compliant"
+      }
+    },
+    {
+      "id": "KE-24",
+      "description": "A precedence whose winner does not apply does not suppress the losing requirement.",
+      "covers": [
+        "precedence_effective_winner"
+      ],
+      "tenant": "packaging_demo",
+      "principal": {
+        "sub": "eval-runner"
+      },
+      "context": {
+        "customer": "CORNERSHOP",
+        "brand": "OTHERBRAND",
+        "market": "SOUTHLAND",
+        "product": "PX-200-MINI",
+        "product_family": "otc_tablets",
+        "workflow": "label_review",
+        "as_of": "2026-08-01T00:00:00Z"
+      },
+      "facts": {
+        "label.batch_code_present": {
+          "value": true,
+          "evidence": [
+            {
+              "source_id": "ARTWORK-PX200-R3",
+              "locator": "artwork spec"
+            }
+          ]
+        },
+        "label.min_font_pt": {
+          "value": 8,
+          "evidence": [
+            {
+              "source_id": "ARTWORK-PX200-R3",
+              "locator": "artwork spec"
+            }
+          ]
+        },
+        "label.front_claims": {
+          "value": [],
+          "evidence": [
+            {
+              "source_id": "ARTWORK-PX200-R3",
+              "locator": "artwork spec"
+            }
+          ]
+        },
+        "label.brand_panel_color": {
+          "value": "green",
+          "evidence": [
+            {
+              "source_id": "ARTWORK-PX200-R3",
+              "locator": "artwork spec"
+            }
+          ]
+        },
+        "label.allergen_statement": {
+          "value": "Contains lactose",
+          "evidence": [
+            {
+              "source_id": "ARTWORK-PX200-R3",
+              "locator": "artwork spec"
+            }
+          ]
+        },
+        "label.registration_number_present": {
+          "value": true,
+          "evidence": [
+            {
+              "source_id": "ARTWORK-PX200-R3",
+              "locator": "artwork spec"
+            }
+          ]
+        },
+        "label.languages": {
+          "value": [
+            "sl",
+            "en"
+          ],
+          "evidence": [
+            {
+              "source_id": "ARTWORK-PX200-R3",
+              "locator": "artwork spec"
+            }
+          ]
+        },
+        "label.storage_statement": {
+          "value": "Store below 30 C",
+          "evidence": [
+            {
+              "source_id": "ARTWORK-PX200-R3",
+              "locator": "artwork spec"
+            }
+          ]
+        }
+      },
+      "expected": {
+        "applicable": [
+          "PKG-001",
+          "PKG-003",
+          "PKG-007",
+          "PKG-009",
+          "PKG-012"
+        ],
+        "outcomes": {
+          "PKG-009": "fail",
+          "PKG-001": "not_evaluated",
+          "PKG-010": "not_evaluated"
+        },
+        "conflicts": [],
+        "human_review_required": false,
+        "overall": "non_compliant"
+      }
+    },
+    {
+      "id": "KE-25",
+      "description": "A prohibition whose fact is declared absence-is-violation fails when the fact is missing.",
+      "covers": [
+        "absence_semantics",
+        "prohibition"
+      ],
+      "tenant": "packaging_demo",
+      "principal": {
+        "sub": "eval-runner"
+      },
+      "context": {
+        "customer": "CORNERSHOP",
+        "brand": "OTHERBRAND",
+        "market": "NORTHLAND",
+        "product": "PX-200",
+        "product_family": "otc_tablets",
+        "workflow": "export_review",
+        "as_of": "2026-08-01T00:00:00Z"
+      },
+      "facts": {
+        "label.batch_code_present": {
+          "value": true,
+          "evidence": [
+            {
+              "source_id": "ARTWORK-PX200-R3",
+              "locator": "artwork spec"
+            }
+          ]
+        },
+        "label.min_font_pt": {
+          "value": 8,
+          "evidence": [
+            {
+              "source_id": "ARTWORK-PX200-R3",
+              "locator": "artwork spec"
+            }
+          ]
+        },
+        "label.front_claims": {
+          "value": [],
+          "evidence": [
+            {
+              "source_id": "ARTWORK-PX200-R3",
+              "locator": "artwork spec"
+            }
+          ]
+        },
+        "label.brand_panel_color": {
+          "value": "green",
+          "evidence": [
+            {
+              "source_id": "ARTWORK-PX200-R3",
+              "locator": "artwork spec"
+            }
+          ]
+        },
+        "label.allergen_statement": {
+          "value": "Contains lactose",
+          "evidence": [
+            {
+              "source_id": "ARTWORK-PX200-R3",
+              "locator": "artwork spec"
+            }
+          ]
+        },
+        "label.registration_number_present": {
+          "value": true,
+          "evidence": [
+            {
+              "source_id": "ARTWORK-PX200-R3",
+              "locator": "artwork spec"
+            }
+          ]
+        }
+      },
+      "expected": {
+        "applicable": [
+          "PKG-005",
+          "PKG-007",
+          "PKG-011",
+          "PKG-012",
+          "PKG-017"
+        ],
+        "outcomes": {
+          "PKG-017": "fail",
+          "PKG-005": "pass"
+        },
+        "conflicts": [],
+        "human_review_required": false,
+        "overall": "non_compliant"
+      }
+    },
+    {
+      "id": "KE-26",
+      "description": "A fact of the wrong type is insufficient evidence, never a pass or a crash.",
+      "covers": [
+        "fact_types",
+        "insufficient_evidence"
+      ],
+      "tenant": "packaging_demo",
+      "principal": {
+        "sub": "eval-runner"
+      },
+      "context": {
+        "customer": "CORNERSHOP",
+        "brand": "OTHERBRAND",
+        "market": "NORTHLAND",
+        "product": "PX-200",
+        "product_family": "otc_tablets",
+        "workflow": "label_review",
+        "as_of": "2026-08-01T00:00:00Z"
+      },
+      "facts": {
+        "label.batch_code_present": {
+          "value": true,
+          "evidence": [
+            {
+              "source_id": "ARTWORK-PX200-R3",
+              "locator": "artwork spec"
+            }
+          ]
+        },
+        "label.min_font_pt": {
+          "value": "8",
+          "evidence": [
+            {
+              "source_id": "ARTWORK-PX200-R3",
+              "locator": "artwork spec"
+            }
+          ]
+        },
+        "label.front_claims": {
+          "value": [],
+          "evidence": [
+            {
+              "source_id": "ARTWORK-PX200-R3",
+              "locator": "artwork spec"
+            }
+          ]
+        },
+        "label.brand_panel_color": {
+          "value": "green",
+          "evidence": [
+            {
+              "source_id": "ARTWORK-PX200-R3",
+              "locator": "artwork spec"
+            }
+          ]
+        },
+        "label.allergen_statement": {
+          "value": "Contains lactose",
+          "evidence": [
+            {
+              "source_id": "ARTWORK-PX200-R3",
+              "locator": "artwork spec"
+            }
+          ]
+        },
+        "label.registration_number_present": {
+          "value": true,
+          "evidence": [
+            {
+              "source_id": "ARTWORK-PX200-R3",
+              "locator": "artwork spec"
+            }
+          ]
+        }
+      },
+      "expected": {
+        "applicable": [
+          "PKG-001",
+          "PKG-005",
+          "PKG-007",
+          "PKG-011",
+          "PKG-012"
+        ],
+        "outcomes": {
+          "PKG-007": "insufficient_evidence",
+          "PKG-011": "insufficient_evidence",
+          "PKG-001": "pass"
+        },
+        "conflicts": [],
+        "human_review_required": true,
+        "overall": "needs_review"
+      }
+    }
+  ]
+}

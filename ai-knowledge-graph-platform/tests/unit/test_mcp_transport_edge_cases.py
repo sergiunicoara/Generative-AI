@@ -166,8 +166,8 @@ def test_tools_list_skips_denied_specs_and_describes_tools(monkeypatch):
 
 
 def test_json_type_mapping():
-    assert [t._json_type(x) for x in (str, int, float, bool, None, bytes)] == \
-        ["string", "integer", "number", "boolean", "string", "string"]
+    assert [t._json_type(x) for x in (str, int, float, bool, dict, list, None, bytes)] == \
+        ["string", "integer", "number", "boolean", "object", "array", "string", "string"]
 
 
 def test_tool_schema_required_only_when_present_and_tenant_hidden():

@@ -553,6 +553,109 @@ class GovernanceStore:
             raise UnknownEvidenceRequestError(f"unknown evidence request {request_id!r}")
         return dict(row)
 
+    # -- contextual knowledge releases ---------------------------------------
+    # Same durable store, same append-only + active-pointer discipline as the
+    # Energy publications above: a knowledge release is immutable once
+    # written, activation only moves a pointer, and a rejected candidate never
+    # reaches this layer (the publisher raises before calling it).
+
+    async def publish_knowledge_release(self, record: dict[str, object]) -> dict[str, object]:
+        """Append a release and make it active; idempotent on identical content."""
+        tenant, domain = str(record["tenant"]), str(record["domain"])
+        async with self._write_transaction() as connection:
+            active = (await connection.execute(text("""
+                SELECT r.release_json FROM knowledge_active_releases a
+                JOIN knowledge_releases r ON r.release_id = a.release_id
+                WHERE a.tenant = :tenant AND a.domain = :domain AND r.content_hash = :content_hash
+            """), {"tenant": tenant, "domain": domain,
+                   "content_hash": record["content_hash"]})).scalar_one_or_none()
+            if active:
+                return json.loads(active)
+            next_version = (await connection.execute(text("""
+                SELECT COALESCE(MAX(version), 0) + 1 FROM knowledge_releases
+                WHERE tenant = :tenant AND domain = :domain
+            """), {"tenant": tenant, "domain": domain})).scalar_one()
+            stored = {**record, "version": int(next_version)}
+            await connection.execute(text("""
+                INSERT INTO knowledge_releases
+                (release_id, tenant, domain, version, content_hash, published_at, published_by,
+                 rolled_back_from, release_json)
+                VALUES (:release_id, :tenant, :domain, :version, :content_hash, :published_at,
+                        :published_by, :rolled_back_from, :release_json)
+            """), {
+                "release_id": stored["release_id"], "tenant": tenant, "domain": domain,
+                "version": stored["version"], "content_hash": stored["content_hash"],
+                "published_at": stored["published_at"], "published_by": stored["published_by"],
+                "rolled_back_from": stored.get("rolled_back_from"),
+                "release_json": json.dumps(stored, sort_keys=True, default=str),
+            })
+            await self._set_active_knowledge_release(connection, tenant, domain, str(stored["release_id"]))
+        return stored
+
+    async def active_knowledge_release(self, tenant: str, domain: str) -> dict[str, object] | None:
+        async with self._engine.connect() as connection:
+            row = (await connection.execute(text("""
+                SELECT r.release_json FROM knowledge_active_releases a
+                JOIN knowledge_releases r ON r.release_id = a.release_id
+                WHERE a.tenant = :tenant AND a.domain = :domain
+            """), {"tenant": tenant, "domain": domain})).scalar_one_or_none()
+        return json.loads(row) if row else None
+
+    async def knowledge_release_history(self, tenant: str, domain: str) -> list[dict[str, object]]:
+        async with self._engine.connect() as connection:
+            rows = (await connection.execute(text("""
+                SELECT release_json FROM knowledge_releases WHERE tenant = :tenant AND domain = :domain
+                ORDER BY version
+            """), {"tenant": tenant, "domain": domain})).scalars().all()
+        return [json.loads(row) for row in rows]
+
+    async def rollback_knowledge_release(
+        self, tenant: str, domain: str, release_id: str, *, rolled_back_by: str,
+    ) -> dict[str, object]:
+        """Re-activate an earlier release's content as a new appended release."""
+        history = await self.knowledge_release_history(tenant, domain)
+        target = next((item for item in history if item["release_id"] == release_id), None)
+        if target is None:
+            raise GovernanceStoreError(f"no knowledge release {release_id!r} for {tenant}/{domain}")
+        restored = {
+            **target, "release_id": uuid4().hex, "published_at": _now_iso(),
+            "published_by": rolled_back_by, "rolled_back_from": release_id,
+        }
+        async with self._write_transaction() as connection:
+            next_version = (await connection.execute(text("""
+                SELECT COALESCE(MAX(version), 0) + 1 FROM knowledge_releases
+                WHERE tenant = :tenant AND domain = :domain
+            """), {"tenant": tenant, "domain": domain})).scalar_one()
+            restored["version"] = int(next_version)
+            await connection.execute(text("""
+                INSERT INTO knowledge_releases
+                (release_id, tenant, domain, version, content_hash, published_at, published_by,
+                 rolled_back_from, release_json)
+                VALUES (:release_id, :tenant, :domain, :version, :content_hash, :published_at,
+                        :published_by, :rolled_back_from, :release_json)
+            """), {
+                "release_id": restored["release_id"], "tenant": tenant, "domain": domain,
+                "version": restored["version"], "content_hash": restored["content_hash"],
+                "published_at": restored["published_at"], "published_by": rolled_back_by,
+                "rolled_back_from": release_id,
+                "release_json": json.dumps(restored, sort_keys=True, default=str),
+            })
+            await self._set_active_knowledge_release(connection, tenant, domain, str(restored["release_id"]))
+        return restored
+
+    async def _set_active_knowledge_release(
+        self, connection: AsyncConnection, tenant: str, domain: str, release_id: str,
+    ) -> None:
+        updated = await connection.execute(text("""
+            UPDATE knowledge_active_releases SET release_id = :release_id
+            WHERE tenant = :tenant AND domain = :domain
+        """), {"tenant": tenant, "domain": domain, "release_id": release_id})
+        if updated.rowcount == 0:
+            await connection.execute(text("""
+                INSERT INTO knowledge_active_releases (tenant, domain, release_id)
+                VALUES (:tenant, :domain, :release_id)
+            """), {"tenant": tenant, "domain": domain, "release_id": release_id})
+
     async def _set_active_version(self, connection: AsyncConnection, tenant: str, version_id: str) -> None:
         updated = await connection.execute(text("""
             UPDATE energy_active_versions SET version_id = :version_id WHERE tenant = :tenant
@@ -636,6 +739,16 @@ _DDL = (
     )""",
     """CREATE INDEX IF NOT EXISTS idx_energy_evidence_requests_tenant
         ON energy_evidence_requests (tenant, created_at)""",
+    """CREATE TABLE IF NOT EXISTS knowledge_releases (
+        release_id TEXT PRIMARY KEY, tenant TEXT NOT NULL, domain TEXT NOT NULL,
+        version INTEGER NOT NULL, content_hash TEXT NOT NULL, published_at TEXT NOT NULL,
+        published_by TEXT NOT NULL, rolled_back_from TEXT, release_json TEXT NOT NULL,
+        UNIQUE (tenant, domain, version)
+    )""",
+    """CREATE TABLE IF NOT EXISTS knowledge_active_releases (
+        tenant TEXT NOT NULL, domain TEXT NOT NULL, release_id TEXT NOT NULL,
+        PRIMARY KEY (tenant, domain)
+    )""",
     """CREATE TABLE IF NOT EXISTS energy_evidence_request_transitions (
         transition_id TEXT PRIMARY KEY, tenant TEXT NOT NULL, request_id TEXT NOT NULL,
         from_state TEXT NOT NULL, to_state TEXT NOT NULL, changed_at TEXT NOT NULL,

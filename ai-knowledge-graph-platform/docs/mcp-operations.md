@@ -98,6 +98,14 @@ Export the client-consumable contract with:
 python scripts/export_mcp_contract.py --output artifacts/mcp-capabilities-v1.json
 ```
 
+`kg.knowledge.evaluate@1.0.0` (read, `read` scope) evaluates a domain's active
+knowledge release for a business context; its arguments are `domain`,
+`context`, optional `facts`, `semantic_candidates` and
+`expect_applicable_knowledge`. Entitlements come from the caller identity;
+request validation failures return `{"error": {"code": "invalid_request"}}`
+and a missing release `{"error": {"code": "no_published_release"}}`. See
+`docs/contextual-knowledge-evaluation.md`.
+
 Consumers should bind to a fully qualified name such as
 `biz.workorder.compensate@1.0.0`. A bare capability ID resolves to the newest
 registered version only when a client intentionally accepts that upgrade

@@ -67,7 +67,12 @@ class QueryCacheContext:
     # Entitlements are part of an answer's identity: a tenant-wide cache entry
     # must never be reused by a caller with a different document ACL.
     access_fingerprint: str = "tenant-default"
-    cache_schema_version: str = "3"
+    # Contextual-knowledge identity: an answer grounded in one knowledge
+    # release or business context (customer/brand/market/...) must not be
+    # served for another.  Empty when the answer used neither.
+    knowledge_release: str = ""
+    business_context_fingerprint: str = ""
+    cache_schema_version: str = "4"
 
     def canonical_content(self) -> dict[str, Any]:
         return asdict(self)

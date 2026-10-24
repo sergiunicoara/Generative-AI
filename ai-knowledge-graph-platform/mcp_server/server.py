@@ -148,6 +148,31 @@ async def lookup_entity(
 
 
 @mcp.tool()
+async def evaluate_contextual_knowledge(
+    domain: str,
+    context: dict,
+    facts: dict | None = None,
+    expect_applicable_knowledge: bool = False,
+    tenant: str = "aerospace",
+) -> dict:
+    """Evaluate which published requirements apply to a business context and
+    whether the evidenced facts satisfy them.
+
+    Backed by ``kg.knowledge.evaluate@1.0.0``. Returns per-requirement
+    applicability (applies / does_not_apply / unknown), validation outcomes
+    (pass / fail / insufficient_evidence / conflict / not_evaluated),
+    unresolved conflicts, authorised exceptions used, citations, and whether
+    human review is required. Read-only; entitlements come from the caller.
+    """
+    args = {"domain": domain, "context": context, "tenant": tenant,
+            "expect_applicable_knowledge": expect_applicable_knowledge}
+    if facts is not None:
+        args["facts"] = facts
+    result = await _registry.call("kg.knowledge.evaluate@1.0.0", args, CallerIdentity.current())
+    return _result_to_dict(result)
+
+
+@mcp.tool()
 async def find_context_precedents(
     policy_version_id: str,
     tenant: str = "aerospace",

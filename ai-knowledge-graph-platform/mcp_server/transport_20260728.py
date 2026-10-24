@@ -29,7 +29,9 @@ def _header(scope: Scope, name: bytes) -> str:
 
 
 def _json_type(value: type | None) -> str:
-    return {str: "string", int: "integer", float: "number", bool: "boolean"}.get(value, "string")
+    return {
+        str: "string", int: "integer", float: "number", bool: "boolean", dict: "object", list: "array",
+    }.get(value, "string")
 
 
 def _tool_schema(spec) -> dict[str, Any]:

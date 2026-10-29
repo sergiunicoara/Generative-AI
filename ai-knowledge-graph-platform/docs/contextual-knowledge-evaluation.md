@@ -22,10 +22,13 @@ not FDA, EMA or QRD requirements, and nothing here has had domain-expert review.
 | Applicability | `graphrag/context_graph/applicability.py` | Three-valued, no authorization logic |
 | Evaluation | `graphrag/context_graph/knowledge_evaluation.py` | Authorization filter, supersession, exceptions, validation, conflicts, decision |
 | Releases | `graphrag/context_graph/knowledge_release.py` | Packs, review helpers, publication gate, regression cases |
-| Persistence | `graphrag/domains/energy/governance_store.py` | `knowledge_releases` / `knowledge_active_releases` in the existing durable governance store |
+| RDF projection | `graphrag/context_graph/knowledge_rdf.py`, `ontology/models/contextual-knowledge.yaml` | Release → RDF; SHACL compiled from the canonical model; part of the gate |
+| Curation | `graphrag/context_graph/knowledge_curation.py` | Working pack revisions, review decisions, publish from a revision |
+| Persistence | `graphrag/domains/energy/governance_store.py` | `knowledge_releases` / `knowledge_active_releases` / `knowledge_pack_revisions` in the existing durable governance store |
 | Serving + cache | `graphrag/context_graph/knowledge_service.py` | Active-release resolution, decision cache |
 | MCP | `mcp_server/capabilities/knowledge_evaluate.py` | `kg.knowledge.evaluate@1.0.0` |
 | HTTP | `api/routes/knowledge.py` | `POST /knowledge/evaluate` (same registry call path) |
+| HTTP curation | `api/routes/knowledge_curation.py` | `/knowledge/packs/{domain}`: review, import, publish |
 | Energy | `graphrag/domains/energy/knowledge.py`, `answers.py` | Bulletin projection, per-asset evaluation on `maintenance_review` |
 | Domain pack | `config/knowledge_packs/packaging_labeling.yml` | Synthetic demonstration pack |
 
@@ -64,9 +67,24 @@ For Energy, the authoritative source remains the published RDF graph (SHACL
 gated). Knowledge items are a deterministic projection of its guidance
 revisions, and the release reference is the Energy publication `version_id`.
 
-**Not implemented**: an RDF/SHACL projection of knowledge items through the
-canonical semantic-model compiler (`graphrag/semantic_model`). Item validation
-is currently Pydantic-only. This is tracked in the roadmap.
+**RDF projection.** `ontology/models/contextual-knowledge.yaml` is the
+canonical semantic model of a published release. The semantic-model compiler
+turns it into OWL, SHACL and Neo4j artefacts like the Energy and automotive
+models, and `make semantic-model-check` drift-checks them.
+`knowledge_rdf.project_release` projects a release's published items and
+exceptions into RDF, using only terms the model declares (a test checks this).
+`validate_projection` checks that graph against shapes compiled from the model
+in memory. The release gate runs this check after the referential checks and
+before the regression cases. A reference to an entry outside the release (an
+item superseding a withdrawn one) is reported in `omitted_references` rather
+than projected, because the shapes require every edge to end at a released
+item. The referential checks cover those references.
+
+SHACL here is structural: presence, cardinality, datatypes and edge targets.
+The metamodel has no enumeration or conditional constraint, so the Pydantic
+contracts still enforce the modality, authority, status and operator
+vocabularies and the publication rules. The projection is computed for the
+gate and is not stored or served.
 
 ## Separate axes
 
@@ -103,9 +121,9 @@ reported separately: "does not apply" is `not_evaluated` with reason
 | Recorded after `known_as` | `does_not_apply` (`not_recorded_at_view`) |
 | Outside the valid window at `as_of` | `does_not_apply` (`not_yet_valid`/`expired`) |
 | Window present but no `as_of` | `unknown` (`as_of_missing`) |
-| Superseded by a later revision that applies and covers the whole bound context | `does_not_apply` (`superseded`). Supersession is transitive (C supersedes B supersedes A means C supersedes A, even if B is not in force) and independent of input order. |
-| A later revision whose applicability is unknown | `unknown` (`supersession_undetermined`) |
-| A later revision covering only part of the bound context (e.g. one of two markets) | stays `applies` (`partially_superseded`); the pair is ordered, so it is not an `ambiguous_revision` conflict |
+| Superseded by later revisions that apply and together cover the whole bound context | `does_not_apply` (`superseded`, naming every covering revision). One revision may cover it alone, or several regional revisions jointly. Supersession is transitive (C supersedes B supersedes A means C supersedes A, even if B is not in force) and independent of input order. |
+| A later revision whose applicability is unknown, and the applying revisions do not cover everything | `unknown` (`supersession_undetermined`) |
+| Later revisions covering only part of the bound context (e.g. one of two markets) | stays `applies` (`partially_superseded`); `in_force_context` lists where it still binds. The pair is ordered, so it is not an `ambiguous_revision` conflict |
 | Cyclic supersession lineage | `unknown` (`supersession_cycle`); the release gate also rejects cycles |
 
 Dimensions are orthogonal: customer, brand, market, product, product family
@@ -130,8 +148,20 @@ and workflow. No hierarchy is assumed (a market is not a child of a customer).
     covers every context value the requirement binds (per dimension, the
     requirement's bound values must be a subset of the exception's). A waiver
     for market A on a carton sold in A and B leaves the requirement in force
-    and evaluated; the exception is listed in `partial_exception_refs`.
-    Several partial waivers are not unioned (documented limitation).
+    and evaluated. The exception is listed in `partial_exception_refs`, and
+    `in_force_context` shows the uncovered values.
+  * **Joint waivers.** Several applying waivers waive a requirement when
+    together they cover every *combination* of its bound values that is
+    still in force after supersession. A union per dimension is not enough:
+    waivers for (market A, product P1) and (market B, product P2) leave
+    (A, P2) and (B, P1) in force. A partial supersession and a waiver on the
+    remainder also retire the requirement together. Each contributing waiver
+    is listed in `exception_refs` and `exceptions_applied`. A waiver that
+    applies but touches none of the requirement's bound values is not
+    reported as partial. Precedence is not unioned: a single precedence
+    exception must still cover the target's whole bound context. Past 256
+    uncovered fragments the evaluator gives up and treats the requirement as
+    uncovered (fail closed).
   * **Effective winner.** Precedence suppresses a target only when the winner
     is visible to the caller, applies, is not waived or superseded, covers the
     target's bound context, and is not itself the target of another applicable
@@ -223,6 +253,9 @@ and fails.
     and it must be the latest version of that id;
   * referential checks: supersession, override and exception targets exist; no
     supersession cycles;
+  * shape checks: the candidate's RDF projection conforms to the SHACL shapes
+    compiled from `ontology/models/contextual-knowledge.yaml` (recorded as
+    `checks.shacl`);
   * the domain's regression cases against the candidate release. Cases are
     mandatory: publishing with none is refused, so `regression: passed` is
     never recorded for an empty gate.
@@ -242,8 +275,44 @@ and fails.
   schema version. `QueryCacheContext` gained `knowledge_release` and
   `business_context_fingerprint`; its schema version moved from 3 to 4.
 
-Not implemented: an HTTP route or review UI for curating and publishing packs.
-Publication is library- and script-driven.
+### Curation and publication over HTTP
+
+Curators can review and publish without code access through
+`/knowledge/packs/{domain}`. The working pack is stored in the governance
+store as append-only revisions (`knowledge_pack_revisions`). Each revision
+records who made the change, what changed and when.
+
+| Route | Scope | Effect |
+| --- | --- | --- |
+| `GET /knowledge/packs/{domain}` | `read` | Working revision: each entry's current version and status, the review queue, the active release |
+| `GET /knowledge/packs/{domain}/history` | `read` | Every revision with `changed_by` and the change |
+| `POST /knowledge/packs/{domain}/import` | `admin` | New revision from the deployed `config/knowledge_packs/{domain}.yml` |
+| `POST /knowledge/packs/{domain}/{items\|exceptions}/{id}/{approve\|withdraw}` | `write` | Next version of one entry. `publish: false` stops at `approved` |
+| `POST /knowledge/packs/{domain}/publish` | `admin` | The unchanged release gate on the named revision, then activation |
+
+* **Identity comes from the token, never from the body.** The token `sub`
+  becomes `reviewed_by` on items, `granted_by` on exceptions, `published_by`
+  on the release and `changed_by` on the revision. A missing `sub` gets 403.
+  Bodies reject unknown fields, so a `reviewed_by` field is a 422, not
+  ignored. The tenant is the token tenant. Another tenant's pack is a 404,
+  indistinguishable from no pack.
+* **Compare-and-swap.** Every mutation names the `expected_revision` it was
+  based on and gets 409 if the pack moved. Publishing names the revision too,
+  so a publisher publishes what they reviewed.
+* **Same contract checks as the library.** A review goes through
+  `approve_item`, `withdraw_item`, `approve_exception` or
+  `withdraw_exception`. An entry that would violate the contracts (no source,
+  an extracted constraint without human constraint provenance) is a 422.
+  Approval starts only from draft, in review or approved. Re-approving a
+  published entry or reviving a withdrawn one is a 409; those need a new
+  draft.
+* **The gate's inputs are server-side.** Regression cases come from the
+  deployed `evals/knowledge_eval/{domain}_cases.json`, never from the request.
+  A failed gate is a 422 with `failures` and leaves the active release as it
+  was.
+
+Not implemented: a review UI, and a route for submitting new drafts. Drafts
+still arrive through the version-controlled pack file and `import`.
 
 ## API and MCP usage
 
@@ -286,7 +355,12 @@ python scripts/knowledge_eval_demo.py
 # targeted tests
 python scripts/run_pytest.py tests/unit/context_graph/test_contextual_knowledge.py \
     tests/unit/test_knowledge_capability.py tests/unit/test_energy_contextual_knowledge.py \
-    tests/unit/context_graph/test_contextual_knowledge_audit.py
+    tests/unit/context_graph/test_contextual_knowledge_audit.py \
+    tests/unit/context_graph/test_knowledge_coverage_union.py \
+    tests/unit/context_graph/test_knowledge_rdf.py tests/unit/test_knowledge_curation_routes.py
+
+# drift check for the compiled knowledge model (also part of make semantic-model-check)
+python -m graphrag.semantic_model compile ontology/models/contextual-knowledge.yaml --check --fail-on-error
 ```
 
 ## Limitations and safe claims
@@ -297,6 +371,10 @@ Safe to say:
   applicability, normative modality, authorised exceptions, conflict detection
   and gated, versioned releases."
 * "Exposed through the authenticated API and MCP registry."
+* "Curated and published over authenticated routes, with the token subject as
+  reviewer and publisher."
+* "Releases are projected to RDF and SHACL-validated against shapes compiled
+  from a canonical semantic model as part of the publication gate."
 * "Wired into the Energy maintenance-review answer."
 * "Measured on a 26-case synthetic engineering evaluation set written by the
   developer." (KE-23 to KE-26 were added by the 2026-10-24 audit, with
@@ -320,8 +398,10 @@ Known limitations:
 * Energy guidance is projected as *recommended* (advisory review), matching the
   answer path. The Energy answer text and abstentions remain decided by its own
   temporal selection, and a test checks that both agree.
-* There is no knowledge-item RDF/SHACL projection yet, and no pack
-  curation/publish HTTP route.
+* The RDF projection is checked by structural SHACL only (see above). It is
+  computed for the gate, not stored or served as a SPARQL endpoint.
+* Joint coverage applies to waivers and supersession, not to precedence.
+* Pack curation over HTTP has no review UI and no draft-submission route.
 * Verification is unit-level and in-process (temporary SQLite, synthetic pack).
   Nothing has been live-validated against Neo4j, a deployed API or a real MCP
   client.
@@ -341,6 +421,7 @@ has a regression test in
 7. several published versions of one exception were all applied;
 8. disclaimer-only release updates were deduplicated.
 
-Known limitations that remain: partial waivers are not unioned; a partially
-superseded revision is reported with its full matched context; the evaluation
-set is still developer-authored.
+Known limitations that remain: the evaluation set is still developer-authored.
+Partial waivers and partial supersessions are now unioned and the remaining
+in-force context is reported (2026-10-29, see "Joint waivers" above and
+`tests/unit/context_graph/test_knowledge_coverage_union.py`).

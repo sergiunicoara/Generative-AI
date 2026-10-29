@@ -135,3 +135,34 @@ are kept as history. Measurements below are new.
 - Remaining gaps: partial waivers/supersessions are not unioned; a partially
   superseded revision reports its full matched context; the eval set is
   developer-authored (agreement with own expectations, not real-world accuracy).
+
+---
+
+# Contextual knowledge follow-ons (2026-10-29)
+
+The three open roadmap items under "Contextual knowledge evaluation".
+
+## Plan
+- [x] Joint coverage: union partial waivers / partial supersessions by box
+  subtraction over context-value combinations; report `in_force_context`.
+- [x] Authenticated pack review/publish routes: working-pack revisions in the
+  governance store (CAS on `expected_revision`), token `sub` as reviewer,
+  grantor and publisher, unchanged gate with deployed regression cases.
+- [x] RDF projection of published knowledge: canonical model
+  `ontology/models/contextual-knowledge.yaml`, compiled artefacts,
+  `knowledge_rdf.py` projection + SHACL validation, wired into the gate.
+- [x] Docs, roadmap, ontology README, Makefile drift check.
+
+## Review (2026-10-29)
+- New tests: 12 coverage-union (10 failed against the pre-change evaluator,
+  2 pin preserved behaviour), 13 curation-route, 15 RDF/SHACL.
+- Focused knowledge/capability/energy/MCP/semantic-model tests: all pass.
+- Eval: 26/26; outcomes unchanged. Decision ids in `last_run.json` changed
+  because results now carry `in_force_context`.
+- `make semantic-model-check` equivalent: all three models verified.
+- Environment: Python 3.11 venv from `requirements.lock` without torch,
+  torchvision, sentence-transformers and ragas (PyTorch's index is blocked
+  here; the PyPI CUDA wheels are several GB). Test modules importing
+  `sentence_transformers` could not be collected.
+- Not done: review UI, draft-submission route, union of precedence
+  exceptions, any live validation.

@@ -58,6 +58,11 @@ class KnowledgeEvaluationService:
         self.cache_hits = 0
         self.cache_misses = 0
 
+    @property
+    def store(self):
+        """The governance store releases are served from (shared with curation)."""
+        return self._store
+
     async def catalog(self, tenant: str, domain: str) -> ReleaseCatalog:
         record = await self._store.active_knowledge_release(require_tenant(tenant), domain)
         if record is None:

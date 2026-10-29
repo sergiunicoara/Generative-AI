@@ -1,0 +1,242 @@
+id: contextual-knowledge
+version: 1.0.0
+namespace: https://example.knowledge.demo/ontology#
+label: Contextual knowledge release ontology
+unknown_property_policy: reject
+prefixes:
+  prov: http://www.w3.org/ns/prov#
+# The RDF projection of a published knowledge release
+# (graphrag/context_graph/knowledge_rdf.py).  Only published entries are
+# projected, so the publication requirements -- a cited source, a reviewer
+# and review reference on items, a grant and approval reference on
+# exceptions -- are plain required properties here.  Vocabularies (modality,
+# authority, status, operators) are enforced by the Pydantic contracts in
+# graphrag/context_graph/knowledge.py; the metamodel has no enumeration
+# constraint, so the generated shapes check presence and datatype only.
+types:
+  KnowledgeEntry:
+    label: Knowledge entry
+    lpg_label: KNOWLEDGE_ENTRY
+    abstract: true
+    description: A versioned, tenant-owned entry of a knowledge release.
+    properties:
+      entryId:
+        datatype: string
+        required: true
+        cardinality: {max: 1}
+        description: Entry id, unique per tenant and release (the IRI carries the tenant).
+      version:
+        datatype: integer
+        required: true
+        cardinality: {max: 1}
+      tenant:
+        datatype: string
+        required: true
+        cardinality: {max: 1}
+      status:
+        datatype: string
+        required: true
+        cardinality: {max: 1}
+      recordedAt:
+        datatype: dateTime
+        required: true
+        cardinality: {max: 1}
+        description: Transaction time.
+      validFrom:
+        datatype: dateTime
+        cardinality: {max: 1}
+      validTo:
+        datatype: dateTime
+        cardinality: {max: 1}
+      accessMode:
+        datatype: string
+        required: true
+        cardinality: {max: 1}
+      accessState:
+        datatype: string
+        required: true
+        cardinality: {max: 1}
+      requiresGroupResolution:
+        datatype: boolean
+        required: true
+        cardinality: {max: 1}
+      allowPrincipal:
+        datatype: string
+      denyPrincipal:
+        datatype: string
+  KnowledgeItem:
+    label: Knowledge item
+    lpg_label: KNOWLEDGE_ITEM
+    extends: KnowledgeEntry
+    description: One published requirement, recommendation, permission or prohibition.
+    properties:
+      title:
+        datatype: string
+        required: true
+        cardinality: {max: 1}
+      statement:
+        datatype: string
+        required: true
+        cardinality: {max: 1}
+      subjectKey:
+        datatype: string
+        required: true
+        cardinality: {max: 1}
+      modality:
+        datatype: string
+        required: true
+        cardinality: {max: 1}
+      authority:
+        datatype: string
+        required: true
+        cardinality: {max: 1}
+      origin:
+        datatype: string
+        required: true
+        cardinality: {max: 1}
+      series:
+        datatype: string
+        cardinality: {max: 1}
+      confidence:
+        datatype: decimal
+        cardinality: {max: 1}
+        description: Extraction confidence; informational only.
+      reviewedBy:
+        datatype: string
+        required: true
+        cardinality: {max: 1}
+      reviewRef:
+        datatype: string
+        required: true
+        cardinality: {max: 1}
+      constraintAuthoredBy:
+        datatype: string
+        cardinality: {max: 1}
+      constraintApprovalRef:
+        datatype: string
+        cardinality: {max: 1}
+  KnowledgeException:
+    label: Knowledge exception
+    lpg_label: KNOWLEDGE_EXCEPTION
+    extends: KnowledgeEntry
+    description: An authorised waiver or precedence between requirements.
+    properties:
+      exceptionKind:
+        datatype: string
+        required: true
+        cardinality: {max: 1}
+      rationale:
+        datatype: string
+        required: true
+        cardinality: {max: 1}
+      grantedBy:
+        datatype: string
+        required: true
+        cardinality: {max: 1}
+      approvalRef:
+        datatype: string
+        required: true
+        cardinality: {max: 1}
+  ApplicabilityScope:
+    label: Applicability scope
+    lpg_label: APPLICABILITY_SCOPE
+    description: How one business dimension restricts an entry; an undeclared dimension is unknown, never unrestricted.
+    properties:
+      dimension:
+        datatype: string
+        required: true
+        cardinality: {max: 1}
+      scopeMode:
+        datatype: string
+        required: true
+        cardinality: {max: 1}
+      scopeValue:
+        datatype: string
+  SourceCitation:
+    label: Source citation
+    lpg_label: SOURCE_CITATION
+    properties:
+      sourceId:
+        datatype: string
+        required: true
+        cardinality: {max: 1}
+      sourceType:
+        datatype: string
+        required: true
+        cardinality: {max: 1}
+      locator:
+        datatype: string
+        cardinality: {max: 1}
+      quote:
+        datatype: string
+        cardinality: {max: 1}
+      citedRecordedAt:
+        datatype: dateTime
+        cardinality: {max: 1}
+  ConstraintPredicate:
+    label: Constraint predicate
+    lpg_label: CONSTRAINT_PREDICATE
+    description: One bounded check of an item's conjunctive constraint.
+    properties:
+      position:
+        datatype: integer
+        required: true
+        cardinality: {max: 1}
+      factName:
+        datatype: string
+        required: true
+        cardinality: {max: 1}
+      operator:
+        datatype: string
+        required: true
+        cardinality: {max: 1}
+      expectedValueJson:
+        datatype: string
+        cardinality: {max: 1}
+        description: The comparison value as canonical JSON (scalar or list); absent for emptiness checks.
+      whenMissing:
+        datatype: string
+        required: true
+        cardinality: {max: 1}
+relations:
+  hasScope:
+    source: KnowledgeEntry
+    target: ApplicabilityScope
+    lpg_type: HAS_SCOPE
+    cardinality: {max: 6}
+  citesSource:
+    source: KnowledgeEntry
+    target: SourceCitation
+    lpg_type: CITES_SOURCE
+    cardinality: {min: 1}
+  hasPredicate:
+    source: KnowledgeItem
+    target: ConstraintPredicate
+    lpg_type: HAS_PREDICATE
+    cardinality: {max: 20}
+  supersedes:
+    source: KnowledgeItem
+    target: KnowledgeItem
+    lpg_type: SUPERSEDES
+  declaresOverrideOf:
+    source: KnowledgeItem
+    target: KnowledgeItem
+    lpg_type: DECLARES_OVERRIDE_OF
+    description: Recorded intent only; it authorises nothing without an exception.
+  exceptionTarget:
+    source: KnowledgeException
+    target: KnowledgeItem
+    lpg_type: EXCEPTION_TARGET
+    cardinality: {min: 1, max: 20}
+  precedenceWinner:
+    source: KnowledgeException
+    target: KnowledgeItem
+    lpg_type: PRECEDENCE_WINNER
+    cardinality: {max: 1}
+artifacts:
+  owl: ontology/knowledge/contextual-knowledge.ttl
+  shacl: ontology/shapes/contextual-knowledge.shapes.ttl
+  neo4j: ontology/generated/knowledge/neo4j-constraints.cypher
+  diagnostics: ontology/generated/knowledge/diagnostics.json
+  diagnostics_report: ontology/generated/knowledge/diagnostics.md
+  erd: ontology/generated/knowledge/erd.mmd

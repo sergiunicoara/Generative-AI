@@ -1,0 +1,64 @@
+classDiagram
+    class ApplicabilityScope {
+        +string dimension!
+        +string scopeMode!
+        +string scopeValue
+    }
+    class ConstraintPredicate {
+        +string expectedValueJson
+        +string factName!
+        +string operator!
+        +integer position!
+        +string whenMissing!
+    }
+    class KnowledgeEntry {
+        <<abstract>>
+        +string accessMode!
+        +string accessState!
+        +string allowPrincipal
+        +string denyPrincipal
+        +string entryId!
+        +dateTime recordedAt!
+        +boolean requiresGroupResolution!
+        +string status!
+        +string tenant!
+        +dateTime validFrom
+        +dateTime validTo
+        +integer version!
+    }
+    class KnowledgeException {
+        +string approvalRef!
+        +string exceptionKind!
+        +string grantedBy!
+        +string rationale!
+    }
+    KnowledgeEntry <|-- KnowledgeException
+    class KnowledgeItem {
+        +string authority!
+        +decimal confidence
+        +string constraintApprovalRef
+        +string constraintAuthoredBy
+        +string modality!
+        +string origin!
+        +string reviewRef!
+        +string reviewedBy!
+        +string series
+        +string statement!
+        +string subjectKey!
+        +string title!
+    }
+    KnowledgeEntry <|-- KnowledgeItem
+    class SourceCitation {
+        +dateTime citedRecordedAt
+        +string locator
+        +string quote
+        +string sourceId!
+        +string sourceType!
+    }
+    KnowledgeEntry "1" --> "1..*" SourceCitation : citesSource
+    KnowledgeItem "1" --> "0..*" KnowledgeItem : declaresOverrideOf
+    KnowledgeException "1" --> "1..20" KnowledgeItem : exceptionTarget
+    KnowledgeItem "1" --> "0..20" ConstraintPredicate : hasPredicate
+    KnowledgeEntry "1" --> "0..6" ApplicabilityScope : hasScope
+    KnowledgeException "1" --> "0..1" KnowledgeItem : precedenceWinner
+    KnowledgeItem "1" --> "0..*" KnowledgeItem : supersedes

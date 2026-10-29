@@ -104,6 +104,22 @@ in the Energy YAML schema today. It does not create a new synthetic document
 corpus; automotive's existing 30-document corpus and competency questions
 (`evals/automotive_iatf/`) are unchanged and untouched by this model.
 
+## Third model: published contextual knowledge
+
+`ontology/models/contextual-knowledge.yaml` models a published knowledge
+release (items, exceptions, applicability scopes, citations, constraint
+predicates and the references between them). It is compiled by the same
+`compile_model()` into `ontology/knowledge/contextual-knowledge.ttl`,
+`ontology/shapes/contextual-knowledge.shapes.ttl` and
+`ontology/generated/knowledge/`, and drift-checked by
+`make semantic-model-check`. `graphrag/context_graph/knowledge_rdf.py`
+projects a release into RDF using only the model's declared terms and
+validates it against those shapes; the knowledge release gate refuses a
+candidate whose projection does not conform. The metamodel has no
+enumeration constraint, so modality, authority, status and operator
+vocabularies are still enforced by the Pydantic contracts, not by SHACL. See
+`docs/contextual-knowledge-evaluation.md`.
+
 This directory is the SHACL-shapes half of the platform's ontology system —
 see [`docs/ontology-model.md`](../docs/ontology-model.md) for the technical
 model (type hierarchy, relation domain/range rules, inference rules,

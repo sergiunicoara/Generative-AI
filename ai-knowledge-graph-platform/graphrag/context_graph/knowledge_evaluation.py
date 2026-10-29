@@ -11,8 +11,9 @@ Pipeline, in order, for one request:
 2. **Applicability** of every remaining item (three-valued, see
    ``applicability.py``), then transitive, order-independent supersession.
 3. **Authorized exceptions** that apply in this context and cover the
-   target's whole bound context (waivers; precedence only with a winner that
-   is itself in force).  Partial coverage leaves the target in force.
+   target's whole bound context (waivers, alone or jointly; precedence only
+   with a winner that is itself in force).  Partial coverage leaves the
+   target in force for the uncovered values.
 4. **Validation** of every applicable requirement -- all of them, not the
    first matching one -- against bounded predicates over evidenced facts.
 5. **Conflicts** among applicable requirements, resolved only by an applicable
@@ -115,6 +116,10 @@ class ConstraintResult(_Frozen):
     # exceptions that apply here but cover only part of the item's bound
     # context: the item stays in force and is evaluated for every value
     partial_exception_refs: tuple[str, ...] = ()
+    # where a partially superseded or partially waived item still binds, as
+    # disjoint context boxes (a dimension left out is unbounded); empty when
+    # the item binds its whole matched context
+    in_force_context: tuple[dict[str, tuple[str, ...]], ...] = ()
     conflict_ids: tuple[str, ...] = ()
 
 
@@ -507,18 +512,99 @@ def _uncovered(coverer: Applicability, coverer_result: ApplicabilityResult,
     return gaps
 
 
+# A bound context as a box: per dimension, the bound values, or ``None`` when
+# unbounded.  Several partial coverers jointly cover a target only if the union
+# of their boxes includes every combination of the target's values -- a waiver
+# for (market A, product P1) and one for (market B, product P2) leave
+# (A, P2) and (B, P1) uncovered, so per-dimension unions are not enough.
+Box = dict[str, frozenset[str] | None]
+
+#: Fragment cap for the uncovered remainder.  Past it, nothing counts as
+#: covered (fail closed): the target stays in force for its whole context.
+_REMAINDER_LIMIT = 256
+
+
+def _box(app: Applicability, result: ApplicabilityResult, context: BusinessContext) -> Box:
+    box: Box = {}
+    for dimension in DIMENSIONS:
+        bound = _bound(app, result, context, dimension)
+        box[dimension] = None if bound is None else frozenset(bound)
+    return box
+
+
+def _subtract(box: Box, coverer: Box) -> list[Box] | None:
+    """``box`` minus ``coverer`` as disjoint boxes, or ``None`` when the
+    coverer removes nothing.
+
+    A coverer bounded on a dimension the box leaves unbounded removes nothing:
+    finitely many values never cover an unstated, open-ended dimension.
+    """
+    for dimension in DIMENSIONS:
+        covering = coverer[dimension]
+        if covering is None:
+            continue
+        bound = box[dimension]
+        if bound is None or not bound & covering:
+            return None
+    pieces: list[Box] = []
+    current = dict(box)
+    for dimension in DIMENSIONS:
+        covering = coverer[dimension]
+        if covering is None:
+            continue
+        outside = current[dimension] - covering
+        if outside:
+            pieces.append({**current, dimension: outside})
+        current[dimension] = current[dimension] & covering
+    return pieces
+
+
+def _remainder(start: list[Box], coverers: list[tuple[str, Box]]) -> tuple[list[Box], list[str]]:
+    """What no coverer covers, and the keys of the coverers that removed part
+    of it.  Exact union semantics, independent of coverer order for the
+    covered/uncovered answer."""
+    remaining = list(start)
+    used: list[str] = []
+    for key, coverer in coverers:
+        after: list[Box] = []
+        touched = False
+        for box in remaining:
+            pieces = _subtract(box, coverer)
+            if pieces is None:
+                after.append(box)
+            else:
+                after.extend(pieces)
+                touched = True
+        if len(after) > _REMAINDER_LIMIT:
+            return list(start), []
+        if touched:
+            used.append(key)
+        remaining = after
+    return remaining, used
+
+
+def _context_boxes(boxes: list[Box]) -> tuple[dict[str, tuple[str, ...]], ...]:
+    rendered = [
+        {dimension: tuple(sorted(values)) for dimension, values in box.items() if values is not None}
+        for box in boxes
+    ]
+    return tuple(sorted(rendered, key=lambda box: sorted(box.items())))
+
+
 def _supersession(
     visible: list[KnowledgeItem], base: dict[str, ApplicabilityResult], context: BusinessContext,
-) -> tuple[dict[str, ApplicabilityResult], set[str], frozenset[frozenset[str]]]:
+) -> tuple[dict[str, ApplicabilityResult], set[str], frozenset[frozenset[str]], dict[str, list[Box]]]:
     """Resolve supersession from the immutable per-item applicability.
 
     ``S.supersedes = [T]`` is transitive (C supersedes B supersedes A means C
-    supersedes A, even when B itself is not in force).  T stops applying when a
-    later revision applies and covers T's whole bound context; it becomes
-    unknown when a later revision's applicability is unknown or the lineage is
-    cyclic; a later revision covering only part of T leaves T in force.
-    Independent of input order.  Returns final applicability, the ids that
-    were superseded, and the revision pairs ordered by supersession.
+    supersedes A, even when B itself is not in force).  T stops applying when
+    the later revisions that apply together cover T's whole bound context; it
+    becomes unknown when a later revision's applicability is unknown or the
+    lineage is cyclic; later revisions covering only part of T leave T in
+    force for the rest.  Independent of input order.  Returns final
+    applicability, the ids that were superseded, the revision pairs ordered by
+    supersession, and the remaining in-force context of partially superseded
+    items.
     """
     by_id = {item.id: item for item in visible}
     direct: dict[str, set[str]] = {}
@@ -540,6 +626,7 @@ def _supersession(
     final = dict(base)
     superseded: set[str] = set()
     ordered: set[frozenset[str]] = set()
+    remaining_context: dict[str, list[Box]] = {}
     for item in visible:
         revisions = later(item.id)
         ordered.update(frozenset({item.id, other}) for other in revisions if other != item.id)
@@ -556,22 +643,21 @@ def _supersession(
             continue
         if current.status != ApplicabilityStatus.APPLIES:
             continue
-        covering = partial = unknown = ""
+        unknown = ""
+        coverers: list[tuple[str, Box]] = []
         for other_id in sorted(revisions):
             other, other_base = by_id[other_id], base[other_id]
             if other_base.status == ApplicabilityStatus.APPLIES:
-                if not _uncovered(other.applicability, other_base, item.applicability, current, context):
-                    covering = covering or other.key
-                else:
-                    partial = partial or other.key
+                coverers.append((other.key, _box(other.applicability, other_base, context)))
             elif other_base.status == ApplicabilityStatus.UNKNOWN:
                 unknown = unknown or other.key
-        if covering:
+        remaining, used = _remainder([_box(item.applicability, current, context)], coverers)
+        if not remaining:
             superseded.add(item.id)
             final[item.id] = ApplicabilityResult(
                 status=ApplicabilityStatus.DOES_NOT_APPLY, matched=current.matched,
                 reasons=(ApplicabilityReason(code="superseded", dimension="time",
-                                             detail=f"superseded by {covering}"),),
+                                             detail=f"superseded by {', '.join(used)}"),),
             )
         elif unknown:
             final[item.id] = ApplicabilityResult(
@@ -579,11 +665,13 @@ def _supersession(
                 reasons=(ApplicabilityReason(code="supersession_undetermined", dimension="time",
                                              detail=f"may be superseded by {unknown}"),),
             )
-        elif partial:
+        elif used:
+            remaining_context[item.id] = remaining
             final[item.id] = current.model_copy(update={"reasons": (*current.reasons, ApplicabilityReason(
                 code="partially_superseded", dimension="time",
-                detail=f"{partial} covers only part of this context; this revision stays in force"),)})
-    return final, superseded, frozenset(ordered)
+                detail=(f"{', '.join(used)} cover{'s' if len(used) == 1 else ''} only part of this "
+                        f"context; this revision stays in force for {list(_context_boxes(remaining))}")),)})
+    return final, superseded, frozenset(ordered), remaining_context
 
 
 # ---------------------------------------------------------------------------
@@ -619,7 +707,7 @@ def evaluate_knowledge(
         item.id: evaluate_applicability(item.applicability, context, recorded_at=item.recorded_at)
         for item in visible
     }
-    applicability, superseded, ordered = _supersession(visible, own_scope, context)
+    applicability, superseded, ordered, in_force = _supersession(visible, own_scope, context)
 
     by_id = {item.id: item for item in visible}
     applying = [item for item in visible if applicability[item.id].status == ApplicabilityStatus.APPLIES]
@@ -627,10 +715,12 @@ def evaluate_knowledge(
     # -- authorized exceptions ---------------------------------------------
     # An exception changes a requirement only when it applies, covers the
     # requirement's whole bound context and -- for precedence -- names a winner
-    # that is itself in force here.  Anything less leaves the requirement in
+    # that is itself in force here.  Waivers may cover jointly: together they
+    # must cover every combination of context values the requirement still
+    # binds after supersession.  Anything less leaves the requirement in
     # force; a precedence that cannot be confirmed escalates.
     applied: list[AppliedException] = []
-    waived: dict[str, str] = {}
+    waived: dict[str, tuple[str, ...]] = {}
     partly_waived: set[str] = set()
     losers: dict[str, str] = {}
     precedence: dict[frozenset[str], str] = {}
@@ -664,18 +754,28 @@ def evaluate_knowledge(
         return [t for t in exc.target_item_ids
                 if t in by_id and applicability[t].status == ApplicabilityStatus.APPLIES]
 
-    for exc in (e for e in candidates if e.kind == "waiver"):
-        covered: list[str] = []
+    waivers = [e for e in candidates if e.kind == "waiver"]
+    waiver_boxes: dict[str, list[tuple[str, Box]]] = {}
+    for exc in waivers:
+        exc_box = _box(exc.applicability, exc_results[exc.id], context)
         for target in applying_targets(exc):
-            if coverage_gaps(exc, target):
-                partly_waived.add(target)
-                partial_refs.setdefault(target, []).append(exc.key)
-            elif target not in waived:
-                waived[target] = exc.key
-                covered.append(target)
-        if covered:
+            waiver_boxes.setdefault(target, []).append((exc.key, exc_box))
+    waived_targets: dict[str, list[str]] = {}
+    for target, boxes in sorted(waiver_boxes.items()):
+        start = in_force.get(target) or [_box(by_id[target].applicability, applicability[target], context)]
+        remaining, used = _remainder(start, boxes)
+        if not remaining:
+            waived[target] = tuple(used)
+            for key in used:
+                waived_targets.setdefault(key, []).append(target)
+        elif used:
+            partly_waived.add(target)
+            partial_refs.setdefault(target, []).extend(used)
+            in_force[target] = remaining
+    for exc in waivers:
+        if exc.key in waived_targets:
             applied.append(AppliedException(
-                exception_key=exc.key, kind=exc.kind, target_item_ids=tuple(covered),
+                exception_key=exc.key, kind=exc.kind, target_item_ids=tuple(waived_targets[exc.key]),
                 granted_by=exc.granted_by, approval_ref=exc.approval_ref, citations=exc.sources,
             ))
 
@@ -757,6 +857,7 @@ def evaluate_knowledge(
             modality=item.modality, authority=item.authority.value, blocking=blocking,
             applicability=app.status, applicability_reasons=app.reasons, matched_context=app.matched,
             partial_exception_refs=tuple(partial_refs.get(item.id, ())),
+            in_force_context=_context_boxes(in_force[item.id]) if item.id in in_force else (),
         )
         if app.status == ApplicabilityStatus.DOES_NOT_APPLY:
             results.append(ConstraintResult(**base, outcome=ValidationOutcome.NOT_EVALUATED,
@@ -770,7 +871,7 @@ def evaluate_knowledge(
         if item.id in waived:
             results.append(ConstraintResult(**base, outcome=ValidationOutcome.NOT_EVALUATED,
                                             outcome_reason="waived_by_exception", validation_performed=False,
-                                            citations=item.sources, exception_refs=(waived[item.id],)))
+                                            citations=item.sources, exception_refs=waived[item.id]))
             continue
         if item.id in losers:
             results.append(ConstraintResult(**base, outcome=ValidationOutcome.NOT_EVALUATED,

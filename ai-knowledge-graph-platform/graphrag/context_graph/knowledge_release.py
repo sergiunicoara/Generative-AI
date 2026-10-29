@@ -15,6 +15,9 @@ Publication runs gate checks before anything is written:
   and it must be the latest version of that id;
 * referential checks: supersession, override and exception targets exist and
   are published; no supersession cycles; exceptions target published items;
+* shape checks: the release's RDF projection conforms to the SHACL shapes
+  compiled from the canonical model ``ontology/models/contextual-knowledge.yaml``
+  (``knowledge_rdf.py``);
 * regression (mandatory -- an empty case set is refused): the domain's
   deterministic evaluation cases must reproduce their expected applicability,
   outcomes, conflicts and escalation against the *candidate* release.
@@ -45,6 +48,7 @@ from graphrag.context_graph.knowledge import (
 from graphrag.context_graph.knowledge_evaluation import (
     EvaluationDecision, KnowledgeReleaseRef, evaluate_knowledge,
 )
+from graphrag.context_graph.knowledge_rdf import shape_failures
 from graphrag.enterprise.models import AccessContext
 
 RELEASE_SCHEMA_VERSION = "knowledge-release/v1"
@@ -132,6 +136,44 @@ def withdraw_item(item: KnowledgeItem, *, reviewed_by: str, review_ref: str) -> 
     data.update(version=item.version + 1, status=PublicationStatus.WITHDRAWN,
                 reviewed_by=reviewed_by, review_ref=review_ref, recorded_at=datetime.now(timezone.utc))
     return KnowledgeItem.model_validate(data)
+
+
+def approve_exception(
+    exception: KnowledgeException, *, granted_by: str, approval_ref: str, publish: bool = True,
+) -> KnowledgeException:
+    """Return the next version of an exception, granted by a trusted approver.
+
+    Like ``approve_item``, ``granted_by`` must be the authenticated identity:
+    whoever approves the exception is the one granting it.
+    """
+    if not granted_by or not approval_ref:
+        raise ValueError("an exception grant needs an approver identity and an approval reference")
+    data = exception.model_dump()
+    data.update(
+        version=exception.version + 1, granted_by=granted_by, approval_ref=approval_ref,
+        status=PublicationStatus.PUBLISHED if publish else PublicationStatus.APPROVED,
+        recorded_at=datetime.now(timezone.utc),
+    )
+    return KnowledgeException.model_validate(data)
+
+
+def withdraw_exception(exception: KnowledgeException, *, approval_ref: str) -> KnowledgeException:
+    data = exception.model_dump()
+    data.update(version=exception.version + 1, status=PublicationStatus.WITHDRAWN,
+                approval_ref=approval_ref or exception.approval_ref, recorded_at=datetime.now(timezone.utc))
+    return KnowledgeException.model_validate(data)
+
+
+def replace_entry(pack: KnowledgePack, entry: KnowledgeItem | KnowledgeException) -> KnowledgePack:
+    """A pack holds one current version per id; return the pack with ``entry``
+    in place of its earlier version.  Earlier versions stay in the curation
+    history and in the releases that served them."""
+    field_name = "items" if isinstance(entry, KnowledgeItem) else "exceptions"
+    entries = getattr(pack, field_name)
+    if not any(existing.id == entry.id for existing in entries):
+        raise KeyError(entry.id)
+    replaced = [entry if existing.id == entry.id else existing for existing in entries]
+    return pack.model_copy(update={field_name: replaced})
 
 
 # ---------------------------------------------------------------------------
@@ -288,6 +330,11 @@ def check_pack(pack: KnowledgePack, cases: Iterable[RegressionCase] = ()) -> lis
                 failures.append(f"{exc.key}: targets {target}, which is not a published item")
     if failures:
         return failures
+    # the RDF projection must conform to the shapes compiled from the
+    # canonical model (ontology/models/contextual-knowledge.yaml)
+    failures.extend(shape_failures(published, pack.published_exceptions()))
+    if failures:
+        return failures
 
     release = KnowledgeReleaseRef(release_id="candidate", domain=pack.domain, version="candidate")
     for case in cases:
@@ -338,8 +385,8 @@ async def publish_pack(
         raise KnowledgePublicationError(
             f"knowledge release for {pack.tenant}/{pack.domain} rejected; the active release is unchanged",
             failures)
-    checks = {"contract": "passed", "referential": "passed", "regression_cases": len(cases),
-              "regression": "passed"}
+    checks = {"contract": "passed", "referential": "passed", "shacl": "passed",
+              "regression_cases": len(cases), "regression": "passed"}
     return await store.publish_knowledge_release(release_record(pack, published_by=published_by, checks=checks))
 
 
@@ -364,7 +411,7 @@ class ReleaseCatalog:
 
 
 __all__ = [
-    "KnowledgePack", "KnowledgePublicationError", "RegressionCase", "ReleaseCatalog", "approve_item",
-    "case_mismatches", "check_pack", "load_cases", "load_pack", "publish_pack", "release_record",
-    "review_queue", "run_case", "withdraw_item",
+    "KnowledgePack", "KnowledgePublicationError", "RegressionCase", "ReleaseCatalog", "approve_exception",
+    "approve_item", "case_mismatches", "check_pack", "load_cases", "load_pack", "publish_pack",
+    "release_record", "replace_entry", "review_queue", "run_case", "withdraw_exception", "withdraw_item",
 ]

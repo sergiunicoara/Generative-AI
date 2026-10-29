@@ -643,6 +643,65 @@ class GovernanceStore:
             await self._set_active_knowledge_release(connection, tenant, domain, str(restored["release_id"]))
         return restored
 
+    # -- knowledge pack curation --------------------------------------------
+    # The working pack curated over HTTP: every change appends a full pack
+    # revision with who made it and why, guarded by a compare-and-swap on the
+    # revision number.  Releases are still published from a revision through
+    # the gate above; a revision itself is never served.
+
+    async def save_knowledge_pack_revision(
+        self, tenant: str, domain: str, pack: dict[str, object], *, changed_by: str,
+        change: dict[str, object], expected_revision: int,
+    ) -> dict[str, object]:
+        async with self._write_transaction() as connection:
+            current = (await connection.execute(text("""
+                SELECT COALESCE(MAX(revision), 0) FROM knowledge_pack_revisions
+                WHERE tenant = :tenant AND domain = :domain
+            """), {"tenant": tenant, "domain": domain})).scalar_one()
+            if int(current) != expected_revision:
+                raise WorkflowConflictError(
+                    f"knowledge pack {tenant}/{domain} is at revision {current}, not {expected_revision}")
+            record = {
+                "tenant": tenant, "domain": domain, "revision": int(current) + 1, "changed_by": changed_by,
+                "change": change, "created_at": _now_iso(), "pack": pack,
+            }
+            await connection.execute(text("""
+                INSERT INTO knowledge_pack_revisions
+                (tenant, domain, revision, changed_by, change_json, created_at, pack_json)
+                VALUES (:tenant, :domain, :revision, :changed_by, :change_json, :created_at, :pack_json)
+            """), {
+                "tenant": tenant, "domain": domain, "revision": record["revision"], "changed_by": changed_by,
+                "change_json": json.dumps(change, sort_keys=True, default=str),
+                "created_at": record["created_at"], "pack_json": json.dumps(pack, sort_keys=True, default=str),
+            })
+        return record
+
+    async def knowledge_pack_revision(self, tenant: str, domain: str) -> dict[str, object] | None:
+        async with self._engine.connect() as connection:
+            row = (await connection.execute(text("""
+                SELECT revision, changed_by, change_json, created_at, pack_json FROM knowledge_pack_revisions
+                WHERE tenant = :tenant AND domain = :domain ORDER BY revision DESC LIMIT 1
+            """), {"tenant": tenant, "domain": domain})).mappings().first()
+        if row is None:
+            return None
+        return {
+            "tenant": tenant, "domain": domain, "revision": int(row["revision"]),
+            "changed_by": row["changed_by"], "change": json.loads(row["change_json"]),
+            "created_at": row["created_at"], "pack": json.loads(row["pack_json"]),
+        }
+
+    async def knowledge_pack_history(self, tenant: str, domain: str) -> list[dict[str, object]]:
+        async with self._engine.connect() as connection:
+            rows = (await connection.execute(text("""
+                SELECT revision, changed_by, change_json, created_at FROM knowledge_pack_revisions
+                WHERE tenant = :tenant AND domain = :domain ORDER BY revision
+            """), {"tenant": tenant, "domain": domain})).mappings().all()
+        return [
+            {"revision": int(row["revision"]), "changed_by": row["changed_by"],
+             "change": json.loads(row["change_json"]), "created_at": row["created_at"]}
+            for row in rows
+        ]
+
     async def _set_active_knowledge_release(
         self, connection: AsyncConnection, tenant: str, domain: str, release_id: str,
     ) -> None:
@@ -748,6 +807,12 @@ _DDL = (
     """CREATE TABLE IF NOT EXISTS knowledge_active_releases (
         tenant TEXT NOT NULL, domain TEXT NOT NULL, release_id TEXT NOT NULL,
         PRIMARY KEY (tenant, domain)
+    )""",
+    """CREATE TABLE IF NOT EXISTS knowledge_pack_revisions (
+        tenant TEXT NOT NULL, domain TEXT NOT NULL, revision INTEGER NOT NULL,
+        changed_by TEXT NOT NULL, change_json TEXT NOT NULL, created_at TEXT NOT NULL,
+        pack_json TEXT NOT NULL,
+        PRIMARY KEY (tenant, domain, revision)
     )""",
     """CREATE TABLE IF NOT EXISTS energy_evidence_request_transitions (
         transition_id TEXT PRIMARY KEY, tenant TEXT NOT NULL, request_id TEXT NOT NULL,

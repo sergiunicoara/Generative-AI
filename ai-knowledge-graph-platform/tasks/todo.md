@@ -164,5 +164,10 @@ The three open roadmap items under "Contextual knowledge evaluation".
   torchvision, sentence-transformers and ragas (PyTorch's index is blocked
   here; the PyPI CUDA wheels are several GB). Test modules importing
   `sentence_transformers` could not be collected.
+- Full unit suite (one run, at the end): 3169 passed, 32 failed, 10 modules
+  not collectable. The same 32 fail identically on a clean checkout of
+  `main` in this environment (missing torch / sentence_transformers, and
+  `graphrag.agents.query_agent` failing to import without them), so none
+  is caused by this change.
 - Not done: review UI, draft-submission route, union of precedence
   exceptions, any live validation.

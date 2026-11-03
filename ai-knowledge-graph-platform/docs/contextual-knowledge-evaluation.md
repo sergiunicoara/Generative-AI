@@ -433,3 +433,39 @@ administrative): `GET /knowledge/decisions/{domain}` (summaries),
 Not done: retention or redaction rules for the decision log (it is append-only
 and keeps facts), and a per-decision access check that would let non-admins
 read their own records.
+
+## Evaluation splits, scale and reviewer rendering (2026-11-03)
+
+* **Splits.** `scripts/run_knowledge_eval.py` labels every report:
+  `development` (the 26 cases the rules were built against), `held_out`
+  (`evals/knowledge_eval/packaging_labeling_heldout.json`: 13 adversarial cases
+  on time boundaries, known-as views, missing context, missing evidence,
+  tenant isolation and semantic ranking, written before the evaluator was run
+  on them and not used when changing rules; 13/13 on first run), and
+  `generated` (`--generated N`: seeded synthetic packs and contexts checked
+  against an independent oracle, `graphrag/context_graph/knowledge_oracle.py`;
+  200 contexts x 400 items gave applicability 80000/80000 and validation
+  6524/6524). Every split is still written by the developer: they show
+  stability and internal consistency, not domain correctness.
+* **Metamorphic relations** (tests over all 39 cases): input order, another
+  tenant's knowledge, unpublished or inaccessible items, an out-of-scope item
+  and consistent renaming of ids do not change the outcome.
+* **Scale.** `scripts/benchmark_knowledge_eval.py` writes
+  `evals/knowledge_eval/benchmark.json` (pack size, requests, p50/p95/max,
+  share per stage, commit, hardware). Measured first: at 5000 items conflict
+  detection took 40% of the time, so the index is on conflict candidates
+  (pairs sharing a subject, a revision series or an override), with identical
+  decisions to the all-pairs reference. An index on applicability dimensions
+  was not added: every visible item must still report its own applicability
+  reasons, so a prefilter could not skip that work without changing decisions.
+  Local numbers (50 requests): 1000 items p95 68 ms, 5000 items p95 440 ms
+  (775 ms before the index). These are in-process measurements on synthetic
+  packs, not a service SLO.
+* **Metrics.** `evaluate_knowledge(timings=...)` accumulates seconds per stage;
+  `KnowledgeEvaluationService.metrics()` and `GET /knowledge/metrics` (admin)
+  report cache hit rate and time per stage, process-local.
+* **Reviewer rendering.** `knowledge_render.render_item` turns an executable
+  constraint into one deterministic sentence ("It is required that
+  label.min_font_pt is at least 8."), including the missing-value rule; the
+  review queue shows it as `executable` next to the `statement`. A view only:
+  it never feeds evaluation.

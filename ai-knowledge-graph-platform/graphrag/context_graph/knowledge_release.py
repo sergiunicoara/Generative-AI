@@ -48,6 +48,7 @@ from graphrag.context_graph.knowledge_evaluation import (
     EvaluationDecision, KnowledgeReleaseRef, evaluate_knowledge,
 )
 from graphrag.context_graph.knowledge_rdf import projection_failures
+from graphrag.context_graph.knowledge_render import render_item
 from graphrag.enterprise.models import AccessContext
 
 RELEASE_SCHEMA_VERSION = "knowledge-release/v1"
@@ -109,7 +110,8 @@ def review_queue(pack: KnowledgePack) -> list[dict[str, Any]]:
             if not item.sources:
                 needs.append("a source citation")
             queue.append({"key": item.key, "status": item.status.value, "origin": item.origin.value,
-                          "title": item.title, "needs": needs})
+                          "title": item.title, "statement": item.statement,
+                          "executable": render_item(item), "needs": needs})
     return queue
 
 

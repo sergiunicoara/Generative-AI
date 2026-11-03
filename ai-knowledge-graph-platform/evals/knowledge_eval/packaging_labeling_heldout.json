@@ -1,0 +1,952 @@
+{
+  "name": "packaging_labeling contextual-knowledge evaluation (held-out)",
+  "label": "SYNTHETIC ENGINEERING EVALUATION - invented rules and expectations, no independent domain review",
+  "split": "held_out",
+  "policy": "Adversarial cases written before the evaluator was run on them. Not used when changing rules or the evaluator; a mismatch is investigated, and an expectation is changed only with a recorded reason.",
+  "domain": "packaging_labeling",
+  "pack": "config/knowledge_packs/packaging_labeling.yml",
+  "cases": [
+    {
+      "id": "KH-01",
+      "description": "as_of exactly at PKG-011 valid_from: revision 2 applies and supersedes revision 1.",
+      "covers": [
+        "valid_time_boundary",
+        "temporal_supersession"
+      ],
+      "tenant": "packaging_demo",
+      "principal": {
+        "sub": "eval-runner"
+      },
+      "context": {
+        "customer": "CORNERSHOP",
+        "brand": "OTHERBRAND",
+        "market": "NORTHLAND",
+        "product": "PX-200",
+        "product_family": "otc_tablets",
+        "workflow": "label_review",
+        "as_of": "2026-07-01T00:00:00Z"
+      },
+      "facts": {
+        "label.batch_code_present": {
+          "value": true,
+          "evidence": [
+            {
+              "source_id": "ARTWORK-HELDOUT",
+              "locator": "artwork spec"
+            }
+          ]
+        },
+        "label.min_font_pt": {
+          "value": 8,
+          "evidence": [
+            {
+              "source_id": "ARTWORK-HELDOUT",
+              "locator": "artwork spec"
+            }
+          ]
+        },
+        "label.front_claims": {
+          "value": [],
+          "evidence": [
+            {
+              "source_id": "ARTWORK-HELDOUT",
+              "locator": "artwork spec"
+            }
+          ]
+        },
+        "label.allergen_statement": {
+          "value": "Contains lactose",
+          "evidence": [
+            {
+              "source_id": "ARTWORK-HELDOUT",
+              "locator": "artwork spec"
+            }
+          ]
+        }
+      },
+      "expected": {
+        "applicable": [
+          "PKG-001",
+          "PKG-005",
+          "PKG-007",
+          "PKG-011",
+          "PKG-012"
+        ],
+        "outcomes": {
+          "PKG-011": "pass",
+          "PKG-002": "not_evaluated"
+        },
+        "overall": "compliant",
+        "human_review_required": false
+      }
+    },
+    {
+      "id": "KH-02",
+      "description": "Fractional font size just under the revision-2 minimum fails it, passes the base rule.",
+      "covers": [
+        "numeric_boundary"
+      ],
+      "tenant": "packaging_demo",
+      "principal": {
+        "sub": "eval-runner"
+      },
+      "context": {
+        "customer": "CORNERSHOP",
+        "brand": "OTHERBRAND",
+        "market": "NORTHLAND",
+        "product": "PX-200",
+        "product_family": "otc_tablets",
+        "workflow": "label_review",
+        "as_of": "2026-08-01T00:00:00Z"
+      },
+      "facts": {
+        "label.batch_code_present": {
+          "value": true,
+          "evidence": [
+            {
+              "source_id": "ARTWORK-HELDOUT",
+              "locator": "artwork spec"
+            }
+          ]
+        },
+        "label.min_font_pt": {
+          "value": 7.99,
+          "evidence": [
+            {
+              "source_id": "ARTWORK-HELDOUT",
+              "locator": "artwork spec"
+            }
+          ]
+        },
+        "label.front_claims": {
+          "value": [],
+          "evidence": [
+            {
+              "source_id": "ARTWORK-HELDOUT",
+              "locator": "artwork spec"
+            }
+          ]
+        },
+        "label.allergen_statement": {
+          "value": "Contains lactose",
+          "evidence": [
+            {
+              "source_id": "ARTWORK-HELDOUT",
+              "locator": "artwork spec"
+            }
+          ]
+        }
+      },
+      "expected": {
+        "applicable": [
+          "PKG-001",
+          "PKG-005",
+          "PKG-007",
+          "PKG-011",
+          "PKG-012"
+        ],
+        "outcomes": {
+          "PKG-011": "fail",
+          "PKG-007": "pass"
+        },
+        "overall": "non_compliant",
+        "human_review_required": false
+      }
+    },
+    {
+      "id": "KH-03",
+      "description": "A repeated market value is the same context as a single one.",
+      "covers": [
+        "context_normalisation"
+      ],
+      "tenant": "packaging_demo",
+      "principal": {
+        "sub": "eval-runner"
+      },
+      "context": {
+        "customer": "CORNERSHOP",
+        "brand": "OTHERBRAND",
+        "market": [
+          "NORTHLAND",
+          "NORTHLAND"
+        ],
+        "product": "PX-200",
+        "product_family": "otc_tablets",
+        "workflow": "label_review",
+        "as_of": "2026-08-01T00:00:00Z"
+      },
+      "facts": {
+        "label.batch_code_present": {
+          "value": true,
+          "evidence": [
+            {
+              "source_id": "ARTWORK-HELDOUT",
+              "locator": "artwork spec"
+            }
+          ]
+        },
+        "label.min_font_pt": {
+          "value": 8,
+          "evidence": [
+            {
+              "source_id": "ARTWORK-HELDOUT",
+              "locator": "artwork spec"
+            }
+          ]
+        },
+        "label.front_claims": {
+          "value": [],
+          "evidence": [
+            {
+              "source_id": "ARTWORK-HELDOUT",
+              "locator": "artwork spec"
+            }
+          ]
+        },
+        "label.allergen_statement": {
+          "value": "Contains lactose",
+          "evidence": [
+            {
+              "source_id": "ARTWORK-HELDOUT",
+              "locator": "artwork spec"
+            }
+          ]
+        }
+      },
+      "expected": {
+        "applicable": [
+          "PKG-001",
+          "PKG-005",
+          "PKG-007",
+          "PKG-011",
+          "PKG-012"
+        ],
+        "overall": "compliant",
+        "human_review_required": false
+      }
+    },
+    {
+      "id": "KH-04",
+      "description": "Product family missing: family-scoped rules are unknown, market exclusions still exclude.",
+      "covers": [
+        "applicability_unknown",
+        "exclusion_beats_unknown"
+      ],
+      "tenant": "packaging_demo",
+      "principal": {
+        "sub": "eval-runner"
+      },
+      "context": {
+        "customer": "CORNERSHOP",
+        "brand": "OTHERBRAND",
+        "market": "SOUTHLAND",
+        "product": "PX-200",
+        "workflow": "label_review",
+        "as_of": "2026-08-01T00:00:00Z"
+      },
+      "facts": {
+        "label.languages": {
+          "value": [
+            "en",
+            "sl"
+          ],
+          "evidence": [
+            {
+              "source_id": "ARTWORK-HELDOUT",
+              "locator": "artwork spec"
+            }
+          ]
+        },
+        "label.storage_statement": {
+          "value": "Store below 25 C",
+          "evidence": [
+            {
+              "source_id": "ARTWORK-HELDOUT",
+              "locator": "artwork spec"
+            }
+          ]
+        }
+      },
+      "expected": {
+        "applicable": [
+          "PKG-003",
+          "PKG-009"
+        ],
+        "unknown": [
+          "PKG-001",
+          "PKG-007",
+          "PKG-012"
+        ],
+        "outcomes": {
+          "PKG-003": "pass",
+          "PKG-009": "pass",
+          "PKG-002": "not_evaluated",
+          "PKG-011": "not_evaluated",
+          "PKG-017": "not_evaluated"
+        },
+        "overall": "needs_review",
+        "human_review_required": true
+      }
+    },
+    {
+      "id": "KH-05",
+      "description": "Export review with the export marking present: the prohibition passes.",
+      "covers": [
+        "prohibition",
+        "absence_semantics"
+      ],
+      "tenant": "packaging_demo",
+      "principal": {
+        "sub": "eval-runner"
+      },
+      "context": {
+        "customer": "CORNERSHOP",
+        "brand": "OTHERBRAND",
+        "market": "NORTHLAND",
+        "product": "PX-200",
+        "product_family": "otc_tablets",
+        "workflow": "export_review",
+        "as_of": "2026-08-01T00:00:00Z"
+      },
+      "facts": {
+        "label.front_claims": {
+          "value": [],
+          "evidence": [
+            {
+              "source_id": "ARTWORK-HELDOUT",
+              "locator": "artwork spec"
+            }
+          ]
+        },
+        "label.min_font_pt": {
+          "value": 8,
+          "evidence": [
+            {
+              "source_id": "ARTWORK-HELDOUT",
+              "locator": "artwork spec"
+            }
+          ]
+        },
+        "label.allergen_statement": {
+          "value": "x",
+          "evidence": [
+            {
+              "source_id": "ARTWORK-HELDOUT",
+              "locator": "artwork spec"
+            }
+          ]
+        },
+        "label.export_marking_omitted": {
+          "value": false,
+          "evidence": [
+            {
+              "source_id": "ARTWORK-HELDOUT",
+              "locator": "artwork spec"
+            }
+          ]
+        }
+      },
+      "expected": {
+        "applicable": [
+          "PKG-005",
+          "PKG-007",
+          "PKG-011",
+          "PKG-012",
+          "PKG-017"
+        ],
+        "outcomes": {
+          "PKG-017": "pass",
+          "PKG-001": "not_evaluated"
+        },
+        "overall": "compliant",
+        "human_review_required": false
+      }
+    },
+    {
+      "id": "KH-06",
+      "description": "A font size without evidence is insufficient for both font rules.",
+      "covers": [
+        "evidence_required"
+      ],
+      "tenant": "packaging_demo",
+      "principal": {
+        "sub": "eval-runner"
+      },
+      "context": {
+        "customer": "CORNERSHOP",
+        "brand": "OTHERBRAND",
+        "market": "NORTHLAND",
+        "product": "PX-200",
+        "product_family": "otc_tablets",
+        "workflow": "label_review",
+        "as_of": "2026-08-01T00:00:00Z"
+      },
+      "facts": {
+        "label.batch_code_present": {
+          "value": true,
+          "evidence": [
+            {
+              "source_id": "ARTWORK-HELDOUT",
+              "locator": "artwork spec"
+            }
+          ]
+        },
+        "label.min_font_pt": {
+          "value": 8,
+          "evidence": []
+        },
+        "label.front_claims": {
+          "value": [],
+          "evidence": [
+            {
+              "source_id": "ARTWORK-HELDOUT",
+              "locator": "artwork spec"
+            }
+          ]
+        },
+        "label.allergen_statement": {
+          "value": "Contains lactose",
+          "evidence": [
+            {
+              "source_id": "ARTWORK-HELDOUT",
+              "locator": "artwork spec"
+            }
+          ]
+        }
+      },
+      "expected": {
+        "applicable": [
+          "PKG-001",
+          "PKG-005",
+          "PKG-007",
+          "PKG-011",
+          "PKG-012"
+        ],
+        "outcomes": {
+          "PKG-007": "insufficient_evidence",
+          "PKG-011": "insufficient_evidence",
+          "PKG-001": "pass"
+        },
+        "overall": "needs_review",
+        "human_review_required": true
+      }
+    },
+    {
+      "id": "KH-07",
+      "description": "Southland, MegaMart, mini pack: waiver on PKG-001 and two precedences resolve storage.",
+      "covers": [
+        "waiver",
+        "precedence",
+        "conflict_resolution"
+      ],
+      "tenant": "packaging_demo",
+      "principal": {
+        "sub": "eval-runner"
+      },
+      "context": {
+        "customer": "MEGAMART",
+        "brand": "OTHERBRAND",
+        "market": "SOUTHLAND",
+        "product": "PX-200-MINI",
+        "product_family": "otc_tablets",
+        "workflow": "label_review",
+        "as_of": "2026-08-01T00:00:00Z"
+      },
+      "facts": {
+        "label.languages": {
+          "value": [
+            "sl"
+          ],
+          "evidence": [
+            {
+              "source_id": "ARTWORK-HELDOUT",
+              "locator": "artwork spec"
+            }
+          ]
+        },
+        "label.min_font_pt": {
+          "value": 6,
+          "evidence": [
+            {
+              "source_id": "ARTWORK-HELDOUT",
+              "locator": "artwork spec"
+            }
+          ]
+        },
+        "label.allergen_statement": {
+          "value": "x",
+          "evidence": [
+            {
+              "source_id": "ARTWORK-HELDOUT",
+              "locator": "artwork spec"
+            }
+          ]
+        },
+        "label.storage_statement": {
+          "value": "Store below 30 C",
+          "evidence": [
+            {
+              "source_id": "ARTWORK-HELDOUT",
+              "locator": "artwork spec"
+            }
+          ]
+        }
+      },
+      "expected": {
+        "applicable": [
+          "PKG-001",
+          "PKG-003",
+          "PKG-006",
+          "PKG-007",
+          "PKG-009",
+          "PKG-010",
+          "PKG-012"
+        ],
+        "outcomes": {
+          "PKG-001": "not_evaluated",
+          "PKG-009": "not_evaluated",
+          "PKG-010": "pass",
+          "PKG-003": "pass",
+          "PKG-007": "pass",
+          "PKG-012": "pass"
+        },
+        "conflicts": [
+          {
+            "kind": "incompatible_requirements",
+            "items": [
+              "PKG-009",
+              "PKG-010"
+            ],
+            "resolved": true
+          }
+        ],
+        "overall": "compliant",
+        "human_review_required": false
+      }
+    },
+    {
+      "id": "KH-08",
+      "description": "Known-as before revision 2 was recorded: revision 1 decides, 7 pt is enough.",
+      "covers": [
+        "transaction_time",
+        "temporal_supersession"
+      ],
+      "tenant": "packaging_demo",
+      "principal": {
+        "sub": "eval-runner"
+      },
+      "context": {
+        "customer": "CORNERSHOP",
+        "brand": "OTHERBRAND",
+        "market": "NORTHLAND",
+        "product": "PX-200",
+        "product_family": "otc_tablets",
+        "workflow": "label_review",
+        "as_of": "2026-08-01T00:00:00Z",
+        "known_as": "2026-06-01T00:00:00Z"
+      },
+      "facts": {
+        "label.batch_code_present": {
+          "value": true,
+          "evidence": [
+            {
+              "source_id": "ARTWORK-HELDOUT",
+              "locator": "artwork spec"
+            }
+          ]
+        },
+        "label.min_font_pt": {
+          "value": 7,
+          "evidence": [
+            {
+              "source_id": "ARTWORK-HELDOUT",
+              "locator": "artwork spec"
+            }
+          ]
+        },
+        "label.front_claims": {
+          "value": [],
+          "evidence": [
+            {
+              "source_id": "ARTWORK-HELDOUT",
+              "locator": "artwork spec"
+            }
+          ]
+        },
+        "label.allergen_statement": {
+          "value": "Contains lactose",
+          "evidence": [
+            {
+              "source_id": "ARTWORK-HELDOUT",
+              "locator": "artwork spec"
+            }
+          ]
+        }
+      },
+      "expected": {
+        "applicable": [
+          "PKG-001",
+          "PKG-002",
+          "PKG-005",
+          "PKG-007",
+          "PKG-012"
+        ],
+        "outcomes": {
+          "PKG-002": "pass",
+          "PKG-011": "not_evaluated"
+        },
+        "overall": "compliant",
+        "human_review_required": false
+      }
+    },
+    {
+      "id": "KH-09",
+      "description": "One day before revision 2 takes effect: revision 1 decides.",
+      "covers": [
+        "valid_time_boundary"
+      ],
+      "tenant": "packaging_demo",
+      "principal": {
+        "sub": "eval-runner"
+      },
+      "context": {
+        "customer": "CORNERSHOP",
+        "brand": "OTHERBRAND",
+        "market": "NORTHLAND",
+        "product": "PX-200",
+        "product_family": "otc_tablets",
+        "workflow": "label_review",
+        "as_of": "2026-06-30T00:00:00Z"
+      },
+      "facts": {
+        "label.batch_code_present": {
+          "value": true,
+          "evidence": [
+            {
+              "source_id": "ARTWORK-HELDOUT",
+              "locator": "artwork spec"
+            }
+          ]
+        },
+        "label.min_font_pt": {
+          "value": 7,
+          "evidence": [
+            {
+              "source_id": "ARTWORK-HELDOUT",
+              "locator": "artwork spec"
+            }
+          ]
+        },
+        "label.front_claims": {
+          "value": [],
+          "evidence": [
+            {
+              "source_id": "ARTWORK-HELDOUT",
+              "locator": "artwork spec"
+            }
+          ]
+        },
+        "label.allergen_statement": {
+          "value": "Contains lactose",
+          "evidence": [
+            {
+              "source_id": "ARTWORK-HELDOUT",
+              "locator": "artwork spec"
+            }
+          ]
+        }
+      },
+      "expected": {
+        "applicable": [
+          "PKG-001",
+          "PKG-002",
+          "PKG-005",
+          "PKG-007",
+          "PKG-012"
+        ],
+        "outcomes": {
+          "PKG-002": "pass",
+          "PKG-011": "not_evaluated"
+        },
+        "overall": "compliant",
+        "human_review_required": false
+      }
+    },
+    {
+      "id": "KH-10",
+      "description": "The mini-pack waiver ends exactly at as_of: it no longer applies.",
+      "covers": [
+        "exception_expiry",
+        "valid_time_boundary"
+      ],
+      "tenant": "packaging_demo",
+      "principal": {
+        "sub": "eval-runner"
+      },
+      "context": {
+        "customer": "CORNERSHOP",
+        "brand": "OTHERBRAND",
+        "market": "NORTHLAND",
+        "product": "PX-200-MINI",
+        "product_family": "otc_tablets",
+        "workflow": "label_review",
+        "as_of": "2027-07-01T00:00:00Z"
+      },
+      "facts": {
+        "label.batch_code_present": {
+          "value": true,
+          "evidence": [
+            {
+              "source_id": "ARTWORK-HELDOUT",
+              "locator": "artwork spec"
+            }
+          ]
+        },
+        "label.min_font_pt": {
+          "value": 7,
+          "evidence": [
+            {
+              "source_id": "ARTWORK-HELDOUT",
+              "locator": "artwork spec"
+            }
+          ]
+        },
+        "label.front_claims": {
+          "value": [],
+          "evidence": [
+            {
+              "source_id": "ARTWORK-HELDOUT",
+              "locator": "artwork spec"
+            }
+          ]
+        },
+        "label.allergen_statement": {
+          "value": "Contains lactose",
+          "evidence": [
+            {
+              "source_id": "ARTWORK-HELDOUT",
+              "locator": "artwork spec"
+            }
+          ]
+        }
+      },
+      "expected": {
+        "applicable": [
+          "PKG-001",
+          "PKG-005",
+          "PKG-007",
+          "PKG-011",
+          "PKG-012"
+        ],
+        "outcomes": {
+          "PKG-011": "fail",
+          "PKG-007": "pass"
+        },
+        "overall": "non_compliant",
+        "human_review_required": false
+      }
+    },
+    {
+      "id": "KH-11",
+      "description": "Another tenant sees none of this tenant's knowledge.",
+      "covers": [
+        "tenant_isolation"
+      ],
+      "tenant": "other_tenant",
+      "principal": {
+        "sub": "eval-runner"
+      },
+      "context": {
+        "customer": "CORNERSHOP",
+        "brand": "OTHERBRAND",
+        "market": "NORTHLAND",
+        "product": "PX-200",
+        "product_family": "otc_tablets",
+        "workflow": "label_review",
+        "as_of": "2026-08-01T00:00:00Z"
+      },
+      "facts": {
+        "label.batch_code_present": {
+          "value": true,
+          "evidence": [
+            {
+              "source_id": "ARTWORK-HELDOUT",
+              "locator": "artwork spec"
+            }
+          ]
+        },
+        "label.min_font_pt": {
+          "value": 8,
+          "evidence": [
+            {
+              "source_id": "ARTWORK-HELDOUT",
+              "locator": "artwork spec"
+            }
+          ]
+        },
+        "label.front_claims": {
+          "value": [],
+          "evidence": [
+            {
+              "source_id": "ARTWORK-HELDOUT",
+              "locator": "artwork spec"
+            }
+          ]
+        },
+        "label.allergen_statement": {
+          "value": "Contains lactose",
+          "evidence": [
+            {
+              "source_id": "ARTWORK-HELDOUT",
+              "locator": "artwork spec"
+            }
+          ]
+        }
+      },
+      "expected": {
+        "applicable": [],
+        "overall": "no_applicable_knowledge",
+        "human_review_required": false
+      }
+    },
+    {
+      "id": "KH-12",
+      "description": "Nothing applies although knowledge was expected: escalate.",
+      "covers": [
+        "expected_knowledge_missing"
+      ],
+      "tenant": "packaging_demo",
+      "principal": {
+        "sub": "eval-runner"
+      },
+      "context": {
+        "customer": "NOBODY",
+        "brand": "NOBRAND",
+        "market": "WESTLAND",
+        "product": "ZZ-1",
+        "product_family": "shampoo",
+        "workflow": "label_review",
+        "as_of": "2026-08-01T00:00:00Z"
+      },
+      "facts": {
+        "label.batch_code_present": {
+          "value": true,
+          "evidence": [
+            {
+              "source_id": "ARTWORK-HELDOUT",
+              "locator": "artwork spec"
+            }
+          ]
+        },
+        "label.min_font_pt": {
+          "value": 8,
+          "evidence": [
+            {
+              "source_id": "ARTWORK-HELDOUT",
+              "locator": "artwork spec"
+            }
+          ]
+        },
+        "label.front_claims": {
+          "value": [],
+          "evidence": [
+            {
+              "source_id": "ARTWORK-HELDOUT",
+              "locator": "artwork spec"
+            }
+          ]
+        },
+        "label.allergen_statement": {
+          "value": "Contains lactose",
+          "evidence": [
+            {
+              "source_id": "ARTWORK-HELDOUT",
+              "locator": "artwork spec"
+            }
+          ]
+        }
+      },
+      "expected": {
+        "applicable": [],
+        "overall": "needs_review",
+        "human_review_required": true
+      },
+      "expect_applicable_knowledge": true
+    },
+    {
+      "id": "KH-13",
+      "description": "A semantic ranking that omits the failing rule does not hide it.",
+      "covers": [
+        "semantic_candidates_do_not_limit"
+      ],
+      "tenant": "packaging_demo",
+      "principal": {
+        "sub": "eval-runner"
+      },
+      "context": {
+        "customer": "CORNERSHOP",
+        "brand": "OTHERBRAND",
+        "market": "NORTHLAND",
+        "product": "PX-200",
+        "product_family": "otc_tablets",
+        "workflow": "label_review",
+        "as_of": "2026-08-01T00:00:00Z"
+      },
+      "facts": {
+        "label.batch_code_present": {
+          "value": true,
+          "evidence": [
+            {
+              "source_id": "ARTWORK-HELDOUT",
+              "locator": "artwork spec"
+            }
+          ]
+        },
+        "label.min_font_pt": {
+          "value": 7,
+          "evidence": [
+            {
+              "source_id": "ARTWORK-HELDOUT",
+              "locator": "artwork spec"
+            }
+          ]
+        },
+        "label.front_claims": {
+          "value": [],
+          "evidence": [
+            {
+              "source_id": "ARTWORK-HELDOUT",
+              "locator": "artwork spec"
+            }
+          ]
+        },
+        "label.allergen_statement": {
+          "value": "Contains lactose",
+          "evidence": [
+            {
+              "source_id": "ARTWORK-HELDOUT",
+              "locator": "artwork spec"
+            }
+          ]
+        }
+      },
+      "expected": {
+        "applicable": [
+          "PKG-001",
+          "PKG-005",
+          "PKG-007",
+          "PKG-011",
+          "PKG-012"
+        ],
+        "outcomes": {
+          "PKG-011": "fail"
+        },
+        "overall": "non_compliant",
+        "human_review_required": false
+      },
+      "semantic_candidates": [
+        "PKG-004"
+      ]
+    }
+  ]
+}

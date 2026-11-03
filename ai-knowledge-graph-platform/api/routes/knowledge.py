@@ -257,6 +257,12 @@ async def decision_review_impact(
             "impacts": [impact.as_dict() for impact in selected]}
 
 
+@router.get("/metrics", dependencies=[Depends(require_scope("admin"))])
+async def evaluator_metrics():
+    """Process-local evaluator metrics: cache hit rate and time per stage."""
+    return (await get_knowledge_service()).metrics()
+
+
 @router.get("/releases/{domain}", dependencies=[Depends(require_scope("read"))])
 async def release_history(domain: Domain, tenant: str = Depends(get_tenant)):
     """Release history (metadata only) for the token's tenant."""

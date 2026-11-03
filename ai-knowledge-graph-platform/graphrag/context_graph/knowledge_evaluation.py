@@ -43,6 +43,7 @@ from collections.abc import Iterable, Mapping
 from datetime import datetime, timezone
 from enum import StrEnum
 from itertools import combinations, product
+from time import perf_counter
 from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -396,13 +397,42 @@ def _incompatible(a: KnowledgeItem, b: KnowledgeItem) -> str:
     return ""
 
 
+def _candidate_pairs(items: list[KnowledgeItem], *, indexed: bool = True):
+    """Pairs that can conflict, in the same (sorted) order as all pairs.
+
+    A conflict needs a declared override between the two, the same revision
+    series, or the same subject; the index groups items by those keys so the
+    rest are never compared.  ``indexed=False`` compares every pair (the
+    reference the index is tested against).
+    """
+    ranked = sorted(items, key=lambda i: i.id)
+    if not indexed:
+        yield from combinations(ranked, 2)
+        return
+    position = {item.id: n for n, item in enumerate(ranked)}
+    groups: dict[tuple[str, str], list[int]] = {}
+    for n, item in enumerate(ranked):
+        groups.setdefault(("subject", item.subject_key), []).append(n)
+        if item.series:
+            groups.setdefault(("series", item.series), []).append(n)
+    pairs: set[tuple[int, int]] = set()
+    for members in groups.values():
+        pairs.update(combinations(members, 2))
+    for n, item in enumerate(ranked):
+        for target in item.overrides:
+            if target in position and position[target] != n:
+                pairs.add(tuple(sorted((n, position[target]))))
+    for first, second in sorted(pairs):
+        yield ranked[first], ranked[second]
+
+
 def detect_conflicts(
-    items: list[KnowledgeItem], ordered: frozenset[frozenset[str]] = frozenset(),
+    items: list[KnowledgeItem], ordered: frozenset[frozenset[str]] = frozenset(), *, indexed: bool = True,
 ) -> list[KnowledgeConflict]:
     """Pairwise conflicts; ``ordered`` pairs (item ids related by supersession)
     are revisions of each other, not contenders, and are skipped."""
     conflicts: list[KnowledgeConflict] = []
-    for a, b in combinations(sorted(items, key=lambda i: i.id), 2):
+    for a, b in _candidate_pairs(items, indexed=indexed):
         if frozenset({a.id, b.id}) in ordered:
             continue
         kinds: list[tuple[str, str]] = []
@@ -664,24 +694,41 @@ def evaluate_knowledge(
     release: KnowledgeReleaseRef,
     expect_applicable_knowledge: bool = False,
     semantic_candidates: Iterable[str] | None = None,
+    timings: dict[str, float] | None = None,
 ) -> EvaluationDecision:
     """Evaluate every visible published requirement in a release.
 
     ``semantic_candidates`` (item ids a retriever ranked as relevant) only
     orders the returned results.  It never limits which requirements are
     evaluated: a mandatory rule outside a semantic top-k is still applied.
+
+    ``timings``, when given, accumulates seconds per stage (visibility,
+    applicability, supersession, exceptions, conflicts, validation, decision)
+    for benchmarks and metrics; it never affects the decision.
     """
+    last = perf_counter()
+
+    def lap(stage: str) -> None:
+        nonlocal last
+        if timings is not None:
+            now = perf_counter()
+            timings[stage] = timings.get(stage, 0.0) + (now - last)
+            last = now
+
     tenant = require_tenant(tenant)
     facts = dict(facts or {})
     visible = visible_items(items, tenant=tenant, access=access)
     visible_exc = visible_exceptions(exceptions, tenant=tenant, access=access)
+    lap("visibility")
 
     # -- applicability ------------------------------------------------------
     own_scope = {
         item.id: evaluate_applicability(item.applicability, context, recorded_at=item.recorded_at)
         for item in visible
     }
+    lap("applicability")
     applicability, superseded, ordered = _supersession(visible, own_scope, context)
+    lap("supersession")
 
     by_id = {item.id: item for item in visible}
     applying = [item for item in visible if applicability[item.id].status == ApplicabilityStatus.APPLIES]
@@ -811,6 +858,7 @@ def evaluate_knowledge(
                 approval_ref=exc.approval_ref, citations=exc.sources,
             ))
 
+    lap("exceptions")
     # -- conflicts ------------------------------------------------------------
     contenders = [item for item in applying if item.id not in waived]
     conflicts: list[KnowledgeConflict] = []
@@ -824,6 +872,7 @@ def evaluate_knowledge(
             for key in conflict.item_keys:
                 unresolved_by_item.setdefault(key.split("@v")[0], []).append(conflict.conflict_id)
 
+    lap("conflicts")
     # -- validation -----------------------------------------------------------
     results: list[ConstraintResult] = []
     citations: dict[tuple[str, str], EvidenceRef] = {}
@@ -894,6 +943,7 @@ def evaluate_knowledge(
         for ref in applied_exc.citations:
             citations[(ref.source_id, ref.locator)] = ref
 
+    lap("validation")
     # -- decision --------------------------------------------------------------
     blocking_results = [r for r in results if r.blocking]
     summary = {
@@ -943,7 +993,7 @@ def evaluate_knowledge(
     else:
         overall = OverallOutcome.COMPLIANT
 
-    return EvaluationDecision(
+    decision = EvaluationDecision(
         decision_id=f"KD-{decision_seed[:16]}", tenant=tenant, domain=domain, release=release,
         context=context, facts_used=facts_used,
         knowledge=tuple(sorted(item.key for item in visible)),
@@ -962,6 +1012,8 @@ def evaluate_knowledge(
             reason_code=evaluation.reason_code,
         ),
     )
+    lap("decision")
+    return decision
 
 
 def utc_now() -> datetime:

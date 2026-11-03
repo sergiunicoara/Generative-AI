@@ -1,5 +1,6 @@
 {
   "dataset": "evals/knowledge_eval/packaging_labeling_cases.json",
+  "split": "development",
   "label": "SYNTHETIC ENGINEERING EVALUATION - invented rules and expectations, no independent domain review",
   "result_source": "deterministic in-process evaluation of the YAML pack (no DB, no network, no model)",
   "cases": {
@@ -346,5 +347,24 @@
       "human_review_required": true,
       "decision_id": "KD-b1cc849f573aaa6f"
     }
-  ]
+  ],
+  "generated": {
+    "split": "generated",
+    "pack_size": 400,
+    "contexts": 200,
+    "seed": 23,
+    "metrics": {
+      "applicability_agreement": {
+        "value": 1.0,
+        "numerator": 80000,
+        "denominator": 80000
+      },
+      "validation_outcome_agreement": {
+        "value": 1.0,
+        "numerator": 6524,
+        "denominator": 6524
+      }
+    },
+    "disagreements": []
+  }
 }

@@ -216,7 +216,7 @@ claims of live validation. Full unit suite and push after each wave.
 - [x] Wave 1 (3582 passed, full suite): durable decision log + replay + explanation-fidelity check;
       decision re-review impact analysis (release change, expiring exceptions,
       review-due items); remediation hints in gate and evaluation errors.
-- [ ] Wave 2: metamorphic + held-out + generated evaluation; applicability
+- [x] Wave 2: metamorphic + held-out + generated evaluation; applicability
       index, latency benchmark, stage metrics; constraint rendering for reviewers.
 - [ ] Wave 3: release stamp on every projection; shape/model registry as RDF;
       named-graph ADR + per-tenant drop test + JSON-LD round trip.

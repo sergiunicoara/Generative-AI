@@ -1,0 +1,73 @@
+{
+  "commit": "fabbf2c",
+  "python": "3.11.9",
+  "machine": "AMD64",
+  "processor": "Intel64 Family 6 Model 140 Stepping 1, GenuineIntel",
+  "system": "Windows",
+  "note": "local in-process measurement on synthetic packs; not a service SLO",
+  "results": [
+    {
+      "pack_size": 100,
+      "requests": 50,
+      "latency_ms": {
+        "p50": 3.42,
+        "p95": 5.51,
+        "max": 13.34
+      },
+      "stage_share": {
+        "applicability": 0.286,
+        "conflicts": 0.063,
+        "decision": 0.443,
+        "exceptions": 0.007,
+        "supersession": 0.017,
+        "validation": 0.159,
+        "visibility": 0.025
+      },
+      "mean_applicable_items": 19.2,
+      "budget_p95_ms": 25.0,
+      "within_budget": true
+    },
+    {
+      "pack_size": 1000,
+      "requests": 50,
+      "latency_ms": {
+        "p50": 44.25,
+        "p95": 68.19,
+        "max": 71.53
+      },
+      "stage_share": {
+        "applicability": 0.281,
+        "conflicts": 0.04,
+        "decision": 0.429,
+        "exceptions": 0.009,
+        "supersession": 0.019,
+        "validation": 0.192,
+        "visibility": 0.031
+      },
+      "mean_applicable_items": 163.3,
+      "budget_p95_ms": 250.0,
+      "within_budget": true
+    },
+    {
+      "pack_size": 5000,
+      "requests": 50,
+      "latency_ms": {
+        "p50": 345.26,
+        "p95": 440.06,
+        "max": 454.07
+      },
+      "stage_share": {
+        "applicability": 0.246,
+        "conflicts": 0.046,
+        "decision": 0.456,
+        "exceptions": 0.01,
+        "supersession": 0.019,
+        "validation": 0.197,
+        "visibility": 0.026
+      },
+      "mean_applicable_items": 807.8,
+      "budget_p95_ms": 1500.0,
+      "within_budget": true
+    }
+  ]
+}

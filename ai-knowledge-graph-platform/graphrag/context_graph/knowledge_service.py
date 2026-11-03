@@ -63,6 +63,8 @@ class KnowledgeEvaluationService:
         self._cache_size = cache_size
         self.cache_hits = 0
         self.cache_misses = 0
+        # seconds per evaluator stage, accumulated over cache misses
+        self.stage_seconds: dict[str, float] = {}
 
     async def catalog(self, tenant: str, domain: str) -> ReleaseCatalog:
         record = await self._store.active_knowledge_release(require_tenant(tenant), domain)
@@ -113,7 +115,7 @@ class KnowledgeEvaluationService:
                 items=catalog.items, exceptions=catalog.exceptions, context=context, facts=facts,
                 tenant=tenant, access=access, domain=domain, release=catalog.ref,
                 expect_applicable_knowledge=expect_applicable_knowledge,
-                semantic_candidates=semantic_candidates,
+                semantic_candidates=semantic_candidates, timings=self.stage_seconds,
             )
             self._cache[key] = decision
             if len(self._cache) > self._cache_size:
@@ -125,6 +127,18 @@ class KnowledgeEvaluationService:
                 semantic_candidates=semantic_candidates,
             ))
         return decision
+
+    def metrics(self) -> dict[str, Any]:
+        """Cache hit rate and time per evaluator stage since start (process-local)."""
+        lookups = self.cache_hits + self.cache_misses
+        return {
+            "cache": {"hits": self.cache_hits, "misses": self.cache_misses, "entries": len(self._cache),
+                      "hit_rate": round(self.cache_hits / lookups, 4) if lookups else None},
+            "evaluations": self.cache_misses,
+            "stage_seconds": {stage: round(value, 6) for stage, value in sorted(self.stage_seconds.items())},
+            "mean_ms_per_evaluation": (round(sum(self.stage_seconds.values()) * 1000 / self.cache_misses, 3)
+                                       if self.cache_misses else None),
+        }
 
     # -- decision log ------------------------------------------------------------
 

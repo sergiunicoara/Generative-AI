@@ -757,7 +757,7 @@ documentation. Items are phrased against this platform's existing contracts.
   **Acceptance evidence:** parity with the RDF-side validator on fixed valid and
   invalid fixtures for the Energy and knowledge models, recorded with the shape
   hash it ran against.
-- [ ] Controlled-natural-language rendering of constraints for reviewers. A
+- [x] Controlled-natural-language rendering of constraints for reviewers. A
   deterministic text rendering of `Constraint`/`Predicate` over the existing
   operator vocabulary, shown in the review queue next to the statement.
   Inspired by business-rules vocabularies such as SBVR, but a view only: no new
@@ -766,6 +766,7 @@ documentation. Items are phrased against this platform's existing contracts.
   only what the prose says.
   **Acceptance evidence:** golden renderings for every operator and `when_missing`
   mode; a test that the rendering cannot change evaluation.
+  **Status (2026-11-03):** `knowledge_render.py`; the review queue shows `executable` next to `statement`; golden renderings for every operator and `when_missing` mode.
 - [ ] Release stamp on every projection. Each projection of a release (RDF
   export, Energy answers, GraphQL and MCP payloads, cache entries) carries the
   release id and content hash; a check fails when a served projection does not
@@ -824,7 +825,7 @@ before evaluation, curation routes, separate evaluation metrics, API and MCP.
   assert it does not); a stored decision replays exactly; no decision readable
   across tenants.
   **Status (2026-11-03):** append-only, tenant-scoped `knowledge_decisions` table; every service evaluation is recorded with its inputs, access context and cited release, and replays exactly. Counterfactual fidelity on the 26-case set: no decisive item or exception is missing from any decision's citations. The converse (every cited item decisive) is not required and does not hold: a decision lists every applicable rule.
-- [ ] Stronger evaluation of applicability and conflict handling. Add metamorphic
+- [x] Stronger evaluation of applicability and conflict handling. Add metamorphic
   tests (same decision after reordering items, adding an irrelevant item, adding
   another tenant's items, renaming ids), a held-out split with adversarial cases,
   and generated contexts with large denominators. The current 26-case set is
@@ -833,7 +834,8 @@ before evaluation, curation routes, separate evaluation metrics, API and MCP.
   hand-picked cases.
   **Acceptance evidence:** reported with denominators and split labels; the
   held-out split is not used when tuning rules.
-- [ ] Scale and observability of the evaluator. Evaluation scans every visible
+  **Status (2026-11-03):** metamorphic relations (input order, another tenant's items, unpublished/inaccessible items, an out-of-scope item, consistent renaming) over all 39 cases; a 13-case held-out adversarial split (`packaging_labeling_heldout.json`, 13/13 on first run, written before running); a generated split of 200 seeded contexts x 400 synthetic items against an independent oracle (`knowledge_oracle.py`): applicability 80000/80000, validation 6524/6524. All three are still developer-authored; they show stability and internal consistency, not domain correctness.
+- [x] Scale and observability of the evaluator. Evaluation scans every visible
   item per request, which is correct but not shown for thousands of items. Add an
   index by applicability dimension, a latency benchmark with stated budgets, and
   metrics for cache hit rate and time per stage.
@@ -841,6 +843,7 @@ before evaluation, curation routes, separate evaluation metrics, API and MCP.
   expectations as packs grow.
   **Acceptance evidence:** identical decisions with and without the index on the
   evaluation set; benchmark results recorded with pack size, hardware and commit.
+  **Status (2026-11-03):** `scripts/benchmark_knowledge_eval.py` (seeded packs, stage shares, p95 budgets) showed conflict detection at 40% of the time at 5000 items, so the index is on conflict candidates (subject, series, overrides) rather than on applicability dimensions: every visible item must still report its own applicability reasons, so a dimension prefilter could not skip that work without changing decisions. 5000 items: p95 775 ms to 440 ms (local, 50 requests); decisions identical with and without the index. Stage timings in `evaluate_knowledge(timings=...)`; `GET /knowledge/metrics` (admin) reports cache hit rate and time per stage.
 - [ ] Record the formalism decision and cover non-constraint knowledge. Write an
   ADR comparing the current bounded predicates with decision tables (DMN),
   Datalog and a production rule engine, including failure modes. Today only

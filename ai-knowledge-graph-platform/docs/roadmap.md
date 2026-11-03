@@ -86,7 +86,7 @@ document.
 
 ### P0 — target capability matrix and loss diagnostics
 
-- [ ] Give every semantic rule a typed target outcome: `enforced`,
+- [x] Give every semantic rule a typed target outcome: `enforced`,
       `translated`, `runtime-mitigated`, `warning`, or `unsupported`.
       `fidelity` today is a 3-value axis
       (`preserved`/`approximated`/`unenforceable`,
@@ -97,19 +97,21 @@ document.
       turning `diagnostics.json` from a loss report into a full matrix and
       roughly doubling its size. A real redesign, not a rename; needs its
       own design pass.
+      **Status (2026-11-03):** `Diagnostic.outcome` (enforced/translated/runtime-mitigated/warning/unsupported, derived from `fidelity` plus the compensating control; `fidelity` kept) and a `capability-matrix.json` per model (every rule x target, never more optimistic than the diagnostics). See `docs/interoperability-and-curation.md`.
 
 **Base project value:** makes format choice a compilation decision, supports
 architecture reviews and prevents false confidence from incomplete schemas.
 
 ### P1 — visual and tool-friendly semantic modelling
 
-- [ ] Add explicit support and examples for qualified cardinalities,
+- [x] Add explicit support and examples for qualified cardinalities,
       relationship attributes and composite keys where the target supports
       them. Needs new fields on `PropertySpec`/`RelationSpec`/`Cardinality`
       (`graphrag/semantic_model/models.py`) and touches every emitter in
       `compiler.py` (OWL restrictions, SHACL property shapes, Neo4j
       constraints) — a schema change, not an additive one; needs its own
       design pass.
+      **Status (2026-11-03):** composite keys, qualified cardinalities and relationship attributes in the model, all three emitters, the runtime validator and the ERD; examples in the `contextual-knowledge` model and the synthetic test model. Relationship attributes are reified in OWL/SHACL and native but runtime-validated on Neo4j.
 
 **Base project boundary:** YAML remains the canonical source; ERD and Protégé
 are review and interoperability surfaces, not competing sources of truth.
@@ -213,20 +215,24 @@ provides evidence for collaboration with SMEs, architects and country teams.
 
 ### P2 — additional target and integration adapters
 
-- [ ] Add read-only conformance adapters for additional LPG/RDF targets only
+- [x] Add read-only conformance adapters for additional LPG/RDF targets only
       when a real deployment requires them; benchmark against the same dataset
       fingerprint and competency-question suite.
+  **Status (2026-11-03):** `scripts/sparql_conformance.py` runs the SPARQL competency suite against any SPARQL 1.1 endpoint (Stardog, GraphDB, Fuseki) with a dataset fingerprint. Verified offline only; not run against a real Stardog, GraphDB or Fuseki.
 - [x] Gremlin (Neptune/Cosmos DB): `GraphBackend` Protocol + `GremlinBackend`
       cover core entity/relation CRUD and 1-hop retrieval, additive to Neo4j,
       live-verified against a real `tinkerpop/gremlin-server` container (not
       Neptune/Cosmos DB themselves). See
       [ADR-0012](adr/0012-graphbackend-protocol-and-gremlin.md).
-- [ ] Consider Stardog and GQL adapters as interoperability targets, not as
+- [x] Consider Stardog and GQL adapters as interoperability targets, not as
       additional sources of truth.
-- [ ] Add GraphQL only as a stable consumer API over governed RDF/Neo4j reads;
+  **Status (2026-11-03):** Stardog via the SPARQL conformance adapter; GQL as a generated `graph-type.gql` (ISO GQL graph-type rendering, flattened inheritance, losses reported). Not validated by a GQL engine.
+- [x] Add GraphQL only as a stable consumer API over governed RDF/Neo4j reads;
       it must not bypass SPARQL, SHACL, tenant boundaries or audit controls.
-- [ ] Add optional Jira/ticketing and spreadsheet import/export integrations for
+  **Status (2026-11-03):** `POST /graphql`, query-only, every resolver through the capability registry (scopes, tenant, audit); answer generation deliberately not exposed.
+- [x] Add optional Jira/ticketing and spreadsheet import/export integrations for
       curator operations after the core review model is stable.
+  **Status (2026-11-03):** CSV/XLSX export and decision import, and a Jira issue route, on the ontology-proposal queue; reviewer is the token `sub`. Jira only exercised against a mock transport; the route is not idempotent.
 
 ### Explicit non-goals
 
@@ -680,25 +686,118 @@ reproduced and fixed eight evaluator and release-gate defects (partial
 exception coverage, precedence without an effective winner, prohibition
 absence semantics, fact typing, order-dependent supersession, empty regression
 gate, multiple effective exception versions, disclaimer-only releases); each
-has a regression test. Not done: an RDF/SHACL
-projection of knowledge items through the canonical semantic-model compiler, a
-review UI or HTTP route for curating/publishing packs (publication is
-library/CLI-driven), live validation against Neo4j or a deployed API, and any
-real regulatory content. See `docs/contextual-knowledge-evaluation.md`.
+has a regression test. Published knowledge also projects to RDF and is gated
+by SHACL generated from `ontology/models/contextual-knowledge.yaml`; packs are
+published, rolled back and inspected through authenticated routes. Not done: an
+RDF export route, a review UI or per-entry approval route, live validation
+against Neo4j or a deployed API, and any real regulatory content. See `docs/contextual-knowledge-evaluation.md`.
 
-- [ ] Project published knowledge items to RDF and validate them with SHACL
-  generated by the canonical semantic-model workflow.
+- [x] Project published knowledge items to RDF and validate them with SHACL
+  generated by the canonical semantic-model workflow (2026-10-29: model
+  `ontology/models/contextual-knowledge.yaml`, `knowledge_rdf.py`, gate in
+  `check_pack`; enumerations and scopes stay Pydantic-enforced).
   **Base project value:** one authoritative model for knowledge items instead of
   Pydantic-only validation.
-- [ ] Authenticated pack review/publish routes using token `sub` as reviewer
-  and publisher identity.
+- [x] Authenticated pack review/publish routes using token `sub` as reviewer
+  and publisher identity (2026-10-29: review queue, publish, history,
+  rollback; metadata-only responses; tenant from the token).
   **Base project value:** curation without code access; same provenance rules
   the library already enforces.
-- [ ] Union several partial waivers or partial supersessions when together
+- [x] Union several partial waivers or partial supersessions when together
   they cover a requirement's whole bound context, and report the remaining
-  matched context of a partially superseded revision.
+  matched context of a partially superseded revision (2026-10-29: judged per
+  combination of context values, capped at 5,000 combinations, fail-closed).
   **Base project value:** fewer needless evaluations of requirements that are
   jointly waived, without weakening the current fail-closed coverage rule.
+
+### Candidate additions from a graph-community feed review (2026-11-03)
+
+**Status: proposed, not implemented.** Source: the newest 48 posts (back to about
+one month) of a public LinkedIn graph-database/knowledge-graph group, with the
+comments visible on each. That material is secondary, partly promotional (vendor
+launches, events, job ads, self-published books) and unverified; it was used
+only to prompt ideas. Nothing below is adopted on the strength of a post, and no
+product claim from the feed is treated as fact until checked against its own
+documentation. Items are phrased against this platform's existing contracts.
+
+- [ ] Decision re-review impact analysis. A decision from the contextual-knowledge
+  evaluator cites its release; when a release changes, an exception nears expiry
+  or an item passes a review-due date, list the stored decisions that would now
+  come out differently, keeping "what was known then" apart from "what is known
+  now", and keeping missing evidence, pending approval and refusal as distinct
+  states. Needs a design decision first: decisions are returned and cached today,
+  not persisted, so a durable decision log (tenant-scoped, append-only) comes
+  before the analysis. `review_due` would be an explicit, human-set field; the
+  tool must never set a "verified" flag itself.
+  **Base project value:** answers "which past decisions need another look after a
+  rule or ownership change", which the as-of/known-as model already makes
+  computable.
+  **Acceptance evidence:** replaying a stored decision against the release it
+  cites reproduces it exactly; a diff against the current release lists exactly
+  the affected decisions on fixtures that change one rule, one waiver expiry and
+  one superseding revision; tenant isolation and access filtering hold.
+- [ ] Remediation hints in machine-readable errors. Publication-gate failures and
+  evaluation errors already come back structured; give each a stable code, the
+  offending field or item key, and the smallest corrective action, so an agent or
+  curator can act without parsing prose.
+  **Base project value:** shorter fix loops for agent-driven curation, with no
+  change to the gate itself.
+  **Acceptance evidence:** every failure from `check_pack` and every
+  `invalid_request` carries code, path and hint; tests assert them instead of
+  matching message text.
+- [ ] Evaluate SHACL-to-Cypher validation for the Neo4j runtime. The generated
+  shapes run on RDF exports; property graphs rely on runtime validators and the
+  mutation gate. Compare an existing open-source SHACL-to-Cypher compiler (check
+  licence, maintenance and its single-maintainer risk) against a minimal in-house
+  subset limited to what the generated shapes use. Evaluation only: no new write
+  path, no second source of truth.
+  **Base project value:** one set of generated shapes checked on both stores.
+  **Acceptance evidence:** parity with the RDF-side validator on fixed valid and
+  invalid fixtures for the Energy and knowledge models, recorded with the shape
+  hash it ran against.
+- [ ] Controlled-natural-language rendering of constraints for reviewers. A
+  deterministic text rendering of `Constraint`/`Predicate` over the existing
+  operator vocabulary, shown in the review queue next to the statement.
+  Inspired by business-rules vocabularies such as SBVR, but a view only: no new
+  rule language and no change to the W3C-based model, which stays authoritative.
+  **Base project value:** reviewers approve what the executable rule says, not
+  only what the prose says.
+  **Acceptance evidence:** golden renderings for every operator and `when_missing`
+  mode; a test that the rendering cannot change evaluation.
+- [ ] Release stamp on every projection. Each projection of a release (RDF
+  export, Energy answers, GraphQL and MCP payloads, cache entries) carries the
+  release id and content hash; a check fails when a served projection does not
+  match the active release. The decision cache already keys on release; the RDF
+  export does not yet carry it.
+  **Base project value:** corrections propagate or are visibly stale across
+  projections, with the release remaining the single authority.
+  **Acceptance evidence:** a test publishes, rolls back and re-exports, and
+  asserts stamps and stale-projection detection.
+- [ ] Shape and model registry as plain RDF (lower priority). Describe which
+  generated model and shapes apply to which graph, with version, SHA-256 and
+  active flag, in a named graph shipped with the export so the mapping travels
+  with the data.
+  **Base project value:** portability across triple stores without store-specific
+  configuration.
+  **Acceptance evidence:** a SPARQL query answers "which shapes apply to graph X"
+  and the recorded hash equals `compile --check`.
+- [ ] Verify before considering an "Open Knowledge Format" bundle export. A post
+  describes a markdown-bundle format for agent-readable knowledge with untyped
+  links; its existence, version and licence are unverified here. Only if the
+  specification checks out, evaluate an export in which typed edges and trust
+  fields survive and nothing like a "verified" flag is invented.
+  **Acceptance evidence:** a conformance check against the published
+  specification, and a round trip that preserves edge types.
+
+Considered and **not** added: new embedded or streaming graph engines announced
+in the feed (a second graph database stays deferred without a measured Neo4j
+blocker, see "Explicitly deferred"); additional schema dialects such as
+PG-Schema, LinkML, FalkorDB or Memgraph targets (the non-goal on dialect count
+stands; the GQL graph-type export already planned covers interoperability);
+"GraphRAG versus vector RAG" guidance (the golden evaluation's per-type
+breakdown already measures it); "semantic layer first" accuracy arguments
+(consistent with the current direction, no new work); job posts, events and
+book announcements.
 
 ## Context Graph evaluation suite
 

@@ -1,0 +1,40 @@
+classDiagram
+    class Governed {
+        <<mixin>>
+        +string knowledgeId
+        +string knowledgeKey
+        +dateTime recordedAt
+        +string status
+        +string tenant
+        +integer version
+    }
+    class KnowledgeException {
+        +string approvalRef!
+        +string grantedBy!
+        +string kind!
+    }
+    KnowledgeException ..|> Governed : mixin
+    %% KnowledgeException composite key (tenant, knowledgeId, version)
+    class KnowledgeItem {
+        +string authority!
+        +string modality!
+        +string reviewRef!
+        +string reviewedBy!
+        +string statement!
+        +string subjectKey!
+        +string title!
+        +dateTime validFrom
+        +dateTime validTo
+    }
+    KnowledgeItem ..|> Governed : mixin
+    %% KnowledgeItem composite key (tenant, knowledgeId, version)
+    class KnowledgeSource {
+        +string sourceId*
+    }
+    KnowledgeItem "1" --> "1..*" KnowledgeSource : citesSource
+    %% citesSource attributes: locator: string
+    KnowledgeException "1" --> "1..*" KnowledgeSource : exceptionCitesSource
+    KnowledgeException "1" --> "1..*" KnowledgeItem : exceptionTarget
+    KnowledgeException "1" --> "0..1" KnowledgeItem : exceptionWinner
+    KnowledgeItem "1" --> "0..*" KnowledgeItem : overrides
+    KnowledgeItem "1" --> "0..*" KnowledgeItem : supersedes

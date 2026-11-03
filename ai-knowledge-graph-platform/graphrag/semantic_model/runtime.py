@@ -47,6 +47,16 @@ def _is_iso_temporal(value: Any, datatype: str) -> bool:
     return True
 
 
+def _datatype_ok(datatype: str, value: Any) -> bool:
+    if datatype in {"date", "dateTime"}:
+        return _is_iso_temporal(value, datatype)
+    if datatype in {"integer", "decimal"} and isinstance(value, bool):
+        return False
+    if datatype == "boolean":
+        return type(value) is bool
+    return isinstance(value, _PYTHON_TYPES[datatype])
+
+
 class SemanticMutationValidator:
     """Validate LPG mutations before they reach the shared graph write path.
 
@@ -78,23 +88,39 @@ class SemanticMutationValidator:
             if prop.cardinality.minimum and value is None:
                 violations.append(MutationViolation("REQUIRED_PROPERTY", name, f"Property {name!r} is required for {resolved}"))
                 continue
-            if value is not None:
-                expected = _PYTHON_TYPES[prop.datatype]
-                if prop.datatype in {"date", "dateTime"}:
-                    valid = _is_iso_temporal(value, prop.datatype)
-                elif prop.datatype in {"integer", "decimal"} and isinstance(value, bool):
-                    valid = False
-                elif prop.datatype == "boolean":
-                    valid = type(value) is bool
-                else:
-                    valid = isinstance(value, expected)
-                if not valid:
-                    violations.append(MutationViolation("INVALID_DATATYPE", name, f"Property {name!r} must be {prop.datatype}"))
+            if value is not None and not _datatype_ok(prop.datatype, value):
+                violations.append(MutationViolation("INVALID_DATATYPE", name, f"Property {name!r} must be {prop.datatype}"))
+        return violations
+
+    def validate_relation_properties(
+        self, relation_type: str, properties: dict[str, Any], *, tenant: str,
+    ) -> list[MutationViolation]:
+        """Check relationship attributes (presence, datatype, undeclared names)."""
+        match = next((name for name, spec in self.model.relations.items()
+                      if relation_type in {name, self.model.lpg_relation(name, spec)}), None)
+        if not match:
+            return [MutationViolation("UNKNOWN_RELATION", "relation", f"Unknown relation {relation_type!r}")]
+        violations: list[MutationViolation] = []
+        if not tenant.strip():
+            violations.append(MutationViolation("TENANT_REQUIRED", "tenant", "A trusted tenant is required"))
+        declared = self.model.relations[match].properties
+        if self.model.unknown_property_policy == "reject":
+            for name in sorted(set(properties) - set(declared)):
+                violations.append(MutationViolation("UNKNOWN_RELATION_PROPERTY", name,
+                    f"Attribute {name!r} is not declared for relation {match}"))
+        for name, prop in declared.items():
+            value = properties.get(name)
+            if prop.cardinality.minimum and value is None:
+                violations.append(MutationViolation("REQUIRED_RELATION_PROPERTY", name,
+                    f"Attribute {name!r} is required for relation {match}"))
+            elif value is not None and not _datatype_ok(prop.datatype, value):
+                violations.append(MutationViolation("INVALID_DATATYPE", name,
+                    f"Attribute {name!r} must be {prop.datatype}"))
         return violations
 
     def validate_relation(
         self, relation_type: str, source_type: str, target_type: str, *, tenant: str,
-        existing_count: int | None = None,
+        existing_count: int | None = None, existing_by_target_type: dict[str, int] | None = None,
     ) -> list[MutationViolation]:
         violations: list[MutationViolation] = []
         match = next((name for name, spec in self.model.relations.items()
@@ -114,6 +140,18 @@ class SemanticMutationValidator:
         if maximum is not None and existing_count is not None and existing_count >= maximum:
             violations.append(MutationViolation("MAX_CARDINALITY", "relation",
                 f"{match} permits at most {maximum} relation(s) from one source"))
+        # Qualified maximums count only existing relations whose target is of
+        # the qualifying class; the new relation counts when its own target is.
+        if existing_by_target_type is not None:
+            for qualified in relation.qualified:
+                limit = qualified.cardinality.maximum
+                if limit is None or not self.model.is_subtype(target_type, qualified.on_class):
+                    continue
+                current = sum(count for kind, count in existing_by_target_type.items()
+                              if self.model.is_subtype(kind, qualified.on_class))
+                if current >= limit:
+                    violations.append(MutationViolation("QUALIFIED_MAX_CARDINALITY", "relation",
+                        f"{match} permits at most {limit} relation(s) to {qualified.on_class} from one source"))
         return violations
 
     def require_node(self, type_name: str, properties: dict[str, Any], *, tenant: str) -> None:

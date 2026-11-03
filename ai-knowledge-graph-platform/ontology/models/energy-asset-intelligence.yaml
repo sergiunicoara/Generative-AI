@@ -201,3 +201,5 @@ artifacts:
   diagnostics: ontology/generated/energy/diagnostics.json
   diagnostics_report: ontology/generated/energy/diagnostics.md
   erd: ontology/generated/energy/erd.mmd
+  capability_matrix: ontology/generated/energy/capability-matrix.json
+  gql: ontology/generated/energy/graph-type.gql

@@ -132,6 +132,76 @@ are kept as history. Measurements below are new.
 - [x] Focused: 100 tests (31 audit + 69 knowledge/capability/energy) pass; eval
   26/26; walkthrough runs.
 - [x] Full unit suite (one run, at the end): **3316 passed**, 28 warnings, 0 failed (749 s).
-- Remaining gaps: partial waivers/supersessions are not unioned; a partially
-  superseded revision reports its full matched context; the eval set is
-  developer-authored (agreement with own expectations, not real-world accuracy).
+- Remaining gaps (as of the audit): partial waivers/supersessions not unioned and
+  a partially superseded revision reporting its full matched context were fixed
+  on 2026-10-29 (below); the eval set is developer-authored (agreement with own
+  expectations, not real-world accuracy).
+
+## Roadmap items implemented (2026-10-29)
+
+Chosen from the open items in `docs/roadmap.md`; the others are conditional
+("only when a real deployment requires them"), non-goals, or larger/riskier
+(RDF/SHACL projection, typed semantic-rule outcomes, qualified cardinalities)
+and were left for a later decision.
+
+- [x] Tests first: `tests/unit/context_graph/test_knowledge_partial_union.py`
+  (8) and `tests/unit/test_knowledge_pack_routes.py` (15). Pre-implementation:
+  5 of 8 union tests failed (the 3 passing are fail-closed guards); 13 of 14
+  route tests failed (the initial set) before the routes existed.
+- [x] Union of partial waivers / supersessions, per combination of context
+  values (not per dimension), capped at 5,000 combinations (fail-closed);
+  `matched_context` of a partially superseded revision shows what is left;
+  later exceptions cover exactly that remainder.
+- [x] Routes: review queue (`write`), publish and rollback (`admin`), history
+  (`read`); reviewer/publisher = token `sub`; tenant from the token; pack by
+  validated domain name; metadata-only responses.
+- [x] RDF/SHACL projection: canonical model `ontology/models/contextual-knowledge.yaml`
+  (compiled artifacts committed, `make semantic-model-check` extended),
+  `graphrag/context_graph/knowledge_rdf.py`, SHACL conformance required by
+  `check_pack` (fail-closed), visibility-filtered `export_graph`; 11 tests
+  incl. negative cases (missing source / tenant / review ref, duplicate version).
+- Focused: union 8 + audit 31 + knowledge 46 + routes 15 + capability 11 + rdf 11
+  pass; eval 26/26.
+- [x] Full unit suite (one run, at the end of that batch): passed; superseded by the 2026-11-03 run below.
+
+# Remaining roadmap items (2026-11-01)
+
+Scope: every open checkbox in `docs/roadmap.md` (items at lines 89, 106, 278,
+286, 288, 290). The proposed "Recruitment Knowledge Graph" extension is a
+separate, unscheduled domain proposal, not an open checkbox, and is out of
+scope. Constraints: no paid services; no live external systems (Stardog,
+Jira, GraphDB) are available, so adapters are verified offline and are not
+described as live-validated. Full unit suite runs once, at the end, before push.
+
+## Plan
+- [x] P0 typed target outcome: additive `outcome` per diagnostic
+      (enforced/translated/runtime-mitigated/warning/unsupported) and a full
+      rule x target capability matrix artifact; `fidelity` kept for existing
+      consumers.
+- [x] P1 qualified cardinalities, relationship attributes, composite keys in
+      the canonical model and every emitter where the target supports them;
+      diagnostics where it does not; regenerated artifacts + drift check.
+- [x] P2 read-only SPARQL 1.1 endpoint conformance adapter (Stardog/GraphDB/
+      Fuseki) running the SPARQL competency questions against the dataset
+      fingerprint; offline-tested.
+- [x] P2 GQL graph-type export as an interoperability surface (not a source
+      of truth).
+- [x] P2 GraphQL consumer API that only resolves through the governed
+      capability registry (scopes, tenant, audit unchanged).
+- [x] P2 curator import/export: spreadsheet (CSV/XLSX) and Jira issue payloads
+      for the curator queues; outbound Jira client with injectable transport,
+      disabled unless configured.
+- [x] Docs + roadmap; one full unit-suite run; push.
+
+## Results (2026-11-03)
+- Implemented: typed outcomes + `capability-matrix.json`; composite keys, qualified
+  cardinalities, relationship attributes (all emitters, runtime validator, ERD);
+  GQL graph-type rendering; SPARQL endpoint conformance adapter (+ Fuseki URL
+  builder); `POST /graphql` (read-only, via the capability registry; the
+  `answer` field was removed because it writes traces / may call an LLM);
+  curator CSV/XLSX export + decision import + Jira issue route.
+- Caught while testing: an infinite loop I introduced (extension validation ran
+  before the inheritance-cycle check) and two diagnostic-code/matrix mismatches.
+- Full unit suite, one run at the end: **3567 passed**, 28 warnings, 0 failed (771 s).
+- Not validated live: GQL engine, Stardog/GraphDB/Fuseki, Jira (mock transports only).
+- Open: `requirements.lock` lacks `graphql-core` (`make lock`); Jira route not idempotent.

@@ -1,0 +1,105 @@
+# DO NOT EDIT — generated from contextual-knowledge.yaml.
+@prefix dcterms: <http://purl.org/dc/terms/> .
+@prefix energy: <https://example.knowledge.demo/ontology#> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+
+energy: a owl:Ontology ; rdfs:label "Contextual knowledge (published items and exceptions)" ; owl:versionInfo "1.0.0" .
+
+energy:KnowledgeException a owl:Class ;
+  rdfs:label "Knowledge exception" ;
+  rdfs:comment "A scoped, approved waiver or precedence resolution over knowledge items." .
+energy:KnowledgeItem a owl:Class ;
+  rdfs:label "Knowledge item" ;
+  rdfs:comment "A published, versioned requirement, recommendation, permission or prohibition. Applicability, constraints and access policy stay in the Pydantic contract (graphrag/context_graph/knowledge.py), which remains the authority for them; this projection carries identity, lifecycle, review and provenance." .
+energy:KnowledgeSource a owl:Class ;
+  rdfs:label "Knowledge source" ;
+  rdfs:comment "A cited source document, chunk or approval record." .
+
+energy:approvalRef a owl:DatatypeProperty ; rdfs:domain energy:KnowledgeException ; rdfs:range xsd:string .
+energy:authority a owl:DatatypeProperty ; rdfs:domain energy:KnowledgeItem ; rdfs:range xsd:string .
+energy:grantedBy a owl:DatatypeProperty ; rdfs:domain energy:KnowledgeException ; rdfs:range xsd:string .
+energy:kind a owl:DatatypeProperty ; rdfs:domain energy:KnowledgeException ; rdfs:range xsd:string .
+energy:knowledgeId a owl:DatatypeProperty ; rdfs:domain owl:Thing ; rdfs:range xsd:string .
+energy:knowledgeKey a owl:DatatypeProperty ; rdfs:domain owl:Thing ; rdfs:range xsd:string .
+energy:modality a owl:DatatypeProperty ; rdfs:domain energy:KnowledgeItem ; rdfs:range xsd:string .
+energy:recordedAt a owl:DatatypeProperty ; rdfs:domain owl:Thing ; rdfs:range xsd:dateTime .
+energy:reviewRef a owl:DatatypeProperty ; rdfs:domain energy:KnowledgeItem ; rdfs:range xsd:string .
+energy:reviewedBy a owl:DatatypeProperty ; rdfs:domain energy:KnowledgeItem ; rdfs:range xsd:string .
+energy:sourceId a owl:DatatypeProperty ; rdfs:domain energy:KnowledgeSource ; rdfs:range xsd:string .
+energy:statement a owl:DatatypeProperty ; rdfs:domain energy:KnowledgeItem ; rdfs:range xsd:string .
+energy:status a owl:DatatypeProperty ; rdfs:domain owl:Thing ; rdfs:range xsd:string .
+energy:subjectKey a owl:DatatypeProperty ; rdfs:domain energy:KnowledgeItem ; rdfs:range xsd:string .
+energy:tenant a owl:DatatypeProperty ; rdfs:domain owl:Thing ; rdfs:range xsd:string .
+energy:title a owl:DatatypeProperty ; rdfs:domain energy:KnowledgeItem ; rdfs:range xsd:string .
+energy:validFrom a owl:DatatypeProperty ; rdfs:domain energy:KnowledgeItem ; rdfs:range xsd:dateTime .
+energy:validTo a owl:DatatypeProperty ; rdfs:domain energy:KnowledgeItem ; rdfs:range xsd:dateTime .
+energy:version a owl:DatatypeProperty ; rdfs:domain owl:Thing ; rdfs:range xsd:integer .
+energy:citesSource a owl:ObjectProperty ; rdfs:domain energy:KnowledgeItem ; rdfs:range energy:KnowledgeSource .
+energy:exceptionCitesSource a owl:ObjectProperty ; rdfs:domain energy:KnowledgeException ; rdfs:range energy:KnowledgeSource .
+energy:exceptionTarget a owl:ObjectProperty ; rdfs:domain energy:KnowledgeException ; rdfs:range energy:KnowledgeItem .
+energy:exceptionWinner a owl:ObjectProperty ; rdfs:domain energy:KnowledgeException ; rdfs:range energy:KnowledgeItem .
+energy:overrides a owl:ObjectProperty ; rdfs:domain energy:KnowledgeItem ; rdfs:range energy:KnowledgeItem .
+energy:supersedes a owl:ObjectProperty ; rdfs:domain energy:KnowledgeItem ; rdfs:range energy:KnowledgeItem .
+energy:CitesSourceStatement a owl:Class ; rdfs:subClassOf rdf:Statement ; rdfs:label "citesSource statement" .
+energy:locator a owl:DatatypeProperty ; rdfs:domain energy:CitesSourceStatement ; rdfs:range xsd:string .
+
+energy:KnowledgeException owl:hasKey ( energy:knowledgeKey ) .
+energy:KnowledgeException owl:hasKey ( energy:tenant energy:knowledgeId energy:version ) .
+energy:KnowledgeException rdfs:subClassOf [ a owl:Restriction ; owl:onProperty energy:approvalRef ; owl:minCardinality "1"^^xsd:nonNegativeInteger ] .
+energy:KnowledgeException rdfs:subClassOf [ a owl:Restriction ; owl:onProperty energy:approvalRef ; owl:maxCardinality "1"^^xsd:nonNegativeInteger ] .
+energy:KnowledgeException rdfs:subClassOf [ a owl:Restriction ; owl:onProperty energy:grantedBy ; owl:minCardinality "1"^^xsd:nonNegativeInteger ] .
+energy:KnowledgeException rdfs:subClassOf [ a owl:Restriction ; owl:onProperty energy:grantedBy ; owl:maxCardinality "1"^^xsd:nonNegativeInteger ] .
+energy:KnowledgeException rdfs:subClassOf [ a owl:Restriction ; owl:onProperty energy:kind ; owl:minCardinality "1"^^xsd:nonNegativeInteger ] .
+energy:KnowledgeException rdfs:subClassOf [ a owl:Restriction ; owl:onProperty energy:kind ; owl:maxCardinality "1"^^xsd:nonNegativeInteger ] .
+energy:KnowledgeException rdfs:subClassOf [ a owl:Restriction ; owl:onProperty energy:knowledgeId ; owl:minCardinality "1"^^xsd:nonNegativeInteger ] .
+energy:KnowledgeException rdfs:subClassOf [ a owl:Restriction ; owl:onProperty energy:knowledgeId ; owl:maxCardinality "1"^^xsd:nonNegativeInteger ] .
+energy:KnowledgeException rdfs:subClassOf [ a owl:Restriction ; owl:onProperty energy:knowledgeKey ; owl:minCardinality "1"^^xsd:nonNegativeInteger ] .
+energy:KnowledgeException rdfs:subClassOf [ a owl:Restriction ; owl:onProperty energy:knowledgeKey ; owl:maxCardinality "1"^^xsd:nonNegativeInteger ] .
+energy:KnowledgeException rdfs:subClassOf [ a owl:Restriction ; owl:onProperty energy:recordedAt ; owl:minCardinality "1"^^xsd:nonNegativeInteger ] .
+energy:KnowledgeException rdfs:subClassOf [ a owl:Restriction ; owl:onProperty energy:recordedAt ; owl:maxCardinality "1"^^xsd:nonNegativeInteger ] .
+energy:KnowledgeException rdfs:subClassOf [ a owl:Restriction ; owl:onProperty energy:status ; owl:minCardinality "1"^^xsd:nonNegativeInteger ] .
+energy:KnowledgeException rdfs:subClassOf [ a owl:Restriction ; owl:onProperty energy:status ; owl:maxCardinality "1"^^xsd:nonNegativeInteger ] .
+energy:KnowledgeException rdfs:subClassOf [ a owl:Restriction ; owl:onProperty energy:tenant ; owl:minCardinality "1"^^xsd:nonNegativeInteger ] .
+energy:KnowledgeException rdfs:subClassOf [ a owl:Restriction ; owl:onProperty energy:tenant ; owl:maxCardinality "1"^^xsd:nonNegativeInteger ] .
+energy:KnowledgeException rdfs:subClassOf [ a owl:Restriction ; owl:onProperty energy:version ; owl:minCardinality "1"^^xsd:nonNegativeInteger ] .
+energy:KnowledgeException rdfs:subClassOf [ a owl:Restriction ; owl:onProperty energy:version ; owl:maxCardinality "1"^^xsd:nonNegativeInteger ] .
+energy:KnowledgeException rdfs:subClassOf [ a owl:Restriction ; owl:onProperty energy:exceptionCitesSource ; owl:minCardinality "1"^^xsd:nonNegativeInteger ] .
+energy:KnowledgeException rdfs:subClassOf [ a owl:Restriction ; owl:onProperty energy:exceptionTarget ; owl:minCardinality "1"^^xsd:nonNegativeInteger ] .
+energy:KnowledgeException rdfs:subClassOf [ a owl:Restriction ; owl:onProperty energy:exceptionWinner ; owl:maxCardinality "1"^^xsd:nonNegativeInteger ] .
+energy:KnowledgeItem owl:hasKey ( energy:knowledgeKey ) .
+energy:KnowledgeItem owl:hasKey ( energy:tenant energy:knowledgeId energy:version ) .
+energy:KnowledgeItem rdfs:subClassOf [ a owl:Restriction ; owl:onProperty energy:authority ; owl:minCardinality "1"^^xsd:nonNegativeInteger ] .
+energy:KnowledgeItem rdfs:subClassOf [ a owl:Restriction ; owl:onProperty energy:authority ; owl:maxCardinality "1"^^xsd:nonNegativeInteger ] .
+energy:KnowledgeItem rdfs:subClassOf [ a owl:Restriction ; owl:onProperty energy:knowledgeId ; owl:minCardinality "1"^^xsd:nonNegativeInteger ] .
+energy:KnowledgeItem rdfs:subClassOf [ a owl:Restriction ; owl:onProperty energy:knowledgeId ; owl:maxCardinality "1"^^xsd:nonNegativeInteger ] .
+energy:KnowledgeItem rdfs:subClassOf [ a owl:Restriction ; owl:onProperty energy:knowledgeKey ; owl:minCardinality "1"^^xsd:nonNegativeInteger ] .
+energy:KnowledgeItem rdfs:subClassOf [ a owl:Restriction ; owl:onProperty energy:knowledgeKey ; owl:maxCardinality "1"^^xsd:nonNegativeInteger ] .
+energy:KnowledgeItem rdfs:subClassOf [ a owl:Restriction ; owl:onProperty energy:modality ; owl:minCardinality "1"^^xsd:nonNegativeInteger ] .
+energy:KnowledgeItem rdfs:subClassOf [ a owl:Restriction ; owl:onProperty energy:modality ; owl:maxCardinality "1"^^xsd:nonNegativeInteger ] .
+energy:KnowledgeItem rdfs:subClassOf [ a owl:Restriction ; owl:onProperty energy:recordedAt ; owl:minCardinality "1"^^xsd:nonNegativeInteger ] .
+energy:KnowledgeItem rdfs:subClassOf [ a owl:Restriction ; owl:onProperty energy:recordedAt ; owl:maxCardinality "1"^^xsd:nonNegativeInteger ] .
+energy:KnowledgeItem rdfs:subClassOf [ a owl:Restriction ; owl:onProperty energy:reviewRef ; owl:minCardinality "1"^^xsd:nonNegativeInteger ] .
+energy:KnowledgeItem rdfs:subClassOf [ a owl:Restriction ; owl:onProperty energy:reviewRef ; owl:maxCardinality "1"^^xsd:nonNegativeInteger ] .
+energy:KnowledgeItem rdfs:subClassOf [ a owl:Restriction ; owl:onProperty energy:reviewedBy ; owl:minCardinality "1"^^xsd:nonNegativeInteger ] .
+energy:KnowledgeItem rdfs:subClassOf [ a owl:Restriction ; owl:onProperty energy:reviewedBy ; owl:maxCardinality "1"^^xsd:nonNegativeInteger ] .
+energy:KnowledgeItem rdfs:subClassOf [ a owl:Restriction ; owl:onProperty energy:statement ; owl:minCardinality "1"^^xsd:nonNegativeInteger ] .
+energy:KnowledgeItem rdfs:subClassOf [ a owl:Restriction ; owl:onProperty energy:statement ; owl:maxCardinality "1"^^xsd:nonNegativeInteger ] .
+energy:KnowledgeItem rdfs:subClassOf [ a owl:Restriction ; owl:onProperty energy:status ; owl:minCardinality "1"^^xsd:nonNegativeInteger ] .
+energy:KnowledgeItem rdfs:subClassOf [ a owl:Restriction ; owl:onProperty energy:status ; owl:maxCardinality "1"^^xsd:nonNegativeInteger ] .
+energy:KnowledgeItem rdfs:subClassOf [ a owl:Restriction ; owl:onProperty energy:subjectKey ; owl:minCardinality "1"^^xsd:nonNegativeInteger ] .
+energy:KnowledgeItem rdfs:subClassOf [ a owl:Restriction ; owl:onProperty energy:subjectKey ; owl:maxCardinality "1"^^xsd:nonNegativeInteger ] .
+energy:KnowledgeItem rdfs:subClassOf [ a owl:Restriction ; owl:onProperty energy:tenant ; owl:minCardinality "1"^^xsd:nonNegativeInteger ] .
+energy:KnowledgeItem rdfs:subClassOf [ a owl:Restriction ; owl:onProperty energy:tenant ; owl:maxCardinality "1"^^xsd:nonNegativeInteger ] .
+energy:KnowledgeItem rdfs:subClassOf [ a owl:Restriction ; owl:onProperty energy:title ; owl:minCardinality "1"^^xsd:nonNegativeInteger ] .
+energy:KnowledgeItem rdfs:subClassOf [ a owl:Restriction ; owl:onProperty energy:title ; owl:maxCardinality "1"^^xsd:nonNegativeInteger ] .
+energy:KnowledgeItem rdfs:subClassOf [ a owl:Restriction ; owl:onProperty energy:validFrom ; owl:maxCardinality "1"^^xsd:nonNegativeInteger ] .
+energy:KnowledgeItem rdfs:subClassOf [ a owl:Restriction ; owl:onProperty energy:validTo ; owl:maxCardinality "1"^^xsd:nonNegativeInteger ] .
+energy:KnowledgeItem rdfs:subClassOf [ a owl:Restriction ; owl:onProperty energy:version ; owl:minCardinality "1"^^xsd:nonNegativeInteger ] .
+energy:KnowledgeItem rdfs:subClassOf [ a owl:Restriction ; owl:onProperty energy:version ; owl:maxCardinality "1"^^xsd:nonNegativeInteger ] .
+energy:KnowledgeItem rdfs:subClassOf [ a owl:Restriction ; owl:onProperty energy:citesSource ; owl:minCardinality "1"^^xsd:nonNegativeInteger ] .
+energy:KnowledgeSource owl:hasKey ( energy:sourceId ) .
+energy:KnowledgeSource rdfs:subClassOf [ a owl:Restriction ; owl:onProperty energy:sourceId ; owl:minCardinality "1"^^xsd:nonNegativeInteger ] .
+energy:KnowledgeSource rdfs:subClassOf [ a owl:Restriction ; owl:onProperty energy:sourceId ; owl:maxCardinality "1"^^xsd:nonNegativeInteger ] .

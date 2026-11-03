@@ -214,6 +214,29 @@ class OntologyProposalService:
             limit=limit,
         )
 
+    async def get_many(self, tenant: str, proposal_ids: list[str]) -> list[dict]:
+        """Tenant-scoped lookup of proposals by id, in any status (other tenants' ids are invisible)."""
+        if not proposal_ids:
+            return []
+        return await self._neo4j.run(
+            """
+            MATCH (p:OntologyProposal {tenant: $tenant})
+            WHERE p.id IN $ids
+            RETURN p.id AS id, p.kind AS kind, p.proposed_value AS proposed_value,
+                   p.source_type AS source_type, p.target_type AS target_type,
+                   p.entity_name AS entity_name, p.reason AS reason, p.status AS status,
+                   p.confidence AS confidence, p.conflicts AS conflicts,
+                   p.affected_use_cases AS affected_use_cases,
+                   p.business_impact AS business_impact, p.urgency AS urgency,
+                   p.effort AS effort, p.risk AS risk, p.dependencies AS dependencies,
+                   p.requesting_team AS requesting_team,
+                   p.seen_count AS seen_count, p.created_at AS created_at,
+                   p.last_seen_at AS last_seen_at
+            """,
+            tenant=tenant,
+            ids=list(proposal_ids),
+        )
+
     # Roadmap "P1 -- ontology curation and human-in-the-loop workbench",
     # bullet 2: "approve, edit, reject, merge, defer and quarantine
     # decisions, each with actor, reason, timestamp and model/version

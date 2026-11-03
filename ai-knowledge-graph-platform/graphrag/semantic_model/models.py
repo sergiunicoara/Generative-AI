@@ -70,8 +70,20 @@ class TypeSpec(StrictModel):
     extends: str | None = None
     mixins: list[str] = Field(default_factory=list)
     properties: dict[str, PropertySpec] = Field(default_factory=dict)
+    # Each entry is one composite key: the *combination* of these (required)
+    # properties is unique, unlike `key: true` on a single property.
+    composite_keys: list[list[str]] = Field(default_factory=list)
     deprecated: bool = False
     replaced_by: str | None = None
+
+
+class QualifiedCardinality(StrictModel):
+    """Cardinality counted only over relation targets of ``on_class`` (a
+    subtype of the relation's declared target), e.g. "at least one of the
+    supplied components is a SafetyComponent"."""
+
+    on_class: str
+    cardinality: Cardinality
 
 
 class RelationSpec(StrictModel):
@@ -81,6 +93,10 @@ class RelationSpec(StrictModel):
     description: str = ""
     lpg_type: str = ""
     cardinality: Cardinality = Field(default_factory=Cardinality)
+    qualified: list[QualifiedCardinality] = Field(default_factory=list)
+    # Relationship attributes: native on Neo4j relationships; carried on an
+    # rdf:Statement reification class in OWL/SHACL (see the compiler).
+    properties: dict[str, PropertySpec] = Field(default_factory=dict)
     deprecated: bool = False
     replaced_by: str | None = None
 
@@ -101,6 +117,11 @@ class ArtifactPaths(StrictModel):
     # and tool-friendly semantic modelling"). Same optionality rationale as
     # `diagnostics_report` above.
     erd: str | None = None
+    # Optional: the full rule x target capability matrix (every rule, every
+    # target, typed outcome) -- the positive counterpart to `diagnostics`.
+    capability_matrix: str | None = None
+    # Optional: an ISO GQL graph-type rendering (interoperability surface).
+    gql: str | None = None
 
 
 class SemanticModel(StrictModel):
@@ -155,6 +176,15 @@ class SemanticModel(StrictModel):
             result.update(spec.properties)
         return result
 
+    def composite_keys_for(self, name: str) -> list[list[str]]:
+        """Composite keys declared on a type and its ancestors, in lineage order."""
+        keys: list[list[str]] = []
+        for type_name in [*reversed(self.ancestors(name)), name]:
+            for members in self.types[type_name].composite_keys:
+                if members not in keys:
+                    keys.append(members)
+        return keys
+
     def relations_for(self, name: str) -> dict[str, RelationSpec]:
         return {
             relation_name: relation
@@ -202,8 +232,53 @@ def _validate_semantics(model: SemanticModel) -> None:
                 break
             seen.add(current)
             current = model.types[current].extends
+    # lineage walks below assume the hierarchy is acyclic and fully resolved
+    if not errors:
+        errors.extend(_validate_extensions(model))
     if errors:
         raise SemanticModelError("; ".join(dict.fromkeys(errors)))
+
+
+def statement_class(relation_name: str) -> str:
+    """The reification class carrying a relation's attributes in RDF."""
+    return relation_name[:1].upper() + relation_name[1:] + "Statement"
+
+
+def _validate_extensions(model: SemanticModel) -> list[str]:
+    """Composite keys, qualified cardinalities and relation attributes."""
+    errors: list[str] = []
+    node_properties = {name for spec in model.types.values() for name in spec.properties}
+    node_properties |= {name for mixin in model.mixins.values() for name in mixin.properties}
+    for name, spec in model.types.items():
+        effective = model.effective_properties(name)
+        for members in spec.composite_keys:
+            label = f"type {name}: composite key {members}"
+            if len(members) < 2 or len(set(members)) != len(members):
+                errors.append(f"{label} needs at least two distinct properties")
+                continue
+            for member in members:
+                if member not in effective:
+                    errors.append(f"{label}: unknown property {member}")
+                elif not effective[member].cardinality.minimum:
+                    errors.append(f"{label}: member {member} must be required")
+    for name, relation in model.relations.items():
+        for qualified in relation.qualified:
+            if qualified.on_class not in model.types:
+                errors.append(f"relation {name}: unknown qualified class {qualified.on_class}")
+            elif not model.is_subtype(qualified.on_class, relation.target):
+                errors.append(f"relation {name}: qualified class {qualified.on_class} is not a "
+                              f"subtype of target {relation.target}")
+            card = qualified.cardinality
+            if card.minimum is None and card.maximum is None:
+                errors.append(f"relation {name}: qualified cardinality on {qualified.on_class} sets no bound")
+        if relation.properties and statement_class(name) in model.types:
+            errors.append(f"relation {name}: reification class {statement_class(name)} clashes with a type")
+        for attribute, prop in relation.properties.items():
+            if prop.key:
+                errors.append(f"relation {name}: attribute {attribute} cannot be a key")
+            if attribute in node_properties or attribute in model.relations:
+                errors.append(f"relation {name}: attribute {attribute} reuses a property or relation name")
+    return errors
 
 
 def load_model(path: str | Path) -> SemanticModel:

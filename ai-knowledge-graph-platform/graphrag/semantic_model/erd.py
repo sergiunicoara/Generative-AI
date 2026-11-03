@@ -71,9 +71,17 @@ def render_erd_mermaid(model: SemanticModel) -> str:
                 lines.append(f"    {spec.extends} <|-- {type_name}")
         for mixin_name in spec.mixins:
             lines.append(f"    {type_name} ..|> {mixin_name} : mixin")
+        for members in spec.composite_keys:
+            lines.append(f"    %% {type_name} composite key ({', '.join(members)})")
     for relation_name, relation in sorted(model.relations.items()):
         label = _cardinality_label(relation.cardinality)
         lines.append(
             f'    {relation.source} "1" --> "{label}" {relation.target} : {relation_name}',
         )
+        for qualified in relation.qualified:
+            lines.append(f"    %% {relation_name}: {_cardinality_label(qualified.cardinality)} "
+                         f"of target type {qualified.on_class}")
+        if relation.properties:
+            attrs = ", ".join(f"{name}: {prop.datatype}" for name, prop in sorted(relation.properties.items()))
+            lines.append(f"    %% {relation_name} attributes: {attrs}")
     return "\n".join(lines) + "\n"

@@ -11,7 +11,10 @@ from pathlib import Path
 from typing import Literal
 
 from graphrag.semantic_model.erd import render_erd_mermaid
-from graphrag.semantic_model.models import PropertySpec, SemanticModel, SemanticModelError, load_model
+from graphrag.semantic_model.gql import render_gql
+from graphrag.semantic_model.models import (
+    PropertySpec, SemanticModel, SemanticModelError, load_model, statement_class,
+)
 
 _XSD = {
     "string": "xsd:string", "integer": "xsd:integer", "decimal": "xsd:decimal",
@@ -24,6 +27,7 @@ class Target(str, Enum):
     OWL = "owl"
     SHACL = "shacl"
     NEO4J = "neo4j"
+    GQL = "gql"
 
 
 class Capability(str, Enum):
@@ -51,7 +55,17 @@ TARGET_CAPABILITIES: dict[Target, frozenset[Capability]] = {
         Capability.CLOSED_WORLD_VALIDATION,
     }),
     Target.NEO4J: frozenset({Capability.UNIQUE_KEYS}),
+    # ISO GQL graph types: node and edge types with typed properties. No
+    # cardinality, key or deprecation constraints (see gql.py).
+    Target.GQL: frozenset({Capability.CLASSES, Capability.PROPERTIES, Capability.DATATYPES}),
 }
+
+
+def target_capabilities(model: SemanticModel) -> dict[Target, frozenset[Capability]]:
+    """Capabilities of the targets this model actually compiles to (GQL only
+    when the model configures a GQL artifact), so models that do not opt in
+    keep byte-identical artifacts."""
+    return {t: c for t, c in TARGET_CAPABILITIES.items() if t != Target.GQL or model.artifacts.gql}
 
 
 @dataclass(frozen=True)
@@ -65,6 +79,36 @@ class Diagnostic:
     message: str
     fidelity: Literal["preserved", "approximated", "unenforceable"]
     runtime_control: str | None = None
+    # Typed target outcome, derived from fidelity and the compensating control
+    # (see `_outcome`); `fidelity` stays for existing consumers.
+    outcome: str = ""
+
+    def __post_init__(self) -> None:
+        if not self.outcome:
+            object.__setattr__(self, "outcome", _outcome(self))
+
+
+OUTCOMES = ("enforced", "translated", "runtime-mitigated", "warning", "unsupported")
+
+
+def _outcome(item: "Diagnostic") -> str:
+    """What the target does with a rule it cannot enforce natively.
+
+    * ``warning``: the semantics are carried but not enforced (open-world
+      OWL cardinality); another target is the gate.
+    * ``runtime-mitigated``: not enforced by the target; a named runtime
+      control compensates.
+    * ``translated``: converted to the closest construct (flattened, expanded
+      or reified), no enforcement lost silently.
+    * ``unsupported``: neither enforced nor compensated.
+    ``enforced`` never appears on a diagnostic (a loss report); it is the
+    positive outcome recorded in the capability matrix.
+    """
+    if item.fidelity == "preserved":
+        return "warning"
+    if item.runtime_control:
+        return "runtime-mitigated"
+    return "translated" if item.fidelity == "approximated" else "unsupported"
 
 
 @dataclass(frozen=True)
@@ -73,6 +117,7 @@ class Compilation:
     shacl: str
     neo4j: str
     diagnostics: tuple[Diagnostic, ...]
+    gql: str = ""
 
 
 def _prefixes(model: SemanticModel, *, shacl: bool = False) -> list[str]:
@@ -150,11 +195,24 @@ def _compile_owl(model: SemanticModel) -> str:
         if relation.replaced_by:
             parts.append(f"dcterms:isReplacedBy energy:{relation.replaced_by}")
         lines.append(f"energy:{name} " + " ; ".join(parts) + " .")
+    # Relationship attributes: OWL has no edge properties, so each relation that
+    # carries attributes gets a reification class holding them (rdf:Statement).
+    for name, relation in sorted(model.relations.items()):
+        if not relation.properties:
+            continue
+        cls = statement_class(name)
+        lines.append(f'energy:{cls} a owl:Class ; rdfs:subClassOf rdf:Statement ; '
+                     f'rdfs:label "{name} statement" .')
+        for attribute, prop in sorted(relation.properties.items()):
+            lines.append(f"energy:{attribute} a owl:DatatypeProperty ; rdfs:domain energy:{cls} ; "
+                         f"rdfs:range {_XSD[prop.datatype]} .")
     lines.append("")
     for type_name in sorted(model.types):
         keys = [name for name, prop in sorted(model.effective_properties(type_name).items()) if prop.key]
         if keys:
             lines.append(f"energy:{type_name} owl:hasKey ( {' '.join(f'energy:{key}' for key in keys)} ) .")
+        for members in model.composite_keys_for(type_name):
+            lines.append(f"energy:{type_name} owl:hasKey ( {' '.join(f'energy:{key}' for key in members)} ) .")
         for prop_name, prop in sorted(model.effective_properties(type_name).items()):
             for kind, value in _cardinality_terms(prop):
                 predicate = {"exact": "owl:cardinality", "min": "owl:minCardinality", "max": "owl:maxCardinality"}[kind]
@@ -164,6 +222,12 @@ def _compile_owl(model: SemanticModel) -> str:
             for kind, value in _cardinality_terms(card):
                 predicate = {"exact": "owl:cardinality", "min": "owl:minCardinality", "max": "owl:maxCardinality"}[kind]
                 lines.append(f"energy:{type_name} rdfs:subClassOf [ a owl:Restriction ; owl:onProperty energy:{relation_name} ; {predicate} \"{value}\"^^xsd:nonNegativeInteger ] .")
+            for qualified in relation.qualified:
+                card = PropertySpec(datatype="string", cardinality=qualified.cardinality)
+                for kind, value in _cardinality_terms(card):
+                    predicate = {"exact": "owl:qualifiedCardinality", "min": "owl:minQualifiedCardinality",
+                                 "max": "owl:maxQualifiedCardinality"}[kind]
+                    lines.append(f"energy:{type_name} rdfs:subClassOf [ a owl:Restriction ; owl:onProperty energy:{relation_name} ; owl:onClass energy:{qualified.on_class} ; {predicate} \"{value}\"^^xsd:nonNegativeInteger ] .")
     return "\n".join(lines).rstrip() + "\n"
 
 
@@ -186,9 +250,36 @@ def _compile_shacl(model: SemanticModel) -> str:
             if relation.cardinality.maximum is not None:
                 terms.append(f"sh:maxCount {relation.cardinality.maximum}")
             constraints.append("  sh:property [ " + " ; ".join(terms) + " ]")
+            for qualified in relation.qualified:
+                terms = [f"sh:path energy:{relation_name}",
+                         f"sh:qualifiedValueShape [ sh:class energy:{qualified.on_class} ]"]
+                if qualified.cardinality.minimum is not None:
+                    terms.append(f"sh:qualifiedMinCount {qualified.cardinality.minimum}")
+                if qualified.cardinality.maximum is not None:
+                    terms.append(f"sh:qualifiedMaxCount {qualified.cardinality.maximum}")
+                constraints.append("  sh:property [ " + " ; ".join(terms) + " ]")
         if constraints:
             lines.append(f"energy:{type_name}Shape a sh:NodeShape ; sh:targetClass energy:{type_name} ;")
             lines.append(" ;\n".join(constraints) + " .")
+    # Relationship attributes live on a reified statement: its endpoints keep
+    # the declared source and target types, its attributes keep their datatypes.
+    for relation_name, relation in sorted(model.relations.items()):
+        if not relation.properties:
+            continue
+        cls = statement_class(relation_name)
+        constraints = [
+            f"  sh:property [ sh:path rdf:subject ; sh:nodeKind sh:IRI ; sh:class energy:{relation.source} ; sh:minCount 1 ; sh:maxCount 1 ]",
+            f"  sh:property [ sh:path rdf:object ; sh:nodeKind sh:IRI ; sh:class energy:{relation.target} ; sh:minCount 1 ; sh:maxCount 1 ]",
+        ]
+        for attribute, prop in sorted(relation.properties.items()):
+            terms = [f"sh:path energy:{attribute}", f"sh:datatype {_XSD[prop.datatype]}"]
+            if prop.cardinality.minimum is not None:
+                terms.append(f"sh:minCount {prop.cardinality.minimum}")
+            if prop.cardinality.maximum is not None:
+                terms.append(f"sh:maxCount {prop.cardinality.maximum}")
+            constraints.append("  sh:property [ " + " ; ".join(terms) + " ]")
+        lines.append(f"energy:{cls}Shape a sh:NodeShape ; sh:targetClass energy:{cls} ;")
+        lines.append(" ;\n".join(constraints) + " .")
     return "\n".join(lines).rstrip() + "\n"
 
 
@@ -201,6 +292,10 @@ def _compile_neo4j(model: SemanticModel) -> str:
             if prop.key:
                 cname = f"energy_{label.lower()}_{prop_name.lower()}_unique"
                 lines.append(f"CREATE CONSTRAINT {cname} IF NOT EXISTS FOR (n:{label}) REQUIRE n.{prop_name} IS UNIQUE;")
+        for members in model.composite_keys_for(type_name):
+            cname = f"energy_{label.lower()}_{'_'.join(m.lower() for m in members)}_unique"
+            columns = ", ".join(f"n.{m}" for m in members)
+            lines.append(f"CREATE CONSTRAINT {cname} IF NOT EXISTS FOR (n:{label}) REQUIRE ({columns}) IS UNIQUE;")
     return "\n".join(lines).rstrip() + "\n"
 
 
@@ -280,6 +375,33 @@ def _diagnostics(model: SemanticModel) -> tuple[Diagnostic, ...]:
                 model.source_lines.get(name), name,
                 "OWL cardinality describes semantics under the open-world assumption; it does not reject a relation with too few instances.",
                 "preserved", "Use the generated SHACL shape as the closed-world publication gate."))
+    for name, spec in sorted(model.types.items()):
+        for members in spec.composite_keys:
+            result.append(Diagnostic("warning", "SHACL_COMPOSITE_KEY_RUNTIME", Target.SHACL, path,
+                model.source_lines.get(name), f"{name}({', '.join(members)})",
+                "SHACL Core cardinality does not enforce graph-wide uniqueness of a property combination.",
+                "unenforceable", "Enforce uniqueness in the selected persistence transaction."))
+    for name, relation in sorted(model.relations.items()):
+        line = model.source_lines.get(name)
+        for qualified in relation.qualified:
+            element = f"{name}[{qualified.on_class}]"
+            result.append(Diagnostic("warning", "NEO4J_QUALIFIED_CARDINALITY_RUNTIME", Target.NEO4J, path, line,
+                element, "Neo4j schema constraints cannot count relationships by target type.",
+                "unenforceable", "Check inside the same write transaction; application-only check-then-write can race."))
+            if qualified.cardinality.minimum:
+                result.append(Diagnostic("warning", "OWL_OPEN_WORLD_MINIMUM_QUALIFIED", Target.OWL, path, line,
+                    element, "OWL qualified cardinality describes semantics under the open-world assumption; "
+                    "it does not reject too few matching relations.", "preserved",
+                    "Use the generated SHACL shape as the closed-world publication gate."))
+        if relation.properties:
+            result.append(Diagnostic("info", "OWL_RELATION_PROPERTY_REIFIED", Target.OWL, path, line, name,
+                "OWL has no edge properties; attributes sit on a reified rdf:Statement class.", "approximated"))
+            result.append(Diagnostic("info", "SHACL_RELATION_PROPERTY_REIFIED", Target.SHACL, path, line, name,
+                "SHACL validates relation attributes on the reified statement, not on the edge itself.",
+                "approximated", "Materialise the statement node when exporting edge attributes to RDF."))
+            result.append(Diagnostic("warning", "NEO4J_RELATION_PROPERTY_RUNTIME", Target.NEO4J, path, line, name,
+                "Neo4j community schema constraints do not enforce relationship property presence or datatype.",
+                "unenforceable", "Validate relationship properties in the shared mutation validator."))
     if model.unknown_property_policy == "reject":
         result.append(Diagnostic("warning", "SHACL_UNKNOWN_PROPERTY_RUNTIME", Target.SHACL, path, None,
             "unknown_property_policy",
@@ -292,8 +414,48 @@ def _diagnostics(model: SemanticModel) -> tuple[Diagnostic, ...]:
     return tuple(result)
 
 
+def _gql_diagnostics(model: SemanticModel) -> tuple[Diagnostic, ...]:
+    """Losses specific to the GQL graph-type rendering (only when configured)."""
+    path = model.source_path.name if model.source_path else ""
+    result: list[Diagnostic] = []
+    for name, spec in sorted(model.types.items()):
+        line = model.source_lines.get(name)
+        if spec.extends:
+            result.append(Diagnostic("info", "GQL_INHERITANCE_FLATTENED", Target.GQL, path, line, name,
+                "The GQL rendering copies inherited properties onto each concrete node type; "
+                "the is-a relationship itself is not represented.", "approximated"))
+        if spec.mixins:
+            result.append(Diagnostic("info", "GQL_MIXIN_EXPANDED", Target.GQL, path, line, name,
+                "The GQL rendering copies mixin properties onto the concrete node type; "
+                "mixin identity is not represented.", "approximated"))
+        for prop_name, prop in sorted(model.effective_properties(name).items()):
+            if prop.key:
+                result.append(Diagnostic("warning", "GQL_KEY_UNSUPPORTED", Target.GQL, path,
+                    model.source_lines.get(prop_name), f"{name}.{prop_name}",
+                    "GQL graph types carry no key or uniqueness constraint.", "unenforceable",
+                    "Enforce uniqueness in the selected persistence transaction."))
+        for members in spec.composite_keys:
+            result.append(Diagnostic("warning", "GQL_COMPOSITE_KEY_UNSUPPORTED", Target.GQL, path, line,
+                f"{name}({', '.join(members)})",
+                "GQL graph types carry no key or uniqueness constraint.", "unenforceable",
+                "Enforce uniqueness in the selected persistence transaction."))
+    for name, relation in sorted(model.relations.items()):
+        bounded = (relation.cardinality.minimum is not None or relation.cardinality.maximum is not None)
+        if bounded:
+            result.append(Diagnostic("warning", "GQL_CARDINALITY_UNSUPPORTED", Target.GQL, path,
+                model.source_lines.get(name), name,
+                "GQL graph types carry no relationship cardinality.", "unenforceable",
+                "Check inside the same write transaction; application-only check-then-write can race."))
+    return tuple(result)
+
+
 def compile_model(model: SemanticModel) -> Compilation:
-    return Compilation(_compile_owl(model), _compile_shacl(model), _compile_neo4j(model), _diagnostics(model))
+    diagnostics = _diagnostics(model)
+    gql = ""
+    if model.artifacts.gql:
+        gql = render_gql(model)
+        diagnostics = (*diagnostics, *_gql_diagnostics(model))
+    return Compilation(_compile_owl(model), _compile_shacl(model), _compile_neo4j(model), diagnostics, gql)
 
 
 def _render_diagnostics_report(model: SemanticModel, compiled: Compilation) -> str:
@@ -316,21 +478,21 @@ def _render_diagnostics_report(model: SemanticModel, compiled: Compilation) -> s
         "| Target | Supported capabilities |",
         "| --- | --- |",
     ]
-    for target, capabilities in TARGET_CAPABILITIES.items():
+    for target, capabilities in target_capabilities(model).items():
         lines.append(f"| {target.value} | {', '.join(sorted(c.value for c in capabilities))} |")
     lines += [
         "",
         f"## Diagnostics ({len(compiled.diagnostics)})",
         "",
-        "| Severity | Target | Code | Element | Fidelity | Message | Mitigation | Location |",
-        "| --- | --- | --- | --- | --- | --- | --- | --- |",
+        "| Severity | Target | Code | Element | Fidelity | Outcome | Message | Mitigation | Location |",
+        "| --- | --- | --- | --- | --- | --- | --- | --- | --- |",
     ]
     for item in sorted(compiled.diagnostics, key=lambda d: (d.target.value, d.code, d.element)):
         location = f"{item.model_path}:{item.line}" if item.line else item.model_path
         mitigation = item.runtime_control or "—"
         lines.append(
             f"| {item.severity} | {item.target.value} | {item.code} | {item.element} | "
-            f"{item.fidelity} | {item.message} | {mitigation} | {location} |"
+            f"{item.fidelity} | {item.outcome} | {item.message} | {mitigation} | {location} |"
         )
     return "\n".join(lines).rstrip() + "\n"
 
@@ -339,7 +501,9 @@ def _outputs(model: SemanticModel, output_dir: Path | None) -> dict[str, Path]:
     if output_dir is not None:
         return {"owl": output_dir / "ontology.ttl", "shacl": output_dir / "shapes.ttl",
                 "neo4j": output_dir / "neo4j.cypher", "diagnostics": output_dir / "diagnostics.json",
-                "diagnostics_report": output_dir / "diagnostics.md", "erd": output_dir / "erd.mmd"}
+                "diagnostics_report": output_dir / "diagnostics.md", "erd": output_dir / "erd.mmd",
+                "capability_matrix": output_dir / "capability-matrix.json",
+                **({"gql": output_dir / "graph-type.gql"} if model.artifacts.gql else {})}
     assert model.source_path is not None
     root = model.source_path.parents[2]
     return {name: root / value for name, value in model.artifacts.model_dump().items() if value is not None}
@@ -372,13 +536,20 @@ def compile_to_disk(
                 "diagnostics": json.dumps({"model": model.id, "version": model.version,
                     "capabilities": {
                         target.value: sorted(capability.value for capability in capabilities)
-                        for target, capabilities in TARGET_CAPABILITIES.items()
+                        for target, capabilities in target_capabilities(model).items()
                     },
                     "diagnostics": [asdict(item) for item in compiled.diagnostics]}, indent=2, sort_keys=True) + "\n"}
     if "diagnostics_report" in paths:
         contents["diagnostics_report"] = _render_diagnostics_report(model, compiled)
     if "erd" in paths:
         contents["erd"] = render_erd_mermaid(model)
+    if "capability_matrix" in paths:
+        from graphrag.semantic_model.matrix import build_capability_matrix
+
+        contents["capability_matrix"] = json.dumps(build_capability_matrix(
+            model, compiled.diagnostics, tuple(target_capabilities(model))), indent=2, sort_keys=True) + "\n"
+    if "gql" in paths:
+        contents["gql"] = compiled.gql
     drift = [name for name, path in paths.items() if not path.exists() or path.read_text(encoding="utf-8") != contents[name]]
     if check:
         if drift:

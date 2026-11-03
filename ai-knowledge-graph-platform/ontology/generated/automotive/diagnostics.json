@@ -1,5 +1,10 @@
 {
   "capabilities": {
+    "gql": [
+      "classes",
+      "datatypes",
+      "properties"
+    ],
     "neo4j": [
       "unique_keys"
     ],
@@ -29,6 +34,7 @@
       "line": 87,
       "message": "The generated SHACL shape has no shape-inheritance link to the parent type; inherited properties are present but the is-a relationship itself is not represented.",
       "model_path": "automotive-iatf-quality.yaml",
+      "outcome": "runtime-mitigated",
       "runtime_control": "Preserve the type hierarchy through the canonical OWL export for lineage checks.",
       "severity": "info",
       "target": "shacl"
@@ -40,6 +46,7 @@
       "line": 87,
       "message": "Neo4j has no native label-hierarchy constraint; inherited properties are expanded onto the concrete label with no structural link back to the parent type.",
       "model_path": "automotive-iatf-quality.yaml",
+      "outcome": "runtime-mitigated",
       "runtime_control": "Preserve the type hierarchy through the canonical OWL export for lineage checks.",
       "severity": "info",
       "target": "neo4j"
@@ -51,6 +58,7 @@
       "line": 92,
       "message": "OWL cardinality describes semantics under the open-world assumption; it does not reject missing input data.",
       "model_path": "automotive-iatf-quality.yaml",
+      "outcome": "warning",
       "runtime_control": "Use the generated SHACL shape as the closed-world publication gate.",
       "severity": "warning",
       "target": "owl"
@@ -62,6 +70,7 @@
       "line": 92,
       "message": "Portable Neo4j community constraints cannot enforce this required property.",
       "model_path": "automotive-iatf-quality.yaml",
+      "outcome": "runtime-mitigated",
       "runtime_control": "Validate the property before the mutation and monitor out-of-band writes.",
       "severity": "warning",
       "target": "neo4j"
@@ -73,6 +82,7 @@
       "line": 92,
       "message": "Neo4j schema does not enforce the canonical string datatype for this property.",
       "model_path": "automotive-iatf-quality.yaml",
+      "outcome": "runtime-mitigated",
       "runtime_control": "Validate values in the shared mutation validator.",
       "severity": "warning",
       "target": "neo4j"
@@ -84,6 +94,7 @@
       "line": 98,
       "message": "Neo4j schema does not enforce the canonical dateTime datatype for this property.",
       "model_path": "automotive-iatf-quality.yaml",
+      "outcome": "runtime-mitigated",
       "runtime_control": "Validate values in the shared mutation validator.",
       "severity": "warning",
       "target": "neo4j"
@@ -95,6 +106,7 @@
       "line": 13,
       "message": "Neo4j schema does not enforce the canonical dateTime datatype for this property.",
       "model_path": "automotive-iatf-quality.yaml",
+      "outcome": "runtime-mitigated",
       "runtime_control": "Validate values in the shared mutation validator.",
       "severity": "warning",
       "target": "neo4j"
@@ -106,6 +118,7 @@
       "line": 100,
       "message": "Neo4j schema does not enforce the canonical string datatype for this property.",
       "model_path": "automotive-iatf-quality.yaml",
+      "outcome": "runtime-mitigated",
       "runtime_control": "Validate values in the shared mutation validator.",
       "severity": "warning",
       "target": "neo4j"
@@ -117,6 +130,7 @@
       "line": 96,
       "message": "Neo4j schema does not enforce the canonical dateTime datatype for this property.",
       "model_path": "automotive-iatf-quality.yaml",
+      "outcome": "runtime-mitigated",
       "runtime_control": "Validate values in the shared mutation validator.",
       "severity": "warning",
       "target": "neo4j"
@@ -128,6 +142,7 @@
       "line": 15,
       "message": "Neo4j schema does not enforce the canonical dateTime datatype for this property.",
       "model_path": "automotive-iatf-quality.yaml",
+      "outcome": "runtime-mitigated",
       "runtime_control": "Validate values in the shared mutation validator.",
       "severity": "warning",
       "target": "neo4j"
@@ -139,6 +154,7 @@
       "line": 119,
       "message": "Mixin properties are expanded onto the concrete label; mixin identity is not native Neo4j schema.",
       "model_path": "automotive-iatf-quality.yaml",
+      "outcome": "translated",
       "runtime_control": null,
       "severity": "info",
       "target": "neo4j"
@@ -150,6 +166,7 @@
       "line": 13,
       "message": "Neo4j schema does not enforce the canonical dateTime datatype for this property.",
       "model_path": "automotive-iatf-quality.yaml",
+      "outcome": "runtime-mitigated",
       "runtime_control": "Validate values in the shared mutation validator.",
       "severity": "warning",
       "target": "neo4j"
@@ -161,6 +178,7 @@
       "line": 11,
       "message": "Neo4j schema does not enforce the canonical string datatype for this property.",
       "model_path": "automotive-iatf-quality.yaml",
+      "outcome": "runtime-mitigated",
       "runtime_control": "Validate values in the shared mutation validator.",
       "severity": "warning",
       "target": "neo4j"
@@ -172,6 +190,7 @@
       "line": 124,
       "message": "OWL cardinality describes semantics under the open-world assumption; it does not reject missing input data.",
       "model_path": "automotive-iatf-quality.yaml",
+      "outcome": "warning",
       "runtime_control": "Use the generated SHACL shape as the closed-world publication gate.",
       "severity": "warning",
       "target": "owl"
@@ -183,6 +202,7 @@
       "line": 124,
       "message": "Neo4j schema does not enforce the canonical string datatype for this property.",
       "model_path": "automotive-iatf-quality.yaml",
+      "outcome": "runtime-mitigated",
       "runtime_control": "Validate values in the shared mutation validator.",
       "severity": "warning",
       "target": "neo4j"
@@ -194,6 +214,7 @@
       "line": 124,
       "message": "SHACL Core cardinality does not enforce graph-wide key uniqueness.",
       "model_path": "automotive-iatf-quality.yaml",
+      "outcome": "runtime-mitigated",
       "runtime_control": "Enforce uniqueness in the selected persistence transaction.",
       "severity": "warning",
       "target": "shacl"
@@ -205,6 +226,7 @@
       "line": 15,
       "message": "Neo4j schema does not enforce the canonical dateTime datatype for this property.",
       "model_path": "automotive-iatf-quality.yaml",
+      "outcome": "runtime-mitigated",
       "runtime_control": "Validate values in the shared mutation validator.",
       "severity": "warning",
       "target": "neo4j"
@@ -216,6 +238,7 @@
       "line": 38,
       "message": "The generated SHACL shape has no shape-inheritance link to the parent type; inherited properties are present but the is-a relationship itself is not represented.",
       "model_path": "automotive-iatf-quality.yaml",
+      "outcome": "runtime-mitigated",
       "runtime_control": "Preserve the type hierarchy through the canonical OWL export for lineage checks.",
       "severity": "info",
       "target": "shacl"
@@ -227,6 +250,7 @@
       "line": 38,
       "message": "Neo4j has no native label-hierarchy constraint; inherited properties are expanded onto the concrete label with no structural link back to the parent type.",
       "model_path": "automotive-iatf-quality.yaml",
+      "outcome": "runtime-mitigated",
       "runtime_control": "Preserve the type hierarchy through the canonical OWL export for lineage checks.",
       "severity": "info",
       "target": "neo4j"
@@ -238,6 +262,7 @@
       "line": 13,
       "message": "Neo4j schema does not enforce the canonical dateTime datatype for this property.",
       "model_path": "automotive-iatf-quality.yaml",
+      "outcome": "runtime-mitigated",
       "runtime_control": "Validate values in the shared mutation validator.",
       "severity": "warning",
       "target": "neo4j"
@@ -249,6 +274,7 @@
       "line": 15,
       "message": "Neo4j schema does not enforce the canonical dateTime datatype for this property.",
       "model_path": "automotive-iatf-quality.yaml",
+      "outcome": "runtime-mitigated",
       "runtime_control": "Validate values in the shared mutation validator.",
       "severity": "warning",
       "target": "neo4j"
@@ -260,6 +286,7 @@
       "line": 55,
       "message": "The generated SHACL shape has no shape-inheritance link to the parent type; inherited properties are present but the is-a relationship itself is not represented.",
       "model_path": "automotive-iatf-quality.yaml",
+      "outcome": "runtime-mitigated",
       "runtime_control": "Preserve the type hierarchy through the canonical OWL export for lineage checks.",
       "severity": "info",
       "target": "shacl"
@@ -271,6 +298,7 @@
       "line": 55,
       "message": "Neo4j has no native label-hierarchy constraint; inherited properties are expanded onto the concrete label with no structural link back to the parent type.",
       "model_path": "automotive-iatf-quality.yaml",
+      "outcome": "runtime-mitigated",
       "runtime_control": "Preserve the type hierarchy through the canonical OWL export for lineage checks.",
       "severity": "info",
       "target": "neo4j"
@@ -282,6 +310,7 @@
       "line": 13,
       "message": "Neo4j schema does not enforce the canonical dateTime datatype for this property.",
       "model_path": "automotive-iatf-quality.yaml",
+      "outcome": "runtime-mitigated",
       "runtime_control": "Validate values in the shared mutation validator.",
       "severity": "warning",
       "target": "neo4j"
@@ -293,6 +322,7 @@
       "line": 48,
       "message": "OWL cardinality describes semantics under the open-world assumption; it does not reject missing input data.",
       "model_path": "automotive-iatf-quality.yaml",
+      "outcome": "warning",
       "runtime_control": "Use the generated SHACL shape as the closed-world publication gate.",
       "severity": "warning",
       "target": "owl"
@@ -304,6 +334,7 @@
       "line": 48,
       "message": "Neo4j schema does not enforce the canonical string datatype for this property.",
       "model_path": "automotive-iatf-quality.yaml",
+      "outcome": "runtime-mitigated",
       "runtime_control": "Validate values in the shared mutation validator.",
       "severity": "warning",
       "target": "neo4j"
@@ -315,6 +346,7 @@
       "line": 48,
       "message": "SHACL Core cardinality does not enforce graph-wide key uniqueness.",
       "model_path": "automotive-iatf-quality.yaml",
+      "outcome": "runtime-mitigated",
       "runtime_control": "Enforce uniqueness in the selected persistence transaction.",
       "severity": "warning",
       "target": "shacl"
@@ -326,6 +358,7 @@
       "line": 52,
       "message": "Neo4j schema does not enforce the canonical integer datatype for this property.",
       "model_path": "automotive-iatf-quality.yaml",
+      "outcome": "runtime-mitigated",
       "runtime_control": "Validate values in the shared mutation validator.",
       "severity": "warning",
       "target": "neo4j"
@@ -337,6 +370,7 @@
       "line": 15,
       "message": "Neo4j schema does not enforce the canonical dateTime datatype for this property.",
       "model_path": "automotive-iatf-quality.yaml",
+      "outcome": "runtime-mitigated",
       "runtime_control": "Validate values in the shared mutation validator.",
       "severity": "warning",
       "target": "neo4j"
@@ -348,6 +382,7 @@
       "line": 67,
       "message": "The generated SHACL shape has no shape-inheritance link to the parent type; inherited properties are present but the is-a relationship itself is not represented.",
       "model_path": "automotive-iatf-quality.yaml",
+      "outcome": "runtime-mitigated",
       "runtime_control": "Preserve the type hierarchy through the canonical OWL export for lineage checks.",
       "severity": "info",
       "target": "shacl"
@@ -359,6 +394,7 @@
       "line": 67,
       "message": "Neo4j has no native label-hierarchy constraint; inherited properties are expanded onto the concrete label with no structural link back to the parent type.",
       "model_path": "automotive-iatf-quality.yaml",
+      "outcome": "runtime-mitigated",
       "runtime_control": "Preserve the type hierarchy through the canonical OWL export for lineage checks.",
       "severity": "info",
       "target": "neo4j"
@@ -370,6 +406,7 @@
       "line": 13,
       "message": "Neo4j schema does not enforce the canonical dateTime datatype for this property.",
       "model_path": "automotive-iatf-quality.yaml",
+      "outcome": "runtime-mitigated",
       "runtime_control": "Validate values in the shared mutation validator.",
       "severity": "warning",
       "target": "neo4j"
@@ -381,6 +418,7 @@
       "line": 48,
       "message": "OWL cardinality describes semantics under the open-world assumption; it does not reject missing input data.",
       "model_path": "automotive-iatf-quality.yaml",
+      "outcome": "warning",
       "runtime_control": "Use the generated SHACL shape as the closed-world publication gate.",
       "severity": "warning",
       "target": "owl"
@@ -392,6 +430,7 @@
       "line": 48,
       "message": "Neo4j schema does not enforce the canonical string datatype for this property.",
       "model_path": "automotive-iatf-quality.yaml",
+      "outcome": "runtime-mitigated",
       "runtime_control": "Validate values in the shared mutation validator.",
       "severity": "warning",
       "target": "neo4j"
@@ -403,6 +442,7 @@
       "line": 48,
       "message": "SHACL Core cardinality does not enforce graph-wide key uniqueness.",
       "model_path": "automotive-iatf-quality.yaml",
+      "outcome": "runtime-mitigated",
       "runtime_control": "Enforce uniqueness in the selected persistence transaction.",
       "severity": "warning",
       "target": "shacl"
@@ -414,6 +454,7 @@
       "line": 52,
       "message": "Neo4j schema does not enforce the canonical integer datatype for this property.",
       "model_path": "automotive-iatf-quality.yaml",
+      "outcome": "runtime-mitigated",
       "runtime_control": "Validate values in the shared mutation validator.",
       "severity": "warning",
       "target": "neo4j"
@@ -425,6 +466,7 @@
       "line": 15,
       "message": "Neo4j schema does not enforce the canonical dateTime datatype for this property.",
       "model_path": "automotive-iatf-quality.yaml",
+      "outcome": "runtime-mitigated",
       "runtime_control": "Validate values in the shared mutation validator.",
       "severity": "warning",
       "target": "neo4j"
@@ -436,6 +478,7 @@
       "line": 63,
       "message": "The generated SHACL shape has no shape-inheritance link to the parent type; inherited properties are present but the is-a relationship itself is not represented.",
       "model_path": "automotive-iatf-quality.yaml",
+      "outcome": "runtime-mitigated",
       "runtime_control": "Preserve the type hierarchy through the canonical OWL export for lineage checks.",
       "severity": "info",
       "target": "shacl"
@@ -447,6 +490,7 @@
       "line": 63,
       "message": "Neo4j has no native label-hierarchy constraint; inherited properties are expanded onto the concrete label with no structural link back to the parent type.",
       "model_path": "automotive-iatf-quality.yaml",
+      "outcome": "runtime-mitigated",
       "runtime_control": "Preserve the type hierarchy through the canonical OWL export for lineage checks.",
       "severity": "info",
       "target": "neo4j"
@@ -458,6 +502,7 @@
       "line": 13,
       "message": "Neo4j schema does not enforce the canonical dateTime datatype for this property.",
       "model_path": "automotive-iatf-quality.yaml",
+      "outcome": "runtime-mitigated",
       "runtime_control": "Validate values in the shared mutation validator.",
       "severity": "warning",
       "target": "neo4j"
@@ -469,6 +514,7 @@
       "line": 48,
       "message": "OWL cardinality describes semantics under the open-world assumption; it does not reject missing input data.",
       "model_path": "automotive-iatf-quality.yaml",
+      "outcome": "warning",
       "runtime_control": "Use the generated SHACL shape as the closed-world publication gate.",
       "severity": "warning",
       "target": "owl"
@@ -480,6 +526,7 @@
       "line": 48,
       "message": "Neo4j schema does not enforce the canonical string datatype for this property.",
       "model_path": "automotive-iatf-quality.yaml",
+      "outcome": "runtime-mitigated",
       "runtime_control": "Validate values in the shared mutation validator.",
       "severity": "warning",
       "target": "neo4j"
@@ -491,6 +538,7 @@
       "line": 48,
       "message": "SHACL Core cardinality does not enforce graph-wide key uniqueness.",
       "model_path": "automotive-iatf-quality.yaml",
+      "outcome": "runtime-mitigated",
       "runtime_control": "Enforce uniqueness in the selected persistence transaction.",
       "severity": "warning",
       "target": "shacl"
@@ -502,6 +550,7 @@
       "line": 52,
       "message": "Neo4j schema does not enforce the canonical integer datatype for this property.",
       "model_path": "automotive-iatf-quality.yaml",
+      "outcome": "runtime-mitigated",
       "runtime_control": "Validate values in the shared mutation validator.",
       "severity": "warning",
       "target": "neo4j"
@@ -513,6 +562,7 @@
       "line": 15,
       "message": "Neo4j schema does not enforce the canonical dateTime datatype for this property.",
       "model_path": "automotive-iatf-quality.yaml",
+      "outcome": "runtime-mitigated",
       "runtime_control": "Validate values in the shared mutation validator.",
       "severity": "warning",
       "target": "neo4j"
@@ -524,6 +574,7 @@
       "line": 130,
       "message": "Mixin properties are expanded onto the concrete label; mixin identity is not native Neo4j schema.",
       "model_path": "automotive-iatf-quality.yaml",
+      "outcome": "translated",
       "runtime_control": null,
       "severity": "info",
       "target": "neo4j"
@@ -535,6 +586,7 @@
       "line": 141,
       "message": "Neo4j schema does not enforce the canonical decimal datatype for this property.",
       "model_path": "automotive-iatf-quality.yaml",
+      "outcome": "runtime-mitigated",
       "runtime_control": "Validate values in the shared mutation validator.",
       "severity": "warning",
       "target": "neo4j"
@@ -546,6 +598,7 @@
       "line": 13,
       "message": "Neo4j schema does not enforce the canonical dateTime datatype for this property.",
       "model_path": "automotive-iatf-quality.yaml",
+      "outcome": "runtime-mitigated",
       "runtime_control": "Validate values in the shared mutation validator.",
       "severity": "warning",
       "target": "neo4j"
@@ -557,6 +610,7 @@
       "line": 135,
       "message": "OWL cardinality describes semantics under the open-world assumption; it does not reject missing input data.",
       "model_path": "automotive-iatf-quality.yaml",
+      "outcome": "warning",
       "runtime_control": "Use the generated SHACL shape as the closed-world publication gate.",
       "severity": "warning",
       "target": "owl"
@@ -568,6 +622,7 @@
       "line": 135,
       "message": "Neo4j schema does not enforce the canonical string datatype for this property.",
       "model_path": "automotive-iatf-quality.yaml",
+      "outcome": "runtime-mitigated",
       "runtime_control": "Validate values in the shared mutation validator.",
       "severity": "warning",
       "target": "neo4j"
@@ -579,6 +634,7 @@
       "line": 135,
       "message": "SHACL Core cardinality does not enforce graph-wide key uniqueness.",
       "model_path": "automotive-iatf-quality.yaml",
+      "outcome": "runtime-mitigated",
       "runtime_control": "Enforce uniqueness in the selected persistence transaction.",
       "severity": "warning",
       "target": "shacl"
@@ -590,6 +646,7 @@
       "line": 139,
       "message": "Neo4j schema does not enforce the canonical decimal datatype for this property.",
       "model_path": "automotive-iatf-quality.yaml",
+      "outcome": "runtime-mitigated",
       "runtime_control": "Validate values in the shared mutation validator.",
       "severity": "warning",
       "target": "neo4j"
@@ -601,6 +658,7 @@
       "line": 15,
       "message": "Neo4j schema does not enforce the canonical dateTime datatype for this property.",
       "model_path": "automotive-iatf-quality.yaml",
+      "outcome": "runtime-mitigated",
       "runtime_control": "Validate values in the shared mutation validator.",
       "severity": "warning",
       "target": "neo4j"
@@ -612,6 +670,7 @@
       "line": 103,
       "message": "The generated SHACL shape has no shape-inheritance link to the parent type; inherited properties are present but the is-a relationship itself is not represented.",
       "model_path": "automotive-iatf-quality.yaml",
+      "outcome": "runtime-mitigated",
       "runtime_control": "Preserve the type hierarchy through the canonical OWL export for lineage checks.",
       "severity": "info",
       "target": "shacl"
@@ -623,6 +682,7 @@
       "line": 103,
       "message": "Neo4j has no native label-hierarchy constraint; inherited properties are expanded onto the concrete label with no structural link back to the parent type.",
       "model_path": "automotive-iatf-quality.yaml",
+      "outcome": "runtime-mitigated",
       "runtime_control": "Preserve the type hierarchy through the canonical OWL export for lineage checks.",
       "severity": "info",
       "target": "neo4j"
@@ -634,6 +694,7 @@
       "line": 116,
       "message": "Neo4j schema does not enforce the canonical dateTime datatype for this property.",
       "model_path": "automotive-iatf-quality.yaml",
+      "outcome": "runtime-mitigated",
       "runtime_control": "Validate values in the shared mutation validator.",
       "severity": "warning",
       "target": "neo4j"
@@ -645,6 +706,7 @@
       "line": 114,
       "message": "Neo4j schema does not enforce the canonical string datatype for this property.",
       "model_path": "automotive-iatf-quality.yaml",
+      "outcome": "runtime-mitigated",
       "runtime_control": "Validate values in the shared mutation validator.",
       "severity": "warning",
       "target": "neo4j"
@@ -656,6 +718,7 @@
       "line": 13,
       "message": "Neo4j schema does not enforce the canonical dateTime datatype for this property.",
       "model_path": "automotive-iatf-quality.yaml",
+      "outcome": "runtime-mitigated",
       "runtime_control": "Validate values in the shared mutation validator.",
       "severity": "warning",
       "target": "neo4j"
@@ -667,6 +730,7 @@
       "line": 111,
       "message": "Neo4j schema does not enforce the canonical string datatype for this property.",
       "model_path": "automotive-iatf-quality.yaml",
+      "outcome": "runtime-mitigated",
       "runtime_control": "Validate values in the shared mutation validator.",
       "severity": "warning",
       "target": "neo4j"
@@ -678,6 +742,7 @@
       "line": 108,
       "message": "Neo4j schema does not enforce the canonical string datatype for this property.",
       "model_path": "automotive-iatf-quality.yaml",
+      "outcome": "runtime-mitigated",
       "runtime_control": "Validate values in the shared mutation validator.",
       "severity": "warning",
       "target": "neo4j"
@@ -689,6 +754,7 @@
       "line": 15,
       "message": "Neo4j schema does not enforce the canonical dateTime datatype for this property.",
       "model_path": "automotive-iatf-quality.yaml",
+      "outcome": "runtime-mitigated",
       "runtime_control": "Validate values in the shared mutation validator.",
       "severity": "warning",
       "target": "neo4j"
@@ -700,6 +766,7 @@
       "line": 18,
       "message": "OWL has no native abstract-class constraint that forbids direct instances.",
       "model_path": "automotive-iatf-quality.yaml",
+      "outcome": "runtime-mitigated",
       "runtime_control": "Reject direct instances at the governed mutation or publication boundary.",
       "severity": "warning",
       "target": "owl"
@@ -711,6 +778,7 @@
       "line": 18,
       "message": "The generated SHACL Core shape does not forbid direct instances of an abstract class.",
       "model_path": "automotive-iatf-quality.yaml",
+      "outcome": "runtime-mitigated",
       "runtime_control": "Reject abstract classes in the governed mutation validator.",
       "severity": "warning",
       "target": "shacl"
@@ -722,6 +790,7 @@
       "line": 18,
       "message": "Neo4j labels do not prevent direct instances of an abstract semantic type.",
       "model_path": "automotive-iatf-quality.yaml",
+      "outcome": "runtime-mitigated",
       "runtime_control": "Reject abstract labels in the mutation validator.",
       "severity": "warning",
       "target": "neo4j"
@@ -733,6 +802,7 @@
       "line": 18,
       "message": "Mixin properties are expanded onto the concrete label; mixin identity is not native Neo4j schema.",
       "model_path": "automotive-iatf-quality.yaml",
+      "outcome": "translated",
       "runtime_control": null,
       "severity": "info",
       "target": "neo4j"
@@ -744,6 +814,7 @@
       "line": 13,
       "message": "Neo4j schema does not enforce the canonical dateTime datatype for this property.",
       "model_path": "automotive-iatf-quality.yaml",
+      "outcome": "runtime-mitigated",
       "runtime_control": "Validate values in the shared mutation validator.",
       "severity": "warning",
       "target": "neo4j"
@@ -755,6 +826,7 @@
       "line": 15,
       "message": "Neo4j schema does not enforce the canonical dateTime datatype for this property.",
       "model_path": "automotive-iatf-quality.yaml",
+      "outcome": "runtime-mitigated",
       "runtime_control": "Validate values in the shared mutation validator.",
       "severity": "warning",
       "target": "neo4j"
@@ -766,6 +838,7 @@
       "line": 42,
       "message": "OWL has no native abstract-class constraint that forbids direct instances.",
       "model_path": "automotive-iatf-quality.yaml",
+      "outcome": "runtime-mitigated",
       "runtime_control": "Reject direct instances at the governed mutation or publication boundary.",
       "severity": "warning",
       "target": "owl"
@@ -777,6 +850,7 @@
       "line": 42,
       "message": "The generated SHACL Core shape does not forbid direct instances of an abstract class.",
       "model_path": "automotive-iatf-quality.yaml",
+      "outcome": "runtime-mitigated",
       "runtime_control": "Reject abstract classes in the governed mutation validator.",
       "severity": "warning",
       "target": "shacl"
@@ -788,6 +862,7 @@
       "line": 42,
       "message": "Neo4j labels do not prevent direct instances of an abstract semantic type.",
       "model_path": "automotive-iatf-quality.yaml",
+      "outcome": "runtime-mitigated",
       "runtime_control": "Reject abstract labels in the mutation validator.",
       "severity": "warning",
       "target": "neo4j"
@@ -799,6 +874,7 @@
       "line": 42,
       "message": "Mixin properties are expanded onto the concrete label; mixin identity is not native Neo4j schema.",
       "model_path": "automotive-iatf-quality.yaml",
+      "outcome": "translated",
       "runtime_control": null,
       "severity": "info",
       "target": "neo4j"
@@ -810,6 +886,7 @@
       "line": 13,
       "message": "Neo4j schema does not enforce the canonical dateTime datatype for this property.",
       "model_path": "automotive-iatf-quality.yaml",
+      "outcome": "runtime-mitigated",
       "runtime_control": "Validate values in the shared mutation validator.",
       "severity": "warning",
       "target": "neo4j"
@@ -821,6 +898,7 @@
       "line": 48,
       "message": "OWL cardinality describes semantics under the open-world assumption; it does not reject missing input data.",
       "model_path": "automotive-iatf-quality.yaml",
+      "outcome": "warning",
       "runtime_control": "Use the generated SHACL shape as the closed-world publication gate.",
       "severity": "warning",
       "target": "owl"
@@ -832,6 +910,7 @@
       "line": 48,
       "message": "Neo4j schema does not enforce the canonical string datatype for this property.",
       "model_path": "automotive-iatf-quality.yaml",
+      "outcome": "runtime-mitigated",
       "runtime_control": "Validate values in the shared mutation validator.",
       "severity": "warning",
       "target": "neo4j"
@@ -843,6 +922,7 @@
       "line": 48,
       "message": "SHACL Core cardinality does not enforce graph-wide key uniqueness.",
       "model_path": "automotive-iatf-quality.yaml",
+      "outcome": "runtime-mitigated",
       "runtime_control": "Enforce uniqueness in the selected persistence transaction.",
       "severity": "warning",
       "target": "shacl"
@@ -854,6 +934,7 @@
       "line": 52,
       "message": "Neo4j schema does not enforce the canonical integer datatype for this property.",
       "model_path": "automotive-iatf-quality.yaml",
+      "outcome": "runtime-mitigated",
       "runtime_control": "Validate values in the shared mutation validator.",
       "severity": "warning",
       "target": "neo4j"
@@ -865,6 +946,7 @@
       "line": 15,
       "message": "Neo4j schema does not enforce the canonical dateTime datatype for this property.",
       "model_path": "automotive-iatf-quality.yaml",
+      "outcome": "runtime-mitigated",
       "runtime_control": "Validate values in the shared mutation validator.",
       "severity": "warning",
       "target": "neo4j"
@@ -876,6 +958,7 @@
       "line": 59,
       "message": "The generated SHACL shape has no shape-inheritance link to the parent type; inherited properties are present but the is-a relationship itself is not represented.",
       "model_path": "automotive-iatf-quality.yaml",
+      "outcome": "runtime-mitigated",
       "runtime_control": "Preserve the type hierarchy through the canonical OWL export for lineage checks.",
       "severity": "info",
       "target": "shacl"
@@ -887,6 +970,7 @@
       "line": 59,
       "message": "Neo4j has no native label-hierarchy constraint; inherited properties are expanded onto the concrete label with no structural link back to the parent type.",
       "model_path": "automotive-iatf-quality.yaml",
+      "outcome": "runtime-mitigated",
       "runtime_control": "Preserve the type hierarchy through the canonical OWL export for lineage checks.",
       "severity": "info",
       "target": "neo4j"
@@ -898,6 +982,7 @@
       "line": 13,
       "message": "Neo4j schema does not enforce the canonical dateTime datatype for this property.",
       "model_path": "automotive-iatf-quality.yaml",
+      "outcome": "runtime-mitigated",
       "runtime_control": "Validate values in the shared mutation validator.",
       "severity": "warning",
       "target": "neo4j"
@@ -909,6 +994,7 @@
       "line": 48,
       "message": "OWL cardinality describes semantics under the open-world assumption; it does not reject missing input data.",
       "model_path": "automotive-iatf-quality.yaml",
+      "outcome": "warning",
       "runtime_control": "Use the generated SHACL shape as the closed-world publication gate.",
       "severity": "warning",
       "target": "owl"
@@ -920,6 +1006,7 @@
       "line": 48,
       "message": "Neo4j schema does not enforce the canonical string datatype for this property.",
       "model_path": "automotive-iatf-quality.yaml",
+      "outcome": "runtime-mitigated",
       "runtime_control": "Validate values in the shared mutation validator.",
       "severity": "warning",
       "target": "neo4j"
@@ -931,6 +1018,7 @@
       "line": 48,
       "message": "SHACL Core cardinality does not enforce graph-wide key uniqueness.",
       "model_path": "automotive-iatf-quality.yaml",
+      "outcome": "runtime-mitigated",
       "runtime_control": "Enforce uniqueness in the selected persistence transaction.",
       "severity": "warning",
       "target": "shacl"
@@ -942,6 +1030,7 @@
       "line": 52,
       "message": "Neo4j schema does not enforce the canonical integer datatype for this property.",
       "model_path": "automotive-iatf-quality.yaml",
+      "outcome": "runtime-mitigated",
       "runtime_control": "Validate values in the shared mutation validator.",
       "severity": "warning",
       "target": "neo4j"
@@ -953,6 +1042,7 @@
       "line": 15,
       "message": "Neo4j schema does not enforce the canonical dateTime datatype for this property.",
       "model_path": "automotive-iatf-quality.yaml",
+      "outcome": "runtime-mitigated",
       "runtime_control": "Validate values in the shared mutation validator.",
       "severity": "warning",
       "target": "neo4j"
@@ -964,6 +1054,7 @@
       "line": 82,
       "message": "OWL has no native abstract-class constraint that forbids direct instances.",
       "model_path": "automotive-iatf-quality.yaml",
+      "outcome": "runtime-mitigated",
       "runtime_control": "Reject direct instances at the governed mutation or publication boundary.",
       "severity": "warning",
       "target": "owl"
@@ -975,6 +1066,7 @@
       "line": 82,
       "message": "The generated SHACL Core shape does not forbid direct instances of an abstract class.",
       "model_path": "automotive-iatf-quality.yaml",
+      "outcome": "runtime-mitigated",
       "runtime_control": "Reject abstract classes in the governed mutation validator.",
       "severity": "warning",
       "target": "shacl"
@@ -986,6 +1078,7 @@
       "line": 82,
       "message": "Neo4j labels do not prevent direct instances of an abstract semantic type.",
       "model_path": "automotive-iatf-quality.yaml",
+      "outcome": "runtime-mitigated",
       "runtime_control": "Reject abstract labels in the mutation validator.",
       "severity": "warning",
       "target": "neo4j"
@@ -997,6 +1090,7 @@
       "line": 82,
       "message": "Mixin properties are expanded onto the concrete label; mixin identity is not native Neo4j schema.",
       "model_path": "automotive-iatf-quality.yaml",
+      "outcome": "translated",
       "runtime_control": null,
       "severity": "info",
       "target": "neo4j"
@@ -1008,6 +1102,7 @@
       "line": 13,
       "message": "Neo4j schema does not enforce the canonical dateTime datatype for this property.",
       "model_path": "automotive-iatf-quality.yaml",
+      "outcome": "runtime-mitigated",
       "runtime_control": "Validate values in the shared mutation validator.",
       "severity": "warning",
       "target": "neo4j"
@@ -1019,6 +1114,7 @@
       "line": 15,
       "message": "Neo4j schema does not enforce the canonical dateTime datatype for this property.",
       "model_path": "automotive-iatf-quality.yaml",
+      "outcome": "runtime-mitigated",
       "runtime_control": "Validate values in the shared mutation validator.",
       "severity": "warning",
       "target": "neo4j"
@@ -1030,6 +1126,7 @@
       "line": 71,
       "message": "Mixin properties are expanded onto the concrete label; mixin identity is not native Neo4j schema.",
       "model_path": "automotive-iatf-quality.yaml",
+      "outcome": "translated",
       "runtime_control": null,
       "severity": "info",
       "target": "neo4j"
@@ -1041,6 +1138,7 @@
       "line": 13,
       "message": "Neo4j schema does not enforce the canonical dateTime datatype for this property.",
       "model_path": "automotive-iatf-quality.yaml",
+      "outcome": "runtime-mitigated",
       "runtime_control": "Validate values in the shared mutation validator.",
       "severity": "warning",
       "target": "neo4j"
@@ -1052,6 +1150,7 @@
       "line": 76,
       "message": "OWL cardinality describes semantics under the open-world assumption; it does not reject missing input data.",
       "model_path": "automotive-iatf-quality.yaml",
+      "outcome": "warning",
       "runtime_control": "Use the generated SHACL shape as the closed-world publication gate.",
       "severity": "warning",
       "target": "owl"
@@ -1063,6 +1162,7 @@
       "line": 76,
       "message": "Neo4j schema does not enforce the canonical string datatype for this property.",
       "model_path": "automotive-iatf-quality.yaml",
+      "outcome": "runtime-mitigated",
       "runtime_control": "Validate values in the shared mutation validator.",
       "severity": "warning",
       "target": "neo4j"
@@ -1074,6 +1174,7 @@
       "line": 76,
       "message": "SHACL Core cardinality does not enforce graph-wide key uniqueness.",
       "model_path": "automotive-iatf-quality.yaml",
+      "outcome": "runtime-mitigated",
       "runtime_control": "Enforce uniqueness in the selected persistence transaction.",
       "severity": "warning",
       "target": "shacl"
@@ -1085,6 +1186,7 @@
       "line": 80,
       "message": "Neo4j schema does not enforce the canonical string datatype for this property.",
       "model_path": "automotive-iatf-quality.yaml",
+      "outcome": "runtime-mitigated",
       "runtime_control": "Validate values in the shared mutation validator.",
       "severity": "warning",
       "target": "neo4j"
@@ -1096,6 +1198,7 @@
       "line": 15,
       "message": "Neo4j schema does not enforce the canonical dateTime datatype for this property.",
       "model_path": "automotive-iatf-quality.yaml",
+      "outcome": "runtime-mitigated",
       "runtime_control": "Validate values in the shared mutation validator.",
       "severity": "warning",
       "target": "neo4j"
@@ -1107,6 +1210,7 @@
       "line": 23,
       "message": "The generated SHACL shape has no shape-inheritance link to the parent type; inherited properties are present but the is-a relationship itself is not represented.",
       "model_path": "automotive-iatf-quality.yaml",
+      "outcome": "runtime-mitigated",
       "runtime_control": "Preserve the type hierarchy through the canonical OWL export for lineage checks.",
       "severity": "info",
       "target": "shacl"
@@ -1118,6 +1222,7 @@
       "line": 23,
       "message": "Neo4j has no native label-hierarchy constraint; inherited properties are expanded onto the concrete label with no structural link back to the parent type.",
       "model_path": "automotive-iatf-quality.yaml",
+      "outcome": "runtime-mitigated",
       "runtime_control": "Preserve the type hierarchy through the canonical OWL export for lineage checks.",
       "severity": "info",
       "target": "neo4j"
@@ -1129,6 +1234,7 @@
       "line": 32,
       "message": "Neo4j schema does not enforce the canonical string datatype for this property.",
       "model_path": "automotive-iatf-quality.yaml",
+      "outcome": "runtime-mitigated",
       "runtime_control": "Validate values in the shared mutation validator.",
       "severity": "warning",
       "target": "neo4j"
@@ -1140,6 +1246,7 @@
       "line": 13,
       "message": "Neo4j schema does not enforce the canonical dateTime datatype for this property.",
       "model_path": "automotive-iatf-quality.yaml",
+      "outcome": "runtime-mitigated",
       "runtime_control": "Validate values in the shared mutation validator.",
       "severity": "warning",
       "target": "neo4j"
@@ -1151,6 +1258,7 @@
       "line": 35,
       "message": "Neo4j schema does not enforce the canonical integer datatype for this property.",
       "model_path": "automotive-iatf-quality.yaml",
+      "outcome": "runtime-mitigated",
       "runtime_control": "Validate values in the shared mutation validator.",
       "severity": "warning",
       "target": "neo4j"
@@ -1162,6 +1270,7 @@
       "line": 28,
       "message": "OWL cardinality describes semantics under the open-world assumption; it does not reject missing input data.",
       "model_path": "automotive-iatf-quality.yaml",
+      "outcome": "warning",
       "runtime_control": "Use the generated SHACL shape as the closed-world publication gate.",
       "severity": "warning",
       "target": "owl"
@@ -1173,6 +1282,7 @@
       "line": 28,
       "message": "Neo4j schema does not enforce the canonical string datatype for this property.",
       "model_path": "automotive-iatf-quality.yaml",
+      "outcome": "runtime-mitigated",
       "runtime_control": "Validate values in the shared mutation validator.",
       "severity": "warning",
       "target": "neo4j"
@@ -1184,6 +1294,7 @@
       "line": 28,
       "message": "SHACL Core cardinality does not enforce graph-wide key uniqueness.",
       "model_path": "automotive-iatf-quality.yaml",
+      "outcome": "runtime-mitigated",
       "runtime_control": "Enforce uniqueness in the selected persistence transaction.",
       "severity": "warning",
       "target": "shacl"
@@ -1195,6 +1306,7 @@
       "line": 15,
       "message": "Neo4j schema does not enforce the canonical dateTime datatype for this property.",
       "model_path": "automotive-iatf-quality.yaml",
+      "outcome": "runtime-mitigated",
       "runtime_control": "Validate values in the shared mutation validator.",
       "severity": "warning",
       "target": "neo4j"
@@ -1206,6 +1318,7 @@
       "line": 168,
       "message": "Neo4j schema constraints do not enforce inherited relation source and target types.",
       "model_path": "automotive-iatf-quality.yaml",
+      "outcome": "runtime-mitigated",
       "runtime_control": "Validate relation endpoints in the shared mutation validator.",
       "severity": "warning",
       "target": "neo4j"
@@ -1217,6 +1330,7 @@
       "line": 152,
       "message": "Neo4j schema constraints do not enforce inherited relation source and target types.",
       "model_path": "automotive-iatf-quality.yaml",
+      "outcome": "runtime-mitigated",
       "runtime_control": "Validate relation endpoints in the shared mutation validator.",
       "severity": "warning",
       "target": "neo4j"
@@ -1228,6 +1342,7 @@
       "line": 164,
       "message": "Neo4j schema constraints do not enforce inherited relation source and target types.",
       "model_path": "automotive-iatf-quality.yaml",
+      "outcome": "runtime-mitigated",
       "runtime_control": "Validate relation endpoints in the shared mutation validator.",
       "severity": "warning",
       "target": "neo4j"
@@ -1239,6 +1354,7 @@
       "line": 184,
       "message": "Neo4j schema constraints do not enforce inherited relation source and target types.",
       "model_path": "automotive-iatf-quality.yaml",
+      "outcome": "runtime-mitigated",
       "runtime_control": "Validate relation endpoints in the shared mutation validator.",
       "severity": "warning",
       "target": "neo4j"
@@ -1250,6 +1366,7 @@
       "line": 156,
       "message": "Neo4j schema constraints do not enforce inherited relation source and target types.",
       "model_path": "automotive-iatf-quality.yaml",
+      "outcome": "runtime-mitigated",
       "runtime_control": "Validate relation endpoints in the shared mutation validator.",
       "severity": "warning",
       "target": "neo4j"
@@ -1261,6 +1378,7 @@
       "line": 160,
       "message": "Neo4j schema constraints do not enforce inherited relation source and target types.",
       "model_path": "automotive-iatf-quality.yaml",
+      "outcome": "runtime-mitigated",
       "runtime_control": "Validate relation endpoints in the shared mutation validator.",
       "severity": "warning",
       "target": "neo4j"
@@ -1272,6 +1390,7 @@
       "line": 180,
       "message": "Neo4j schema constraints do not enforce inherited relation source and target types.",
       "model_path": "automotive-iatf-quality.yaml",
+      "outcome": "runtime-mitigated",
       "runtime_control": "Validate relation endpoints in the shared mutation validator.",
       "severity": "warning",
       "target": "neo4j"
@@ -1283,6 +1402,7 @@
       "line": 172,
       "message": "Neo4j schema constraints do not enforce inherited relation source and target types.",
       "model_path": "automotive-iatf-quality.yaml",
+      "outcome": "runtime-mitigated",
       "runtime_control": "Validate relation endpoints in the shared mutation validator.",
       "severity": "warning",
       "target": "neo4j"
@@ -1294,6 +1414,7 @@
       "line": 148,
       "message": "Neo4j schema constraints do not enforce inherited relation source and target types.",
       "model_path": "automotive-iatf-quality.yaml",
+      "outcome": "runtime-mitigated",
       "runtime_control": "Validate relation endpoints in the shared mutation validator.",
       "severity": "warning",
       "target": "neo4j"
@@ -1305,6 +1426,7 @@
       "line": 176,
       "message": "Neo4j schema constraints do not enforce inherited relation source and target types.",
       "model_path": "automotive-iatf-quality.yaml",
+      "outcome": "runtime-mitigated",
       "runtime_control": "Validate relation endpoints in the shared mutation validator.",
       "severity": "warning",
       "target": "neo4j"
@@ -1316,6 +1438,7 @@
       "line": 144,
       "message": "Neo4j schema constraints do not enforce inherited relation source and target types.",
       "model_path": "automotive-iatf-quality.yaml",
+      "outcome": "runtime-mitigated",
       "runtime_control": "Validate relation endpoints in the shared mutation validator.",
       "severity": "warning",
       "target": "neo4j"
@@ -1327,6 +1450,7 @@
       "line": null,
       "message": "Generated shapes remain open to preserve existing RDF metadata and do not reject every undeclared predicate.",
       "model_path": "automotive-iatf-quality.yaml",
+      "outcome": "runtime-mitigated",
       "runtime_control": "Reject unknown LPG properties in the shared mutation validator; use curated closed SHACL shapes where required.",
       "severity": "warning",
       "target": "shacl"
@@ -1338,9 +1462,286 @@
       "line": null,
       "message": "Neo4j has no schema-level closed-world constraint; nothing rejects an undeclared property written onto a node.",
       "model_path": "automotive-iatf-quality.yaml",
+      "outcome": "runtime-mitigated",
       "runtime_control": "Reject unknown LPG properties in the shared mutation validator.",
       "severity": "warning",
       "target": "neo4j"
+    },
+    {
+      "code": "GQL_INHERITANCE_FLATTENED",
+      "element": "Audit",
+      "fidelity": "approximated",
+      "line": 87,
+      "message": "The GQL rendering copies inherited properties onto each concrete node type; the is-a relationship itself is not represented.",
+      "model_path": "automotive-iatf-quality.yaml",
+      "outcome": "translated",
+      "runtime_control": null,
+      "severity": "info",
+      "target": "gql"
+    },
+    {
+      "code": "GQL_MIXIN_EXPANDED",
+      "element": "AutomotiveComponent",
+      "fidelity": "approximated",
+      "line": 119,
+      "message": "The GQL rendering copies mixin properties onto the concrete node type; mixin identity is not represented.",
+      "model_path": "automotive-iatf-quality.yaml",
+      "outcome": "translated",
+      "runtime_control": null,
+      "severity": "info",
+      "target": "gql"
+    },
+    {
+      "code": "GQL_KEY_UNSUPPORTED",
+      "element": "AutomotiveComponent.partNumber",
+      "fidelity": "unenforceable",
+      "line": 124,
+      "message": "GQL graph types carry no key or uniqueness constraint.",
+      "model_path": "automotive-iatf-quality.yaml",
+      "outcome": "runtime-mitigated",
+      "runtime_control": "Enforce uniqueness in the selected persistence transaction.",
+      "severity": "warning",
+      "target": "gql"
+    },
+    {
+      "code": "GQL_INHERITANCE_FLATTENED",
+      "element": "ClientOrg",
+      "fidelity": "approximated",
+      "line": 38,
+      "message": "The GQL rendering copies inherited properties onto each concrete node type; the is-a relationship itself is not represented.",
+      "model_path": "automotive-iatf-quality.yaml",
+      "outcome": "translated",
+      "runtime_control": null,
+      "severity": "info",
+      "target": "gql"
+    },
+    {
+      "code": "GQL_INHERITANCE_FLATTENED",
+      "element": "ClientRequirement",
+      "fidelity": "approximated",
+      "line": 55,
+      "message": "The GQL rendering copies inherited properties onto each concrete node type; the is-a relationship itself is not represented.",
+      "model_path": "automotive-iatf-quality.yaml",
+      "outcome": "translated",
+      "runtime_control": null,
+      "severity": "info",
+      "target": "gql"
+    },
+    {
+      "code": "GQL_KEY_UNSUPPORTED",
+      "element": "ClientRequirement.documentId",
+      "fidelity": "unenforceable",
+      "line": 48,
+      "message": "GQL graph types carry no key or uniqueness constraint.",
+      "model_path": "automotive-iatf-quality.yaml",
+      "outcome": "runtime-mitigated",
+      "runtime_control": "Enforce uniqueness in the selected persistence transaction.",
+      "severity": "warning",
+      "target": "gql"
+    },
+    {
+      "code": "GQL_INHERITANCE_FLATTENED",
+      "element": "FormRecord",
+      "fidelity": "approximated",
+      "line": 67,
+      "message": "The GQL rendering copies inherited properties onto each concrete node type; the is-a relationship itself is not represented.",
+      "model_path": "automotive-iatf-quality.yaml",
+      "outcome": "translated",
+      "runtime_control": null,
+      "severity": "info",
+      "target": "gql"
+    },
+    {
+      "code": "GQL_KEY_UNSUPPORTED",
+      "element": "FormRecord.documentId",
+      "fidelity": "unenforceable",
+      "line": 48,
+      "message": "GQL graph types carry no key or uniqueness constraint.",
+      "model_path": "automotive-iatf-quality.yaml",
+      "outcome": "runtime-mitigated",
+      "runtime_control": "Enforce uniqueness in the selected persistence transaction.",
+      "severity": "warning",
+      "target": "gql"
+    },
+    {
+      "code": "GQL_INHERITANCE_FLATTENED",
+      "element": "InternalProcedure",
+      "fidelity": "approximated",
+      "line": 63,
+      "message": "The GQL rendering copies inherited properties onto each concrete node type; the is-a relationship itself is not represented.",
+      "model_path": "automotive-iatf-quality.yaml",
+      "outcome": "translated",
+      "runtime_control": null,
+      "severity": "info",
+      "target": "gql"
+    },
+    {
+      "code": "GQL_KEY_UNSUPPORTED",
+      "element": "InternalProcedure.documentId",
+      "fidelity": "unenforceable",
+      "line": 48,
+      "message": "GQL graph types carry no key or uniqueness constraint.",
+      "model_path": "automotive-iatf-quality.yaml",
+      "outcome": "runtime-mitigated",
+      "runtime_control": "Enforce uniqueness in the selected persistence transaction.",
+      "severity": "warning",
+      "target": "gql"
+    },
+    {
+      "code": "GQL_MIXIN_EXPANDED",
+      "element": "KPI",
+      "fidelity": "approximated",
+      "line": 130,
+      "message": "The GQL rendering copies mixin properties onto the concrete node type; mixin identity is not represented.",
+      "model_path": "automotive-iatf-quality.yaml",
+      "outcome": "translated",
+      "runtime_control": null,
+      "severity": "info",
+      "target": "gql"
+    },
+    {
+      "code": "GQL_KEY_UNSUPPORTED",
+      "element": "KPI.name",
+      "fidelity": "unenforceable",
+      "line": 135,
+      "message": "GQL graph types carry no key or uniqueness constraint.",
+      "model_path": "automotive-iatf-quality.yaml",
+      "outcome": "runtime-mitigated",
+      "runtime_control": "Enforce uniqueness in the selected persistence transaction.",
+      "severity": "warning",
+      "target": "gql"
+    },
+    {
+      "code": "GQL_INHERITANCE_FLATTENED",
+      "element": "Nonconformity",
+      "fidelity": "approximated",
+      "line": 103,
+      "message": "The GQL rendering copies inherited properties onto each concrete node type; the is-a relationship itself is not represented.",
+      "model_path": "automotive-iatf-quality.yaml",
+      "outcome": "translated",
+      "runtime_control": null,
+      "severity": "info",
+      "target": "gql"
+    },
+    {
+      "code": "GQL_MIXIN_EXPANDED",
+      "element": "Organization",
+      "fidelity": "approximated",
+      "line": 18,
+      "message": "The GQL rendering copies mixin properties onto the concrete node type; mixin identity is not represented.",
+      "model_path": "automotive-iatf-quality.yaml",
+      "outcome": "translated",
+      "runtime_control": null,
+      "severity": "info",
+      "target": "gql"
+    },
+    {
+      "code": "GQL_MIXIN_EXPANDED",
+      "element": "QualityDocument",
+      "fidelity": "approximated",
+      "line": 42,
+      "message": "The GQL rendering copies mixin properties onto the concrete node type; mixin identity is not represented.",
+      "model_path": "automotive-iatf-quality.yaml",
+      "outcome": "translated",
+      "runtime_control": null,
+      "severity": "info",
+      "target": "gql"
+    },
+    {
+      "code": "GQL_KEY_UNSUPPORTED",
+      "element": "QualityDocument.documentId",
+      "fidelity": "unenforceable",
+      "line": 48,
+      "message": "GQL graph types carry no key or uniqueness constraint.",
+      "model_path": "automotive-iatf-quality.yaml",
+      "outcome": "runtime-mitigated",
+      "runtime_control": "Enforce uniqueness in the selected persistence transaction.",
+      "severity": "warning",
+      "target": "gql"
+    },
+    {
+      "code": "GQL_INHERITANCE_FLATTENED",
+      "element": "QualityManual",
+      "fidelity": "approximated",
+      "line": 59,
+      "message": "The GQL rendering copies inherited properties onto each concrete node type; the is-a relationship itself is not represented.",
+      "model_path": "automotive-iatf-quality.yaml",
+      "outcome": "translated",
+      "runtime_control": null,
+      "severity": "info",
+      "target": "gql"
+    },
+    {
+      "code": "GQL_KEY_UNSUPPORTED",
+      "element": "QualityManual.documentId",
+      "fidelity": "unenforceable",
+      "line": 48,
+      "message": "GQL graph types carry no key or uniqueness constraint.",
+      "model_path": "automotive-iatf-quality.yaml",
+      "outcome": "runtime-mitigated",
+      "runtime_control": "Enforce uniqueness in the selected persistence transaction.",
+      "severity": "warning",
+      "target": "gql"
+    },
+    {
+      "code": "GQL_MIXIN_EXPANDED",
+      "element": "QualityProcess",
+      "fidelity": "approximated",
+      "line": 82,
+      "message": "The GQL rendering copies mixin properties onto the concrete node type; mixin identity is not represented.",
+      "model_path": "automotive-iatf-quality.yaml",
+      "outcome": "translated",
+      "runtime_control": null,
+      "severity": "info",
+      "target": "gql"
+    },
+    {
+      "code": "GQL_MIXIN_EXPANDED",
+      "element": "Standard",
+      "fidelity": "approximated",
+      "line": 71,
+      "message": "The GQL rendering copies mixin properties onto the concrete node type; mixin identity is not represented.",
+      "model_path": "automotive-iatf-quality.yaml",
+      "outcome": "translated",
+      "runtime_control": null,
+      "severity": "info",
+      "target": "gql"
+    },
+    {
+      "code": "GQL_KEY_UNSUPPORTED",
+      "element": "Standard.standardId",
+      "fidelity": "unenforceable",
+      "line": 76,
+      "message": "GQL graph types carry no key or uniqueness constraint.",
+      "model_path": "automotive-iatf-quality.yaml",
+      "outcome": "runtime-mitigated",
+      "runtime_control": "Enforce uniqueness in the selected persistence transaction.",
+      "severity": "warning",
+      "target": "gql"
+    },
+    {
+      "code": "GQL_INHERITANCE_FLATTENED",
+      "element": "Supplier",
+      "fidelity": "approximated",
+      "line": 23,
+      "message": "The GQL rendering copies inherited properties onto each concrete node type; the is-a relationship itself is not represented.",
+      "model_path": "automotive-iatf-quality.yaml",
+      "outcome": "translated",
+      "runtime_control": null,
+      "severity": "info",
+      "target": "gql"
+    },
+    {
+      "code": "GQL_KEY_UNSUPPORTED",
+      "element": "Supplier.supplierId",
+      "fidelity": "unenforceable",
+      "line": 28,
+      "message": "GQL graph types carry no key or uniqueness constraint.",
+      "model_path": "automotive-iatf-quality.yaml",
+      "outcome": "runtime-mitigated",
+      "runtime_control": "Enforce uniqueness in the selected persistence transaction.",
+      "severity": "warning",
+      "target": "gql"
     }
   ],
   "model": "automotive-iatf-quality",

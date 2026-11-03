@@ -1,0 +1,1957 @@
+{
+  "model": "automotive-iatf-quality",
+  "outcomes": [
+    "enforced",
+    "translated",
+    "runtime-mitigated",
+    "warning",
+    "unsupported"
+  ],
+  "rules": [
+    {
+      "element": "Audit",
+      "line": 87,
+      "outcomes": {
+        "gql": "enforced",
+        "neo4j": "translated",
+        "owl": "enforced",
+        "shacl": "enforced"
+      },
+      "rule": "class"
+    },
+    {
+      "element": "Audit",
+      "line": 87,
+      "outcomes": {
+        "gql": "translated",
+        "neo4j": "runtime-mitigated",
+        "owl": "enforced",
+        "shacl": "runtime-mitigated"
+      },
+      "rule": "inheritance"
+    },
+    {
+      "element": "Audit.auditorId",
+      "line": 92,
+      "outcomes": {
+        "gql": "enforced",
+        "neo4j": "runtime-mitigated",
+        "owl": "enforced",
+        "shacl": "enforced"
+      },
+      "rule": "property"
+    },
+    {
+      "element": "Audit.auditorId",
+      "line": 92,
+      "outcomes": {
+        "gql": "enforced",
+        "neo4j": "runtime-mitigated",
+        "owl": "enforced",
+        "shacl": "enforced"
+      },
+      "rule": "datatype"
+    },
+    {
+      "element": "Audit.auditorId",
+      "line": 92,
+      "outcomes": {
+        "gql": "enforced",
+        "neo4j": "runtime-mitigated",
+        "owl": "warning",
+        "shacl": "enforced"
+      },
+      "rule": "required"
+    },
+    {
+      "element": "Audit.completedAt",
+      "line": 98,
+      "outcomes": {
+        "gql": "enforced",
+        "neo4j": "runtime-mitigated",
+        "owl": "enforced",
+        "shacl": "enforced"
+      },
+      "rule": "property"
+    },
+    {
+      "element": "Audit.completedAt",
+      "line": 98,
+      "outcomes": {
+        "gql": "enforced",
+        "neo4j": "runtime-mitigated",
+        "owl": "enforced",
+        "shacl": "enforced"
+      },
+      "rule": "datatype"
+    },
+    {
+      "element": "Audit.createdAt",
+      "line": 13,
+      "outcomes": {
+        "gql": "enforced",
+        "neo4j": "runtime-mitigated",
+        "owl": "enforced",
+        "shacl": "enforced"
+      },
+      "rule": "property"
+    },
+    {
+      "element": "Audit.createdAt",
+      "line": 13,
+      "outcomes": {
+        "gql": "enforced",
+        "neo4j": "runtime-mitigated",
+        "owl": "enforced",
+        "shacl": "enforced"
+      },
+      "rule": "datatype"
+    },
+    {
+      "element": "Audit.outcome",
+      "line": 100,
+      "outcomes": {
+        "gql": "enforced",
+        "neo4j": "runtime-mitigated",
+        "owl": "enforced",
+        "shacl": "enforced"
+      },
+      "rule": "property"
+    },
+    {
+      "element": "Audit.outcome",
+      "line": 100,
+      "outcomes": {
+        "gql": "enforced",
+        "neo4j": "runtime-mitigated",
+        "owl": "enforced",
+        "shacl": "enforced"
+      },
+      "rule": "datatype"
+    },
+    {
+      "element": "Audit.scheduledAt",
+      "line": 96,
+      "outcomes": {
+        "gql": "enforced",
+        "neo4j": "runtime-mitigated",
+        "owl": "enforced",
+        "shacl": "enforced"
+      },
+      "rule": "property"
+    },
+    {
+      "element": "Audit.scheduledAt",
+      "line": 96,
+      "outcomes": {
+        "gql": "enforced",
+        "neo4j": "runtime-mitigated",
+        "owl": "enforced",
+        "shacl": "enforced"
+      },
+      "rule": "datatype"
+    },
+    {
+      "element": "Audit.updatedAt",
+      "line": 15,
+      "outcomes": {
+        "gql": "enforced",
+        "neo4j": "runtime-mitigated",
+        "owl": "enforced",
+        "shacl": "enforced"
+      },
+      "rule": "property"
+    },
+    {
+      "element": "Audit.updatedAt",
+      "line": 15,
+      "outcomes": {
+        "gql": "enforced",
+        "neo4j": "runtime-mitigated",
+        "owl": "enforced",
+        "shacl": "enforced"
+      },
+      "rule": "datatype"
+    },
+    {
+      "element": "AutomotiveComponent",
+      "line": 119,
+      "outcomes": {
+        "gql": "enforced",
+        "neo4j": "translated",
+        "owl": "enforced",
+        "shacl": "enforced"
+      },
+      "rule": "class"
+    },
+    {
+      "element": "AutomotiveComponent",
+      "line": 119,
+      "outcomes": {
+        "gql": "translated",
+        "neo4j": "translated",
+        "owl": "translated",
+        "shacl": "translated"
+      },
+      "rule": "mixin"
+    },
+    {
+      "element": "AutomotiveComponent.createdAt",
+      "line": 13,
+      "outcomes": {
+        "gql": "enforced",
+        "neo4j": "runtime-mitigated",
+        "owl": "enforced",
+        "shacl": "enforced"
+      },
+      "rule": "property"
+    },
+    {
+      "element": "AutomotiveComponent.createdAt",
+      "line": 13,
+      "outcomes": {
+        "gql": "enforced",
+        "neo4j": "runtime-mitigated",
+        "owl": "enforced",
+        "shacl": "enforced"
+      },
+      "rule": "datatype"
+    },
+    {
+      "element": "AutomotiveComponent.description",
+      "line": 11,
+      "outcomes": {
+        "gql": "enforced",
+        "neo4j": "runtime-mitigated",
+        "owl": "enforced",
+        "shacl": "enforced"
+      },
+      "rule": "property"
+    },
+    {
+      "element": "AutomotiveComponent.description",
+      "line": 11,
+      "outcomes": {
+        "gql": "enforced",
+        "neo4j": "runtime-mitigated",
+        "owl": "enforced",
+        "shacl": "enforced"
+      },
+      "rule": "datatype"
+    },
+    {
+      "element": "AutomotiveComponent.partNumber",
+      "line": 124,
+      "outcomes": {
+        "gql": "enforced",
+        "neo4j": "runtime-mitigated",
+        "owl": "enforced",
+        "shacl": "enforced"
+      },
+      "rule": "property"
+    },
+    {
+      "element": "AutomotiveComponent.partNumber",
+      "line": 124,
+      "outcomes": {
+        "gql": "enforced",
+        "neo4j": "runtime-mitigated",
+        "owl": "enforced",
+        "shacl": "enforced"
+      },
+      "rule": "datatype"
+    },
+    {
+      "element": "AutomotiveComponent.partNumber",
+      "line": 124,
+      "outcomes": {
+        "gql": "enforced",
+        "neo4j": "runtime-mitigated",
+        "owl": "warning",
+        "shacl": "enforced"
+      },
+      "rule": "required"
+    },
+    {
+      "element": "AutomotiveComponent.partNumber",
+      "line": 124,
+      "outcomes": {
+        "gql": "runtime-mitigated",
+        "neo4j": "enforced",
+        "owl": "warning",
+        "shacl": "runtime-mitigated"
+      },
+      "rule": "key"
+    },
+    {
+      "element": "AutomotiveComponent.updatedAt",
+      "line": 15,
+      "outcomes": {
+        "gql": "enforced",
+        "neo4j": "runtime-mitigated",
+        "owl": "enforced",
+        "shacl": "enforced"
+      },
+      "rule": "property"
+    },
+    {
+      "element": "AutomotiveComponent.updatedAt",
+      "line": 15,
+      "outcomes": {
+        "gql": "enforced",
+        "neo4j": "runtime-mitigated",
+        "owl": "enforced",
+        "shacl": "enforced"
+      },
+      "rule": "datatype"
+    },
+    {
+      "element": "ClientOrg",
+      "line": 38,
+      "outcomes": {
+        "gql": "enforced",
+        "neo4j": "translated",
+        "owl": "enforced",
+        "shacl": "enforced"
+      },
+      "rule": "class"
+    },
+    {
+      "element": "ClientOrg",
+      "line": 38,
+      "outcomes": {
+        "gql": "translated",
+        "neo4j": "runtime-mitigated",
+        "owl": "enforced",
+        "shacl": "runtime-mitigated"
+      },
+      "rule": "inheritance"
+    },
+    {
+      "element": "ClientOrg.createdAt",
+      "line": 13,
+      "outcomes": {
+        "gql": "enforced",
+        "neo4j": "runtime-mitigated",
+        "owl": "enforced",
+        "shacl": "enforced"
+      },
+      "rule": "property"
+    },
+    {
+      "element": "ClientOrg.createdAt",
+      "line": 13,
+      "outcomes": {
+        "gql": "enforced",
+        "neo4j": "runtime-mitigated",
+        "owl": "enforced",
+        "shacl": "enforced"
+      },
+      "rule": "datatype"
+    },
+    {
+      "element": "ClientOrg.updatedAt",
+      "line": 15,
+      "outcomes": {
+        "gql": "enforced",
+        "neo4j": "runtime-mitigated",
+        "owl": "enforced",
+        "shacl": "enforced"
+      },
+      "rule": "property"
+    },
+    {
+      "element": "ClientOrg.updatedAt",
+      "line": 15,
+      "outcomes": {
+        "gql": "enforced",
+        "neo4j": "runtime-mitigated",
+        "owl": "enforced",
+        "shacl": "enforced"
+      },
+      "rule": "datatype"
+    },
+    {
+      "element": "ClientRequirement",
+      "line": 55,
+      "outcomes": {
+        "gql": "enforced",
+        "neo4j": "translated",
+        "owl": "enforced",
+        "shacl": "enforced"
+      },
+      "rule": "class"
+    },
+    {
+      "element": "ClientRequirement",
+      "line": 55,
+      "outcomes": {
+        "gql": "translated",
+        "neo4j": "runtime-mitigated",
+        "owl": "enforced",
+        "shacl": "runtime-mitigated"
+      },
+      "rule": "inheritance"
+    },
+    {
+      "element": "ClientRequirement.createdAt",
+      "line": 13,
+      "outcomes": {
+        "gql": "enforced",
+        "neo4j": "runtime-mitigated",
+        "owl": "enforced",
+        "shacl": "enforced"
+      },
+      "rule": "property"
+    },
+    {
+      "element": "ClientRequirement.createdAt",
+      "line": 13,
+      "outcomes": {
+        "gql": "enforced",
+        "neo4j": "runtime-mitigated",
+        "owl": "enforced",
+        "shacl": "enforced"
+      },
+      "rule": "datatype"
+    },
+    {
+      "element": "ClientRequirement.documentId",
+      "line": 48,
+      "outcomes": {
+        "gql": "enforced",
+        "neo4j": "runtime-mitigated",
+        "owl": "enforced",
+        "shacl": "enforced"
+      },
+      "rule": "property"
+    },
+    {
+      "element": "ClientRequirement.documentId",
+      "line": 48,
+      "outcomes": {
+        "gql": "enforced",
+        "neo4j": "runtime-mitigated",
+        "owl": "enforced",
+        "shacl": "enforced"
+      },
+      "rule": "datatype"
+    },
+    {
+      "element": "ClientRequirement.documentId",
+      "line": 48,
+      "outcomes": {
+        "gql": "enforced",
+        "neo4j": "runtime-mitigated",
+        "owl": "warning",
+        "shacl": "enforced"
+      },
+      "rule": "required"
+    },
+    {
+      "element": "ClientRequirement.documentId",
+      "line": 48,
+      "outcomes": {
+        "gql": "runtime-mitigated",
+        "neo4j": "enforced",
+        "owl": "warning",
+        "shacl": "runtime-mitigated"
+      },
+      "rule": "key"
+    },
+    {
+      "element": "ClientRequirement.retentionPeriodYears",
+      "line": 52,
+      "outcomes": {
+        "gql": "enforced",
+        "neo4j": "runtime-mitigated",
+        "owl": "enforced",
+        "shacl": "enforced"
+      },
+      "rule": "property"
+    },
+    {
+      "element": "ClientRequirement.retentionPeriodYears",
+      "line": 52,
+      "outcomes": {
+        "gql": "enforced",
+        "neo4j": "runtime-mitigated",
+        "owl": "enforced",
+        "shacl": "enforced"
+      },
+      "rule": "datatype"
+    },
+    {
+      "element": "ClientRequirement.updatedAt",
+      "line": 15,
+      "outcomes": {
+        "gql": "enforced",
+        "neo4j": "runtime-mitigated",
+        "owl": "enforced",
+        "shacl": "enforced"
+      },
+      "rule": "property"
+    },
+    {
+      "element": "ClientRequirement.updatedAt",
+      "line": 15,
+      "outcomes": {
+        "gql": "enforced",
+        "neo4j": "runtime-mitigated",
+        "owl": "enforced",
+        "shacl": "enforced"
+      },
+      "rule": "datatype"
+    },
+    {
+      "element": "FormRecord",
+      "line": 67,
+      "outcomes": {
+        "gql": "enforced",
+        "neo4j": "translated",
+        "owl": "enforced",
+        "shacl": "enforced"
+      },
+      "rule": "class"
+    },
+    {
+      "element": "FormRecord",
+      "line": 67,
+      "outcomes": {
+        "gql": "translated",
+        "neo4j": "runtime-mitigated",
+        "owl": "enforced",
+        "shacl": "runtime-mitigated"
+      },
+      "rule": "inheritance"
+    },
+    {
+      "element": "FormRecord.createdAt",
+      "line": 13,
+      "outcomes": {
+        "gql": "enforced",
+        "neo4j": "runtime-mitigated",
+        "owl": "enforced",
+        "shacl": "enforced"
+      },
+      "rule": "property"
+    },
+    {
+      "element": "FormRecord.createdAt",
+      "line": 13,
+      "outcomes": {
+        "gql": "enforced",
+        "neo4j": "runtime-mitigated",
+        "owl": "enforced",
+        "shacl": "enforced"
+      },
+      "rule": "datatype"
+    },
+    {
+      "element": "FormRecord.documentId",
+      "line": 48,
+      "outcomes": {
+        "gql": "enforced",
+        "neo4j": "runtime-mitigated",
+        "owl": "enforced",
+        "shacl": "enforced"
+      },
+      "rule": "property"
+    },
+    {
+      "element": "FormRecord.documentId",
+      "line": 48,
+      "outcomes": {
+        "gql": "enforced",
+        "neo4j": "runtime-mitigated",
+        "owl": "enforced",
+        "shacl": "enforced"
+      },
+      "rule": "datatype"
+    },
+    {
+      "element": "FormRecord.documentId",
+      "line": 48,
+      "outcomes": {
+        "gql": "enforced",
+        "neo4j": "runtime-mitigated",
+        "owl": "warning",
+        "shacl": "enforced"
+      },
+      "rule": "required"
+    },
+    {
+      "element": "FormRecord.documentId",
+      "line": 48,
+      "outcomes": {
+        "gql": "runtime-mitigated",
+        "neo4j": "enforced",
+        "owl": "warning",
+        "shacl": "runtime-mitigated"
+      },
+      "rule": "key"
+    },
+    {
+      "element": "FormRecord.retentionPeriodYears",
+      "line": 52,
+      "outcomes": {
+        "gql": "enforced",
+        "neo4j": "runtime-mitigated",
+        "owl": "enforced",
+        "shacl": "enforced"
+      },
+      "rule": "property"
+    },
+    {
+      "element": "FormRecord.retentionPeriodYears",
+      "line": 52,
+      "outcomes": {
+        "gql": "enforced",
+        "neo4j": "runtime-mitigated",
+        "owl": "enforced",
+        "shacl": "enforced"
+      },
+      "rule": "datatype"
+    },
+    {
+      "element": "FormRecord.updatedAt",
+      "line": 15,
+      "outcomes": {
+        "gql": "enforced",
+        "neo4j": "runtime-mitigated",
+        "owl": "enforced",
+        "shacl": "enforced"
+      },
+      "rule": "property"
+    },
+    {
+      "element": "FormRecord.updatedAt",
+      "line": 15,
+      "outcomes": {
+        "gql": "enforced",
+        "neo4j": "runtime-mitigated",
+        "owl": "enforced",
+        "shacl": "enforced"
+      },
+      "rule": "datatype"
+    },
+    {
+      "element": "InternalProcedure",
+      "line": 63,
+      "outcomes": {
+        "gql": "enforced",
+        "neo4j": "translated",
+        "owl": "enforced",
+        "shacl": "enforced"
+      },
+      "rule": "class"
+    },
+    {
+      "element": "InternalProcedure",
+      "line": 63,
+      "outcomes": {
+        "gql": "translated",
+        "neo4j": "runtime-mitigated",
+        "owl": "enforced",
+        "shacl": "runtime-mitigated"
+      },
+      "rule": "inheritance"
+    },
+    {
+      "element": "InternalProcedure.createdAt",
+      "line": 13,
+      "outcomes": {
+        "gql": "enforced",
+        "neo4j": "runtime-mitigated",
+        "owl": "enforced",
+        "shacl": "enforced"
+      },
+      "rule": "property"
+    },
+    {
+      "element": "InternalProcedure.createdAt",
+      "line": 13,
+      "outcomes": {
+        "gql": "enforced",
+        "neo4j": "runtime-mitigated",
+        "owl": "enforced",
+        "shacl": "enforced"
+      },
+      "rule": "datatype"
+    },
+    {
+      "element": "InternalProcedure.documentId",
+      "line": 48,
+      "outcomes": {
+        "gql": "enforced",
+        "neo4j": "runtime-mitigated",
+        "owl": "enforced",
+        "shacl": "enforced"
+      },
+      "rule": "property"
+    },
+    {
+      "element": "InternalProcedure.documentId",
+      "line": 48,
+      "outcomes": {
+        "gql": "enforced",
+        "neo4j": "runtime-mitigated",
+        "owl": "enforced",
+        "shacl": "enforced"
+      },
+      "rule": "datatype"
+    },
+    {
+      "element": "InternalProcedure.documentId",
+      "line": 48,
+      "outcomes": {
+        "gql": "enforced",
+        "neo4j": "runtime-mitigated",
+        "owl": "warning",
+        "shacl": "enforced"
+      },
+      "rule": "required"
+    },
+    {
+      "element": "InternalProcedure.documentId",
+      "line": 48,
+      "outcomes": {
+        "gql": "runtime-mitigated",
+        "neo4j": "enforced",
+        "owl": "warning",
+        "shacl": "runtime-mitigated"
+      },
+      "rule": "key"
+    },
+    {
+      "element": "InternalProcedure.retentionPeriodYears",
+      "line": 52,
+      "outcomes": {
+        "gql": "enforced",
+        "neo4j": "runtime-mitigated",
+        "owl": "enforced",
+        "shacl": "enforced"
+      },
+      "rule": "property"
+    },
+    {
+      "element": "InternalProcedure.retentionPeriodYears",
+      "line": 52,
+      "outcomes": {
+        "gql": "enforced",
+        "neo4j": "runtime-mitigated",
+        "owl": "enforced",
+        "shacl": "enforced"
+      },
+      "rule": "datatype"
+    },
+    {
+      "element": "InternalProcedure.updatedAt",
+      "line": 15,
+      "outcomes": {
+        "gql": "enforced",
+        "neo4j": "runtime-mitigated",
+        "owl": "enforced",
+        "shacl": "enforced"
+      },
+      "rule": "property"
+    },
+    {
+      "element": "InternalProcedure.updatedAt",
+      "line": 15,
+      "outcomes": {
+        "gql": "enforced",
+        "neo4j": "runtime-mitigated",
+        "owl": "enforced",
+        "shacl": "enforced"
+      },
+      "rule": "datatype"
+    },
+    {
+      "element": "KPI",
+      "line": 130,
+      "outcomes": {
+        "gql": "enforced",
+        "neo4j": "translated",
+        "owl": "enforced",
+        "shacl": "enforced"
+      },
+      "rule": "class"
+    },
+    {
+      "element": "KPI",
+      "line": 130,
+      "outcomes": {
+        "gql": "translated",
+        "neo4j": "translated",
+        "owl": "translated",
+        "shacl": "translated"
+      },
+      "rule": "mixin"
+    },
+    {
+      "element": "KPI.actualValue",
+      "line": 141,
+      "outcomes": {
+        "gql": "enforced",
+        "neo4j": "runtime-mitigated",
+        "owl": "enforced",
+        "shacl": "enforced"
+      },
+      "rule": "property"
+    },
+    {
+      "element": "KPI.actualValue",
+      "line": 141,
+      "outcomes": {
+        "gql": "enforced",
+        "neo4j": "runtime-mitigated",
+        "owl": "enforced",
+        "shacl": "enforced"
+      },
+      "rule": "datatype"
+    },
+    {
+      "element": "KPI.createdAt",
+      "line": 13,
+      "outcomes": {
+        "gql": "enforced",
+        "neo4j": "runtime-mitigated",
+        "owl": "enforced",
+        "shacl": "enforced"
+      },
+      "rule": "property"
+    },
+    {
+      "element": "KPI.createdAt",
+      "line": 13,
+      "outcomes": {
+        "gql": "enforced",
+        "neo4j": "runtime-mitigated",
+        "owl": "enforced",
+        "shacl": "enforced"
+      },
+      "rule": "datatype"
+    },
+    {
+      "element": "KPI.name",
+      "line": 135,
+      "outcomes": {
+        "gql": "enforced",
+        "neo4j": "runtime-mitigated",
+        "owl": "enforced",
+        "shacl": "enforced"
+      },
+      "rule": "property"
+    },
+    {
+      "element": "KPI.name",
+      "line": 135,
+      "outcomes": {
+        "gql": "enforced",
+        "neo4j": "runtime-mitigated",
+        "owl": "enforced",
+        "shacl": "enforced"
+      },
+      "rule": "datatype"
+    },
+    {
+      "element": "KPI.name",
+      "line": 135,
+      "outcomes": {
+        "gql": "enforced",
+        "neo4j": "runtime-mitigated",
+        "owl": "warning",
+        "shacl": "enforced"
+      },
+      "rule": "required"
+    },
+    {
+      "element": "KPI.name",
+      "line": 135,
+      "outcomes": {
+        "gql": "runtime-mitigated",
+        "neo4j": "enforced",
+        "owl": "warning",
+        "shacl": "runtime-mitigated"
+      },
+      "rule": "key"
+    },
+    {
+      "element": "KPI.targetValue",
+      "line": 139,
+      "outcomes": {
+        "gql": "enforced",
+        "neo4j": "runtime-mitigated",
+        "owl": "enforced",
+        "shacl": "enforced"
+      },
+      "rule": "property"
+    },
+    {
+      "element": "KPI.targetValue",
+      "line": 139,
+      "outcomes": {
+        "gql": "enforced",
+        "neo4j": "runtime-mitigated",
+        "owl": "enforced",
+        "shacl": "enforced"
+      },
+      "rule": "datatype"
+    },
+    {
+      "element": "KPI.updatedAt",
+      "line": 15,
+      "outcomes": {
+        "gql": "enforced",
+        "neo4j": "runtime-mitigated",
+        "owl": "enforced",
+        "shacl": "enforced"
+      },
+      "rule": "property"
+    },
+    {
+      "element": "KPI.updatedAt",
+      "line": 15,
+      "outcomes": {
+        "gql": "enforced",
+        "neo4j": "runtime-mitigated",
+        "owl": "enforced",
+        "shacl": "enforced"
+      },
+      "rule": "datatype"
+    },
+    {
+      "element": "Nonconformity",
+      "line": 103,
+      "outcomes": {
+        "gql": "enforced",
+        "neo4j": "translated",
+        "owl": "enforced",
+        "shacl": "enforced"
+      },
+      "rule": "class"
+    },
+    {
+      "element": "Nonconformity",
+      "line": 103,
+      "outcomes": {
+        "gql": "translated",
+        "neo4j": "runtime-mitigated",
+        "owl": "enforced",
+        "shacl": "runtime-mitigated"
+      },
+      "rule": "inheritance"
+    },
+    {
+      "element": "Nonconformity.closedAt",
+      "line": 116,
+      "outcomes": {
+        "gql": "enforced",
+        "neo4j": "runtime-mitigated",
+        "owl": "enforced",
+        "shacl": "enforced"
+      },
+      "rule": "property"
+    },
+    {
+      "element": "Nonconformity.closedAt",
+      "line": 116,
+      "outcomes": {
+        "gql": "enforced",
+        "neo4j": "runtime-mitigated",
+        "owl": "enforced",
+        "shacl": "enforced"
+      },
+      "rule": "datatype"
+    },
+    {
+      "element": "Nonconformity.correctiveAction",
+      "line": 114,
+      "outcomes": {
+        "gql": "enforced",
+        "neo4j": "runtime-mitigated",
+        "owl": "enforced",
+        "shacl": "enforced"
+      },
+      "rule": "property"
+    },
+    {
+      "element": "Nonconformity.correctiveAction",
+      "line": 114,
+      "outcomes": {
+        "gql": "enforced",
+        "neo4j": "runtime-mitigated",
+        "owl": "enforced",
+        "shacl": "enforced"
+      },
+      "rule": "datatype"
+    },
+    {
+      "element": "Nonconformity.createdAt",
+      "line": 13,
+      "outcomes": {
+        "gql": "enforced",
+        "neo4j": "runtime-mitigated",
+        "owl": "enforced",
+        "shacl": "enforced"
+      },
+      "rule": "property"
+    },
+    {
+      "element": "Nonconformity.createdAt",
+      "line": 13,
+      "outcomes": {
+        "gql": "enforced",
+        "neo4j": "runtime-mitigated",
+        "owl": "enforced",
+        "shacl": "enforced"
+      },
+      "rule": "datatype"
+    },
+    {
+      "element": "Nonconformity.rootCause",
+      "line": 111,
+      "outcomes": {
+        "gql": "enforced",
+        "neo4j": "runtime-mitigated",
+        "owl": "enforced",
+        "shacl": "enforced"
+      },
+      "rule": "property"
+    },
+    {
+      "element": "Nonconformity.rootCause",
+      "line": 111,
+      "outcomes": {
+        "gql": "enforced",
+        "neo4j": "runtime-mitigated",
+        "owl": "enforced",
+        "shacl": "enforced"
+      },
+      "rule": "datatype"
+    },
+    {
+      "element": "Nonconformity.severity",
+      "line": 108,
+      "outcomes": {
+        "gql": "enforced",
+        "neo4j": "runtime-mitigated",
+        "owl": "enforced",
+        "shacl": "enforced"
+      },
+      "rule": "property"
+    },
+    {
+      "element": "Nonconformity.severity",
+      "line": 108,
+      "outcomes": {
+        "gql": "enforced",
+        "neo4j": "runtime-mitigated",
+        "owl": "enforced",
+        "shacl": "enforced"
+      },
+      "rule": "datatype"
+    },
+    {
+      "element": "Nonconformity.updatedAt",
+      "line": 15,
+      "outcomes": {
+        "gql": "enforced",
+        "neo4j": "runtime-mitigated",
+        "owl": "enforced",
+        "shacl": "enforced"
+      },
+      "rule": "property"
+    },
+    {
+      "element": "Nonconformity.updatedAt",
+      "line": 15,
+      "outcomes": {
+        "gql": "enforced",
+        "neo4j": "runtime-mitigated",
+        "owl": "enforced",
+        "shacl": "enforced"
+      },
+      "rule": "datatype"
+    },
+    {
+      "element": "Organization",
+      "line": 18,
+      "outcomes": {
+        "gql": "enforced",
+        "neo4j": "translated",
+        "owl": "enforced",
+        "shacl": "enforced"
+      },
+      "rule": "class"
+    },
+    {
+      "element": "Organization",
+      "line": 18,
+      "outcomes": {
+        "gql": "translated",
+        "neo4j": "translated",
+        "owl": "translated",
+        "shacl": "translated"
+      },
+      "rule": "mixin"
+    },
+    {
+      "element": "Organization",
+      "line": 18,
+      "outcomes": {
+        "gql": "translated",
+        "neo4j": "runtime-mitigated",
+        "owl": "runtime-mitigated",
+        "shacl": "runtime-mitigated"
+      },
+      "rule": "abstract"
+    },
+    {
+      "element": "Organization.createdAt",
+      "line": 13,
+      "outcomes": {
+        "gql": "enforced",
+        "neo4j": "runtime-mitigated",
+        "owl": "enforced",
+        "shacl": "enforced"
+      },
+      "rule": "property"
+    },
+    {
+      "element": "Organization.createdAt",
+      "line": 13,
+      "outcomes": {
+        "gql": "enforced",
+        "neo4j": "runtime-mitigated",
+        "owl": "enforced",
+        "shacl": "enforced"
+      },
+      "rule": "datatype"
+    },
+    {
+      "element": "Organization.updatedAt",
+      "line": 15,
+      "outcomes": {
+        "gql": "enforced",
+        "neo4j": "runtime-mitigated",
+        "owl": "enforced",
+        "shacl": "enforced"
+      },
+      "rule": "property"
+    },
+    {
+      "element": "Organization.updatedAt",
+      "line": 15,
+      "outcomes": {
+        "gql": "enforced",
+        "neo4j": "runtime-mitigated",
+        "owl": "enforced",
+        "shacl": "enforced"
+      },
+      "rule": "datatype"
+    },
+    {
+      "element": "QualityDocument",
+      "line": 42,
+      "outcomes": {
+        "gql": "enforced",
+        "neo4j": "translated",
+        "owl": "enforced",
+        "shacl": "enforced"
+      },
+      "rule": "class"
+    },
+    {
+      "element": "QualityDocument",
+      "line": 42,
+      "outcomes": {
+        "gql": "translated",
+        "neo4j": "translated",
+        "owl": "translated",
+        "shacl": "translated"
+      },
+      "rule": "mixin"
+    },
+    {
+      "element": "QualityDocument",
+      "line": 42,
+      "outcomes": {
+        "gql": "translated",
+        "neo4j": "runtime-mitigated",
+        "owl": "runtime-mitigated",
+        "shacl": "runtime-mitigated"
+      },
+      "rule": "abstract"
+    },
+    {
+      "element": "QualityDocument.createdAt",
+      "line": 13,
+      "outcomes": {
+        "gql": "enforced",
+        "neo4j": "runtime-mitigated",
+        "owl": "enforced",
+        "shacl": "enforced"
+      },
+      "rule": "property"
+    },
+    {
+      "element": "QualityDocument.createdAt",
+      "line": 13,
+      "outcomes": {
+        "gql": "enforced",
+        "neo4j": "runtime-mitigated",
+        "owl": "enforced",
+        "shacl": "enforced"
+      },
+      "rule": "datatype"
+    },
+    {
+      "element": "QualityDocument.documentId",
+      "line": 48,
+      "outcomes": {
+        "gql": "enforced",
+        "neo4j": "runtime-mitigated",
+        "owl": "enforced",
+        "shacl": "enforced"
+      },
+      "rule": "property"
+    },
+    {
+      "element": "QualityDocument.documentId",
+      "line": 48,
+      "outcomes": {
+        "gql": "enforced",
+        "neo4j": "runtime-mitigated",
+        "owl": "enforced",
+        "shacl": "enforced"
+      },
+      "rule": "datatype"
+    },
+    {
+      "element": "QualityDocument.documentId",
+      "line": 48,
+      "outcomes": {
+        "gql": "enforced",
+        "neo4j": "runtime-mitigated",
+        "owl": "warning",
+        "shacl": "enforced"
+      },
+      "rule": "required"
+    },
+    {
+      "element": "QualityDocument.documentId",
+      "line": 48,
+      "outcomes": {
+        "gql": "runtime-mitigated",
+        "neo4j": "enforced",
+        "owl": "warning",
+        "shacl": "runtime-mitigated"
+      },
+      "rule": "key"
+    },
+    {
+      "element": "QualityDocument.retentionPeriodYears",
+      "line": 52,
+      "outcomes": {
+        "gql": "enforced",
+        "neo4j": "runtime-mitigated",
+        "owl": "enforced",
+        "shacl": "enforced"
+      },
+      "rule": "property"
+    },
+    {
+      "element": "QualityDocument.retentionPeriodYears",
+      "line": 52,
+      "outcomes": {
+        "gql": "enforced",
+        "neo4j": "runtime-mitigated",
+        "owl": "enforced",
+        "shacl": "enforced"
+      },
+      "rule": "datatype"
+    },
+    {
+      "element": "QualityDocument.updatedAt",
+      "line": 15,
+      "outcomes": {
+        "gql": "enforced",
+        "neo4j": "runtime-mitigated",
+        "owl": "enforced",
+        "shacl": "enforced"
+      },
+      "rule": "property"
+    },
+    {
+      "element": "QualityDocument.updatedAt",
+      "line": 15,
+      "outcomes": {
+        "gql": "enforced",
+        "neo4j": "runtime-mitigated",
+        "owl": "enforced",
+        "shacl": "enforced"
+      },
+      "rule": "datatype"
+    },
+    {
+      "element": "QualityManual",
+      "line": 59,
+      "outcomes": {
+        "gql": "enforced",
+        "neo4j": "translated",
+        "owl": "enforced",
+        "shacl": "enforced"
+      },
+      "rule": "class"
+    },
+    {
+      "element": "QualityManual",
+      "line": 59,
+      "outcomes": {
+        "gql": "translated",
+        "neo4j": "runtime-mitigated",
+        "owl": "enforced",
+        "shacl": "runtime-mitigated"
+      },
+      "rule": "inheritance"
+    },
+    {
+      "element": "QualityManual.createdAt",
+      "line": 13,
+      "outcomes": {
+        "gql": "enforced",
+        "neo4j": "runtime-mitigated",
+        "owl": "enforced",
+        "shacl": "enforced"
+      },
+      "rule": "property"
+    },
+    {
+      "element": "QualityManual.createdAt",
+      "line": 13,
+      "outcomes": {
+        "gql": "enforced",
+        "neo4j": "runtime-mitigated",
+        "owl": "enforced",
+        "shacl": "enforced"
+      },
+      "rule": "datatype"
+    },
+    {
+      "element": "QualityManual.documentId",
+      "line": 48,
+      "outcomes": {
+        "gql": "enforced",
+        "neo4j": "runtime-mitigated",
+        "owl": "enforced",
+        "shacl": "enforced"
+      },
+      "rule": "property"
+    },
+    {
+      "element": "QualityManual.documentId",
+      "line": 48,
+      "outcomes": {
+        "gql": "enforced",
+        "neo4j": "runtime-mitigated",
+        "owl": "enforced",
+        "shacl": "enforced"
+      },
+      "rule": "datatype"
+    },
+    {
+      "element": "QualityManual.documentId",
+      "line": 48,
+      "outcomes": {
+        "gql": "enforced",
+        "neo4j": "runtime-mitigated",
+        "owl": "warning",
+        "shacl": "enforced"
+      },
+      "rule": "required"
+    },
+    {
+      "element": "QualityManual.documentId",
+      "line": 48,
+      "outcomes": {
+        "gql": "runtime-mitigated",
+        "neo4j": "enforced",
+        "owl": "warning",
+        "shacl": "runtime-mitigated"
+      },
+      "rule": "key"
+    },
+    {
+      "element": "QualityManual.retentionPeriodYears",
+      "line": 52,
+      "outcomes": {
+        "gql": "enforced",
+        "neo4j": "runtime-mitigated",
+        "owl": "enforced",
+        "shacl": "enforced"
+      },
+      "rule": "property"
+    },
+    {
+      "element": "QualityManual.retentionPeriodYears",
+      "line": 52,
+      "outcomes": {
+        "gql": "enforced",
+        "neo4j": "runtime-mitigated",
+        "owl": "enforced",
+        "shacl": "enforced"
+      },
+      "rule": "datatype"
+    },
+    {
+      "element": "QualityManual.updatedAt",
+      "line": 15,
+      "outcomes": {
+        "gql": "enforced",
+        "neo4j": "runtime-mitigated",
+        "owl": "enforced",
+        "shacl": "enforced"
+      },
+      "rule": "property"
+    },
+    {
+      "element": "QualityManual.updatedAt",
+      "line": 15,
+      "outcomes": {
+        "gql": "enforced",
+        "neo4j": "runtime-mitigated",
+        "owl": "enforced",
+        "shacl": "enforced"
+      },
+      "rule": "datatype"
+    },
+    {
+      "element": "QualityProcess",
+      "line": 82,
+      "outcomes": {
+        "gql": "enforced",
+        "neo4j": "translated",
+        "owl": "enforced",
+        "shacl": "enforced"
+      },
+      "rule": "class"
+    },
+    {
+      "element": "QualityProcess",
+      "line": 82,
+      "outcomes": {
+        "gql": "translated",
+        "neo4j": "translated",
+        "owl": "translated",
+        "shacl": "translated"
+      },
+      "rule": "mixin"
+    },
+    {
+      "element": "QualityProcess",
+      "line": 82,
+      "outcomes": {
+        "gql": "translated",
+        "neo4j": "runtime-mitigated",
+        "owl": "runtime-mitigated",
+        "shacl": "runtime-mitigated"
+      },
+      "rule": "abstract"
+    },
+    {
+      "element": "QualityProcess.createdAt",
+      "line": 13,
+      "outcomes": {
+        "gql": "enforced",
+        "neo4j": "runtime-mitigated",
+        "owl": "enforced",
+        "shacl": "enforced"
+      },
+      "rule": "property"
+    },
+    {
+      "element": "QualityProcess.createdAt",
+      "line": 13,
+      "outcomes": {
+        "gql": "enforced",
+        "neo4j": "runtime-mitigated",
+        "owl": "enforced",
+        "shacl": "enforced"
+      },
+      "rule": "datatype"
+    },
+    {
+      "element": "QualityProcess.updatedAt",
+      "line": 15,
+      "outcomes": {
+        "gql": "enforced",
+        "neo4j": "runtime-mitigated",
+        "owl": "enforced",
+        "shacl": "enforced"
+      },
+      "rule": "property"
+    },
+    {
+      "element": "QualityProcess.updatedAt",
+      "line": 15,
+      "outcomes": {
+        "gql": "enforced",
+        "neo4j": "runtime-mitigated",
+        "owl": "enforced",
+        "shacl": "enforced"
+      },
+      "rule": "datatype"
+    },
+    {
+      "element": "Standard",
+      "line": 71,
+      "outcomes": {
+        "gql": "enforced",
+        "neo4j": "translated",
+        "owl": "enforced",
+        "shacl": "enforced"
+      },
+      "rule": "class"
+    },
+    {
+      "element": "Standard",
+      "line": 71,
+      "outcomes": {
+        "gql": "translated",
+        "neo4j": "translated",
+        "owl": "translated",
+        "shacl": "translated"
+      },
+      "rule": "mixin"
+    },
+    {
+      "element": "Standard.createdAt",
+      "line": 13,
+      "outcomes": {
+        "gql": "enforced",
+        "neo4j": "runtime-mitigated",
+        "owl": "enforced",
+        "shacl": "enforced"
+      },
+      "rule": "property"
+    },
+    {
+      "element": "Standard.createdAt",
+      "line": 13,
+      "outcomes": {
+        "gql": "enforced",
+        "neo4j": "runtime-mitigated",
+        "owl": "enforced",
+        "shacl": "enforced"
+      },
+      "rule": "datatype"
+    },
+    {
+      "element": "Standard.standardId",
+      "line": 76,
+      "outcomes": {
+        "gql": "enforced",
+        "neo4j": "runtime-mitigated",
+        "owl": "enforced",
+        "shacl": "enforced"
+      },
+      "rule": "property"
+    },
+    {
+      "element": "Standard.standardId",
+      "line": 76,
+      "outcomes": {
+        "gql": "enforced",
+        "neo4j": "runtime-mitigated",
+        "owl": "enforced",
+        "shacl": "enforced"
+      },
+      "rule": "datatype"
+    },
+    {
+      "element": "Standard.standardId",
+      "line": 76,
+      "outcomes": {
+        "gql": "enforced",
+        "neo4j": "runtime-mitigated",
+        "owl": "warning",
+        "shacl": "enforced"
+      },
+      "rule": "required"
+    },
+    {
+      "element": "Standard.standardId",
+      "line": 76,
+      "outcomes": {
+        "gql": "runtime-mitigated",
+        "neo4j": "enforced",
+        "owl": "warning",
+        "shacl": "runtime-mitigated"
+      },
+      "rule": "key"
+    },
+    {
+      "element": "Standard.title",
+      "line": 80,
+      "outcomes": {
+        "gql": "enforced",
+        "neo4j": "runtime-mitigated",
+        "owl": "enforced",
+        "shacl": "enforced"
+      },
+      "rule": "property"
+    },
+    {
+      "element": "Standard.title",
+      "line": 80,
+      "outcomes": {
+        "gql": "enforced",
+        "neo4j": "runtime-mitigated",
+        "owl": "enforced",
+        "shacl": "enforced"
+      },
+      "rule": "datatype"
+    },
+    {
+      "element": "Standard.updatedAt",
+      "line": 15,
+      "outcomes": {
+        "gql": "enforced",
+        "neo4j": "runtime-mitigated",
+        "owl": "enforced",
+        "shacl": "enforced"
+      },
+      "rule": "property"
+    },
+    {
+      "element": "Standard.updatedAt",
+      "line": 15,
+      "outcomes": {
+        "gql": "enforced",
+        "neo4j": "runtime-mitigated",
+        "owl": "enforced",
+        "shacl": "enforced"
+      },
+      "rule": "datatype"
+    },
+    {
+      "element": "Supplier",
+      "line": 23,
+      "outcomes": {
+        "gql": "enforced",
+        "neo4j": "translated",
+        "owl": "enforced",
+        "shacl": "enforced"
+      },
+      "rule": "class"
+    },
+    {
+      "element": "Supplier",
+      "line": 23,
+      "outcomes": {
+        "gql": "translated",
+        "neo4j": "runtime-mitigated",
+        "owl": "enforced",
+        "shacl": "runtime-mitigated"
+      },
+      "rule": "inheritance"
+    },
+    {
+      "element": "Supplier.classification",
+      "line": 32,
+      "outcomes": {
+        "gql": "enforced",
+        "neo4j": "runtime-mitigated",
+        "owl": "enforced",
+        "shacl": "enforced"
+      },
+      "rule": "property"
+    },
+    {
+      "element": "Supplier.classification",
+      "line": 32,
+      "outcomes": {
+        "gql": "enforced",
+        "neo4j": "runtime-mitigated",
+        "owl": "enforced",
+        "shacl": "enforced"
+      },
+      "rule": "datatype"
+    },
+    {
+      "element": "Supplier.createdAt",
+      "line": 13,
+      "outcomes": {
+        "gql": "enforced",
+        "neo4j": "runtime-mitigated",
+        "owl": "enforced",
+        "shacl": "enforced"
+      },
+      "rule": "property"
+    },
+    {
+      "element": "Supplier.createdAt",
+      "line": 13,
+      "outcomes": {
+        "gql": "enforced",
+        "neo4j": "runtime-mitigated",
+        "owl": "enforced",
+        "shacl": "enforced"
+      },
+      "rule": "datatype"
+    },
+    {
+      "element": "Supplier.reevaluationFrequencyMonths",
+      "line": 35,
+      "outcomes": {
+        "gql": "enforced",
+        "neo4j": "runtime-mitigated",
+        "owl": "enforced",
+        "shacl": "enforced"
+      },
+      "rule": "property"
+    },
+    {
+      "element": "Supplier.reevaluationFrequencyMonths",
+      "line": 35,
+      "outcomes": {
+        "gql": "enforced",
+        "neo4j": "runtime-mitigated",
+        "owl": "enforced",
+        "shacl": "enforced"
+      },
+      "rule": "datatype"
+    },
+    {
+      "element": "Supplier.supplierId",
+      "line": 28,
+      "outcomes": {
+        "gql": "enforced",
+        "neo4j": "runtime-mitigated",
+        "owl": "enforced",
+        "shacl": "enforced"
+      },
+      "rule": "property"
+    },
+    {
+      "element": "Supplier.supplierId",
+      "line": 28,
+      "outcomes": {
+        "gql": "enforced",
+        "neo4j": "runtime-mitigated",
+        "owl": "enforced",
+        "shacl": "enforced"
+      },
+      "rule": "datatype"
+    },
+    {
+      "element": "Supplier.supplierId",
+      "line": 28,
+      "outcomes": {
+        "gql": "enforced",
+        "neo4j": "runtime-mitigated",
+        "owl": "warning",
+        "shacl": "enforced"
+      },
+      "rule": "required"
+    },
+    {
+      "element": "Supplier.supplierId",
+      "line": 28,
+      "outcomes": {
+        "gql": "runtime-mitigated",
+        "neo4j": "enforced",
+        "owl": "warning",
+        "shacl": "runtime-mitigated"
+      },
+      "rule": "key"
+    },
+    {
+      "element": "Supplier.updatedAt",
+      "line": 15,
+      "outcomes": {
+        "gql": "enforced",
+        "neo4j": "runtime-mitigated",
+        "owl": "enforced",
+        "shacl": "enforced"
+      },
+      "rule": "property"
+    },
+    {
+      "element": "Supplier.updatedAt",
+      "line": 15,
+      "outcomes": {
+        "gql": "enforced",
+        "neo4j": "runtime-mitigated",
+        "owl": "enforced",
+        "shacl": "enforced"
+      },
+      "rule": "datatype"
+    },
+    {
+      "element": "appliesTo",
+      "line": 168,
+      "outcomes": {
+        "gql": "enforced",
+        "neo4j": "runtime-mitigated",
+        "owl": "warning",
+        "shacl": "enforced"
+      },
+      "rule": "relation"
+    },
+    {
+      "element": "audits",
+      "line": 152,
+      "outcomes": {
+        "gql": "enforced",
+        "neo4j": "runtime-mitigated",
+        "owl": "warning",
+        "shacl": "enforced"
+      },
+      "rule": "relation"
+    },
+    {
+      "element": "compliesWith",
+      "line": 164,
+      "outcomes": {
+        "gql": "enforced",
+        "neo4j": "runtime-mitigated",
+        "owl": "warning",
+        "shacl": "enforced"
+      },
+      "rule": "relation"
+    },
+    {
+      "element": "escalatesTo",
+      "line": 184,
+      "outcomes": {
+        "gql": "enforced",
+        "neo4j": "runtime-mitigated",
+        "owl": "warning",
+        "shacl": "enforced"
+      },
+      "rule": "relation"
+    },
+    {
+      "element": "identifiedIn",
+      "line": 156,
+      "outcomes": {
+        "gql": "enforced",
+        "neo4j": "runtime-mitigated",
+        "owl": "warning",
+        "shacl": "enforced"
+      },
+      "rule": "relation"
+    },
+    {
+      "element": "mandates",
+      "line": 160,
+      "outcomes": {
+        "gql": "enforced",
+        "neo4j": "runtime-mitigated",
+        "owl": "warning",
+        "shacl": "enforced"
+      },
+      "rule": "relation"
+    },
+    {
+      "element": "monitoredBy",
+      "line": 180,
+      "outcomes": {
+        "gql": "enforced",
+        "neo4j": "runtime-mitigated",
+        "owl": "warning",
+        "shacl": "enforced"
+      },
+      "rule": "relation"
+    },
+    {
+      "element": "references",
+      "line": 172,
+      "outcomes": {
+        "gql": "enforced",
+        "neo4j": "runtime-mitigated",
+        "owl": "warning",
+        "shacl": "enforced"
+      },
+      "rule": "relation"
+    },
+    {
+      "element": "sourcesFrom",
+      "line": 148,
+      "outcomes": {
+        "gql": "enforced",
+        "neo4j": "runtime-mitigated",
+        "owl": "warning",
+        "shacl": "enforced"
+      },
+      "rule": "relation"
+    },
+    {
+      "element": "supersedes",
+      "line": 176,
+      "outcomes": {
+        "gql": "enforced",
+        "neo4j": "runtime-mitigated",
+        "owl": "warning",
+        "shacl": "enforced"
+      },
+      "rule": "relation"
+    },
+    {
+      "element": "suppliesTo",
+      "line": 144,
+      "outcomes": {
+        "gql": "enforced",
+        "neo4j": "runtime-mitigated",
+        "owl": "warning",
+        "shacl": "enforced"
+      },
+      "rule": "relation"
+    },
+    {
+      "element": "unknown_property_policy",
+      "line": null,
+      "outcomes": {
+        "gql": "runtime-mitigated",
+        "neo4j": "runtime-mitigated",
+        "owl": "unsupported",
+        "shacl": "runtime-mitigated"
+      },
+      "rule": "closed_world"
+    }
+  ],
+  "summary": {
+    "gql": {
+      "enforced": 147,
+      "runtime-mitigated": 10,
+      "translated": 17
+    },
+    "neo4j": {
+      "enforced": 9,
+      "runtime-mitigated": 145,
+      "translated": 20
+    },
+    "owl": {
+      "enforced": 134,
+      "runtime-mitigated": 3,
+      "translated": 6,
+      "unsupported": 1,
+      "warning": 30
+    },
+    "shacl": {
+      "enforced": 147,
+      "runtime-mitigated": 21,
+      "translated": 6
+    }
+  },
+  "targets": [
+    "owl",
+    "shacl",
+    "neo4j",
+    "gql"
+  ],
+  "version": "1.0.0"
+}

@@ -192,3 +192,5 @@ artifacts:
   diagnostics: ontology/generated/automotive/diagnostics.json
   diagnostics_report: ontology/generated/automotive/diagnostics.md
   erd: ontology/generated/automotive/erd.mmd
+  capability_matrix: ontology/generated/automotive/capability-matrix.json
+  gql: ontology/generated/automotive/graph-type.gql

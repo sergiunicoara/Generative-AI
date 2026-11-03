@@ -1,0 +1,26 @@
+-- DO NOT EDIT — generated from energy-asset-intelligence.yaml.
+-- ISO GQL graph-type rendering (interoperability surface). Not executed by any GQL engine here.
+CREATE GRAPH TYPE energy_asset_intelligence_type AS {
+  (Asset :ASSET {assetId STRING NOT NULL, createdAt ZONED DATETIME, updatedAt ZONED DATETIME}),
+  (Component :COMPONENT {componentType STRING, createdAt ZONED DATETIME, updatedAt ZONED DATETIME}),
+  (DocumentRevision :DOCUMENT_REVISION {appliesToComponentType STRING, documentId STRING NOT NULL, recordedAt ZONED DATETIME NOT NULL, temperatureReviewThreshold DECIMAL, validFrom ZONED DATETIME NOT NULL, validTo ZONED DATETIME}),
+  (EvidenceRequest :EVIDENCE_REQUEST {assignedTo STRING NOT NULL, createdAt ZONED DATETIME, missingField STRING NOT NULL, priority STRING NOT NULL, reason STRING NOT NULL, requestId STRING NOT NULL, state STRING NOT NULL, targetSourceSystem STRING NOT NULL, updatedAt ZONED DATETIME}),
+  (EvidenceRequestTransition :EVIDENCE_REQUEST_TRANSITION {changedAt ZONED DATETIME, changedBy STRING, fromState STRING, toState STRING, transitionReason STRING}),
+  (MaintenanceReviewFinding :MAINTENANCE_REVIEW_FINDING {}),
+  (Observation :OBSERVATION {createdAt ZONED DATETIME, metric STRING, observedAt ZONED DATETIME NOT NULL, recordedAt ZONED DATETIME NOT NULL, unit STRING NOT NULL, updatedAt ZONED DATETIME, value DECIMAL NOT NULL}),
+  (Site :SITE {}),
+  (WindTurbine :WIND_TURBINE {assetId STRING NOT NULL, createdAt ZONED DATETIME, updatedAt ZONED DATETIME}),
+  (WorkOrder :WORK_ORDER {createdAt ZONED DATETIME, recordedAt ZONED DATETIME NOT NULL, status STRING, updatedAt ZONED DATETIME, validFrom ZONED DATETIME NOT NULL, workOrderId STRING}),
+  (:EVIDENCE_REQUEST_TRANSITION)-[changesRequest_EvidenceRequestTransition_EvidenceRequest :CHANGES_REQUEST {}]->(:EVIDENCE_REQUEST),
+  (:WORK_ORDER)-[concernsAsset_WorkOrder_Asset :CONCERNS_ASSET {}]->(:ASSET),
+  (:WORK_ORDER)-[concernsAsset_WorkOrder_WindTurbine :CONCERNS_ASSET {}]->(:WIND_TURBINE),
+  (:EVIDENCE_REQUEST)-[forAsset_EvidenceRequest_Asset :FOR_ASSET {}]->(:ASSET),
+  (:EVIDENCE_REQUEST)-[forAsset_EvidenceRequest_WindTurbine :FOR_ASSET {}]->(:WIND_TURBINE),
+  (:SITE)-[hasAsset_Site_Asset :HAS_ASSET {}]->(:ASSET),
+  (:SITE)-[hasAsset_Site_WindTurbine :HAS_ASSET {}]->(:WIND_TURBINE),
+  (:ASSET)-[hasComponent_Asset_Component :HAS_COMPONENT {}]->(:COMPONENT),
+  (:WIND_TURBINE)-[hasComponent_WindTurbine_Component :HAS_COMPONENT {}]->(:COMPONENT),
+  (:OBSERVATION)-[observedAsset_Observation_Asset :OBSERVED_ASSET {}]->(:ASSET),
+  (:OBSERVATION)-[observedAsset_Observation_WindTurbine :OBSERVED_ASSET {}]->(:WIND_TURBINE),
+  (:DOCUMENT_REVISION)-[supersedes_DocumentRevision_DocumentRevision :SUPERSEDES {}]->(:DOCUMENT_REVISION)
+}

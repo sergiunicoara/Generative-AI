@@ -1,0 +1,13 @@
+-- DO NOT EDIT — generated from contextual-knowledge.yaml.
+-- ISO GQL graph-type rendering (interoperability surface). Not executed by any GQL engine here.
+CREATE GRAPH TYPE contextual_knowledge_type AS {
+  (KnowledgeException :KNOWLEDGE_EXCEPTION {approvalRef STRING NOT NULL, grantedBy STRING NOT NULL, kind STRING NOT NULL, knowledgeId STRING NOT NULL, knowledgeKey STRING NOT NULL, recordedAt ZONED DATETIME NOT NULL, status STRING NOT NULL, tenant STRING NOT NULL, version INT64 NOT NULL}),
+  (KnowledgeItem :KNOWLEDGE_ITEM {authority STRING NOT NULL, knowledgeId STRING NOT NULL, knowledgeKey STRING NOT NULL, modality STRING NOT NULL, recordedAt ZONED DATETIME NOT NULL, reviewRef STRING NOT NULL, reviewedBy STRING NOT NULL, statement STRING NOT NULL, status STRING NOT NULL, subjectKey STRING NOT NULL, tenant STRING NOT NULL, title STRING NOT NULL, validFrom ZONED DATETIME, validTo ZONED DATETIME, version INT64 NOT NULL}),
+  (KnowledgeSource :KNOWLEDGE_SOURCE {sourceId STRING NOT NULL}),
+  (:KNOWLEDGE_ITEM)-[citesSource_KnowledgeItem_KnowledgeSource :CITES_SOURCE {locator STRING}]->(:KNOWLEDGE_SOURCE),
+  (:KNOWLEDGE_EXCEPTION)-[exceptionCitesSource_KnowledgeException_KnowledgeSource :EXCEPTION_CITES_SOURCE {}]->(:KNOWLEDGE_SOURCE),
+  (:KNOWLEDGE_EXCEPTION)-[exceptionTarget_KnowledgeException_KnowledgeItem :EXCEPTION_TARGET {}]->(:KNOWLEDGE_ITEM),
+  (:KNOWLEDGE_EXCEPTION)-[exceptionWinner_KnowledgeException_KnowledgeItem :EXCEPTION_WINNER {}]->(:KNOWLEDGE_ITEM),
+  (:KNOWLEDGE_ITEM)-[overrides_KnowledgeItem_KnowledgeItem :OVERRIDES {}]->(:KNOWLEDGE_ITEM),
+  (:KNOWLEDGE_ITEM)-[supersedes_KnowledgeItem_KnowledgeItem :SUPERSEDES {}]->(:KNOWLEDGE_ITEM)
+}

@@ -44,10 +44,18 @@ async def record_audit_event(event: dict, *, transport: str, neo4j=None) -> None
     )
 
 
-async def neo4j_audit_sink(event: dict) -> None:
-    # Time-boxed: an unreachable database must not stall every tool call.
-    import asyncio
-    await asyncio.wait_for(record_audit_event(event, transport="mcp"), timeout=AUDIT_TIMEOUT_S)
+def make_audit_sink(transport: str):
+    """An audit sink that labels every event with the calling ``transport``."""
+
+    async def sink(event: dict) -> None:
+        # Time-boxed: an unreachable database must not stall every tool call.
+        import asyncio
+        await asyncio.wait_for(record_audit_event(event, transport=transport), timeout=AUDIT_TIMEOUT_S)
+
+    return sink
+
+
+neo4j_audit_sink = make_audit_sink("mcp")
 
 
 async def list_audit_events(tenant: str, *, limit: int = 100, neo4j=None) -> list[dict]:

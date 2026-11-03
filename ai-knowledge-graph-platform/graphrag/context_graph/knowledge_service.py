@@ -16,13 +16,15 @@ simply stop being addressed.
 from __future__ import annotations
 
 from collections import OrderedDict
-from collections.abc import Mapping
+from collections.abc import Iterable, Mapping
 import os
 from typing import Any
 
 from graphrag.context_graph.knowledge import BusinessContext, Fact, content_digest
 from graphrag.context_graph.knowledge_evaluation import EvaluationDecision, evaluate_knowledge
-from graphrag.context_graph.knowledge_release import ReleaseCatalog
+from graphrag.context_graph.knowledge_release import (
+    KnowledgePack, RegressionCase, ReleaseCatalog, publish_pack,
+)
 from graphrag.core.tenancy import require_tenant
 from graphrag.enterprise.models import AccessContext
 
@@ -63,6 +65,25 @@ class KnowledgeEvaluationService:
         if record is None:
             raise NoActiveReleaseError(f"no published knowledge release for domain {domain!r}")
         return ReleaseCatalog.from_record(record)
+
+    # -- release administration (callers authorise; the store keeps the history) --
+
+    async def publish(
+        self, pack: KnowledgePack, *, published_by: str, cases: Iterable[RegressionCase],
+    ) -> dict[str, Any]:
+        """Gate and activate a release.  Raises ``KnowledgePublicationError``."""
+        return await publish_pack(self._store, pack, published_by=published_by, cases=cases)
+
+    async def release_history(self, tenant: str, domain: str) -> list[dict[str, Any]]:
+        return await self._store.knowledge_release_history(require_tenant(tenant), domain)
+
+    async def active_release_id(self, tenant: str, domain: str) -> str | None:
+        record = await self._store.active_knowledge_release(require_tenant(tenant), domain)
+        return str(record["release_id"]) if record else None
+
+    async def rollback(self, tenant: str, domain: str, release_id: str, *, rolled_back_by: str) -> dict[str, Any]:
+        return await self._store.rollback_knowledge_release(
+            require_tenant(tenant), domain, release_id, rolled_back_by=rolled_back_by)
 
     async def evaluate(
         self, *, tenant: str, domain: str, access: AccessContext, context: BusinessContext,

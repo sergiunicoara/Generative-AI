@@ -238,6 +238,16 @@ def _stardog_urls(base_url: str, **kw: str) -> tuple[str, str | None]:
     return f"{base}/query", f"{base}?default"
 
 
+def _fuseki_urls(base_url: str, **kw: str) -> tuple[str, str | None]:
+    # Jena Fuseki exposes the same dataset at /{ds}/sparql (and /{ds}/query) and its Graph Store endpoint at
+    # /{ds}/data. Not exercised against a running Fuseki here.
+    dataset = kw.get("dataset", "")
+    if not dataset:
+        raise ValueError("Fuseki requires a 'dataset' name")
+    base = f"{base_url.rstrip('/')}/{dataset}"
+    return f"{base}/sparql", f"{base}/data?default"
+
+
 def _rdfox_urls(base_url: str, **kw: str) -> tuple[str, str | None]:
     datastore = kw.get("datastore", "")
     if not datastore:
@@ -262,6 +272,7 @@ _VENDOR_URL_BUILDERS = {
     "blazegraph": _blazegraph_urls,
     "graphdb": _graphdb_urls,
     "stardog": _stardog_urls,
+    "fuseki": _fuseki_urls,
     "rdfox": _rdfox_urls,
     "virtuoso": _virtuoso_urls,
     "neptune": _neptune_urls,

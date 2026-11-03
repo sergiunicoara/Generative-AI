@@ -15,6 +15,8 @@ Publication runs gate checks before anything is written:
   and it must be the latest version of that id;
 * referential checks: supersession, override and exception targets exist and
   are published; no supersession cycles; exceptions target published items;
+* SHACL: the RDF projection of the published content must conform to the
+  shapes generated from ``ontology/models/contextual-knowledge.yaml``;
 * regression (mandatory -- an empty case set is refused): the domain's
   deterministic evaluation cases must reproduce their expected applicability,
   outcomes, conflicts and escalation against the *candidate* release.
@@ -45,6 +47,7 @@ from graphrag.context_graph.knowledge import (
 from graphrag.context_graph.knowledge_evaluation import (
     EvaluationDecision, KnowledgeReleaseRef, evaluate_knowledge,
 )
+from graphrag.context_graph.knowledge_rdf import projection_failures
 from graphrag.enterprise.models import AccessContext
 
 RELEASE_SCHEMA_VERSION = "knowledge-release/v1"
@@ -286,6 +289,9 @@ def check_pack(pack: KnowledgePack, cases: Iterable[RegressionCase] = ()) -> lis
         for target in (*exc.target_item_ids, *( [exc.winner_item_id] if exc.winner_item_id else [])):
             if target not in published_ids:
                 failures.append(f"{exc.key}: targets {target}, which is not a published item")
+    if not failures:
+        # the projection assumes one effective version per id, checked above
+        failures.extend(projection_failures(published, pack.published_exceptions()))
     if failures:
         return failures
 

@@ -62,6 +62,17 @@ checks established Energy vocabulary, verifies deterministic output and drift,
 and proves shared-write rejection. Existing Energy publication tests continue
 to exercise R2RML/RML → candidate RDF → SHACL → quarantine/publication → SPARQL.
 
+## Third model: contextual knowledge (platform-internal)
+
+[`models/contextual-knowledge.yaml`](models/contextual-knowledge.yaml) models
+published knowledge items and exceptions (identity, tenant, lifecycle, review
+and cited sources) so the knowledge-release publication gate validates their
+RDF projection with SHACL **generated** by the same compiler
+(`graphrag/context_graph/knowledge_rdf.py`). Enumerated values (modality,
+status, authority), applicability scopes, constraints and access policies are
+not expressible in the model's datatypes and stay enforced by the Pydantic
+contract. See `docs/contextual-knowledge-evaluation.md`.
+
 ## Second domain: automotive (proof the compiler is domain-general)
 
 Roadmap "P1 — reusable domain onboarding and governance pack", bullet 4:
@@ -88,7 +99,7 @@ Energy — no Energy-specific branch, flag, or code change was needed:
 python -m graphrag.semantic_model compile ontology/models/automotive-iatf-quality.yaml
 ```
 
-`make semantic-model-check` drift-checks both models.
+`make semantic-model-check` drift-checks all three models (Energy, automotive, contextual knowledge).
 `tests/unit/test_semantic_model.py::test_compiler_is_domain_general_not_energy_specific`
 compiles the automotive model and asserts no generated diagnostic mentions
 "Energy" — a real regression this exercise caught: `SHACL_UNKNOWN_PROPERTY_RUNTIME`'s

@@ -93,6 +93,9 @@ openpyxl>=3.1.0
 # ── MCP server (exposes hybrid retrieval + entity lookup to MCP clients) ───────
 mcp>=1.8.0,<2.0
 
+# ── GraphQL consumer API (api/routes/graphql_api.py; read-only, over the MCP registry) ──
+graphql-core>=3.2.13,<3.3
+
 # ── Live E2E tests (Docker-backed Neo4j and Redis) ────────────────────────────
 testcontainers>=4.15.0
 

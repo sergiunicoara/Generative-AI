@@ -7,29 +7,19 @@ agree; it does not measure any model.
 """
 from __future__ import annotations
 
-import json
-from pathlib import Path
-
 import pytest
 from rdflib import Graph, Literal, URIRef
 
 from graphrag.graph.sparql_bridge import SPARQLBridge
+from graphrag.graph.sparql_conformance import build_graph, load_suite
 
-ROOT = Path(__file__).resolve().parents[2]
-SUITE = json.loads((ROOT / "evals" / "competency" / "cases.json").read_text(encoding="utf-8"))
-ONTOLOGY = {
-    "automotive": ROOT / "ontology" / "automotive" / "automotive-iatf-quality.ttl",
-    "energy": ROOT / "ontology" / "energy" / "energy-asset-intelligence.ttl",
-}
-INSTANCES = ROOT / "evals" / "competency" / "automotive_iatf_instances.ttl"
+# The graph-building and suite loading are shared with graphrag.graph.sparql_conformance, so the adapters and this
+# test cannot drift apart on what a (domain, level) dataset is.
+SUITE = load_suite()
 
 
 def _graph(domain: str, level: str) -> Graph:
-    g = Graph()
-    g.parse(str(ONTOLOGY[domain]), format="turtle")
-    if level == "instance":
-        g.parse(str(INSTANCES), format="turtle")
-    return g
+    return build_graph(domain, level)
 
 
 def _answer(g: Graph, sparql: str) -> list[str]:

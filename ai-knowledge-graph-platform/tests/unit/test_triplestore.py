@@ -163,6 +163,15 @@ class TestVendorURLBuilders:
         with pytest.raises(ValueError, match="database"):
             TripleStoreTarget("stardog", "http://localhost:5820")
 
+    def test_fuseki_requires_a_dataset_name(self):
+        with pytest.raises(ValueError, match="dataset"):
+            TripleStoreTarget("fuseki", "http://localhost:3030")
+
+    def test_fuseki_urls(self):
+        target = TripleStoreTarget("fuseki", "http://localhost:3030/", dataset="kg")
+        assert target.query_url == "http://localhost:3030/kg/sparql"
+        assert target.load_url == "http://localhost:3030/kg/data?default"
+
     def test_neptune_query_url_but_no_load_url(self):
         target = TripleStoreTarget("neptune", "https://neptune.example:8182")
         assert target.query_url.endswith("/sparql")

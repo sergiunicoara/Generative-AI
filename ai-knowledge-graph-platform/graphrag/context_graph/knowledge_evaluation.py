@@ -42,7 +42,7 @@ from __future__ import annotations
 from collections.abc import Iterable, Mapping
 from datetime import datetime, timezone
 from enum import StrEnum
-from itertools import combinations
+from itertools import combinations, product
 from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -478,13 +478,16 @@ def _bound(app: Applicability, result: ApplicabilityResult, context: BusinessCon
     """Context values an applying item binds on one dimension.
 
     ``None`` means unbounded: the scope is unrestricted and the request does
-    not state the dimension.
+    not state the dimension.  Values recorded in ``result.matched`` win, so a
+    partially superseded revision is bounded by what is left of it.
     """
+    if dimension in result.matched:
+        return set(result.matched[dimension])
     scope = app.scope(dimension)
     if scope is not None and scope.mode == "any":
         values = context.values(dimension)
         return None if values is None else set(values)
-    return set(result.matched.get(dimension, ()))
+    return set()
 
 
 def _uncovered(coverer: Applicability, coverer_result: ApplicabilityResult,
@@ -505,6 +508,43 @@ def _uncovered(coverer: Applicability, coverer_result: ApplicabilityResult,
         if bound is None or not bound <= covering:
             gaps.append(dimension)
     return gaps
+
+
+_MAX_CELLS = 5_000
+Box = dict[str, "set[str] | None"]
+
+
+def _box(app: Applicability, result: ApplicabilityResult, context: BusinessContext) -> Box:
+    return {dimension: _bound(app, result, context, dimension) for dimension in DIMENSIONS}
+
+
+def _covers(box: Box, cell: tuple) -> bool:
+    for dimension, value in zip(DIMENSIONS, cell):
+        bound = box[dimension]
+        if bound is not None and (value is None or value not in bound):
+            return False
+    return True
+
+
+def _remaining_cells(target: Box, coverers: list[Box]) -> tuple[list[tuple], int] | None:
+    """Combinations of context values ``target`` binds that no coverer binds,
+    and how many combinations the target binds in total.
+
+    Coverage is judged per combination (market x product x ...), never per
+    dimension: waivers for A+P1 and B+P2 do not cover A+P2.  A dimension the
+    target leaves unbounded is one combination value (``None``) that only an
+    equally unbounded coverer includes.  ``None`` is returned when the target
+    spans too many combinations to enumerate; callers then treat nothing as
+    covered, which keeps the requirement in force.
+    """
+    axes = [sorted(target[d]) if target[d] is not None else [None] for d in DIMENSIONS]
+    total = 1
+    for axis in axes:
+        total *= len(axis)
+    if total == 0 or total > _MAX_CELLS:
+        return None
+    remaining = [cell for cell in product(*axes) if not any(_covers(box, cell) for box in coverers)]
+    return remaining, total
 
 
 def _supersession(
@@ -556,16 +596,26 @@ def _supersession(
             continue
         if current.status != ApplicabilityStatus.APPLIES:
             continue
-        covering = partial = unknown = ""
+        covering = unknown = ""
+        applying_revisions: list[KnowledgeItem] = []
         for other_id in sorted(revisions):
             other, other_base = by_id[other_id], base[other_id]
             if other_base.status == ApplicabilityStatus.APPLIES:
-                if not _uncovered(other.applicability, other_base, item.applicability, current, context):
-                    covering = covering or other.key
-                else:
-                    partial = partial or other.key
+                applying_revisions.append(other)
             elif other_base.status == ApplicabilityStatus.UNKNOWN:
                 unknown = unknown or other.key
+        target_box = _box(item.applicability, current, context)
+        remaining: tuple[list[tuple], int] | None = None
+        whole = next((o for o in applying_revisions if not _uncovered(
+            o.applicability, base[o.id], item.applicability, current, context)), None)
+        if whole is not None:
+            covering = whole.key
+        elif applying_revisions:
+            # several later revisions may together cover what none covers alone
+            remaining = _remaining_cells(
+                target_box, [_box(o.applicability, base[o.id], context) for o in applying_revisions])
+            if remaining is not None and not remaining[0]:
+                covering = ", ".join(o.key for o in applying_revisions)
         if covering:
             superseded.add(item.id)
             final[item.id] = ApplicabilityResult(
@@ -579,10 +629,19 @@ def _supersession(
                 reasons=(ApplicabilityReason(code="supersession_undetermined", dimension="time",
                                              detail=f"may be superseded by {unknown}"),),
             )
-        elif partial:
-            final[item.id] = current.model_copy(update={"reasons": (*current.reasons, ApplicabilityReason(
+        elif applying_revisions and (remaining is None or 0 < len(remaining[0]) < remaining[1]):
+            names = ", ".join(o.key for o in applying_revisions)
+            update: dict[str, Any] = {"reasons": (*current.reasons, ApplicabilityReason(
                 code="partially_superseded", dimension="time",
-                detail=f"{partial} covers only part of this context; this revision stays in force"),)})
+                detail=f"{names} cover only part of this context; this revision stays in force"),)}
+            if remaining is not None:
+                # what is left of this revision: the values of its uncovered combinations
+                left = dict(current.matched)
+                for index, dimension in enumerate(DIMENSIONS):
+                    if target_box[dimension] is not None:
+                        left[dimension] = tuple(sorted({cell[index] for cell in remaining[0]}))
+                update["matched"] = left
+            final[item.id] = current.model_copy(update=update)
     return final, superseded, frozenset(ordered)
 
 
@@ -630,7 +689,7 @@ def evaluate_knowledge(
     # that is itself in force here.  Anything less leaves the requirement in
     # force; a precedence that cannot be confirmed escalates.
     applied: list[AppliedException] = []
-    waived: dict[str, str] = {}
+    waived: dict[str, tuple[str, ...]] = {}
     partly_waived: set[str] = set()
     losers: dict[str, str] = {}
     precedence: dict[frozenset[str], str] = {}
@@ -664,18 +723,35 @@ def evaluate_knowledge(
         return [t for t in exc.target_item_ids
                 if t in by_id and applicability[t].status == ApplicabilityStatus.APPLIES]
 
-    for exc in (e for e in candidates if e.kind == "waiver"):
-        covered: list[str] = []
+    # Waivers are judged together per target: one that covers the whole bound
+    # context waives it; several partial ones waive it only if, combination by
+    # combination, nothing is left uncovered.  Otherwise the requirement stays.
+    waivers = [e for e in candidates if e.kind == "waiver"]
+    waivers_by_target: dict[str, list[KnowledgeException]] = {}
+    for exc in waivers:
         for target in applying_targets(exc):
-            if coverage_gaps(exc, target):
-                partly_waived.add(target)
-                partial_refs.setdefault(target, []).append(exc.key)
-            elif target not in waived:
-                waived[target] = exc.key
-                covered.append(target)
-        if covered:
+            waivers_by_target.setdefault(target, []).append(exc)
+    contributed: dict[str, list[str]] = {}
+    for target in sorted(waivers_by_target):
+        group = waivers_by_target[target]
+        if any(not coverage_gaps(e, target) for e in group):
+            whole = True
+        else:
+            left = _remaining_cells(
+                _box(by_id[target].applicability, applicability[target], context),
+                [_box(e.applicability, exc_results[e.id], context) for e in group])
+            whole = left is not None and not left[0]
+        if whole:
+            waived[target] = tuple(e.key for e in group)
+            for e in group:
+                contributed.setdefault(e.id, []).append(target)
+        else:
+            partly_waived.add(target)
+            partial_refs.setdefault(target, []).extend(e.key for e in group)
+    for exc in waivers:
+        if exc.id in contributed:
             applied.append(AppliedException(
-                exception_key=exc.key, kind=exc.kind, target_item_ids=tuple(covered),
+                exception_key=exc.key, kind=exc.kind, target_item_ids=tuple(contributed[exc.id]),
                 granted_by=exc.granted_by, approval_ref=exc.approval_ref, citations=exc.sources,
             ))
 
@@ -770,7 +846,7 @@ def evaluate_knowledge(
         if item.id in waived:
             results.append(ConstraintResult(**base, outcome=ValidationOutcome.NOT_EVALUATED,
                                             outcome_reason="waived_by_exception", validation_performed=False,
-                                            citations=item.sources, exception_refs=(waived[item.id],)))
+                                            citations=item.sources, exception_refs=waived[item.id]))
             continue
         if item.id in losers:
             results.append(ConstraintResult(**base, outcome=ValidationOutcome.NOT_EVALUATED,

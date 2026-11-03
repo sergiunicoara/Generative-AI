@@ -1,0 +1,45 @@
+# DO NOT EDIT — generated from contextual-knowledge.yaml.
+@prefix energy: <https://example.knowledge.demo/ontology#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix sh: <http://www.w3.org/ns/shacl#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+
+energy:KnowledgeExceptionShape a sh:NodeShape ; sh:targetClass energy:KnowledgeException ;
+  sh:property [ sh:path energy:approvalRef ; sh:datatype xsd:string ; sh:minCount 1 ; sh:maxCount 1 ] ;
+  sh:property [ sh:path energy:grantedBy ; sh:datatype xsd:string ; sh:minCount 1 ; sh:maxCount 1 ] ;
+  sh:property [ sh:path energy:kind ; sh:datatype xsd:string ; sh:minCount 1 ; sh:maxCount 1 ] ;
+  sh:property [ sh:path energy:knowledgeId ; sh:datatype xsd:string ; sh:minCount 1 ; sh:maxCount 1 ] ;
+  sh:property [ sh:path energy:knowledgeKey ; sh:datatype xsd:string ; sh:minCount 1 ; sh:maxCount 1 ] ;
+  sh:property [ sh:path energy:recordedAt ; sh:datatype xsd:dateTime ; sh:minCount 1 ; sh:maxCount 1 ] ;
+  sh:property [ sh:path energy:status ; sh:datatype xsd:string ; sh:minCount 1 ; sh:maxCount 1 ] ;
+  sh:property [ sh:path energy:tenant ; sh:datatype xsd:string ; sh:minCount 1 ; sh:maxCount 1 ] ;
+  sh:property [ sh:path energy:version ; sh:datatype xsd:integer ; sh:minCount 1 ; sh:maxCount 1 ] ;
+  sh:property [ sh:path energy:exceptionCitesSource ; sh:nodeKind sh:IRI ; sh:class energy:KnowledgeSource ; sh:minCount 1 ] ;
+  sh:property [ sh:path energy:exceptionTarget ; sh:nodeKind sh:IRI ; sh:class energy:KnowledgeItem ; sh:minCount 1 ] ;
+  sh:property [ sh:path energy:exceptionWinner ; sh:nodeKind sh:IRI ; sh:class energy:KnowledgeItem ; sh:maxCount 1 ] .
+energy:KnowledgeItemShape a sh:NodeShape ; sh:targetClass energy:KnowledgeItem ;
+  sh:property [ sh:path energy:authority ; sh:datatype xsd:string ; sh:minCount 1 ; sh:maxCount 1 ] ;
+  sh:property [ sh:path energy:knowledgeId ; sh:datatype xsd:string ; sh:minCount 1 ; sh:maxCount 1 ] ;
+  sh:property [ sh:path energy:knowledgeKey ; sh:datatype xsd:string ; sh:minCount 1 ; sh:maxCount 1 ] ;
+  sh:property [ sh:path energy:modality ; sh:datatype xsd:string ; sh:minCount 1 ; sh:maxCount 1 ] ;
+  sh:property [ sh:path energy:recordedAt ; sh:datatype xsd:dateTime ; sh:minCount 1 ; sh:maxCount 1 ] ;
+  sh:property [ sh:path energy:reviewRef ; sh:datatype xsd:string ; sh:minCount 1 ; sh:maxCount 1 ] ;
+  sh:property [ sh:path energy:reviewedBy ; sh:datatype xsd:string ; sh:minCount 1 ; sh:maxCount 1 ] ;
+  sh:property [ sh:path energy:statement ; sh:datatype xsd:string ; sh:minCount 1 ; sh:maxCount 1 ] ;
+  sh:property [ sh:path energy:status ; sh:datatype xsd:string ; sh:minCount 1 ; sh:maxCount 1 ] ;
+  sh:property [ sh:path energy:subjectKey ; sh:datatype xsd:string ; sh:minCount 1 ; sh:maxCount 1 ] ;
+  sh:property [ sh:path energy:tenant ; sh:datatype xsd:string ; sh:minCount 1 ; sh:maxCount 1 ] ;
+  sh:property [ sh:path energy:title ; sh:datatype xsd:string ; sh:minCount 1 ; sh:maxCount 1 ] ;
+  sh:property [ sh:path energy:validFrom ; sh:datatype xsd:dateTime ; sh:maxCount 1 ] ;
+  sh:property [ sh:path energy:validTo ; sh:datatype xsd:dateTime ; sh:maxCount 1 ] ;
+  sh:property [ sh:path energy:version ; sh:datatype xsd:integer ; sh:minCount 1 ; sh:maxCount 1 ] ;
+  sh:property [ sh:path energy:citesSource ; sh:nodeKind sh:IRI ; sh:class energy:KnowledgeSource ; sh:minCount 1 ] ;
+  sh:property [ sh:path energy:overrides ; sh:nodeKind sh:IRI ; sh:class energy:KnowledgeItem ] ;
+  sh:property [ sh:path energy:supersedes ; sh:nodeKind sh:IRI ; sh:class energy:KnowledgeItem ] .
+energy:KnowledgeSourceShape a sh:NodeShape ; sh:targetClass energy:KnowledgeSource ;
+  sh:property [ sh:path energy:sourceId ; sh:datatype xsd:string ; sh:minCount 1 ; sh:maxCount 1 ] .
+energy:CitesSourceStatementShape a sh:NodeShape ; sh:targetClass energy:CitesSourceStatement ;
+  sh:property [ sh:path rdf:subject ; sh:nodeKind sh:IRI ; sh:class energy:KnowledgeItem ; sh:minCount 1 ; sh:maxCount 1 ] ;
+  sh:property [ sh:path rdf:object ; sh:nodeKind sh:IRI ; sh:class energy:KnowledgeSource ; sh:minCount 1 ; sh:maxCount 1 ] ;
+  sh:property [ sh:path energy:locator ; sh:datatype xsd:string ; sh:maxCount 1 ] .

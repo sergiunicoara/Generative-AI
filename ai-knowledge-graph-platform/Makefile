@@ -7,7 +7,7 @@ PYTEST    ?= $(PYTHON) scripts/run_pytest.py
 UVICORN   ?= $(PYTHON) -m uvicorn
 PIP       ?= $(PYTHON) -m pip
 
-.PHONY: help install install-dev lock test test-collect test-integration test-load test-all test-fuzz mutation lint semantic-model-check competency-questions-check clean-snapshot-check \
+.PHONY: help install install-dev lock test test-collect test-integration test-load test-all test-fuzz mutation lint semantic-model-check competency-questions-check sparql-conformance clean-snapshot-check \
 	typecheck ci \
 	terraform-fmt terraform-validate terraform-test terraform-security \
         api dashboard backup services-up services-down \
@@ -97,12 +97,16 @@ ci:            ## The one command CI runs: lint + unit tests (no live services, 
 clean-snapshot-check: ## Archive the staged/HEAD tree and verify it in a fresh venv
 	$(PYTHON) scripts/verify_energy_clean_snapshot.py
 
-semantic-model-check: ## Fail when generated semantic artifacts (Energy, automotive) drift, or any diagnostic is error-severity
+semantic-model-check: ## Fail when generated semantic artifacts (Energy, automotive, contextual knowledge) drift, or any diagnostic is error-severity
 	$(PYTHON) -m graphrag.semantic_model compile ontology/models/energy-asset-intelligence.yaml --check --fail-on-error
 	$(PYTHON) -m graphrag.semantic_model compile ontology/models/automotive-iatf-quality.yaml --check --fail-on-error
+	$(PYTHON) -m graphrag.semantic_model compile ontology/models/contextual-knowledge.yaml --check --fail-on-error
 
 competency-questions-check: ## Fail when a domain's competency-question Cypher references a type/relation no longer in its ontology YAML
 	$(PYTHON) scripts/check_competency_questions.py
+
+sparql-conformance: ## Run the SPARQL competency suite against the local rdflib baseline (pass --endpoint/--vendor to scripts/sparql_conformance.py for a live store)
+	$(PYTHON) scripts/sparql_conformance.py
 
 # ── Services ───────────────────────────────────────────────────────────────────
 

@@ -1,5 +1,10 @@
 {
   "capabilities": {
+    "gql": [
+      "classes",
+      "datatypes",
+      "properties"
+    ],
     "neo4j": [
       "unique_keys"
     ],
@@ -29,6 +34,7 @@
       "line": 18,
       "message": "Mixin properties are expanded onto the concrete label; mixin identity is not native Neo4j schema.",
       "model_path": "energy-asset-intelligence.yaml",
+      "outcome": "translated",
       "runtime_control": null,
       "severity": "info",
       "target": "neo4j"
@@ -40,6 +46,7 @@
       "line": 24,
       "message": "OWL cardinality describes semantics under the open-world assumption; it does not reject missing input data.",
       "model_path": "energy-asset-intelligence.yaml",
+      "outcome": "warning",
       "runtime_control": "Use the generated SHACL shape as the closed-world publication gate.",
       "severity": "warning",
       "target": "owl"
@@ -51,6 +58,7 @@
       "line": 24,
       "message": "Neo4j schema does not enforce the canonical string datatype for this property.",
       "model_path": "energy-asset-intelligence.yaml",
+      "outcome": "runtime-mitigated",
       "runtime_control": "Validate values in the shared mutation validator.",
       "severity": "warning",
       "target": "neo4j"
@@ -62,6 +70,7 @@
       "line": 24,
       "message": "SHACL Core cardinality does not enforce graph-wide key uniqueness.",
       "model_path": "energy-asset-intelligence.yaml",
+      "outcome": "runtime-mitigated",
       "runtime_control": "Enforce uniqueness in the selected persistence transaction.",
       "severity": "warning",
       "target": "shacl"
@@ -73,6 +82,7 @@
       "line": 13,
       "message": "Neo4j schema does not enforce the canonical dateTime datatype for this property.",
       "model_path": "energy-asset-intelligence.yaml",
+      "outcome": "runtime-mitigated",
       "runtime_control": "Validate values in the shared mutation validator.",
       "severity": "warning",
       "target": "neo4j"
@@ -84,6 +94,7 @@
       "line": 15,
       "message": "Neo4j schema does not enforce the canonical dateTime datatype for this property.",
       "model_path": "energy-asset-intelligence.yaml",
+      "outcome": "runtime-mitigated",
       "runtime_control": "Validate values in the shared mutation validator.",
       "severity": "warning",
       "target": "neo4j"
@@ -95,6 +106,7 @@
       "line": 32,
       "message": "Mixin properties are expanded onto the concrete label; mixin identity is not native Neo4j schema.",
       "model_path": "energy-asset-intelligence.yaml",
+      "outcome": "translated",
       "runtime_control": null,
       "severity": "info",
       "target": "neo4j"
@@ -106,6 +118,7 @@
       "line": 37,
       "message": "Neo4j schema does not enforce the canonical string datatype for this property.",
       "model_path": "energy-asset-intelligence.yaml",
+      "outcome": "runtime-mitigated",
       "runtime_control": "Validate values in the shared mutation validator.",
       "severity": "warning",
       "target": "neo4j"
@@ -117,6 +130,7 @@
       "line": 13,
       "message": "Neo4j schema does not enforce the canonical dateTime datatype for this property.",
       "model_path": "energy-asset-intelligence.yaml",
+      "outcome": "runtime-mitigated",
       "runtime_control": "Validate values in the shared mutation validator.",
       "severity": "warning",
       "target": "neo4j"
@@ -128,6 +142,7 @@
       "line": 15,
       "message": "Neo4j schema does not enforce the canonical dateTime datatype for this property.",
       "model_path": "energy-asset-intelligence.yaml",
+      "outcome": "runtime-mitigated",
       "runtime_control": "Validate values in the shared mutation validator.",
       "severity": "warning",
       "target": "neo4j"
@@ -139,6 +154,7 @@
       "line": 92,
       "message": "The generated SHACL shape has no shape-inheritance link to the parent type; inherited properties are present but the is-a relationship itself is not represented.",
       "model_path": "energy-asset-intelligence.yaml",
+      "outcome": "runtime-mitigated",
       "runtime_control": "Preserve the type hierarchy through the canonical OWL export for lineage checks.",
       "severity": "info",
       "target": "shacl"
@@ -150,6 +166,7 @@
       "line": 92,
       "message": "Neo4j has no native label-hierarchy constraint; inherited properties are expanded onto the concrete label with no structural link back to the parent type.",
       "model_path": "energy-asset-intelligence.yaml",
+      "outcome": "runtime-mitigated",
       "runtime_control": "Preserve the type hierarchy through the canonical OWL export for lineage checks.",
       "severity": "info",
       "target": "neo4j"
@@ -161,6 +178,7 @@
       "line": 101,
       "message": "Neo4j schema does not enforce the canonical string datatype for this property.",
       "model_path": "energy-asset-intelligence.yaml",
+      "outcome": "runtime-mitigated",
       "runtime_control": "Validate values in the shared mutation validator.",
       "severity": "warning",
       "target": "neo4j"
@@ -172,6 +190,7 @@
       "line": 97,
       "message": "OWL cardinality describes semantics under the open-world assumption; it does not reject missing input data.",
       "model_path": "energy-asset-intelligence.yaml",
+      "outcome": "warning",
       "runtime_control": "Use the generated SHACL shape as the closed-world publication gate.",
       "severity": "warning",
       "target": "owl"
@@ -183,6 +202,7 @@
       "line": 97,
       "message": "Neo4j schema does not enforce the canonical string datatype for this property.",
       "model_path": "energy-asset-intelligence.yaml",
+      "outcome": "runtime-mitigated",
       "runtime_control": "Validate values in the shared mutation validator.",
       "severity": "warning",
       "target": "neo4j"
@@ -194,6 +214,7 @@
       "line": 97,
       "message": "SHACL Core cardinality does not enforce graph-wide key uniqueness.",
       "model_path": "energy-asset-intelligence.yaml",
+      "outcome": "runtime-mitigated",
       "runtime_control": "Enforce uniqueness in the selected persistence transaction.",
       "severity": "warning",
       "target": "shacl"
@@ -205,6 +226,7 @@
       "line": 59,
       "message": "OWL cardinality describes semantics under the open-world assumption; it does not reject missing input data.",
       "model_path": "energy-asset-intelligence.yaml",
+      "outcome": "warning",
       "runtime_control": "Use the generated SHACL shape as the closed-world publication gate.",
       "severity": "warning",
       "target": "owl"
@@ -216,6 +238,7 @@
       "line": 59,
       "message": "Portable Neo4j community constraints cannot enforce this required property.",
       "model_path": "energy-asset-intelligence.yaml",
+      "outcome": "runtime-mitigated",
       "runtime_control": "Validate the property before the mutation and monitor out-of-band writes.",
       "severity": "warning",
       "target": "neo4j"
@@ -227,6 +250,7 @@
       "line": 59,
       "message": "Neo4j schema does not enforce the canonical dateTime datatype for this property.",
       "model_path": "energy-asset-intelligence.yaml",
+      "outcome": "runtime-mitigated",
       "runtime_control": "Validate values in the shared mutation validator.",
       "severity": "warning",
       "target": "neo4j"
@@ -238,6 +262,7 @@
       "line": 103,
       "message": "Neo4j schema does not enforce the canonical decimal datatype for this property.",
       "model_path": "energy-asset-intelligence.yaml",
+      "outcome": "runtime-mitigated",
       "runtime_control": "Validate values in the shared mutation validator.",
       "severity": "warning",
       "target": "neo4j"
@@ -249,6 +274,7 @@
       "line": 79,
       "message": "OWL cardinality describes semantics under the open-world assumption; it does not reject missing input data.",
       "model_path": "energy-asset-intelligence.yaml",
+      "outcome": "warning",
       "runtime_control": "Use the generated SHACL shape as the closed-world publication gate.",
       "severity": "warning",
       "target": "owl"
@@ -260,6 +286,7 @@
       "line": 79,
       "message": "Portable Neo4j community constraints cannot enforce this required property.",
       "model_path": "energy-asset-intelligence.yaml",
+      "outcome": "runtime-mitigated",
       "runtime_control": "Validate the property before the mutation and monitor out-of-band writes.",
       "severity": "warning",
       "target": "neo4j"
@@ -271,6 +298,7 @@
       "line": 79,
       "message": "Neo4j schema does not enforce the canonical dateTime datatype for this property.",
       "model_path": "energy-asset-intelligence.yaml",
+      "outcome": "runtime-mitigated",
       "runtime_control": "Validate values in the shared mutation validator.",
       "severity": "warning",
       "target": "neo4j"
@@ -282,6 +310,7 @@
       "line": 108,
       "message": "Neo4j schema does not enforce the canonical dateTime datatype for this property.",
       "model_path": "energy-asset-intelligence.yaml",
+      "outcome": "runtime-mitigated",
       "runtime_control": "Validate values in the shared mutation validator.",
       "severity": "warning",
       "target": "neo4j"
@@ -293,6 +322,7 @@
       "line": 120,
       "message": "Mixin properties are expanded onto the concrete label; mixin identity is not native Neo4j schema.",
       "model_path": "energy-asset-intelligence.yaml",
+      "outcome": "translated",
       "runtime_control": null,
       "severity": "info",
       "target": "neo4j"
@@ -304,6 +334,7 @@
       "line": 120,
       "message": "The generated SHACL shape has no shape-inheritance link to the parent type; inherited properties are present but the is-a relationship itself is not represented.",
       "model_path": "energy-asset-intelligence.yaml",
+      "outcome": "runtime-mitigated",
       "runtime_control": "Preserve the type hierarchy through the canonical OWL export for lineage checks.",
       "severity": "info",
       "target": "shacl"
@@ -315,6 +346,7 @@
       "line": 120,
       "message": "Neo4j has no native label-hierarchy constraint; inherited properties are expanded onto the concrete label with no structural link back to the parent type.",
       "model_path": "energy-asset-intelligence.yaml",
+      "outcome": "runtime-mitigated",
       "runtime_control": "Preserve the type hierarchy through the canonical OWL export for lineage checks.",
       "severity": "info",
       "target": "neo4j"
@@ -326,6 +358,7 @@
       "line": 141,
       "message": "OWL cardinality describes semantics under the open-world assumption; it does not reject missing input data.",
       "model_path": "energy-asset-intelligence.yaml",
+      "outcome": "warning",
       "runtime_control": "Use the generated SHACL shape as the closed-world publication gate.",
       "severity": "warning",
       "target": "owl"
@@ -337,6 +370,7 @@
       "line": 141,
       "message": "Portable Neo4j community constraints cannot enforce this required property.",
       "model_path": "energy-asset-intelligence.yaml",
+      "outcome": "runtime-mitigated",
       "runtime_control": "Validate the property before the mutation and monitor out-of-band writes.",
       "severity": "warning",
       "target": "neo4j"
@@ -348,6 +382,7 @@
       "line": 141,
       "message": "Neo4j schema does not enforce the canonical string datatype for this property.",
       "model_path": "energy-asset-intelligence.yaml",
+      "outcome": "runtime-mitigated",
       "runtime_control": "Validate values in the shared mutation validator.",
       "severity": "warning",
       "target": "neo4j"
@@ -359,6 +394,7 @@
       "line": 13,
       "message": "Neo4j schema does not enforce the canonical dateTime datatype for this property.",
       "model_path": "energy-asset-intelligence.yaml",
+      "outcome": "runtime-mitigated",
       "runtime_control": "Validate values in the shared mutation validator.",
       "severity": "warning",
       "target": "neo4j"
@@ -370,6 +406,7 @@
       "line": 135,
       "message": "OWL cardinality describes semantics under the open-world assumption; it does not reject missing input data.",
       "model_path": "energy-asset-intelligence.yaml",
+      "outcome": "warning",
       "runtime_control": "Use the generated SHACL shape as the closed-world publication gate.",
       "severity": "warning",
       "target": "owl"
@@ -381,6 +418,7 @@
       "line": 135,
       "message": "Portable Neo4j community constraints cannot enforce this required property.",
       "model_path": "energy-asset-intelligence.yaml",
+      "outcome": "runtime-mitigated",
       "runtime_control": "Validate the property before the mutation and monitor out-of-band writes.",
       "severity": "warning",
       "target": "neo4j"
@@ -392,6 +430,7 @@
       "line": 135,
       "message": "Neo4j schema does not enforce the canonical string datatype for this property.",
       "model_path": "energy-asset-intelligence.yaml",
+      "outcome": "runtime-mitigated",
       "runtime_control": "Validate values in the shared mutation validator.",
       "severity": "warning",
       "target": "neo4j"
@@ -403,6 +442,7 @@
       "line": 144,
       "message": "OWL cardinality describes semantics under the open-world assumption; it does not reject missing input data.",
       "model_path": "energy-asset-intelligence.yaml",
+      "outcome": "warning",
       "runtime_control": "Use the generated SHACL shape as the closed-world publication gate.",
       "severity": "warning",
       "target": "owl"
@@ -414,6 +454,7 @@
       "line": 144,
       "message": "Portable Neo4j community constraints cannot enforce this required property.",
       "model_path": "energy-asset-intelligence.yaml",
+      "outcome": "runtime-mitigated",
       "runtime_control": "Validate the property before the mutation and monitor out-of-band writes.",
       "severity": "warning",
       "target": "neo4j"
@@ -425,6 +466,7 @@
       "line": 144,
       "message": "Neo4j schema does not enforce the canonical string datatype for this property.",
       "model_path": "energy-asset-intelligence.yaml",
+      "outcome": "runtime-mitigated",
       "runtime_control": "Validate values in the shared mutation validator.",
       "severity": "warning",
       "target": "neo4j"
@@ -436,6 +478,7 @@
       "line": 150,
       "message": "OWL cardinality describes semantics under the open-world assumption; it does not reject missing input data.",
       "model_path": "energy-asset-intelligence.yaml",
+      "outcome": "warning",
       "runtime_control": "Use the generated SHACL shape as the closed-world publication gate.",
       "severity": "warning",
       "target": "owl"
@@ -447,6 +490,7 @@
       "line": 150,
       "message": "Portable Neo4j community constraints cannot enforce this required property.",
       "model_path": "energy-asset-intelligence.yaml",
+      "outcome": "runtime-mitigated",
       "runtime_control": "Validate the property before the mutation and monitor out-of-band writes.",
       "severity": "warning",
       "target": "neo4j"
@@ -458,6 +502,7 @@
       "line": 150,
       "message": "Neo4j schema does not enforce the canonical string datatype for this property.",
       "model_path": "energy-asset-intelligence.yaml",
+      "outcome": "runtime-mitigated",
       "runtime_control": "Validate values in the shared mutation validator.",
       "severity": "warning",
       "target": "neo4j"
@@ -469,6 +514,7 @@
       "line": 131,
       "message": "OWL cardinality describes semantics under the open-world assumption; it does not reject missing input data.",
       "model_path": "energy-asset-intelligence.yaml",
+      "outcome": "warning",
       "runtime_control": "Use the generated SHACL shape as the closed-world publication gate.",
       "severity": "warning",
       "target": "owl"
@@ -480,6 +526,7 @@
       "line": 131,
       "message": "Neo4j schema does not enforce the canonical string datatype for this property.",
       "model_path": "energy-asset-intelligence.yaml",
+      "outcome": "runtime-mitigated",
       "runtime_control": "Validate values in the shared mutation validator.",
       "severity": "warning",
       "target": "neo4j"
@@ -491,6 +538,7 @@
       "line": 131,
       "message": "SHACL Core cardinality does not enforce graph-wide key uniqueness.",
       "model_path": "energy-asset-intelligence.yaml",
+      "outcome": "runtime-mitigated",
       "runtime_control": "Enforce uniqueness in the selected persistence transaction.",
       "severity": "warning",
       "target": "shacl"
@@ -502,6 +550,7 @@
       "line": 147,
       "message": "OWL cardinality describes semantics under the open-world assumption; it does not reject missing input data.",
       "model_path": "energy-asset-intelligence.yaml",
+      "outcome": "warning",
       "runtime_control": "Use the generated SHACL shape as the closed-world publication gate.",
       "severity": "warning",
       "target": "owl"
@@ -513,6 +562,7 @@
       "line": 147,
       "message": "Portable Neo4j community constraints cannot enforce this required property.",
       "model_path": "energy-asset-intelligence.yaml",
+      "outcome": "runtime-mitigated",
       "runtime_control": "Validate the property before the mutation and monitor out-of-band writes.",
       "severity": "warning",
       "target": "neo4j"
@@ -524,6 +574,7 @@
       "line": 147,
       "message": "Neo4j schema does not enforce the canonical string datatype for this property.",
       "model_path": "energy-asset-intelligence.yaml",
+      "outcome": "runtime-mitigated",
       "runtime_control": "Validate values in the shared mutation validator.",
       "severity": "warning",
       "target": "neo4j"
@@ -535,6 +586,7 @@
       "line": 138,
       "message": "OWL cardinality describes semantics under the open-world assumption; it does not reject missing input data.",
       "model_path": "energy-asset-intelligence.yaml",
+      "outcome": "warning",
       "runtime_control": "Use the generated SHACL shape as the closed-world publication gate.",
       "severity": "warning",
       "target": "owl"
@@ -546,6 +598,7 @@
       "line": 138,
       "message": "Portable Neo4j community constraints cannot enforce this required property.",
       "model_path": "energy-asset-intelligence.yaml",
+      "outcome": "runtime-mitigated",
       "runtime_control": "Validate the property before the mutation and monitor out-of-band writes.",
       "severity": "warning",
       "target": "neo4j"
@@ -557,6 +610,7 @@
       "line": 138,
       "message": "Neo4j schema does not enforce the canonical string datatype for this property.",
       "model_path": "energy-asset-intelligence.yaml",
+      "outcome": "runtime-mitigated",
       "runtime_control": "Validate values in the shared mutation validator.",
       "severity": "warning",
       "target": "neo4j"
@@ -568,6 +622,7 @@
       "line": 15,
       "message": "Neo4j schema does not enforce the canonical dateTime datatype for this property.",
       "model_path": "energy-asset-intelligence.yaml",
+      "outcome": "runtime-mitigated",
       "runtime_control": "Validate values in the shared mutation validator.",
       "severity": "warning",
       "target": "neo4j"
@@ -579,6 +634,7 @@
       "line": 153,
       "message": "The generated SHACL shape has no shape-inheritance link to the parent type; inherited properties are present but the is-a relationship itself is not represented.",
       "model_path": "energy-asset-intelligence.yaml",
+      "outcome": "runtime-mitigated",
       "runtime_control": "Preserve the type hierarchy through the canonical OWL export for lineage checks.",
       "severity": "info",
       "target": "shacl"
@@ -590,6 +646,7 @@
       "line": 153,
       "message": "Neo4j has no native label-hierarchy constraint; inherited properties are expanded onto the concrete label with no structural link back to the parent type.",
       "model_path": "energy-asset-intelligence.yaml",
+      "outcome": "runtime-mitigated",
       "runtime_control": "Preserve the type hierarchy through the canonical OWL export for lineage checks.",
       "severity": "info",
       "target": "neo4j"
@@ -601,6 +658,7 @@
       "line": 162,
       "message": "Neo4j schema does not enforce the canonical dateTime datatype for this property.",
       "model_path": "energy-asset-intelligence.yaml",
+      "outcome": "runtime-mitigated",
       "runtime_control": "Validate values in the shared mutation validator.",
       "severity": "warning",
       "target": "neo4j"
@@ -612,6 +670,7 @@
       "line": 164,
       "message": "Neo4j schema does not enforce the canonical string datatype for this property.",
       "model_path": "energy-asset-intelligence.yaml",
+      "outcome": "runtime-mitigated",
       "runtime_control": "Validate values in the shared mutation validator.",
       "severity": "warning",
       "target": "neo4j"
@@ -623,6 +682,7 @@
       "line": 158,
       "message": "Neo4j schema does not enforce the canonical string datatype for this property.",
       "model_path": "energy-asset-intelligence.yaml",
+      "outcome": "runtime-mitigated",
       "runtime_control": "Validate values in the shared mutation validator.",
       "severity": "warning",
       "target": "neo4j"
@@ -634,6 +694,7 @@
       "line": 160,
       "message": "Neo4j schema does not enforce the canonical string datatype for this property.",
       "model_path": "energy-asset-intelligence.yaml",
+      "outcome": "runtime-mitigated",
       "runtime_control": "Validate values in the shared mutation validator.",
       "severity": "warning",
       "target": "neo4j"
@@ -645,6 +706,7 @@
       "line": 166,
       "message": "Neo4j schema does not enforce the canonical string datatype for this property.",
       "model_path": "energy-asset-intelligence.yaml",
+      "outcome": "runtime-mitigated",
       "runtime_control": "Validate values in the shared mutation validator.",
       "severity": "warning",
       "target": "neo4j"
@@ -656,6 +718,7 @@
       "line": 42,
       "message": "Mixin properties are expanded onto the concrete label; mixin identity is not native Neo4j schema.",
       "model_path": "energy-asset-intelligence.yaml",
+      "outcome": "translated",
       "runtime_control": null,
       "severity": "info",
       "target": "neo4j"
@@ -667,6 +730,7 @@
       "line": 42,
       "message": "The generated SHACL shape has no shape-inheritance link to the parent type; inherited properties are present but the is-a relationship itself is not represented.",
       "model_path": "energy-asset-intelligence.yaml",
+      "outcome": "runtime-mitigated",
       "runtime_control": "Preserve the type hierarchy through the canonical OWL export for lineage checks.",
       "severity": "info",
       "target": "shacl"
@@ -678,6 +742,7 @@
       "line": 42,
       "message": "Neo4j has no native label-hierarchy constraint; inherited properties are expanded onto the concrete label with no structural link back to the parent type.",
       "model_path": "energy-asset-intelligence.yaml",
+      "outcome": "runtime-mitigated",
       "runtime_control": "Preserve the type hierarchy through the canonical OWL export for lineage checks.",
       "severity": "info",
       "target": "neo4j"
@@ -689,6 +754,7 @@
       "line": 13,
       "message": "Neo4j schema does not enforce the canonical dateTime datatype for this property.",
       "model_path": "energy-asset-intelligence.yaml",
+      "outcome": "runtime-mitigated",
       "runtime_control": "Validate values in the shared mutation validator.",
       "severity": "warning",
       "target": "neo4j"
@@ -700,6 +766,7 @@
       "line": 48,
       "message": "Neo4j schema does not enforce the canonical string datatype for this property.",
       "model_path": "energy-asset-intelligence.yaml",
+      "outcome": "runtime-mitigated",
       "runtime_control": "Validate values in the shared mutation validator.",
       "severity": "warning",
       "target": "neo4j"
@@ -711,6 +778,7 @@
       "line": 56,
       "message": "OWL cardinality describes semantics under the open-world assumption; it does not reject missing input data.",
       "model_path": "energy-asset-intelligence.yaml",
+      "outcome": "warning",
       "runtime_control": "Use the generated SHACL shape as the closed-world publication gate.",
       "severity": "warning",
       "target": "owl"
@@ -722,6 +790,7 @@
       "line": 56,
       "message": "Portable Neo4j community constraints cannot enforce this required property.",
       "model_path": "energy-asset-intelligence.yaml",
+      "outcome": "runtime-mitigated",
       "runtime_control": "Validate the property before the mutation and monitor out-of-band writes.",
       "severity": "warning",
       "target": "neo4j"
@@ -733,6 +802,7 @@
       "line": 56,
       "message": "Neo4j schema does not enforce the canonical dateTime datatype for this property.",
       "model_path": "energy-asset-intelligence.yaml",
+      "outcome": "runtime-mitigated",
       "runtime_control": "Validate values in the shared mutation validator.",
       "severity": "warning",
       "target": "neo4j"
@@ -744,6 +814,7 @@
       "line": 59,
       "message": "OWL cardinality describes semantics under the open-world assumption; it does not reject missing input data.",
       "model_path": "energy-asset-intelligence.yaml",
+      "outcome": "warning",
       "runtime_control": "Use the generated SHACL shape as the closed-world publication gate.",
       "severity": "warning",
       "target": "owl"
@@ -755,6 +826,7 @@
       "line": 59,
       "message": "Portable Neo4j community constraints cannot enforce this required property.",
       "model_path": "energy-asset-intelligence.yaml",
+      "outcome": "runtime-mitigated",
       "runtime_control": "Validate the property before the mutation and monitor out-of-band writes.",
       "severity": "warning",
       "target": "neo4j"
@@ -766,6 +838,7 @@
       "line": 59,
       "message": "Neo4j schema does not enforce the canonical dateTime datatype for this property.",
       "model_path": "energy-asset-intelligence.yaml",
+      "outcome": "runtime-mitigated",
       "runtime_control": "Validate values in the shared mutation validator.",
       "severity": "warning",
       "target": "neo4j"
@@ -777,6 +850,7 @@
       "line": 53,
       "message": "OWL cardinality describes semantics under the open-world assumption; it does not reject missing input data.",
       "model_path": "energy-asset-intelligence.yaml",
+      "outcome": "warning",
       "runtime_control": "Use the generated SHACL shape as the closed-world publication gate.",
       "severity": "warning",
       "target": "owl"
@@ -788,6 +862,7 @@
       "line": 53,
       "message": "Portable Neo4j community constraints cannot enforce this required property.",
       "model_path": "energy-asset-intelligence.yaml",
+      "outcome": "runtime-mitigated",
       "runtime_control": "Validate the property before the mutation and monitor out-of-band writes.",
       "severity": "warning",
       "target": "neo4j"
@@ -799,6 +874,7 @@
       "line": 53,
       "message": "Neo4j schema does not enforce the canonical string datatype for this property.",
       "model_path": "energy-asset-intelligence.yaml",
+      "outcome": "runtime-mitigated",
       "runtime_control": "Validate values in the shared mutation validator.",
       "severity": "warning",
       "target": "neo4j"
@@ -810,6 +886,7 @@
       "line": 15,
       "message": "Neo4j schema does not enforce the canonical dateTime datatype for this property.",
       "model_path": "energy-asset-intelligence.yaml",
+      "outcome": "runtime-mitigated",
       "runtime_control": "Validate values in the shared mutation validator.",
       "severity": "warning",
       "target": "neo4j"
@@ -821,6 +898,7 @@
       "line": 50,
       "message": "OWL cardinality describes semantics under the open-world assumption; it does not reject missing input data.",
       "model_path": "energy-asset-intelligence.yaml",
+      "outcome": "warning",
       "runtime_control": "Use the generated SHACL shape as the closed-world publication gate.",
       "severity": "warning",
       "target": "owl"
@@ -832,6 +910,7 @@
       "line": 50,
       "message": "Portable Neo4j community constraints cannot enforce this required property.",
       "model_path": "energy-asset-intelligence.yaml",
+      "outcome": "runtime-mitigated",
       "runtime_control": "Validate the property before the mutation and monitor out-of-band writes.",
       "severity": "warning",
       "target": "neo4j"
@@ -843,6 +922,7 @@
       "line": 50,
       "message": "Neo4j schema does not enforce the canonical decimal datatype for this property.",
       "model_path": "energy-asset-intelligence.yaml",
+      "outcome": "runtime-mitigated",
       "runtime_control": "Validate values in the shared mutation validator.",
       "severity": "warning",
       "target": "neo4j"
@@ -854,6 +934,7 @@
       "line": 87,
       "message": "OWL has no native abstract-class constraint that forbids direct instances.",
       "model_path": "energy-asset-intelligence.yaml",
+      "outcome": "runtime-mitigated",
       "runtime_control": "Reject direct instances at the governed mutation or publication boundary.",
       "severity": "warning",
       "target": "owl"
@@ -865,6 +946,7 @@
       "line": 87,
       "message": "The generated SHACL Core shape does not forbid direct instances of an abstract class.",
       "model_path": "energy-asset-intelligence.yaml",
+      "outcome": "runtime-mitigated",
       "runtime_control": "Reject abstract classes in the governed mutation validator.",
       "severity": "warning",
       "target": "shacl"
@@ -876,6 +958,7 @@
       "line": 87,
       "message": "Neo4j labels do not prevent direct instances of an abstract semantic type.",
       "model_path": "energy-asset-intelligence.yaml",
+      "outcome": "runtime-mitigated",
       "runtime_control": "Reject abstract labels in the mutation validator.",
       "severity": "warning",
       "target": "neo4j"
@@ -887,6 +970,7 @@
       "line": 87,
       "message": "The generated SHACL shape has no shape-inheritance link to the parent type; inherited properties are present but the is-a relationship itself is not represented.",
       "model_path": "energy-asset-intelligence.yaml",
+      "outcome": "runtime-mitigated",
       "runtime_control": "Preserve the type hierarchy through the canonical OWL export for lineage checks.",
       "severity": "info",
       "target": "shacl"
@@ -898,6 +982,7 @@
       "line": 87,
       "message": "Neo4j has no native label-hierarchy constraint; inherited properties are expanded onto the concrete label with no structural link back to the parent type.",
       "model_path": "energy-asset-intelligence.yaml",
+      "outcome": "runtime-mitigated",
       "runtime_control": "Preserve the type hierarchy through the canonical OWL export for lineage checks.",
       "severity": "info",
       "target": "neo4j"
@@ -909,6 +994,7 @@
       "line": 28,
       "message": "The generated SHACL shape has no shape-inheritance link to the parent type; inherited properties are present but the is-a relationship itself is not represented.",
       "model_path": "energy-asset-intelligence.yaml",
+      "outcome": "runtime-mitigated",
       "runtime_control": "Preserve the type hierarchy through the canonical OWL export for lineage checks.",
       "severity": "info",
       "target": "shacl"
@@ -920,6 +1006,7 @@
       "line": 28,
       "message": "Neo4j has no native label-hierarchy constraint; inherited properties are expanded onto the concrete label with no structural link back to the parent type.",
       "model_path": "energy-asset-intelligence.yaml",
+      "outcome": "runtime-mitigated",
       "runtime_control": "Preserve the type hierarchy through the canonical OWL export for lineage checks.",
       "severity": "info",
       "target": "neo4j"
@@ -931,6 +1018,7 @@
       "line": 24,
       "message": "OWL cardinality describes semantics under the open-world assumption; it does not reject missing input data.",
       "model_path": "energy-asset-intelligence.yaml",
+      "outcome": "warning",
       "runtime_control": "Use the generated SHACL shape as the closed-world publication gate.",
       "severity": "warning",
       "target": "owl"
@@ -942,6 +1030,7 @@
       "line": 24,
       "message": "Neo4j schema does not enforce the canonical string datatype for this property.",
       "model_path": "energy-asset-intelligence.yaml",
+      "outcome": "runtime-mitigated",
       "runtime_control": "Validate values in the shared mutation validator.",
       "severity": "warning",
       "target": "neo4j"
@@ -953,6 +1042,7 @@
       "line": 24,
       "message": "SHACL Core cardinality does not enforce graph-wide key uniqueness.",
       "model_path": "energy-asset-intelligence.yaml",
+      "outcome": "runtime-mitigated",
       "runtime_control": "Enforce uniqueness in the selected persistence transaction.",
       "severity": "warning",
       "target": "shacl"
@@ -964,6 +1054,7 @@
       "line": 13,
       "message": "Neo4j schema does not enforce the canonical dateTime datatype for this property.",
       "model_path": "energy-asset-intelligence.yaml",
+      "outcome": "runtime-mitigated",
       "runtime_control": "Validate values in the shared mutation validator.",
       "severity": "warning",
       "target": "neo4j"
@@ -975,6 +1066,7 @@
       "line": 15,
       "message": "Neo4j schema does not enforce the canonical dateTime datatype for this property.",
       "model_path": "energy-asset-intelligence.yaml",
+      "outcome": "runtime-mitigated",
       "runtime_control": "Validate values in the shared mutation validator.",
       "severity": "warning",
       "target": "neo4j"
@@ -986,6 +1078,7 @@
       "line": 68,
       "message": "Mixin properties are expanded onto the concrete label; mixin identity is not native Neo4j schema.",
       "model_path": "energy-asset-intelligence.yaml",
+      "outcome": "translated",
       "runtime_control": null,
       "severity": "info",
       "target": "neo4j"
@@ -997,6 +1090,7 @@
       "line": 68,
       "message": "The generated SHACL shape has no shape-inheritance link to the parent type; inherited properties are present but the is-a relationship itself is not represented.",
       "model_path": "energy-asset-intelligence.yaml",
+      "outcome": "runtime-mitigated",
       "runtime_control": "Preserve the type hierarchy through the canonical OWL export for lineage checks.",
       "severity": "info",
       "target": "shacl"
@@ -1008,6 +1102,7 @@
       "line": 68,
       "message": "Neo4j has no native label-hierarchy constraint; inherited properties are expanded onto the concrete label with no structural link back to the parent type.",
       "model_path": "energy-asset-intelligence.yaml",
+      "outcome": "runtime-mitigated",
       "runtime_control": "Preserve the type hierarchy through the canonical OWL export for lineage checks.",
       "severity": "info",
       "target": "neo4j"
@@ -1019,6 +1114,7 @@
       "line": 13,
       "message": "Neo4j schema does not enforce the canonical dateTime datatype for this property.",
       "model_path": "energy-asset-intelligence.yaml",
+      "outcome": "runtime-mitigated",
       "runtime_control": "Validate values in the shared mutation validator.",
       "severity": "warning",
       "target": "neo4j"
@@ -1030,6 +1126,7 @@
       "line": 59,
       "message": "OWL cardinality describes semantics under the open-world assumption; it does not reject missing input data.",
       "model_path": "energy-asset-intelligence.yaml",
+      "outcome": "warning",
       "runtime_control": "Use the generated SHACL shape as the closed-world publication gate.",
       "severity": "warning",
       "target": "owl"
@@ -1041,6 +1138,7 @@
       "line": 59,
       "message": "Portable Neo4j community constraints cannot enforce this required property.",
       "model_path": "energy-asset-intelligence.yaml",
+      "outcome": "runtime-mitigated",
       "runtime_control": "Validate the property before the mutation and monitor out-of-band writes.",
       "severity": "warning",
       "target": "neo4j"
@@ -1052,6 +1150,7 @@
       "line": 59,
       "message": "Neo4j schema does not enforce the canonical dateTime datatype for this property.",
       "model_path": "energy-asset-intelligence.yaml",
+      "outcome": "runtime-mitigated",
       "runtime_control": "Validate values in the shared mutation validator.",
       "severity": "warning",
       "target": "neo4j"
@@ -1063,6 +1162,7 @@
       "line": 77,
       "message": "Neo4j schema does not enforce the canonical string datatype for this property.",
       "model_path": "energy-asset-intelligence.yaml",
+      "outcome": "runtime-mitigated",
       "runtime_control": "Validate values in the shared mutation validator.",
       "severity": "warning",
       "target": "neo4j"
@@ -1074,6 +1174,7 @@
       "line": 15,
       "message": "Neo4j schema does not enforce the canonical dateTime datatype for this property.",
       "model_path": "energy-asset-intelligence.yaml",
+      "outcome": "runtime-mitigated",
       "runtime_control": "Validate values in the shared mutation validator.",
       "severity": "warning",
       "target": "neo4j"
@@ -1085,6 +1186,7 @@
       "line": 79,
       "message": "OWL cardinality describes semantics under the open-world assumption; it does not reject missing input data.",
       "model_path": "energy-asset-intelligence.yaml",
+      "outcome": "warning",
       "runtime_control": "Use the generated SHACL shape as the closed-world publication gate.",
       "severity": "warning",
       "target": "owl"
@@ -1096,6 +1198,7 @@
       "line": 79,
       "message": "Portable Neo4j community constraints cannot enforce this required property.",
       "model_path": "energy-asset-intelligence.yaml",
+      "outcome": "runtime-mitigated",
       "runtime_control": "Validate the property before the mutation and monitor out-of-band writes.",
       "severity": "warning",
       "target": "neo4j"
@@ -1107,6 +1210,7 @@
       "line": 79,
       "message": "Neo4j schema does not enforce the canonical dateTime datatype for this property.",
       "model_path": "energy-asset-intelligence.yaml",
+      "outcome": "runtime-mitigated",
       "runtime_control": "Validate values in the shared mutation validator.",
       "severity": "warning",
       "target": "neo4j"
@@ -1118,6 +1222,7 @@
       "line": 74,
       "message": "Neo4j schema does not enforce the canonical string datatype for this property.",
       "model_path": "energy-asset-intelligence.yaml",
+      "outcome": "runtime-mitigated",
       "runtime_control": "Validate values in the shared mutation validator.",
       "severity": "warning",
       "target": "neo4j"
@@ -1129,6 +1234,7 @@
       "line": 74,
       "message": "SHACL Core cardinality does not enforce graph-wide key uniqueness.",
       "model_path": "energy-asset-intelligence.yaml",
+      "outcome": "runtime-mitigated",
       "runtime_control": "Enforce uniqueness in the selected persistence transaction.",
       "severity": "warning",
       "target": "shacl"
@@ -1140,6 +1246,7 @@
       "line": 193,
       "message": "Neo4j schema constraints do not enforce inherited relation source and target types.",
       "model_path": "energy-asset-intelligence.yaml",
+      "outcome": "runtime-mitigated",
       "runtime_control": "Validate relation endpoints in the shared mutation validator.",
       "severity": "warning",
       "target": "neo4j"
@@ -1151,6 +1258,7 @@
       "line": 181,
       "message": "Neo4j schema constraints do not enforce inherited relation source and target types.",
       "model_path": "energy-asset-intelligence.yaml",
+      "outcome": "runtime-mitigated",
       "runtime_control": "Validate relation endpoints in the shared mutation validator.",
       "severity": "warning",
       "target": "neo4j"
@@ -1162,6 +1270,7 @@
       "line": 189,
       "message": "Neo4j schema constraints do not enforce inherited relation source and target types.",
       "model_path": "energy-asset-intelligence.yaml",
+      "outcome": "runtime-mitigated",
       "runtime_control": "Validate relation endpoints in the shared mutation validator.",
       "severity": "warning",
       "target": "neo4j"
@@ -1173,6 +1282,7 @@
       "line": 169,
       "message": "Neo4j schema constraints do not enforce inherited relation source and target types.",
       "model_path": "energy-asset-intelligence.yaml",
+      "outcome": "runtime-mitigated",
       "runtime_control": "Validate relation endpoints in the shared mutation validator.",
       "severity": "warning",
       "target": "neo4j"
@@ -1184,6 +1294,7 @@
       "line": 173,
       "message": "Neo4j schema constraints do not enforce inherited relation source and target types.",
       "model_path": "energy-asset-intelligence.yaml",
+      "outcome": "runtime-mitigated",
       "runtime_control": "Validate relation endpoints in the shared mutation validator.",
       "severity": "warning",
       "target": "neo4j"
@@ -1195,6 +1306,7 @@
       "line": 177,
       "message": "Neo4j schema constraints do not enforce inherited relation source and target types.",
       "model_path": "energy-asset-intelligence.yaml",
+      "outcome": "runtime-mitigated",
       "runtime_control": "Validate relation endpoints in the shared mutation validator.",
       "severity": "warning",
       "target": "neo4j"
@@ -1206,6 +1318,7 @@
       "line": 185,
       "message": "Neo4j schema constraints do not enforce inherited relation source and target types.",
       "model_path": "energy-asset-intelligence.yaml",
+      "outcome": "runtime-mitigated",
       "runtime_control": "Validate relation endpoints in the shared mutation validator.",
       "severity": "warning",
       "target": "neo4j"
@@ -1217,6 +1330,7 @@
       "line": null,
       "message": "Generated shapes remain open to preserve existing RDF metadata and do not reject every undeclared predicate.",
       "model_path": "energy-asset-intelligence.yaml",
+      "outcome": "runtime-mitigated",
       "runtime_control": "Reject unknown LPG properties in the shared mutation validator; use curated closed SHACL shapes where required.",
       "severity": "warning",
       "target": "shacl"
@@ -1228,9 +1342,214 @@
       "line": null,
       "message": "Neo4j has no schema-level closed-world constraint; nothing rejects an undeclared property written onto a node.",
       "model_path": "energy-asset-intelligence.yaml",
+      "outcome": "runtime-mitigated",
       "runtime_control": "Reject unknown LPG properties in the shared mutation validator.",
       "severity": "warning",
       "target": "neo4j"
+    },
+    {
+      "code": "GQL_MIXIN_EXPANDED",
+      "element": "Asset",
+      "fidelity": "approximated",
+      "line": 18,
+      "message": "The GQL rendering copies mixin properties onto the concrete node type; mixin identity is not represented.",
+      "model_path": "energy-asset-intelligence.yaml",
+      "outcome": "translated",
+      "runtime_control": null,
+      "severity": "info",
+      "target": "gql"
+    },
+    {
+      "code": "GQL_KEY_UNSUPPORTED",
+      "element": "Asset.assetId",
+      "fidelity": "unenforceable",
+      "line": 24,
+      "message": "GQL graph types carry no key or uniqueness constraint.",
+      "model_path": "energy-asset-intelligence.yaml",
+      "outcome": "runtime-mitigated",
+      "runtime_control": "Enforce uniqueness in the selected persistence transaction.",
+      "severity": "warning",
+      "target": "gql"
+    },
+    {
+      "code": "GQL_MIXIN_EXPANDED",
+      "element": "Component",
+      "fidelity": "approximated",
+      "line": 32,
+      "message": "The GQL rendering copies mixin properties onto the concrete node type; mixin identity is not represented.",
+      "model_path": "energy-asset-intelligence.yaml",
+      "outcome": "translated",
+      "runtime_control": null,
+      "severity": "info",
+      "target": "gql"
+    },
+    {
+      "code": "GQL_INHERITANCE_FLATTENED",
+      "element": "DocumentRevision",
+      "fidelity": "approximated",
+      "line": 92,
+      "message": "The GQL rendering copies inherited properties onto each concrete node type; the is-a relationship itself is not represented.",
+      "model_path": "energy-asset-intelligence.yaml",
+      "outcome": "translated",
+      "runtime_control": null,
+      "severity": "info",
+      "target": "gql"
+    },
+    {
+      "code": "GQL_KEY_UNSUPPORTED",
+      "element": "DocumentRevision.documentId",
+      "fidelity": "unenforceable",
+      "line": 97,
+      "message": "GQL graph types carry no key or uniqueness constraint.",
+      "model_path": "energy-asset-intelligence.yaml",
+      "outcome": "runtime-mitigated",
+      "runtime_control": "Enforce uniqueness in the selected persistence transaction.",
+      "severity": "warning",
+      "target": "gql"
+    },
+    {
+      "code": "GQL_INHERITANCE_FLATTENED",
+      "element": "EvidenceRequest",
+      "fidelity": "approximated",
+      "line": 120,
+      "message": "The GQL rendering copies inherited properties onto each concrete node type; the is-a relationship itself is not represented.",
+      "model_path": "energy-asset-intelligence.yaml",
+      "outcome": "translated",
+      "runtime_control": null,
+      "severity": "info",
+      "target": "gql"
+    },
+    {
+      "code": "GQL_MIXIN_EXPANDED",
+      "element": "EvidenceRequest",
+      "fidelity": "approximated",
+      "line": 120,
+      "message": "The GQL rendering copies mixin properties onto the concrete node type; mixin identity is not represented.",
+      "model_path": "energy-asset-intelligence.yaml",
+      "outcome": "translated",
+      "runtime_control": null,
+      "severity": "info",
+      "target": "gql"
+    },
+    {
+      "code": "GQL_KEY_UNSUPPORTED",
+      "element": "EvidenceRequest.requestId",
+      "fidelity": "unenforceable",
+      "line": 131,
+      "message": "GQL graph types carry no key or uniqueness constraint.",
+      "model_path": "energy-asset-intelligence.yaml",
+      "outcome": "runtime-mitigated",
+      "runtime_control": "Enforce uniqueness in the selected persistence transaction.",
+      "severity": "warning",
+      "target": "gql"
+    },
+    {
+      "code": "GQL_INHERITANCE_FLATTENED",
+      "element": "EvidenceRequestTransition",
+      "fidelity": "approximated",
+      "line": 153,
+      "message": "The GQL rendering copies inherited properties onto each concrete node type; the is-a relationship itself is not represented.",
+      "model_path": "energy-asset-intelligence.yaml",
+      "outcome": "translated",
+      "runtime_control": null,
+      "severity": "info",
+      "target": "gql"
+    },
+    {
+      "code": "GQL_INHERITANCE_FLATTENED",
+      "element": "Observation",
+      "fidelity": "approximated",
+      "line": 42,
+      "message": "The GQL rendering copies inherited properties onto each concrete node type; the is-a relationship itself is not represented.",
+      "model_path": "energy-asset-intelligence.yaml",
+      "outcome": "translated",
+      "runtime_control": null,
+      "severity": "info",
+      "target": "gql"
+    },
+    {
+      "code": "GQL_MIXIN_EXPANDED",
+      "element": "Observation",
+      "fidelity": "approximated",
+      "line": 42,
+      "message": "The GQL rendering copies mixin properties onto the concrete node type; mixin identity is not represented.",
+      "model_path": "energy-asset-intelligence.yaml",
+      "outcome": "translated",
+      "runtime_control": null,
+      "severity": "info",
+      "target": "gql"
+    },
+    {
+      "code": "GQL_INHERITANCE_FLATTENED",
+      "element": "TechnicalDocument",
+      "fidelity": "approximated",
+      "line": 87,
+      "message": "The GQL rendering copies inherited properties onto each concrete node type; the is-a relationship itself is not represented.",
+      "model_path": "energy-asset-intelligence.yaml",
+      "outcome": "translated",
+      "runtime_control": null,
+      "severity": "info",
+      "target": "gql"
+    },
+    {
+      "code": "GQL_INHERITANCE_FLATTENED",
+      "element": "WindTurbine",
+      "fidelity": "approximated",
+      "line": 28,
+      "message": "The GQL rendering copies inherited properties onto each concrete node type; the is-a relationship itself is not represented.",
+      "model_path": "energy-asset-intelligence.yaml",
+      "outcome": "translated",
+      "runtime_control": null,
+      "severity": "info",
+      "target": "gql"
+    },
+    {
+      "code": "GQL_KEY_UNSUPPORTED",
+      "element": "WindTurbine.assetId",
+      "fidelity": "unenforceable",
+      "line": 24,
+      "message": "GQL graph types carry no key or uniqueness constraint.",
+      "model_path": "energy-asset-intelligence.yaml",
+      "outcome": "runtime-mitigated",
+      "runtime_control": "Enforce uniqueness in the selected persistence transaction.",
+      "severity": "warning",
+      "target": "gql"
+    },
+    {
+      "code": "GQL_INHERITANCE_FLATTENED",
+      "element": "WorkOrder",
+      "fidelity": "approximated",
+      "line": 68,
+      "message": "The GQL rendering copies inherited properties onto each concrete node type; the is-a relationship itself is not represented.",
+      "model_path": "energy-asset-intelligence.yaml",
+      "outcome": "translated",
+      "runtime_control": null,
+      "severity": "info",
+      "target": "gql"
+    },
+    {
+      "code": "GQL_MIXIN_EXPANDED",
+      "element": "WorkOrder",
+      "fidelity": "approximated",
+      "line": 68,
+      "message": "The GQL rendering copies mixin properties onto the concrete node type; mixin identity is not represented.",
+      "model_path": "energy-asset-intelligence.yaml",
+      "outcome": "translated",
+      "runtime_control": null,
+      "severity": "info",
+      "target": "gql"
+    },
+    {
+      "code": "GQL_KEY_UNSUPPORTED",
+      "element": "WorkOrder.workOrderId",
+      "fidelity": "unenforceable",
+      "line": 74,
+      "message": "GQL graph types carry no key or uniqueness constraint.",
+      "model_path": "energy-asset-intelligence.yaml",
+      "outcome": "runtime-mitigated",
+      "runtime_control": "Enforce uniqueness in the selected persistence transaction.",
+      "severity": "warning",
+      "target": "gql"
     }
   ],
   "model": "energy-asset-intelligence",

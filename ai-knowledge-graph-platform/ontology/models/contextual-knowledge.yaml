@@ -1,0 +1,156 @@
+id: contextual-knowledge
+version: 1.0.0
+namespace: https://example.knowledge.demo/ontology#
+label: Contextual knowledge (published items and exceptions)
+unknown_property_policy: reject
+prefixes: {}
+mixins:
+  Governed:
+    label: Governed
+    description: Identity, tenant and lifecycle shared by every published knowledge entry.
+    properties:
+      knowledgeKey:
+        datatype: string
+        required: true
+        key: true
+        cardinality: {max: 1}
+      knowledgeId:
+        datatype: string
+        required: true
+        cardinality: {max: 1}
+      version:
+        datatype: integer
+        required: true
+        cardinality: {max: 1}
+      tenant:
+        datatype: string
+        required: true
+        cardinality: {max: 1}
+      status:
+        datatype: string
+        required: true
+        cardinality: {max: 1}
+      recordedAt:
+        datatype: dateTime
+        required: true
+        cardinality: {max: 1}
+types:
+  KnowledgeItem:
+    label: Knowledge item
+    description: >-
+      A published, versioned requirement, recommendation, permission or
+      prohibition. Applicability, constraints and access policy stay in the
+      Pydantic contract (graphrag/context_graph/knowledge.py), which remains
+      the authority for them; this projection carries identity, lifecycle,
+      review and provenance.
+    lpg_label: KNOWLEDGE_ITEM
+    mixins: [Governed]
+    composite_keys:
+      - [tenant, knowledgeId, version]
+    properties:
+      title:
+        datatype: string
+        required: true
+        cardinality: {max: 1}
+      statement:
+        datatype: string
+        required: true
+        cardinality: {max: 1}
+      subjectKey:
+        datatype: string
+        required: true
+        cardinality: {max: 1}
+      modality:
+        datatype: string
+        required: true
+        cardinality: {max: 1}
+      authority:
+        datatype: string
+        required: true
+        cardinality: {max: 1}
+      reviewedBy:
+        datatype: string
+        required: true
+        cardinality: {max: 1}
+      reviewRef:
+        datatype: string
+        required: true
+        cardinality: {max: 1}
+      validFrom:
+        datatype: dateTime
+        cardinality: {max: 1}
+      validTo:
+        datatype: dateTime
+        cardinality: {max: 1}
+  KnowledgeException:
+    label: Knowledge exception
+    description: A scoped, approved waiver or precedence resolution over knowledge items.
+    lpg_label: KNOWLEDGE_EXCEPTION
+    mixins: [Governed]
+    composite_keys:
+      - [tenant, knowledgeId, version]
+    properties:
+      kind:
+        datatype: string
+        required: true
+        cardinality: {max: 1}
+      grantedBy:
+        datatype: string
+        required: true
+        cardinality: {max: 1}
+      approvalRef:
+        datatype: string
+        required: true
+        cardinality: {max: 1}
+  KnowledgeSource:
+    label: Knowledge source
+    description: A cited source document, chunk or approval record.
+    lpg_label: KNOWLEDGE_SOURCE
+    properties:
+      sourceId:
+        datatype: string
+        required: true
+        key: true
+        cardinality: {max: 1}
+relations:
+  citesSource:
+    source: KnowledgeItem
+    target: KnowledgeSource
+    lpg_type: CITES_SOURCE
+    cardinality: {min: 1}
+    properties:
+      locator:
+        datatype: string
+        cardinality: {max: 1}
+  supersedes:
+    source: KnowledgeItem
+    target: KnowledgeItem
+    lpg_type: SUPERSEDES
+  overrides:
+    source: KnowledgeItem
+    target: KnowledgeItem
+    lpg_type: OVERRIDES
+  exceptionCitesSource:
+    source: KnowledgeException
+    target: KnowledgeSource
+    lpg_type: EXCEPTION_CITES_SOURCE
+    cardinality: {min: 1}
+  exceptionTarget:
+    source: KnowledgeException
+    target: KnowledgeItem
+    lpg_type: EXCEPTION_TARGET
+    cardinality: {min: 1}
+  exceptionWinner:
+    source: KnowledgeException
+    target: KnowledgeItem
+    lpg_type: EXCEPTION_WINNER
+    cardinality: {max: 1}
+artifacts:
+  owl: ontology/knowledge/contextual-knowledge.ttl
+  shacl: ontology/shapes/contextual-knowledge.shapes.ttl
+  neo4j: ontology/generated/knowledge/neo4j-constraints.cypher
+  diagnostics: ontology/generated/knowledge/diagnostics.json
+  diagnostics_report: ontology/generated/knowledge/diagnostics.md
+  erd: ontology/generated/knowledge/erd.mmd
+  capability_matrix: ontology/generated/knowledge/capability-matrix.json
+  gql: ontology/generated/knowledge/graph-type.gql

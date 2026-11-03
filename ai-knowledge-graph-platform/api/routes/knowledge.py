@@ -263,6 +263,61 @@ async def evaluator_metrics():
     return (await get_knowledge_service()).metrics()
 
 
+# ---------------------------------------------------------------------------
+# answer trust
+
+
+class DistrustRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    reason: str = Field(min_length=1, max_length=2000)
+
+
+@router.post("/decisions/{domain}/{record_id}/distrust", dependencies=[Depends(require_scope("read"))])
+async def report_distrust(
+    domain: Domain, record_id: Annotated[str, PathParam(pattern=r"^KR-[0-9a-f]{24}$")], body: DistrustRequest,
+    user: dict = Depends(get_current_user), tenant: str = Depends(get_tenant),
+):
+    """Mark a decision as not trusted.  Only the user who received it, or an
+    admin, may report it; the bundle holds only what the reporter may read."""
+    subject = _subject(user)
+    service = await get_knowledge_service()
+    record = await service._store.knowledge_decision(tenant, record_id)
+    if record is None or record["domain"] != domain:
+        raise HTTPException(status_code=404, detail={"code": "decision_not_found", "message": "no such decision"})
+    if record["subject"] != subject and "admin" not in set(str(user.get("scope", "")).split()):
+        raise HTTPException(status_code=403, detail={"code": "not_your_decision",
+                                                     "message": "only the recipient or an admin may report it"})
+    reporter = access_from_identity(CallerIdentity.from_claims(user, tenant=tenant))
+    report = await service.report_distrust(tenant, domain, record_id, reporter=reporter, reason=body.reason)
+    log.info("knowledge.distrust_reported", tenant=tenant, domain=domain, report_id=report["report_id"],
+             root_cause=report["root_cause"])
+    return report
+
+
+@router.get("/trust-reports/{domain}", dependencies=[Depends(require_scope("admin"))])
+async def trust_reports(domain: Domain, tenant: str = Depends(get_tenant)):
+    """Reports with counts per root cause and time to fix."""
+    from graphrag.context_graph.answer_trust import trust_statistics
+
+    reports = await (await get_knowledge_service()).trust_reports(tenant, domain)
+    return {"statistics": trust_statistics(reports),
+            "reports": [{k: r[k] for k in ("report_id", "record_id", "reporter", "root_cause", "status",
+                                           "reported_at", "fixed_at")} for r in reports]}
+
+
+@router.post("/trust-reports/{domain}/{report_id}/fixed", dependencies=[Depends(require_scope("admin"))])
+async def trust_report_fixed(
+    domain: Domain, report_id: Annotated[str, PathParam(pattern=r"^TR-[0-9a-f]{24}$")],
+    user: dict = Depends(get_current_user), tenant: str = Depends(get_tenant),
+):
+    report = await (await get_knowledge_service()).mark_trust_report_fixed(tenant, report_id,
+                                                                           fixed_by=_subject(user))
+    if report is None or report["domain"] != domain:
+        raise HTTPException(status_code=404, detail={"code": "report_not_found", "message": "no such report"})
+    return {k: report[k] for k in ("report_id", "status", "fixed_at", "fixed_by", "root_cause")}
+
+
 @router.get("/releases/{domain}", dependencies=[Depends(require_scope("read"))])
 async def release_history(domain: Domain, tenant: str = Depends(get_tenant)):
     """Release history (metadata only) for the token's tenant."""

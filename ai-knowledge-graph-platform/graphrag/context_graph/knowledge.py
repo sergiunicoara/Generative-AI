@@ -79,6 +79,8 @@ class PublicationStatus(StrEnum):
     APPROVED = "approved"
     PUBLISHED = "published"
     WITHDRAWN = "withdrawn"
+    #: captured from a person but waiting for a domain expert to confirm it
+    NEEDS_EXPERT = "needs_expert"
 
 
 class KnowledgeOrigin(StrEnum):
@@ -238,6 +240,47 @@ class ConstraintProvenance(_Strict):
     approval_ref: str = Field(min_length=1, max_length=256)
 
 
+class ExpertAttribution(_Strict):
+    """Whose expertise an item records and how it was captured."""
+
+    expert: str = Field(min_length=1, max_length=256)
+    role: str = Field(default="", max_length=256)
+    method: Literal["interview", "review", "document", "workshop"] = "interview"
+    captured_at: datetime
+    note: str = Field(default="", max_length=1000)
+
+
+class ExpertDisagreement(_Strict):
+    """Recorded disagreement between experts about one item.
+
+    An open disagreement blocks publication of the item; it ends either
+    ``resolved`` (with the resolution) or ``waived`` (with an approval
+    reference), never silently.
+    """
+
+    id: str = Field(pattern=r"^DIS-[A-Z0-9][A-Z0-9_\-]{0,63}$")
+    tenant: str = Field(min_length=1, max_length=128)
+    item_id: str = Field(min_length=1, max_length=128)
+    experts: tuple[str, ...] = Field(min_length=2, max_length=20)
+    positions: dict[str, str] = Field(default_factory=dict)
+    status: Literal["open", "resolved", "waived"] = "open"
+    resolution: str = Field(default="", max_length=2000)
+    approval_ref: str = Field(default="", max_length=256)
+    recorded_at: datetime
+
+    @model_validator(mode="after")
+    def _closure(self):
+        if len(set(self.experts)) != len(self.experts):
+            raise ValueError(f"{self.id}: experts must be distinct")
+        if set(self.positions) - set(self.experts):
+            raise ValueError(f"{self.id}: positions must belong to the listed experts")
+        if self.status == "resolved" and not self.resolution.strip():
+            raise ValueError(f"{self.id}: a resolved disagreement records the resolution")
+        if self.status == "waived" and not self.approval_ref.strip():
+            raise ValueError(f"{self.id}: a waived disagreement needs an approval reference")
+        return self
+
+
 class KnowledgeItem(_Strict):
     """One versioned, tenant-owned unit of contextual knowledge."""
 
@@ -272,6 +315,12 @@ class KnowledgeItem(_Strict):
     #: When a person must look at this item again.  Set by a reviewer, never
     #: computed: an elapsed date triggers re-review, it does not change status.
     review_due: datetime | None = None
+    #: business definitions (``DEF-...`` ids) this item's wording relies on
+    definition_refs: tuple[str, ...] = ()
+    #: the person responsible for reviewing this item (an identity, not a team)
+    review_owner: str = Field(default="", max_length=256)
+    #: experts whose knowledge this item records, and how it was captured
+    expert_attribution: tuple["ExpertAttribution", ...] = ()
 
     @field_validator("recorded_at")
     @classmethod
@@ -467,7 +516,8 @@ def content_digest(value: Any) -> str:
 
 __all__ = [
     "Applicability", "BLOCKING_MODALITIES", "BusinessContext", "Constraint", "ConstraintProvenance",
-    "DIMENSIONS", "DimensionScope", "EvidenceRef", "Fact", "KNOWLEDGE_SCHEMA_VERSION", "KnowledgeException",
+    "DIMENSIONS", "DimensionScope", "EvidenceRef", "ExpertAttribution", "ExpertDisagreement", "Fact",
+    "KNOWLEDGE_SCHEMA_VERSION", "KnowledgeException",
     "KnowledgeItem", "KnowledgeOrigin", "NormativeModality", "Predicate", "PublicationStatus",
     "SourceAuthority", "content_digest",
 ]

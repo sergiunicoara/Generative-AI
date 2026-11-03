@@ -170,6 +170,8 @@ class EvaluationDecision(_Frozen):
     # exceptions that may bear on the decision but could not be confirmed
     # (scope unknown, or a precedence without an effective winner): escalated
     exceptions_unresolved: tuple[str, ...] = ()
+    # business-definition versions the applicable requirements rely on
+    definitions_used: tuple[str, ...] = ()
     missing_evidence: tuple[dict[str, str], ...] = ()
     citations: tuple[EvidenceRef, ...] = ()
     overall: OverallOutcome
@@ -682,6 +684,17 @@ def _supersession(
 # the evaluator
 
 
+def _definitions_used(applying, definitions, *, tenant: str, access: AccessContext) -> tuple[str, ...]:
+    """Keys of the visible definitions the applicable items reference."""
+    refs = {ref for item in applying for ref in item.definition_refs}
+    if not refs:
+        return ()
+    from graphrag.context_graph.definitions import visible_definitions
+
+    return tuple(sorted(d.key for d in visible_definitions(definitions, tenant=tenant, access=access)
+                        if d.id in refs))
+
+
 def evaluate_knowledge(
     *,
     items: Iterable[KnowledgeItem],
@@ -695,6 +708,7 @@ def evaluate_knowledge(
     expect_applicable_knowledge: bool = False,
     semantic_candidates: Iterable[str] | None = None,
     timings: dict[str, float] | None = None,
+    definitions: Iterable[Any] = (),
 ) -> EvaluationDecision:
     """Evaluate every visible published requirement in a release.
 
@@ -1002,6 +1016,7 @@ def evaluate_knowledge(
             item.key for item in visible if applicability[item.id].status == ApplicabilityStatus.UNKNOWN)),
         results=tuple(results), conflicts=tuple(conflicts), exceptions_applied=tuple(applied),
         exceptions_unresolved=tuple(sorted(set(unresolved_refs))),
+        definitions_used=_definitions_used(applying, definitions, tenant=tenant, access=access),
         missing_evidence=tuple(missing_evidence),
         citations=tuple(sorted(citations.values(), key=lambda ref: (ref.source_id, ref.locator))),
         overall=overall, human_review_required=bool(review_reasons),

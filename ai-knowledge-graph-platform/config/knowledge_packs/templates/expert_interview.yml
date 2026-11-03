@@ -1,0 +1,36 @@
+# Interview template for capturing a requirement from a domain expert.
+# Answers become a DRAFT (or NEEDS_EXPERT) knowledge item with the expert
+# recorded as its source. Nothing captured here is executable or published:
+# an executable constraint and publication still need a curator, a named
+# review owner and the release gate. See graphrag/context_graph/elicitation.py.
+id: expert-interview
+version: 1
+questions:
+  - id: statement
+    required: true
+    prompt: "State the rule in one sentence, as you would tell a new colleague."
+  - id: subject
+    required: true
+    prompt: "What does it apply to (a field, a label element, a document, a step)? One short key."
+  - id: modality
+    required: true
+    prompt: "Is it required, recommended, permitted or prohibited?"
+    choices: [mandatory, recommended, permitted, prohibited]
+  - id: scope
+    required: false
+    prompt: >-
+      Where does it apply? For each of customer, brand, market, product,
+      product family and workflow: the values it applies to, "any", or "not sure".
+  - id: exceptions
+    required: false
+    prompt: "Do you know cases where it does not apply, or where another rule wins?"
+  - id: evidence
+    required: false
+    prompt: "Where is it written down (document, standard, email)? Leave empty if nowhere."
+  - id: confidence
+    required: true
+    prompt: "How sure are you: certain, fairly sure, or unsure?"
+    choices: [certain, fairly_sure, unsure]
+  - id: others_disagree
+    required: false
+    prompt: "Would another expert state it differently? Who?"

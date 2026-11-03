@@ -1,0 +1,17 @@
+# Use-case charter (SYNTHETIC EXAMPLE). The question set, label owner and
+# thresholds below are placeholders written by the developer to exercise the
+# charter runner; a real charter takes its thresholds from the domain experts
+# who own the use case and names them as label owner and threshold source.
+id: packaging-labeling-review
+use_case: "Check a carton artwork against the packaging and labeling rules that apply to its context"
+kind: contextual_knowledge
+question_set: evals/knowledge_eval/packaging_labeling_cases.json
+split: development
+label_owner: "synthetic:developer (placeholder; replace with the expert who owns the labels)"
+threshold_source: "developer placeholder; not set by domain experts"
+metrics:
+  applicability_recall: {min: 0.95}
+  validation_outcome_accuracy: {min: 0.95}
+  escalation_accuracy: {min: 0.95}
+  overall_outcome_accuracy: {min: 0.95}
+  time_to_answer_p95_ms: {max: 250}

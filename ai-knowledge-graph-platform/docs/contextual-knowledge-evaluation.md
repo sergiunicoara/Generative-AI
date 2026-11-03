@@ -469,3 +469,33 @@ read their own records.
   label.min_font_pt is at least 8."), including the missing-value rule; the
   review queue shows it as `executable` next to the `statement`. A view only:
   it never feeds evaluation.
+
+## Definitions, decision tables, elicitation, charters and answer trust (2026-11-03)
+
+* **Formalism** (ADR-0014): requirements stay bounded predicates. Knowledge
+  that maps inputs to outputs is a DMN-style decision table
+  (`decision_tables.py`) with declared input domains, conditions limited to
+  `any`/`eq`/`in`/numeric `range`, and a hit policy (`unique`, `first`, `any`,
+  `collect`). Tables are validated for overlaps, gaps and conflicting outputs
+  over a finite partition of their domains; a published invalid table blocks
+  the gate. They are represented and validated, not executed.
+* **Business definitions** (`definitions.py`): one versioned, owned definition
+  per term, with precision `exact` (needs an executable form), `bounded`
+  (states its limits) or `loose` (refuses an executable form: no false
+  precision). Definitions ship in the release; items list `definition_refs`,
+  decisions list `definitions_used`, and `decisions_using(records, key)` finds
+  the stored decisions that used an older version.
+* **Expert elicitation** (`elicitation.py`, interview template in
+  `config/knowledge_packs/templates/`): answers become attributed drafts
+  (`needs_expert` when unsure; unstated scope stays unknown; never executable
+  or published). `ExpertDisagreement` blocks publication while open.
+* **Use-case charters** (`charters.py`, `scripts/run_charters.py`,
+  `evals/charters/`): per use case, question set, split, label owner,
+  threshold source and thresholds; missing owners are rejected and missed
+  thresholds fail. The bundled charters are synthetic placeholders.
+* **Answer trust** (`answer_trust.py`): a distrust report assembles a bundle
+  under the reporter's access, classifies the root cause (permission filter,
+  wrong or missing definition, stale source, retrieval miss, extraction error,
+  model error, expectation mismatch; first match wins) and tracks time to fix.
+  It covers knowledge decisions; GraphRAG answer traces are not wired in yet.
+

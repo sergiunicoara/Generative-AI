@@ -220,7 +220,7 @@ claims of live validation. Full unit suite and push after each wave.
       index, latency benchmark, stage metrics; constraint rendering for reviewers.
 - [x] Wave 3: release stamp on every projection; shape/model registry as RDF;
       named-graph ADR + per-tenant drop test + JSON-LD round trip.
-- [ ] Wave 4: formalism ADR + decision tables (representation/validation);
+- [x] Wave 4: formalism ADR + decision tables (representation/validation);
       expert elicitation; business-definition registry; use-case charters;
       answer-trust investigation workflow.
 - [ ] Wave 5: erasure/correction propagation audit; data minimisation before

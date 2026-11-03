@@ -698,6 +698,48 @@ class GovernanceStore:
             rows = (await connection.execute(text(query), params)).scalars().all()
         return [json.loads(row) for row in rows]
 
+    # -- answer-trust reports (tenant-scoped) ------------------------------------
+
+    async def record_trust_report(self, report: dict[str, object]) -> None:
+        async with self._write_transaction() as connection:
+            await connection.execute(text("""
+                INSERT INTO answer_trust_reports
+                (report_id, tenant, domain, record_id, status, root_cause, reported_at, fixed_at, report_json)
+                VALUES (:report_id, :tenant, :domain, :record_id, :status, :root_cause, :reported_at, NULL,
+                        :report_json)
+            """), {key: report[key] for key in ("report_id", "tenant", "domain", "record_id", "status",
+                                                "root_cause", "reported_at")}
+                   | {"report_json": json.dumps(report, sort_keys=True, default=str)})
+
+    async def trust_reports(self, tenant: str, domain: str) -> list[dict[str, object]]:
+        async with self._engine.connect() as connection:
+            rows = (await connection.execute(text("""
+                SELECT report_json FROM answer_trust_reports WHERE tenant = :tenant AND domain = :domain
+                ORDER BY reported_at, report_id
+            """), {"tenant": tenant, "domain": domain})).scalars().all()
+        return [json.loads(row) for row in rows]
+
+    async def mark_trust_report_fixed(
+        self, tenant: str, report_id: str, *, fixed_by: str, fixed_at: str,
+    ) -> dict[str, object] | None:
+        """Close a report once; returns None if it does not exist for the tenant."""
+        async with self._write_transaction() as connection:
+            row = (await connection.execute(text("""
+                SELECT report_json FROM answer_trust_reports WHERE tenant = :tenant AND report_id = :report_id
+            """), {"tenant": tenant, "report_id": report_id})).scalar_one_or_none()
+            if row is None:
+                return None
+            report = json.loads(row)
+            if report["status"] == "fixed":
+                return report
+            report |= {"status": "fixed", "fixed_at": fixed_at, "fixed_by": fixed_by}
+            await connection.execute(text("""
+                UPDATE answer_trust_reports SET status = 'fixed', fixed_at = :fixed_at, report_json = :report_json
+                WHERE tenant = :tenant AND report_id = :report_id
+            """), {"tenant": tenant, "report_id": report_id, "fixed_at": fixed_at,
+                   "report_json": json.dumps(report, sort_keys=True, default=str)})
+        return report
+
     async def _set_active_knowledge_release(
         self, connection: AsyncConnection, tenant: str, domain: str, release_id: str,
     ) -> None:
@@ -811,6 +853,11 @@ _DDL = (
     )""",
     """CREATE INDEX IF NOT EXISTS idx_knowledge_decisions_tenant
         ON knowledge_decisions (tenant, domain, recorded_at)""",
+    """CREATE TABLE IF NOT EXISTS answer_trust_reports (
+        report_id TEXT PRIMARY KEY, tenant TEXT NOT NULL, domain TEXT NOT NULL, record_id TEXT NOT NULL,
+        status TEXT NOT NULL, root_cause TEXT NOT NULL, reported_at TEXT NOT NULL, fixed_at TEXT,
+        report_json TEXT NOT NULL
+    )""",
     """CREATE TABLE IF NOT EXISTS energy_evidence_request_transitions (
         transition_id TEXT PRIMARY KEY, tenant TEXT NOT NULL, request_id TEXT NOT NULL,
         from_state TEXT NOT NULL, to_state TEXT NOT NULL, changed_at TEXT NOT NULL,

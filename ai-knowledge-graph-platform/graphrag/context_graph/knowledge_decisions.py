@@ -92,11 +92,11 @@ def _inputs(record: Mapping[str, Any]) -> _Inputs:
 
 
 def _evaluate(items, exceptions, release: KnowledgeReleaseRef, record: Mapping[str, Any],
-              inputs: _Inputs, context: BusinessContext | None = None) -> EvaluationDecision:
+              inputs: _Inputs, context: BusinessContext | None = None, definitions=()) -> EvaluationDecision:
     return evaluate_knowledge(
         items=items, exceptions=exceptions, context=context or inputs.context, facts=inputs.facts,
         tenant=str(record["tenant"]), access=inputs.access, domain=str(record["domain"]), release=release,
-        expect_applicable_knowledge=inputs.expect, semantic_candidates=inputs.semantic,
+        expect_applicable_knowledge=inputs.expect, semantic_candidates=inputs.semantic, definitions=definitions,
     )
 
 
@@ -107,7 +107,13 @@ def replay(record: Mapping[str, Any], catalog, *, as_of: datetime | None = None)
     context = inputs.context
     if as_of is not None:
         context = context.model_copy(update={"as_of": as_of})
-    return _evaluate(catalog.items, catalog.exceptions, catalog.ref, record, inputs, context)
+    return _evaluate(catalog.items, catalog.exceptions, catalog.ref, record, inputs, context,
+                     getattr(catalog, "definitions", ()))
+
+
+def decisions_using(records: Iterable[Mapping[str, Any]], definition_key: str) -> list[str]:
+    """Record ids of stored decisions that used a definition version."""
+    return [str(r["record_id"]) for r in records if definition_key in r["decision"].get("definitions_used", ())]
 
 
 def replays_exactly(record: Mapping[str, Any], catalog) -> bool:
@@ -277,6 +283,6 @@ def needs_review(impacts: Iterable[ReviewImpact]) -> list[ReviewImpact]:
 
 
 __all__ = [
-    "DECISION_RECORD_SCHEMA", "Influence", "ReviewImpact", "cited_keys", "decision_record",
+    "DECISION_RECORD_SCHEMA", "Influence", "ReviewImpact", "cited_keys", "decision_record", "decisions_using",
     "expiring_exceptions", "fidelity", "influence", "needs_review", "replay", "replays_exactly", "review_impact",
 ]

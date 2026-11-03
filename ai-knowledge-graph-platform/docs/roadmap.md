@@ -846,7 +846,7 @@ before evaluation, curation routes, separate evaluation metrics, API and MCP.
   **Acceptance evidence:** identical decisions with and without the index on the
   evaluation set; benchmark results recorded with pack size, hardware and commit.
   **Status (2026-11-03):** `scripts/benchmark_knowledge_eval.py` (seeded packs, stage shares, p95 budgets) showed conflict detection at 40% of the time at 5000 items, so the index is on conflict candidates (subject, series, overrides) rather than on applicability dimensions: every visible item must still report its own applicability reasons, so a dimension prefilter could not skip that work without changing decisions. 5000 items: p95 775 ms to 440 ms (local, 50 requests); decisions identical with and without the index. Stage timings in `evaluate_knowledge(timings=...)`; `GET /knowledge/metrics` (admin) reports cache hit rate and time per stage.
-- [ ] Record the formalism decision and cover non-constraint knowledge. Write an
+- [x] Record the formalism decision and cover non-constraint knowledge. Write an
   ADR comparing the current bounded predicates with decision tables (DMN),
   Datalog and a production rule engine, including failure modes. Today only
   constraints and guidelines are modelled; transformations and procedures are
@@ -857,7 +857,8 @@ before evaluation, curation routes, separate evaluation metrics, API and MCP.
   **Acceptance evidence:** the ADR; a table with an explicit hit policy,
   validated for overlaps and gaps; tests that unsupported content is refused or
   escalated rather than approximated.
-- [ ] Expert elicitation workflow. Turn informal expertise into reviewable items:
+  **Status (2026-11-03):** ADR-0014 (`docs/adr/0014-knowledge-formalism.md`) compares bounded predicates, DMN-style tables, Datalog and production rule engines with their failure modes; `graphrag/context_graph/decision_tables.py` adds tables with declared input domains, a bounded condition vocabulary and an explicit hit policy, validated for overlaps, gaps and conflicting outputs (published invalid tables block the gate). Representation and validation only: tables are not executed. Unsupported content (expressions, undeclared domains) is refused at load time.
+- [x] Expert elicitation workflow. Turn informal expertise into reviewable items:
   interview templates, expert attribution, recorded disagreement between experts,
   a "needs expert" state, and review ownership, built on the existing draft and
   review queue.
@@ -866,6 +867,7 @@ before evaluation, curation routes, separate evaluation metrics, API and MCP.
   **Acceptance evidence:** a draft item cannot be published without a named
   reviewer; recorded disagreement blocks publication until resolved or waived
   with an approval reference.
+  **Status (2026-11-03):** interview template (`config/knowledge_packs/templates/expert_interview.yml`) and `graphrag/context_graph/elicitation.py`: answers become an attributed draft, `needs_expert` when the expert is unsure, unstated scope stays unknown, never executable or published; `ExpertDisagreement` blocks publication while open and closes only resolved (with the resolution) or waived (with an approval reference); the review queue shows experts, review owner and open disagreements; publication still needs a named reviewer.
 
 Considered and **not** added: real regulatory content (it could not be validated
 here and the module must not imply compliance; only synthetic structures such as
@@ -943,7 +945,7 @@ fail-closed handling of unknown ACL state, incremental and delta ingestion,
 drift monitoring, feedback capture, a semantic-model compiler and the
 contextual-knowledge module. Only the gaps below are added.
 
-- [ ] Governed business-definition registry. A versioned register of the terms
+- [x] Governed business-definition registry. A versioned register of the terms
   people and agents must share ("active customer", "which price list applies
   when"), each with an owner, a plain-language definition, a precision level
   (exact, bounded or deliberately loose), the executable form where one exists
@@ -957,7 +959,8 @@ contextual-knowledge module. Only the gaps below are added.
   **Acceptance evidence:** a definition change produces a new version and lists
   the answers or decisions that used the old one; two tenants may define the same
   term differently without crossing; an answer cites definition ids and versions.
-- [ ] Use-case charters with success metrics. Per use case, a checked-in charter
+  **Status (2026-11-03):** `graphrag/context_graph/definitions.py`: versioned, owned definitions with an explicit precision (exact needs an executable form, loose refuses one, bounded states its limits), sources, dependencies and review date, carried in the knowledge release and resolved by tenant, status, latest version and access; items reference them, decisions list `definitions_used`, and `decisions_using` finds the stored decisions that used an older version. The gate rejects references to unpublished definitions and duplicate published terms. Executable SQL/SPARQL text is stored, not run.
+- [x] Use-case charters with success metrics. Per use case, a checked-in charter
   naming the question set, the metrics (for example time to answer and answer
   accuracy against expert-labelled examples), the owner of the labels and the
   acceptance thresholds; the evaluation runner reports each use case against its
@@ -967,7 +970,8 @@ contextual-knowledge module. Only the gaps below are added.
   **Acceptance evidence:** the runner fails a use case that misses its charter
   threshold and reports denominators and split labels; a charter without a named
   label owner is rejected.
-- [ ] Answer-trust investigation workflow. When a user marks an answer as not
+  **Status (2026-11-03):** `graphrag/context_graph/charters.py` and `scripts/run_charters.py` over `evals/charters/*.yml`: each charter names its question set, split, label owner and threshold source; a missing owner is rejected, a missed threshold fails the use case, and every metric reports its denominator. The bundled charters are explicit synthetic placeholders: their thresholds were not set by domain experts.
+- [x] Answer-trust investigation workflow. When a user marks an answer as not
   trusted, assemble one bundle: the question, retrieved evidence, permission
   filters applied, definition and release versions, and the trace; classify the
   root cause from a fixed list (retrieval miss, stale source, permission filter,
@@ -979,6 +983,7 @@ contextual-knowledge module. Only the gaps below are added.
   **Acceptance evidence:** a synthetic untrusted answer for each root-cause class
   is classified correctly from its bundle; the bundle contains no content the
   reporting user could not read.
+  **Status (2026-11-03):** `graphrag/context_graph/answer_trust.py`: a distrust report on a stored decision assembles a bundle under the reporter's access (restricted knowledge omitted, facts only for the asker), classifies the root cause from the fixed list, and is stored with time to fix; counts per class and median hours to fix are reported. Routes: `POST /knowledge/decisions/{domain}/{record_id}/distrust` (recipient or admin), `GET /knowledge/trust-reports/{domain}` and `POST .../{report_id}/fixed` (admin). Covers knowledge decisions; GraphRAG answer traces are not yet wired into it.
 - [ ] Permission-freshness bound. State and test how quickly a revoked source
   permission stops affecting answers: the maximum age of cached ACL state, what
   happens when a source cannot be reached (deny, not allow), and how a revocation

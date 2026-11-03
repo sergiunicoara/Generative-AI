@@ -116,6 +116,7 @@ class KnowledgeEvaluationService:
                 tenant=tenant, access=access, domain=domain, release=catalog.ref,
                 expect_applicable_knowledge=expect_applicable_knowledge,
                 semantic_candidates=semantic_candidates, timings=self.stage_seconds,
+                definitions=catalog.definitions,
             )
             self._cache[key] = decision
             if len(self._cache) > self._cache_size:
@@ -150,6 +151,36 @@ class KnowledgeEvaluationService:
         """
         active = (await self.catalog(tenant, domain)).ref.content_hash
         return sorted(name for name, content_hash in stamps.items() if content_hash != active)
+
+    # -- answer trust -------------------------------------------------------------
+
+    async def report_distrust(
+        self, tenant: str, domain: str, record_id: str, *, reporter: AccessContext, reason: str,
+        answer_source: str = "knowledge_decision",
+    ) -> dict[str, Any]:
+        """Assemble the investigation bundle under the reporter's access,
+        classify the root cause and store the report."""
+        from graphrag.context_graph.answer_trust import assemble_bundle, classify, trust_report
+
+        record = await self._store.knowledge_decision(require_tenant(tenant), record_id)
+        if record is None or record["domain"] != domain:
+            raise LookupError(f"no decision record {record_id!r}")
+        cited = await self.release_catalog(tenant, domain, str(record["release_id"]))
+        active = await self.catalog(tenant, domain)
+        bundle = assemble_bundle(record, cited_catalog=cited, active_catalog=active, reporter=reporter)
+        cause = classify(record, bundle, cited_catalog=cited, active_catalog=active, answer_source=answer_source)
+        report = trust_report(record, reporter=reporter, reason=reason, root_cause=cause, bundle=bundle)
+        await self._store.record_trust_report(report)
+        return report
+
+    async def trust_reports(self, tenant: str, domain: str) -> list[dict[str, Any]]:
+        return await self._store.trust_reports(require_tenant(tenant), domain)
+
+    async def mark_trust_report_fixed(self, tenant: str, report_id: str, *, fixed_by: str,
+                                      fixed_at: datetime | None = None) -> dict[str, Any] | None:
+        when = (fixed_at or datetime.now(timezone.utc)).isoformat()
+        return await self._store.mark_trust_report_fixed(require_tenant(tenant), report_id, fixed_by=fixed_by,
+                                                         fixed_at=when)
 
     # -- decision log ------------------------------------------------------------
 

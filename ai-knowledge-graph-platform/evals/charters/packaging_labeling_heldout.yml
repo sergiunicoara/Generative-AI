@@ -1,0 +1,12 @@
+# Same use case, held-out split (SYNTHETIC EXAMPLE, see packaging_labeling.yml).
+id: packaging-labeling-review-heldout
+use_case: "Check a carton artwork against the packaging and labeling rules that apply to its context"
+kind: contextual_knowledge
+question_set: evals/knowledge_eval/packaging_labeling_heldout.json
+split: held_out
+label_owner: "synthetic:developer (placeholder; replace with the expert who owns the labels)"
+threshold_source: "developer placeholder; not set by domain experts"
+metrics:
+  applicability_recall: {min: 0.9}
+  overall_outcome_accuracy: {min: 0.9}
+  cases_passed_ratio: {min: 0.9}

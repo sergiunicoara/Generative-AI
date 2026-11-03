@@ -47,6 +47,9 @@ from graphrag.context_graph.knowledge import (
 from graphrag.context_graph.knowledge_evaluation import (
     EvaluationDecision, KnowledgeReleaseRef, evaluate_knowledge,
 )
+from graphrag.context_graph.decision_tables import DecisionTable, table_errors
+from graphrag.context_graph.definitions import BusinessDefinition, definition_issues
+from graphrag.context_graph.knowledge import ExpertDisagreement
 from graphrag.context_graph.knowledge_rdf import projection_failures
 from graphrag.context_graph.knowledge_render import render_item
 from graphrag.enterprise.models import AccessContext
@@ -76,6 +79,15 @@ class KnowledgePack(BaseModel):
     disclaimer: str = ""
     items: list[KnowledgeItem] = Field(default_factory=list)
     exceptions: list[KnowledgeException] = Field(default_factory=list)
+    definitions: list[BusinessDefinition] = Field(default_factory=list)
+    decision_tables: list[DecisionTable] = Field(default_factory=list)
+    disagreements: list[ExpertDisagreement] = Field(default_factory=list)
+
+    def published_definitions(self) -> list[BusinessDefinition]:
+        return [d for d in self.definitions if d.status == PublicationStatus.PUBLISHED]
+
+    def published_tables(self) -> list[DecisionTable]:
+        return [t for t in self.decision_tables if t.status == "published"]
 
     def published_items(self) -> list[KnowledgeItem]:
         return [i for i in self.items if i.status == PublicationStatus.PUBLISHED]
@@ -98,9 +110,19 @@ def load_pack(path: str | Path) -> KnowledgePack:
 def review_queue(pack: KnowledgePack) -> list[dict[str, Any]]:
     """Entries awaiting a human decision, with what they still need."""
     queue = []
+    open_disagreements: dict[str, list[str]] = {}
+    for disagreement in pack.disagreements:
+        if disagreement.status == "open":
+            open_disagreements.setdefault(disagreement.item_id, []).append(disagreement.id)
     for item in pack.items:
-        if item.status in (PublicationStatus.DRAFT, PublicationStatus.IN_REVIEW):
+        if item.status in (PublicationStatus.DRAFT, PublicationStatus.IN_REVIEW, PublicationStatus.NEEDS_EXPERT):
             needs = []
+            if item.status == PublicationStatus.NEEDS_EXPERT:
+                needs.append("confirmation by a domain expert")
+            if not item.review_owner:
+                needs.append("a named review owner")
+            for disagreement_id in open_disagreements.get(item.id, ()):
+                needs.append(f"resolution of expert disagreement {disagreement_id}")
             if item.constraint is None:
                 needs.append("executable constraint (optional; otherwise not machine-checkable)")
             missing_dims = [d for d in ("customer", "brand", "market", "product", "product_family", "workflow")
@@ -111,7 +133,8 @@ def review_queue(pack: KnowledgePack) -> list[dict[str, Any]]:
                 needs.append("a source citation")
             queue.append({"key": item.key, "status": item.status.value, "origin": item.origin.value,
                           "title": item.title, "statement": item.statement,
-                          "executable": render_item(item), "needs": needs})
+                          "executable": render_item(item), "review_owner": item.review_owner,
+                          "experts": [a.expert for a in item.expert_attribution], "needs": needs})
     return queue
 
 
@@ -261,6 +284,10 @@ _HINTS = {
     "regression_mismatch": ("Fix the pack, or change the case expectation only after review: cases encode "
                             "intended behaviour."),
     "regression_cases_missing": "Supply the domain regression cases (evals/knowledge_eval/<domain>_cases.json).",
+    "definition_unknown": "Add and publish the referenced definition, or remove the reference.",
+    "duplicate_definition_term": "Keep one published definition per term; withdraw or merge the others.",
+    "decision_table_invalid": "Fix the overlapping, missing or conflicting rules under the table hit policy.",
+    "open_expert_disagreement": "Resolve the disagreement, or waive it with an approval reference, before publishing.",
 }
 
 
@@ -334,6 +361,21 @@ def check_pack_issues(pack: KnowledgePack, cases: Iterable[RegressionCase] = ())
             if target not in published_ids:
                 issues.append(_issue("exception_target_unpublished", f"{exc.key}/targets",
                                      f"{exc.key}: targets {target}, which is not a published item"))
+    issues.extend(_issue(code if code in _HINTS else "tenant_mismatch", path, message)
+                  for code, path, message in definition_issues(pack.definitions, tenant=pack.tenant))
+    published_definitions = {d.id for d in pack.published_definitions()}
+    for item in published:
+        for ref in item.definition_refs:
+            if ref not in published_definitions:
+                issues.append(_issue("definition_unknown", f"{item.key}/definition_refs",
+                                     f"{item.key}: refers to definition {ref}, which is not published"))
+    for table in pack.published_tables():
+        for problem in table_errors(table):
+            issues.append(_issue("decision_table_invalid", f"tables/{table.key}", f"{table.key}: {problem.message}"))
+    for disagreement in pack.disagreements:
+        if disagreement.status == "open" and disagreement.item_id in published_ids:
+            issues.append(_issue("open_expert_disagreement", f"disagreements/{disagreement.id}",
+                                 f"{disagreement.id}: experts disagree about published item {disagreement.item_id}"))
     if not issues:
         # the projection assumes one effective version per id, checked above
         issues.extend(_issue("shacl_violation", "rdf", failure)
@@ -358,13 +400,18 @@ def check_pack(pack: KnowledgePack, cases: Iterable[RegressionCase] = ()) -> lis
 def release_record(pack: KnowledgePack, *, published_by: str, checks: Mapping[str, Any]) -> dict[str, Any]:
     items = [item.model_dump(mode="json") for item in sorted(pack.published_items(), key=lambda i: i.id)]
     exceptions = [e.model_dump(mode="json") for e in sorted(pack.published_exceptions(), key=lambda e: e.id)]
+    definitions = [d.model_dump(mode="json") for d in sorted(pack.published_definitions(), key=lambda d: d.id)]
+    tables = [t.model_dump(mode="json") for t in sorted(pack.published_tables(), key=lambda t: t.id)]
     # Everything the release serves is in its identity, including the
     # disclaimer and pack metadata: changing any of them is a new release.
-    content_hash = content_digest({
+    identity = {
         "schema": RELEASE_SCHEMA_VERSION, "tenant": pack.tenant, "domain": pack.domain,
         "pack_version": pack.pack_version, "description": pack.description,
         "disclaimer": pack.disclaimer, "items": items, "exceptions": exceptions,
-    })
+    }
+    if definitions or tables:  # releases without them keep their earlier identity
+        identity |= {"definitions": definitions, "decision_tables": tables}
+    content_hash = content_digest(identity)
     return {
         "schema_version": RELEASE_SCHEMA_VERSION, "release_id": uuid4().hex, "tenant": pack.tenant,
         "domain": pack.domain, "pack_version": pack.pack_version, "content_hash": content_hash,
@@ -372,7 +419,7 @@ def release_record(pack: KnowledgePack, *, published_by: str, checks: Mapping[st
         "rolled_back_from": None, "checks": dict(checks), "disclaimer": pack.disclaimer,
         "item_keys": [f"{i['id']}@v{i['version']}" for i in items],
         "exception_keys": [f"{e['id']}@v{e['version']}" for e in exceptions],
-        "items": items, "exceptions": exceptions,
+        "items": items, "exceptions": exceptions, "definitions": definitions, "decision_tables": tables,
     }
 
 
@@ -407,6 +454,8 @@ class ReleaseCatalog:
     ref: KnowledgeReleaseRef
     items: tuple[KnowledgeItem, ...]
     exceptions: tuple[KnowledgeException, ...] = field(default_factory=tuple)
+    definitions: tuple[BusinessDefinition, ...] = field(default_factory=tuple)
+    decision_tables: tuple[DecisionTable, ...] = field(default_factory=tuple)
 
     @classmethod
     def from_record(cls, record: Mapping[str, Any]) -> "ReleaseCatalog":
@@ -417,6 +466,8 @@ class ReleaseCatalog:
             ),
             items=tuple(KnowledgeItem.model_validate(i) for i in record["items"]),
             exceptions=tuple(KnowledgeException.model_validate(e) for e in record.get("exceptions", [])),
+            definitions=tuple(BusinessDefinition.model_validate(d) for d in record.get("definitions", [])),
+            decision_tables=tuple(DecisionTable.model_validate(t) for t in record.get("decision_tables", [])),
         )
 
 

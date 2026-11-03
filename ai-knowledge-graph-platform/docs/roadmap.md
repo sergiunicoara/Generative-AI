@@ -887,7 +887,7 @@ above), SKOS label mappings, PROV-O provenance, SHACL gates, incremental
 relational ingestion with quarantine, and retries, timeouts and circuit
 breaking. Only the gaps below are added.
 
-- [ ] Erasure and correction propagation audit across every derived store.
+- [x] Erasure and correction propagation audit across every derived store.
   List every place a fact can live after it is written (Neo4j, vector and text
   indexes, RDF exports and triple-store graphs, query and decision caches,
   knowledge-release snapshots, logs) and prove that an approved correction or
@@ -899,7 +899,8 @@ breaking. Only the gaps below are added.
   corrects it and asserts absence or the new value in every store above, per
   tenant; stores that are immutable by design (append-only releases) are listed
   with their retention or redaction rule.
-- [ ] Data minimisation before model providers. Before text leaves the system for
+  **Status (2026-11-03):** `graphrag/graph/erasure_registry.py` accounts for 24 stores (erased, redacted, expires, immutable with its rule, or a stated gap); erasure now also clears media and cached embeddings, the decision log and trust reports are redacted per subject, the decision cache is evicted, triple-store resources are erased per tenant, and the extraction cache can be purged. Offline tests cover the stores that run without a database; Neo4j-backed stores only through mocked drivers. Remaining gaps are listed in `docs/privacy-controls.md` (chunk vectors, community summaries, aliases, Turtle exports).
+- [x] Data minimisation before model providers. Before text leaves the system for
   an LLM or embedding provider, apply a per-tenant field allowlist and
   pattern-based redaction of direct identifiers, and log a hash and size of what
   was sent rather than the content. Allow a tenant to disable external providers.
@@ -908,7 +909,8 @@ breaking. Only the gaps below are added.
   **Acceptance evidence:** tests with synthetic identifiers show them absent from
   the outbound payload; the audit record holds hash and size only; a disabled
   provider is never called.
-- [ ] Extraction record contract check. Verify, and enforce where missing, that
+  **Status (2026-11-03):** `graphrag/core/outbound.py` inside `FallbackLLM.generate` and `OpenAIEmbedder.embed`: per-tenant provider switch (a disabled provider is never called), pattern-based redaction of direct identifiers, field allowlist, and a hash-and-size audit; ingestion sets the tenant context. Pattern redaction is incomplete by nature; directly constructed clients are not covered.
+- [x] Extraction record contract check. Verify, and enforce where missing, that
   every extracted assertion keeps its source location, the model and prompt
   version that produced it, a confidence, and a review state (accepted, uncertain,
   unsupported), and that uncertain or unsupported results go to the review queue
@@ -917,6 +919,7 @@ breaking. Only the gaps below are added.
   changes.
   **Acceptance evidence:** a schema-level test over the extractor output; a
   replay with a different model version produces a diffable record.
+  **Status (2026-11-03):** every extracted entity and relation carries source chunk, served model, a prompt version derived from the template, confidence and `review_state` (accepted, uncertain, unsupported); only accepted assertions are written, the rest go to the review quarantine; `extraction_records` / `diff_extraction_records` make model replays diffable.
 - [x] Named-graph layout decision for RDF stores. Record, as an ADR, how data is
   split into named graphs (per tenant, per source, per publication version) and
   how that supports rollback, per-tenant deletion and provenance queries, plus an
@@ -984,7 +987,7 @@ contextual-knowledge module. Only the gaps below are added.
   is classified correctly from its bundle; the bundle contains no content the
   reporting user could not read.
   **Status (2026-11-03):** `graphrag/context_graph/answer_trust.py`: a distrust report on a stored decision assembles a bundle under the reporter's access (restricted knowledge omitted, facts only for the asker), classifies the root cause from the fixed list, and is stored with time to fix; counts per class and median hours to fix are reported. Routes: `POST /knowledge/decisions/{domain}/{record_id}/distrust` (recipient or admin), `GET /knowledge/trust-reports/{domain}` and `POST .../{report_id}/fixed` (admin). Covers knowledge decisions; GraphRAG answer traces are not yet wired into it.
-- [ ] Permission-freshness bound. State and test how quickly a revoked source
+- [x] Permission-freshness bound. State and test how quickly a revoked source
   permission stops affecting answers: the maximum age of cached ACL state, what
   happens when a source cannot be reached (deny, not allow), and how a revocation
   invalidates caches and any derived index entries.
@@ -993,6 +996,7 @@ contextual-knowledge module. Only the gaps below are added.
   **Acceptance evidence:** tests revoke access on a fake source and assert denial
   within the stated bound, including through the query cache; an unreachable
   source yields denial and an audit record.
+  **Status (2026-11-03):** ACL observation time on the policy and the document node; restricted documents older than `ACL_MAX_AGE_SECONDS` are denied in the Cypher predicate and the Python mirror; the answer-cache key includes the ACL window; stated bound: next request after a re-sync, otherwise at most twice the max age; an unreachable permission source is denied and audited. Tested with a fake SharePoint source; policies without an observation time are not bounded until re-synced.
 - [ ] Confluence and Databricks source connectors (conditional). Only if a real
   deployment requires them: a Confluence connector that maps page-tree and space
   permissions to the existing ACL model and detects changes, and a Databricks

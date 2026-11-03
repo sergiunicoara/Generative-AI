@@ -223,6 +223,6 @@ claims of live validation. Full unit suite and push after each wave.
 - [x] Wave 4: formalism ADR + decision tables (representation/validation);
       expert elicitation; business-definition registry; use-case charters;
       answer-trust investigation workflow.
-- [ ] Wave 5: erasure/correction propagation audit; data minimisation before
+- [x] Wave 5: erasure/correction propagation audit; data minimisation before
       model providers; extraction record contract; permission-freshness bound.
 - [ ] Wave 6 (evaluation only): SHACL-to-Cypher; "Open Knowledge Format" spec check.

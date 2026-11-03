@@ -39,6 +39,7 @@ requires the audit trail itself to be scrubbed for the subject's data).
 
 from __future__ import annotations
 
+import hashlib
 import re
 from uuid import uuid4
 
@@ -105,8 +106,22 @@ class GDPRService:
             report = await self._forget_entity(
                 entity_name, entity_type, tenant, requested_by, request_id,
             )
+            await self._erase_derived(entity_name, entity_type, tenant)
         await self._evict_cached_answers(tenant)
         return report
+
+    async def _erase_derived(self, entity_name: str, entity_type: str, tenant: str) -> None:
+        """Stores derived from the entity outside its node (see
+        graphrag/graph/erasure_registry.py): media attachments and cached
+        embeddings.  Best-effort and logged, like the answer-cache eviction."""
+        from graphrag.graph.embedding_cache import get_embedding_cache
+        from graphrag.graph.multimodal import MultiModalEntityService
+
+        get_embedding_cache().invalidate(tenant, [(entity_name, entity_type)])
+        try:
+            await MultiModalEntityService(self._neo4j).delete_entity_media(entity_name, entity_type, tenant)
+        except Exception as exc:  # noqa: BLE001 - erasure already happened; report the residue
+            log.warning("gdpr.media_erasure_failed", tenant=tenant, error=type(exc).__name__)
 
     async def forget_document(
         self,
@@ -297,7 +312,9 @@ class GDPRService:
             "chunks_redacted": redacted_chunks,
             "status":         "complete",
         }
-        log.info("gdpr.entity_forgotten", **{k: v for k, v in report.items() if k != "audit_id"})
+        # The log line must not itself keep the erased name: record a digest.
+        log.info("gdpr.entity_forgotten", **{k: v for k, v in report.items() if k not in ("audit_id", "entity_name")},
+                 entity_digest=hashlib.sha256(entity_name.encode("utf-8")).hexdigest()[:16])
         return report
 
     # ── Document erasure ───────────────────────────────────────────────────────

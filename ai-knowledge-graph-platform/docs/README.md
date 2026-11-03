@@ -15,6 +15,7 @@ The specification-to-implementation runner is documented in
 - `runbook.md` — operations and troubleshooting
 - `mcp-operations.md` — authenticated remote MCP deployment and incident response
 - `contextual-knowledge-evaluation.md` — applicability, validation, conflicts and gated knowledge releases (`kg.knowledge.evaluate`)
+- `privacy-controls.md` — erasure propagation registry, data minimisation before model providers, extraction record contract, permission freshness
 - `interoperability-and-curation.md` — typed target outcomes and capability matrix, qualified cardinalities, GQL rendering, SPARQL conformance, GraphQL, curator CSV/XLSX and Jira
 - `local-evidence-runbook.md` — reproducible local MCP, retrieval, write, cost, and load evidence
 - `public-local-evaluation-report.md` — bounded results from the checked-in synthetic local run

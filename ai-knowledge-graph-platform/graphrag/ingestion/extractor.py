@@ -9,7 +9,9 @@ Bayesian merge formula downstream cannot be corrupted by out-of-range values.
 
 from __future__ import annotations
 
+import hashlib
 import json
+import os
 
 import structlog
 
@@ -52,6 +54,51 @@ Use 0.9+ for explicit statements, 0.6-0.9 for strong implications, below 0.6 for
 {text}
 </source_text>
 """
+
+
+# The prompt version is derived from the template, so changing the prompt
+# changes the version recorded on every extracted assertion.
+PROMPT_VERSION = "v1-" + hashlib.sha256(_EXTRACT_PROMPT.encode("utf-8")).hexdigest()[:8]
+# Below this relation confidence an assertion is "uncertain" and goes to review
+# (the prompt itself calls < 0.6 "weak inference").
+REVIEW_CONFIDENCE = float(os.getenv("EXTRACTION_REVIEW_CONFIDENCE", "0.6"))
+
+
+def _grounded(name: str, text: str) -> bool:
+    return bool(name) and name.casefold() in (text or "").casefold()
+
+
+def _relation_review_state(raw: dict, source: Entity, target: Entity) -> str:
+    if "unsupported" in (source.review_state, target.review_state):
+        return "unsupported"
+    confidence = max(0.0, min(1.0, float(raw.get("confidence", 1.0))))
+    return "uncertain" if confidence < REVIEW_CONFIDENCE else "accepted"
+
+
+def extraction_records(entities: list[Entity], relations: list[Relation]) -> list[dict]:
+    """The contract every extracted assertion keeps: where it came from, which
+    model and prompt produced it, how confident it was, and its review state.
+    Sorted, so two runs (for example with a different model) diff cleanly."""
+    by_id = {e.id: e for e in entities}
+    rows = [{"kind": "entity", "key": f"{e.type}:{e.name}", "source_chunk_ids": sorted(e.source_chunk_ids),
+             "model": e.extraction_model, "prompt_version": e.prompt_version, "confidence": e.confidence,
+             "review_state": e.review_state} for e in entities]
+    for r in relations:
+        src, tgt = by_id.get(r.source_entity_id), by_id.get(r.target_entity_id)
+        rows.append({"kind": "relation", "key": f"{src.name if src else '?'}-{r.relation}->{tgt.name if tgt else '?'}",
+                     "source_chunk_ids": [r.source_chunk_id], "span": [r.chunk_span_start, r.chunk_span_end],
+                     "model": r.extraction_model, "prompt_version": r.prompt_version, "confidence": r.confidence,
+                     "review_state": r.review_state})
+    return sorted(rows, key=lambda row: (row["kind"], row["key"]))
+
+
+def diff_extraction_records(before: list[dict], after: list[dict]) -> dict[str, list]:
+    """Assertions added, removed or changed between two extraction runs."""
+    old = {(r["kind"], r["key"]): r for r in before}
+    new = {(r["kind"], r["key"]): r for r in after}
+    changed = [{"key": key, "fields": sorted(f for f in old[key] if old[key][f] != new[key].get(f))}
+               for key in sorted(old.keys() & new.keys()) if old[key] != new[key]]
+    return {"added": sorted(new.keys() - old.keys()), "removed": sorted(old.keys() - new.keys()), "changed": changed}
 
 
 class Extractor:
@@ -126,8 +173,9 @@ class Extractor:
                 source_chunk_ids=[chunk.id],
                 source_doc_id=chunk.document_id,
                 extraction_model=served_model,
-                prompt_version="v1",
+                prompt_version=PROMPT_VERSION,
                 tenant=chunk.tenant,
+                review_state="accepted" if _grounded(e["name"], chunk.text) else "unsupported",
             )
             for e in data.get("entities", [])
             if e.get("name")
@@ -163,10 +211,11 @@ class Extractor:
                     confidence=max(0.0, min(1.0, float(r.get("confidence", 1.0)))),
                         source_chunk_id=chunk.id,
                         extraction_model=served_model,
-                        prompt_version="v1",
+                        prompt_version=PROMPT_VERSION,
                         tenant=chunk.tenant,
                         chunk_span_start=span_start,
                         chunk_span_end=span_end,
+                        review_state=_relation_review_state(r, src, tgt),
                     )
                 )
 

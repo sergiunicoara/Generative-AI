@@ -15,7 +15,7 @@ from graphrag.core.models import IngestMessage, IngestionRunManifest, Structured
 from graphrag.observability.correlation import current_correlation_id
 from graphrag.ingestion.chunker import chunk_document
 from graphrag.ingestion.embedder import Embedder
-from graphrag.ingestion.extractor import Extractor
+from graphrag.ingestion.extractor import PROMPT_VERSION as EXTRACTION_PROMPT_VERSION, Extractor
 from graphrag.ingestion.graph_writer import GraphWriter
 from graphrag.ingestion.intelligence import (
     IntelligenceArtifactExtractor,
@@ -56,6 +56,14 @@ class IngestionAgent(BaseGraphRAGAgent):
 
     async def run(self, message: IngestMessage) -> dict:
         """Full ingestion pipeline: document → chunks → entities → Neo4j."""
+        # The tenant context lets the outbound policy (graphrag/core/outbound.py)
+        # apply to every model call this document triggers.
+        from graphrag.observability.correlation import tenant_context
+
+        with tenant_context(message.document.tenant):
+            return await self._run(message)
+
+    async def _run(self, message: IngestMessage) -> dict:
         # This bootstrap is deliberately before extraction: otherwise a cold
         # worker would skip the strict ontology + SHACL mutation gates for its
         # first document and only load the vocabulary at write time.
@@ -95,7 +103,7 @@ class IngestionAgent(BaseGraphRAGAgent):
             correlation_id=current_correlation_id(),
             model_provider="configured_router",
             model_version=self._model(),
-            prompt_versions={"entity_relation": "v1", "intelligence": "intelligence-v1"},
+            prompt_versions={"entity_relation": EXTRACTION_PROMPT_VERSION, "intelligence": "intelligence-v1"},
         )
 
         log.info("ingestion_agent.start", job_id=job_id, filename=doc.filename)

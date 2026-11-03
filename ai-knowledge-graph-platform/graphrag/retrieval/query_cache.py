@@ -72,7 +72,11 @@ class QueryCacheContext:
     # served for another.  Empty when the answer used neither.
     knowledge_release: str = ""
     business_context_fingerprint: str = ""
-    cache_schema_version: str = "4"
+    # Permission freshness: answers built while a restricted document was
+    # readable stop being served when the ACL freshness window turns over
+    # (graphrag/enterprise/access.py, ACL_MAX_AGE).  0 when ACL is not enforced.
+    acl_epoch: int = 0
+    cache_schema_version: str = "5"
 
     def canonical_content(self) -> dict[str, Any]:
         return asdict(self)

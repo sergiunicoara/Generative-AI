@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import datetime, timezone
 import os
 import time
 from dataclasses import dataclass
@@ -160,6 +161,8 @@ class SharePointSyncConnector:
         self.config = config
         self._graph = graph_client or MicrosoftGraphClient(config)
         self._sync = sync_service or ContentSyncService()
+        # permission reads that failed (denied, never silently defaulted)
+        self.acl_audit: list[dict] = []
 
     @classmethod
     def from_settings(cls, source_id: str) -> "SharePointSyncConnector":
@@ -219,10 +222,17 @@ class SharePointSyncConnector:
         source_url = str(item.get("webUrl") or "")
         source_version = str(item.get("eTag") or item.get("cTag") or "")
         text = load_document_content(filename, content)
+        observed = datetime.now(timezone.utc)
         try:
             policy = _access_policy(await self._graph.permissions(item_id))
-        except (httpx.HTTPError, ValueError):
+        except (httpx.HTTPError, ValueError) as exc:
+            # Unreachable permission source: deny (UNKNOWN is never readable)
+            # and leave an audit record rather than a silent default.
             policy = DocumentAccessPolicy(mode="restricted", state=ACLState.UNKNOWN, requires_group_resolution=True)
+            self.acl_audit.append({"item_id": item_id, "event": "acl_unresolved", "outcome": "denied",
+                                   "reason": type(exc).__name__, "observed_at": observed.isoformat()})
+            log.warning("sharepoint.acl_unresolved", item_id=item_id, reason=type(exc).__name__)
+        policy = policy.model_copy(update={"observed_at": observed})
         return SyncChange(
             change_type=SyncChangeType.UPSERT,
             external_id=item_id,

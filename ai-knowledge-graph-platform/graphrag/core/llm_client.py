@@ -77,6 +77,8 @@ def _parse_retry_after(message: str) -> float:
 # providers report it as ``response.model``). Context-local, so concurrent extractions never see
 # each other's value. Callers that want true provenance reset it, call generate(), then read it.
 _response_model: ContextVar[str | None] = ContextVar("llm_response_model", default=None)
+# set while a FallbackLLM call is in flight, so nested chains minimise once
+_minimised: ContextVar[bool] = ContextVar("llm_prompt_minimised", default=False)
 
 
 def reset_response_model() -> None:
@@ -594,8 +596,23 @@ class FallbackLLM(BaseLLM):
         provider rather than relabelling the first: the primary call really did
         happen and really did fail, and hiding that would make the fallback
         rate — the number that predicts a provider outage — unmeasurable.
+
+        It is also where data minimisation applies (``graphrag/core/outbound.py``):
+        the tenant's outbound policy can block the call, and direct
+        identifiers are redacted before the prompt leaves.  A nested chain
+        minimises once, at the outermost call.
         """
+        from graphrag.core.outbound import minimise
         from graphrag.observability.genai_telemetry import llm_call_span
+
+        if not _minimised.get():
+            prompt, _ = minimise(prompt, purpose="llm")
+            token = _minimised.set(True)
+            try:
+                return await self.generate(prompt, model=model, json_mode=json_mode,
+                                           temperature=temperature, max_tokens=max_tokens)
+            finally:
+                _minimised.reset(token)
 
         try:
             with llm_call_span(
@@ -754,6 +771,9 @@ class OpenAIEmbedder:
         self._model = model
 
     async def embed(self, texts: list[str]) -> list[list[float]]:
+        from graphrag.core.outbound import minimise
+
+        texts = [minimise(text, purpose="embedding")[0] for text in texts]
         loop = asyncio.get_running_loop()
         response = await loop.run_in_executor(
             None,

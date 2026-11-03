@@ -393,6 +393,7 @@ class Neo4jClient:
                 d.allow_principals = $allow_principals,
                 d.deny_principals = $deny_principals,
                 d.requires_group_resolution = $requires_group_resolution,
+                d.acl_observed_at = $acl_observed_at,
                 // A queue retry must never mistake an interrupted write for a
                 // completed document merely because the content hash landed.
                 d.ingest_complete = false,
@@ -430,6 +431,7 @@ class Neo4jClient:
             allow_principals=list(access_policy.get("allow_principals") or []),
             deny_principals=list(access_policy.get("deny_principals") or []),
             requires_group_resolution=bool(access_policy.get("requires_group_resolution", False)),
+            acl_observed_at=access_policy.get("acl_observed_at"),
         )
         if source_id and not rows:
             raise ValueError("document source is missing or belongs to another tenant")

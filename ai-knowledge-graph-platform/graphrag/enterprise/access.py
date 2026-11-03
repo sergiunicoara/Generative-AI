@@ -7,7 +7,41 @@ expansion or the answer cache before it was eventually discarded.
 
 from __future__ import annotations
 
+from datetime import datetime, timedelta, timezone
+import os
+
 from graphrag.enterprise.models import AccessContext, DocumentAccessPolicy
+
+#: Permission-freshness bound.  A restricted document whose ACL was last read
+#: from its source longer ago than this is denied until the source is read
+#: again.  Answers cached while it was readable stop being served at the next
+#: ACL epoch (see ``acl_epoch``), so a revocation that never reaches the
+#: platform stops affecting answers within at most twice this bound; one that
+#: is re-synced takes effect on the next request (the re-ingest advances the
+#: corpus revision every cache key includes).
+ACL_MAX_AGE = timedelta(seconds=int(os.getenv("ACL_MAX_AGE_SECONDS", "3600")))
+
+
+def _utc_iso(value: datetime) -> str:
+    return value.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%f+00:00")
+
+
+def acl_fresh_after(now: datetime | None = None) -> str:
+    """Oldest acceptable ACL observation time, in the stored string form."""
+    return _utc_iso((now or datetime.now(timezone.utc)) - ACL_MAX_AGE)
+
+
+def acl_epoch(now: datetime | None = None) -> int:
+    """Index of the current freshness window, part of the answer-cache key."""
+    seconds = max(1, int(ACL_MAX_AGE.total_seconds()))
+    return int((now or datetime.now(timezone.utc)).timestamp()) // seconds
+
+
+def acl_is_fresh(policy: DocumentAccessPolicy, now: datetime | None = None) -> bool:
+    """Python mirror of the Cypher freshness clause."""
+    if policy.mode != "restricted" or policy.observed_at is None:
+        return True
+    return _utc_iso(policy.observed_at) >= acl_fresh_after(now)
 
 
 def access_params(context: AccessContext | None, *, enabled: bool) -> dict:
@@ -16,6 +50,7 @@ def access_params(context: AccessContext | None, *, enabled: bool) -> dict:
         "acl_enabled": bool(enabled),
         "acl_principals": context.principals,
         "acl_groups_resolved": context.groups_resolved,
+        "acl_fresh_after": acl_fresh_after(),
     }
 
 
@@ -44,6 +79,7 @@ def document_access_predicate(alias: str = "d") -> str:
                 NOT coalesce({alias}.requires_group_resolution, false)
                 OR $acl_groups_resolved
               )
+              AND ({alias}.acl_observed_at IS NULL OR {alias}.acl_observed_at >= $acl_fresh_after)
             )
           )
         )
@@ -96,4 +132,5 @@ def normalise_policy(policy: DocumentAccessPolicy) -> dict:
         "allow_principals": policy.allow_principals,
         "deny_principals": policy.deny_principals,
         "requires_group_resolution": policy.requires_group_resolution,
+        "acl_observed_at": _utc_iso(policy.observed_at) if policy.observed_at else None,
     }

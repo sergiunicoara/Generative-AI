@@ -677,6 +677,42 @@ class GovernanceStore:
             })
         return True
 
+    async def redact_knowledge_decisions(self, tenant: str, subject: str, *, redacted_at: str) -> int:
+        """Erase a subject's submitted facts and identity from their decision
+        records.  The record stays (the audit fact that a decision was made),
+        its inputs do not; a redacted record no longer replays."""
+        async with self._write_transaction() as connection:
+            rows = (await connection.execute(text("""
+                SELECT record_id, record_json FROM knowledge_decisions WHERE tenant = :tenant AND subject = :subject
+            """), {"tenant": tenant, "subject": subject})).all()
+            for record_id, raw in rows:
+                record = json.loads(raw)
+                record["inputs"]["facts"] = {}
+                record["inputs"]["access"] = {"subject_id": "[redacted]", "principals": [], "groups_resolved": False}
+                record["decision"]["facts_used"] = {}
+                record["subject"] = "[redacted]"
+                record["redacted_at"] = redacted_at
+                await connection.execute(text("""
+                    UPDATE knowledge_decisions SET subject = '[redacted]', record_json = :record_json
+                    WHERE tenant = :tenant AND record_id = :record_id
+                """), {"tenant": tenant, "record_id": record_id,
+                       "record_json": json.dumps(record, sort_keys=True, default=str)})
+            reports = (await connection.execute(text("""
+                SELECT report_id, report_json FROM answer_trust_reports WHERE tenant = :tenant
+            """), {"tenant": tenant})).all()
+            for report_id, raw in reports:
+                report = json.loads(raw)
+                if report.get("reporter") != subject:
+                    continue
+                report["reporter"] = "[redacted]"
+                report["bundle"]["question"]["facts"] = []
+                await connection.execute(text("""
+                    UPDATE answer_trust_reports SET report_json = :report_json
+                    WHERE tenant = :tenant AND report_id = :report_id
+                """), {"tenant": tenant, "report_id": report_id,
+                       "report_json": json.dumps(report, sort_keys=True, default=str)})
+        return len(rows)
+
     async def knowledge_decision(self, tenant: str, record_id: str) -> dict[str, object] | None:
         async with self._engine.connect() as connection:
             row = (await connection.execute(text("""

@@ -44,6 +44,9 @@ class DocumentAccessPolicy(BaseModel):
     allow_principals: list[str] = Field(default_factory=list, max_length=5_000)
     deny_principals: list[str] = Field(default_factory=list, max_length=5_000)
     requires_group_resolution: bool = False
+    #: when this ACL was last read from the source; a restricted policy older
+    #: than the freshness bound is denied (graphrag/enterprise/access.py)
+    observed_at: datetime | None = None
 
     @field_validator("allow_principals", "deny_principals")
     @classmethod

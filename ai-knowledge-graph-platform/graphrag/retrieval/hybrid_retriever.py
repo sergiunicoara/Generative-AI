@@ -14,6 +14,7 @@ from graphrag.core.config import get_settings, resolve_tenant_config
 from graphrag.core.llm_client import get_generation_route, get_llm
 from graphrag.core.llm_utils import normalize_dashes
 from graphrag.core.models import QueryResult, RetrievalStep
+from graphrag.enterprise.access import acl_epoch
 from graphrag.enterprise.models import AccessContext
 from graphrag.core.prompt_security import escape_prompt_data
 from graphrag.context_graph.models import (
@@ -642,6 +643,7 @@ class HybridRetriever:
                             valid_at=requested_valid_at,
                             transaction_at=transaction_at,
                             access_fingerprint=(access_context.fingerprint if acl_enforced else "tenant-default"),
+                            acl_epoch=acl_epoch() if acl_enforced else 0,
                         )
                         answer_cache = await get_query_cache()
                         cached = await answer_cache.get(question, tenant, cache_context)

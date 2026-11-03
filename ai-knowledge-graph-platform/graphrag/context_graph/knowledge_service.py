@@ -129,6 +129,20 @@ class KnowledgeEvaluationService:
             ))
         return decision
 
+    def evict_tenant(self, tenant: str) -> int:
+        """Drop every cached decision of a tenant (erasure, ACL change)."""
+        keys = [key for key, decision in self._cache.items() if decision.tenant == tenant]
+        for key in keys:
+            del self._cache[key]
+        return len(keys)
+
+    async def erase_subject(self, tenant: str, subject: str) -> dict[str, int]:
+        """Right-to-erasure for the decision log and cache of one subject."""
+        tenant = require_tenant(tenant)
+        redacted = await self._store.redact_knowledge_decisions(
+            tenant, subject, redacted_at=datetime.now(timezone.utc).isoformat())
+        return {"records_redacted": redacted, "cache_entries_evicted": self.evict_tenant(tenant)}
+
     def metrics(self) -> dict[str, Any]:
         """Cache hit rate and time per evaluator stage since start (process-local)."""
         lookups = self.cache_hits + self.cache_misses

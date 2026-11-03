@@ -48,7 +48,9 @@ from graphrag.graph.pagerank import PageRankComputer
 from graphrag.graph.quarantine import QuarantineService
 from graphrag.graph.review_queue import ReviewQueueService
 from graphrag.graph.trust import origin_for
-from graphrag.graph.validation.batch import RejectedRecord, relation_key, relation_payload
+from graphrag.graph.validation.batch import (
+    RejectedRecord, entity_key, entity_payload, relation_key, relation_payload,
+)
 from graphrag.enterprise.access import normalise_policy
 
 log = structlog.get_logger(__name__)
@@ -126,6 +128,23 @@ class GraphWriter:
             "SET d.schema_version = $label, d.schema_content_hash = $hash",
             id=doc_id, tenant=tenant, label=label, hash=identity.content_hash,
         )
+
+    def _hold_for_review(self, entities: list[Entity], chunk: Chunk) -> list[Entity]:
+        """Extracted assertions that are not "accepted" never reach the graph:
+        they go to the review quarantine with their full record.  Returns the
+        accepted ones."""
+        held = [e for e in entities if getattr(e, "review_state", "accepted") != "accepted"]
+        if not held:
+            return entities
+        if not hasattr(self, "_rejections"):  # writers built via __new__ in tests
+            self._rejections = []
+        for entity in held:
+            self._rejections.append(RejectedRecord(
+                record_kind="entity", record_key=entity_key(entity), rule_ids=["ENT-REVIEW-001"],
+                messages=[f"{entity.review_state} extraction routed to review"],
+                payload=entity_payload(entity), chunk_id=chunk.id,
+            ))
+        return [e for e in entities if getattr(e, "review_state", "accepted") == "accepted"]
 
     def drain_rejections(self) -> list[RejectedRecord]:
         out = getattr(self, "_rejections", [])  # writers built via __new__ in tests
@@ -379,6 +398,7 @@ class GraphWriter:
         but are omitted from the return value.
         """
         tenant = chunk.tenant
+        entities = self._hold_for_review(entities, chunk)
         await self._ensure_registry(tenant)
         registry = self._get_registry(tenant)
         written: list[Entity] = []
@@ -655,6 +675,10 @@ class GraphWriter:
             tgt = entity_map.get(rel.target_entity_id)
             if not (src and tgt):
                 self._reject(rel, entity_map, "REL-REF-001", "endpoint not in this batch")
+                continue
+            if getattr(rel, "review_state", "accepted") != "accepted":
+                self._reject(rel, entity_map, "REL-REVIEW-003",
+                             f"{rel.review_state} extraction (confidence {rel.confidence:.2f}) routed to review")
                 continue
 
             # Resolve aliases for src and tgt names within this tenant.

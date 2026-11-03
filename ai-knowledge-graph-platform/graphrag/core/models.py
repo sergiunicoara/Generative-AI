@@ -211,6 +211,10 @@ class Entity(BaseModel):
     source_doc_id: str = ""           # first document to introduce this entity
     extraction_model: str = ""        # LLM model that extracted this entity
     prompt_version: str = "v1"        # prompt template version at extraction time
+    # Review state of an extracted assertion: "accepted" goes to the graph;
+    # "uncertain" (low confidence) and "unsupported" (not grounded in the source
+    # text) are routed to the review quarantine instead (graph_writer).
+    review_state: str = "accepted"
     # Optional domain properties for a schema-compiled LPG projection. The
     # shared GraphWriter validates these against an injected canonical model
     # before Neo4j receives them; ordinary extraction paths leave this empty.
@@ -245,6 +249,10 @@ class Relation(BaseModel):
     weight: float = 1.0
     confidence: float = 1.0
     confidence_state: str = "ASSERTED"  # ASSERTED | INFERRED | DISPUTED | RETRACTED | APPROVED
+    # Review state of an extracted assertion: "accepted" goes to the graph;
+    # "uncertain" (low confidence) and "unsupported" (not grounded in the source
+    # text) are routed to the review quarantine instead (graph_writer).
+    review_state: str = "accepted"
     extracted_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     source_chunk_id: str = ""
     source_doc_id: str = ""

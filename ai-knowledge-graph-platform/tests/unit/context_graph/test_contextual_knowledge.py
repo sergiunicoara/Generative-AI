@@ -321,4 +321,4 @@ class TestDecisionCache:
                 build_cache_key("q", "t", QueryCacheContext(**{**base.canonical_content(), "knowledge_release": "r2"})),
                 build_cache_key("q", "t", QueryCacheContext(**{**base.canonical_content(),
                                                                "business_context_fingerprint": "ctx"}))}
-        assert len(keys) == 3 and base.cache_schema_version == "4"
+        assert len(keys) == 3 and base.cache_schema_version == "5"

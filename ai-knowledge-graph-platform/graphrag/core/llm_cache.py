@@ -65,6 +65,17 @@ class LLMCache:
     def _path(self, key: str) -> Path:
         return self._dir / f"{key}.json"
 
+    def purge(self) -> int:
+        """Delete every cached prompt/response (they can hold chunk text).
+
+        Entries carry no tenant, so erasure cannot target one tenant: the
+        cache is emptied.  Returns the number of files removed."""
+        removed = 0
+        for path in self._dir.glob("*.json"):
+            path.unlink(missing_ok=True)
+            removed += 1
+        return removed
+
     def get(self, *, model: str, temperature: float, json_mode: bool, prompt: str) -> str | None:
         """Return the cached response, or ``None`` on a miss / corrupt entry."""
         key = self._key(model, temperature, json_mode, prompt)

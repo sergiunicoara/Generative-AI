@@ -66,6 +66,20 @@ def drop_tenant(dataset: Dataset, tenant: str) -> list[URIRef]:
     return sorted(graphs, key=str)
 
 
+def erase_resource(dataset: Dataset, tenant: str, iri: URIRef) -> int:
+    """Delete every triple naming ``iri`` (as subject or object) in the
+    tenant's graphs; other tenants' graphs are not touched.  Returns the
+    number of triples removed."""
+    removed = 0
+    for row in dataset.query(tenant_graphs_query(tenant)):
+        graph = dataset.graph(row[0])
+        triples = [*graph.triples((iri, None, None)), *graph.triples((None, None, iri))]
+        for triple in triples:
+            graph.remove(triple)
+        removed += len(triples)
+    return removed
+
+
 def to_jsonld(graph: Graph, *, prefixes: dict[str, str] | None = None) -> str:
     """JSON-LD for API consumers that cannot use Turtle (IRIs and datatypes kept)."""
     context = dict(prefixes or {name: str(ns) for name, ns in graph.namespaces() if name})
@@ -77,6 +91,6 @@ def from_jsonld(text: str) -> Graph:
 
 
 __all__ = [
-    "GRAPH_BASE", "drop_graphs_update", "drop_tenant", "from_jsonld", "graph_iri", "load_graph",
+    "GRAPH_BASE", "drop_graphs_update", "drop_tenant", "erase_resource", "from_jsonld", "graph_iri", "load_graph",
     "tenant_graphs_query", "tenant_prefix", "to_jsonld",
 ]

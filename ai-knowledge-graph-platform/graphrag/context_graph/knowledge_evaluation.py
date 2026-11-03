@@ -61,6 +61,7 @@ from graphrag.context_graph.models import (
 )
 from graphrag.context_graph.policy_engine import _matches, evaluate_policy
 from graphrag.core.tenancy import require_tenant
+from graphrag.enterprise.access import acl_is_fresh
 from graphrag.enterprise.models import ACLState, AccessContext, DocumentAccessPolicy
 
 ESCALATION_POLICY_ID = "knowledge-evaluation-escalation"
@@ -197,7 +198,9 @@ def can_read(policy: DocumentAccessPolicy, access: AccessContext) -> bool:
         return False
     if not principals & set(policy.allow_principals):
         return False
-    return (not policy.requires_group_resolution) or access.groups_resolved
+    if (policy.requires_group_resolution and not access.groups_resolved) or not acl_is_fresh(policy):
+        return False
+    return True
 
 
 def _effective_versions(entries: Iterable, tenant: str) -> list:

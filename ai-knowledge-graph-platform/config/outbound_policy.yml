@@ -1,0 +1,12 @@
+# What may leave the platform for external LLM and embedding providers.
+# See graphrag/core/outbound.py. Pattern-based redaction is incomplete by
+# nature (names and unshaped identifiers are not caught).
+default:
+  providers_enabled: true
+  redact: true
+  redact_classes: [EMAIL, PHONE, PHONE_INTL, SSN, IP_V4, IP_V6]
+  # allowed_fields: null   # set a list to cut structured records to these fields
+tenants: {}
+  # example:
+  # clinic_tenant:
+  #   providers_enabled: false     # no text for this tenant ever leaves

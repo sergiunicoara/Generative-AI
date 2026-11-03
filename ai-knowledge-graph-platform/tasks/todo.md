@@ -225,4 +225,14 @@ claims of live validation. Full unit suite and push after each wave.
       answer-trust investigation workflow.
 - [x] Wave 5: erasure/correction propagation audit; data minimisation before
       model providers; extraction record contract; permission-freshness bound.
-- [ ] Wave 6 (evaluation only): SHACL-to-Cypher; "Open Knowledge Format" spec check.
+- [x] Wave 6 (evaluation only): SHACL-to-Cypher; "Open Knowledge Format" spec check.
+
+## Results (2026-11-03 batch)
+- 20 of 21 open items implemented or evaluated; Confluence/Databricks stays open by its own
+  condition. Waves 1-5 pushed after a full unit suite each (3582, 3793, 3803, 3834, 3851 + 1 stale
+  test assertion fixed). Wave 6 is evaluation: shacl2cypher not installed (single new release,
+  single maintainer), in-house Cypher subset written; live Neo4j parity test written but skipped
+  (no Docker here); OKF v0.2 verified and an export prototype written, licence unconfirmed.
+- Everything is verified offline; no live Neo4j, Redis, triple store, SharePoint, Jira, GQL engine
+  or model provider was used.
+

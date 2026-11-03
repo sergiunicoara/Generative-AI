@@ -747,7 +747,7 @@ documentation. Items are phrased against this platform's existing contracts.
   `invalid_request` carries code, path and hint; tests assert them instead of
   matching message text.
   **Status (2026-11-03):** `check_pack_issues` returns `GateIssue(code, path, message, hint)`; `KnowledgePublicationError.issues`; the publish route returns them; evaluation `invalid_request` errors carry `code`, `path` and `hint`. Text messages are unchanged.
-- [ ] Evaluate SHACL-to-Cypher validation for the Neo4j runtime. The generated
+- [x] Evaluate SHACL-to-Cypher validation for the Neo4j runtime. The generated
   shapes run on RDF exports; property graphs rely on runtime validators and the
   mutation gate. Compare an existing open-source SHACL-to-Cypher compiler (check
   licence, maintenance and its single-maintainer risk) against a minimal in-house
@@ -757,6 +757,7 @@ documentation. Items are phrased against this platform's existing contracts.
   **Acceptance evidence:** parity with the RDF-side validator on fixed valid and
   invalid fixtures for the Energy and knowledge models, recorded with the shape
   hash it ran against.
+  **Status (2026-11-03):** evaluated: the open-source `shacl2cypher` (MIT per PyPI metadata, one release 0.3.0 on 2026-09-28, one maintainer, Rust core) was not installed, being new executable code from a single source; an in-house subset `graphrag/semantic_model/cypher_checks.py` compiles the canonical model into read-only Cypher violation queries (required, datatype, endpoints, relation and qualified counts, key and composite-key uniqueness) tied to the shapes hash, with a unit test that every generated property shape of a concrete type has its check. Parity with SHACL on a live Neo4j is written (`tests/e2e/test_live_cypher_checks.py`) but has not run: Docker was unavailable here.
 - [x] Controlled-natural-language rendering of constraints for reviewers. A
   deterministic text rendering of `Constraint`/`Predicate` over the existing
   operator vocabulary, shown in the review queue next to the statement.
@@ -786,13 +787,14 @@ documentation. Items are phrased against this platform's existing contracts.
   **Acceptance evidence:** a SPARQL query answers "which shapes apply to graph X"
   and the recorded hash equals `compile --check`.
   **Status (2026-11-03):** `graphrag/semantic_model/registry_rdf.py`: models with id, version, model and shapes SHA-256, shapes path and active flag; data graphs bound with `dcterms:conformsTo`; `shapes_for_graph` is one SPARQL query; `shapes_drift` compares recorded hashes with the committed shapes.
-- [ ] Verify before considering an "Open Knowledge Format" bundle export. A post
+- [x] Verify before considering an "Open Knowledge Format" bundle export. A post
   describes a markdown-bundle format for agent-readable knowledge with untyped
   links; its existence, version and licence are unverified here. Only if the
   specification checks out, evaluate an export in which typed edges and trust
   fields survive and nothing like a "verified" flag is invented.
   **Acceptance evidence:** a conformance check against the published
   specification, and a round trip that preserves edge types.
+  **Status (2026-11-03):** verified: OKF v0.2 (2026-07-25) is published by Google Cloud in GoogleCloudPlatform/knowledge-catalog (`okf/SPEC.md`); only `type` is required, links are untyped, unknown keys must be accepted, trust fields (`generated`, `verified`, `stale_after`) are optional. The repository licence was not confirmed. An evaluation prototype (`graphrag/context_graph/okf_export.py`) exports visible published items with typed edges in an extension key, writes `verified` only from recorded human reviews, and passes a conformance check against the spec rules it relies on; no OKF consumer was run against it.
 
 Considered and **not** added: new embedded or streaming graph engines announced
 in the feed (a second graph database stays deferred without a measured Neo4j

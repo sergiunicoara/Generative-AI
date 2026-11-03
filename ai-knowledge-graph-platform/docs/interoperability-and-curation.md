@@ -139,3 +139,26 @@ a mock transport.
   `shapes_drift` reports committed shapes that no longer match the recorded
   hash.
 
+## Evaluations (2026-11-03)
+
+* **SHACL to Cypher.** The open-source `shacl2cypher` (MIT per its PyPI
+  metadata; one release, 0.3.0 on 2026-09-28; one maintainer; Rust core) was
+  evaluated from its published metadata only and not installed: it is new
+  executable code from a single source. Instead `graphrag/semantic_model/cypher_checks.py`
+  compiles the canonical model into read-only, parameter-free Cypher
+  violation queries for exactly what the generated shapes express, plus key
+  and composite-key uniqueness, each tied to the shapes hash. A unit test shows
+  every generated property shape of a concrete type has its check.
+  `tests/e2e/test_live_cypher_checks.py` compares verdicts with pySHACL on a
+  live Neo4j for valid and invalid fixtures; it has not been run here (no
+  Docker), so parity is not yet demonstrated.
+* **Open Knowledge Format.** Verified against the published spec (v0.2,
+  2026-07-25, `GoogleCloudPlatform/knowledge-catalog/okf/SPEC.md`): only `type`
+  is required, links are untyped, unknown keys must be accepted, trust fields
+  are optional. The repository licence was not confirmed.
+  `graphrag/context_graph/okf_export.py` is an evaluation prototype: it exports
+  the caller's visible published items, keeps typed edges in an extension key
+  next to plain links, writes `verified` only from recorded human reviews and
+  `stale_after` only from a human-set review date, and passes a conformance
+  check of the spec rules it relies on. No OKF consumer was run against it.
+

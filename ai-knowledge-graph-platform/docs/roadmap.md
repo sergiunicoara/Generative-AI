@@ -720,7 +720,7 @@ only to prompt ideas. Nothing below is adopted on the strength of a post, and no
 product claim from the feed is treated as fact until checked against its own
 documentation. Items are phrased against this platform's existing contracts.
 
-- [ ] Decision re-review impact analysis. A decision from the contextual-knowledge
+- [x] Decision re-review impact analysis. A decision from the contextual-knowledge
   evaluator cites its release; when a release changes, an exception nears expiry
   or an item passes a review-due date, list the stored decisions that would now
   come out differently, keeping "what was known then" apart from "what is known
@@ -736,7 +736,8 @@ documentation. Items are phrased against this platform's existing contracts.
   cites reproduces it exactly; a diff against the current release lists exactly
   the affected decisions on fixtures that change one rule, one waiver expiry and
   one superseding revision; tenant isolation and access filtering hold.
-- [ ] Remediation hints in machine-readable errors. Publication-gate failures and
+  **Status (2026-11-03):** `review_impact` (`graphrag/context_graph/knowledge_decisions.py`) re-evaluates stored decisions after a release change, at a moved valid time, for exceptions lapsing within a window, and for items whose human-set `review_due` has passed, reporting then and now separately. Admin route `POST /knowledge/decisions/{domain}/review-impact`.
+- [x] Remediation hints in machine-readable errors. Publication-gate failures and
   evaluation errors already come back structured; give each a stable code, the
   offending field or item key, and the smallest corrective action, so an agent or
   curator can act without parsing prose.
@@ -745,6 +746,7 @@ documentation. Items are phrased against this platform's existing contracts.
   **Acceptance evidence:** every failure from `check_pack` and every
   `invalid_request` carries code, path and hint; tests assert them instead of
   matching message text.
+  **Status (2026-11-03):** `check_pack_issues` returns `GateIssue(code, path, message, hint)`; `KnowledgePublicationError.issues`; the publish route returns them; evaluation `invalid_request` errors carry `code`, `path` and `hint`. Text messages are unchanged.
 - [ ] Evaluate SHACL-to-Cypher validation for the Neo4j runtime. The generated
   shapes run on RDF exports; property graphs rely on runtime validators and the
   mutation gate. Compare an existing open-source SHACL-to-Cypher compiler (check
@@ -798,6 +800,202 @@ stands; the GQL graph-type export already planned covers interoperability);
 breakdown already measures it); "semantic layer first" accuracy arguments
 (consistent with the current direction, no new work); job posts, events and
 book announcements.
+
+### Candidate additions from a knowledge-platform job description (2026-11-03)
+
+**Status: proposed, not implemented.** Source: a job description for a shared
+"knowledge and reasoning" platform role in a packaging-software company, used
+only as a checklist of what such a platform is expected to provide. It is not a
+claim of fit with that company's product, and none of its regulatory or domain
+content is adopted. Already covered by the contextual-knowledge module: three-valued
+applicability, mandatory-versus-advisory modality, conflicts and exceptions,
+escalation to human review, versioned gated releases, tenant and access filtering
+before evaluation, curation routes, separate evaluation metrics, API and MCP.
+
+- [x] Durable decision log and explanation-fidelity evaluation. Persist each
+  evaluation decision (tenant-scoped, append-only, with the release it cites and
+  the facts it used) and measure whether its explanation is faithful: every cited
+  item must change the outcome when removed, and no uncited item may.
+  Persistence is also the prerequisite of the decision re-review analysis above.
+  **Base project value:** audit for multi-tenant use, and a measurable answer to
+  "which knowledge items influenced this result".
+  **Acceptance evidence:** a counterfactual test over the evaluation set
+  (remove each cited item, assert the outcome changes; remove an uncited item,
+  assert it does not); a stored decision replays exactly; no decision readable
+  across tenants.
+  **Status (2026-11-03):** append-only, tenant-scoped `knowledge_decisions` table; every service evaluation is recorded with its inputs, access context and cited release, and replays exactly. Counterfactual fidelity on the 26-case set: no decisive item or exception is missing from any decision's citations. The converse (every cited item decisive) is not required and does not hold: a decision lists every applicable rule.
+- [ ] Stronger evaluation of applicability and conflict handling. Add metamorphic
+  tests (same decision after reordering items, adding an irrelevant item, adding
+  another tenant's items, renaming ids), a held-out split with adversarial cases,
+  and generated contexts with large denominators. The current 26-case set is
+  developer-authored and measures agreement with the author's expectations.
+  **Base project value:** evidence of recall and stability that does not depend on
+  hand-picked cases.
+  **Acceptance evidence:** reported with denominators and split labels; the
+  held-out split is not used when tuning rules.
+- [ ] Scale and observability of the evaluator. Evaluation scans every visible
+  item per request, which is correct but not shown for thousands of items. Add an
+  index by applicability dimension, a latency benchmark with stated budgets, and
+  metrics for cache hit rate and time per stage.
+  **Base project value:** a shared service has to meet latency and reliability
+  expectations as packs grow.
+  **Acceptance evidence:** identical decisions with and without the index on the
+  evaluation set; benchmark results recorded with pack size, hardware and commit.
+- [ ] Record the formalism decision and cover non-constraint knowledge. Write an
+  ADR comparing the current bounded predicates with decision tables (DMN),
+  Datalog and a production rule engine, including failure modes. Today only
+  constraints and guidelines are modelled; transformations and procedures are
+  not. If the ADR supports it, add DMN-style decision tables as a bounded item
+  kind for them: representation and validation only, no execution.
+  **Base project value:** a documented, reviewable choice of formalism, and
+  coverage of knowledge that does not fit a conjunction of predicates.
+  **Acceptance evidence:** the ADR; a table with an explicit hit policy,
+  validated for overlaps and gaps; tests that unsupported content is refused or
+  escalated rather than approximated.
+- [ ] Expert elicitation workflow. Turn informal expertise into reviewable items:
+  interview templates, expert attribution, recorded disagreement between experts,
+  a "needs expert" state, and review ownership, built on the existing draft and
+  review queue.
+  **Base project value:** the stated source of much domain knowledge is people,
+  not documents.
+  **Acceptance evidence:** a draft item cannot be published without a named
+  reviewer; recorded disagreement blocks publication until resolved or waived
+  with an approval reference.
+
+Considered and **not** added: real regulatory content (it could not be validated
+here and the module must not imply compliance; only synthetic structures such as
+multilingual sections or market-specific rules fit), fact extraction from artwork
+files (a separate project), and Datalog as the primary engine (it may be revisited
+for derived facts after the ADR above).
+
+### Candidate additions from a second job description: RDF and extraction role (2026-11-03)
+
+**Status: proposed, not implemented.** Source: a job description for a
+graph-engineering role covering RDF modelling, extraction services, entity
+resolution and search. Used as a checklist only; no claim of fit with that
+employer's product. Most of it is already planned or implemented here: domain
+model, evidence-backed ingestion, safer entity resolution, labelled evaluation
+and RDF publication (see "Suggested extension, Recruitment Knowledge Graph"
+above), SKOS label mappings, PROV-O provenance, SHACL gates, incremental
+relational ingestion with quarantine, and retries, timeouts and circuit
+breaking. Only the gaps below are added.
+
+- [ ] Erasure and correction propagation audit across every derived store.
+  List every place a fact can live after it is written (Neo4j, vector and text
+  indexes, RDF exports and triple-store graphs, query and decision caches,
+  knowledge-release snapshots, logs) and prove that an approved correction or
+  deletion reaches each one, or record why it cannot. Today propagation is
+  stated for traces and for the optional recruiter adapter only.
+  **Base project value:** a privacy claim that holds for the whole system, not
+  one store.
+  **Acceptance evidence:** a test writes a synthetic fact, then deletes or
+  corrects it and asserts absence or the new value in every store above, per
+  tenant; stores that are immutable by design (append-only releases) are listed
+  with their retention or redaction rule.
+- [ ] Data minimisation before model providers. Before text leaves the system for
+  an LLM or embedding provider, apply a per-tenant field allowlist and
+  pattern-based redaction of direct identifiers, and log a hash and size of what
+  was sent rather than the content. Allow a tenant to disable external providers.
+  Pattern-based redaction is incomplete by nature and is described as such.
+  **Base project value:** sensitive records are not sent to providers by default.
+  **Acceptance evidence:** tests with synthetic identifiers show them absent from
+  the outbound payload; the audit record holds hash and size only; a disabled
+  provider is never called.
+- [ ] Extraction record contract check. Verify, and enforce where missing, that
+  every extracted assertion keeps its source location, the model and prompt
+  version that produced it, a confidence, and a review state (accepted, uncertain,
+  unsupported), and that uncertain or unsupported results go to the review queue
+  instead of the graph.
+  **Base project value:** extracted facts can be traced and re-run when a model
+  changes.
+  **Acceptance evidence:** a schema-level test over the extractor output; a
+  replay with a different model version produces a diffable record.
+- [ ] Named-graph layout decision for RDF stores. Record, as an ADR, how data is
+  split into named graphs (per tenant, per source, per publication version) and
+  how that supports rollback, per-tenant deletion and provenance queries, plus an
+  optional JSON-LD serialisation for API consumers that cannot use Turtle.
+  **Base project value:** deletion, rollback and tenant boundaries follow graph
+  boundaries in the store.
+  **Acceptance evidence:** the ADR; a SPARQL test that drops one tenant's graph
+  without touching another's; a JSON-LD round trip that preserves IRIs and
+  datatypes.
+
+Considered and **not** added: embeddings and hybrid-search evaluation, entity
+resolution, taxonomy mapping and pre-publication checks (already planned above or
+implemented); and any work on a specific graph vendor, since the store-neutral
+SPARQL adapter and conformance suite already cover Stardog, GraphDB and Fuseki
+offline.
+
+### Candidate additions from a third job description: enterprise knowledge deployment role (2026-11-03)
+
+**Status: proposed, not implemented.** Source: a job description for a
+customer-facing role that deploys and operates a knowledge platform over
+enterprise sources. Used as a checklist only; no claim of fit with that
+employer's product. Already present here: SharePoint and Snowflake source
+connectors with injectable clients, source ACLs applied before retrieval with
+fail-closed handling of unknown ACL state, incremental and delta ingestion,
+drift monitoring, feedback capture, a semantic-model compiler and the
+contextual-knowledge module. Only the gaps below are added.
+
+- [ ] Governed business-definition registry. A versioned register of the terms
+  people and agents must share ("active customer", "which price list applies
+  when"), each with an owner, a plain-language definition, a precision level
+  (exact, bounded or deliberately loose), the executable form where one exists
+  (a SQL view, a SPARQL query or a knowledge-item predicate), the sources it
+  depends on, and a review date. Definitions resolve through the same release,
+  tenant and access rules as knowledge items, and an answer lists the
+  definition versions it used. The registry records where a definition is
+  intentionally loose rather than forcing false precision.
+  **Base project value:** one definition per concept across retrieval, agents
+  and reports, with a trail when a definition changes.
+  **Acceptance evidence:** a definition change produces a new version and lists
+  the answers or decisions that used the old one; two tenants may define the same
+  term differently without crossing; an answer cites definition ids and versions.
+- [ ] Use-case charters with success metrics. Per use case, a checked-in charter
+  naming the question set, the metrics (for example time to answer and answer
+  accuracy against expert-labelled examples), the owner of the labels and the
+  acceptance thresholds; the evaluation runner reports each use case against its
+  own charter. Thresholds come from the domain experts, not from this repository.
+  **Base project value:** progress is judged against agreed measures per use case
+  rather than one global score.
+  **Acceptance evidence:** the runner fails a use case that misses its charter
+  threshold and reports denominators and split labels; a charter without a named
+  label owner is rejected.
+- [ ] Answer-trust investigation workflow. When a user marks an answer as not
+  trusted, assemble one bundle: the question, retrieved evidence, permission
+  filters applied, definition and release versions, and the trace; classify the
+  root cause from a fixed list (retrieval miss, stale source, permission filter,
+  wrong or missing definition, extraction error, model error, expectation
+  mismatch) and track counts per class and the time to a fix. Builds on the
+  durable decision log proposed above.
+  **Base project value:** "investigate answers users do not trust and fix the
+  cause" becomes a repeatable process with measurable outcomes.
+  **Acceptance evidence:** a synthetic untrusted answer for each root-cause class
+  is classified correctly from its bundle; the bundle contains no content the
+  reporting user could not read.
+- [ ] Permission-freshness bound. State and test how quickly a revoked source
+  permission stops affecting answers: the maximum age of cached ACL state, what
+  happens when a source cannot be reached (deny, not allow), and how a revocation
+  invalidates caches and any derived index entries.
+  **Base project value:** "respect source permissions and stay up to date" gets a
+  stated bound instead of an assumption.
+  **Acceptance evidence:** tests revoke access on a fake source and assert denial
+  within the stated bound, including through the query cache; an unreachable
+  source yields denial and an audit record.
+- [ ] Confluence and Databricks source connectors (conditional). Only if a real
+  deployment requires them: a Confluence connector that maps page-tree and space
+  permissions to the existing ACL model and detects changes, and a Databricks
+  connector following the existing Snowflake connector. Same pattern as the other
+  connectors: injectable client, offline tests, no claim of live validation.
+  **Acceptance evidence:** permission-mapping tests, including inherited
+  restrictions; change detection that removes deleted pages from the graph.
+
+Considered and **not** added: operating on a cloud platform, SQL and relational
+modelling, evaluation in continuous integration and AI-assisted development
+workflows (all already in place or process, not platform features); expert
+elicitation (covered by the proposal above); and Finnish or other language
+support beyond the existing answer-language handling, which needs a concrete
+corpus and labelled examples first.
 
 ## Context Graph evaluation suite
 

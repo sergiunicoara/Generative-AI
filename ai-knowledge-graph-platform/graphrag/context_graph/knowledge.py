@@ -269,11 +269,19 @@ class KnowledgeItem(_Strict):
     confidence: float | None = Field(default=None, ge=0.0, le=1.0)
     reviewed_by: str = Field(default="", max_length=256)
     review_ref: str = Field(default="", max_length=256)
+    #: When a person must look at this item again.  Set by a reviewer, never
+    #: computed: an elapsed date triggers re-review, it does not change status.
+    review_due: datetime | None = None
 
     @field_validator("recorded_at")
     @classmethod
     def _tz(cls, value):
         return _utc(value)
+
+    @field_validator("review_due")
+    @classmethod
+    def _due_utc(cls, value):
+        return None if value is None else _utc(value).astimezone(timezone.utc)
 
     @model_validator(mode="after")
     def _governance(self):

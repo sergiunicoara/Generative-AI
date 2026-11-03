@@ -18,6 +18,7 @@ return release metadata and counts only, never items or exceptions.
 
 from __future__ import annotations
 
+from dataclasses import asdict
 from datetime import datetime
 from pathlib import Path
 from typing import Annotated, Any
@@ -188,10 +189,72 @@ async def publish_pack_route(
                  failures=len(exc.failures))
         raise HTTPException(status_code=422, detail={
             "code": "release_rejected", "message": "release rejected; the active release is unchanged",
-            "failures": exc.failures[:50]}) from exc
+            "failures": exc.failures[:50],
+            "issues": [asdict(issue) for issue in exc.issues[:50]]}) from exc
     log.info("knowledge.published", tenant=tenant, domain=domain, subject=subject,
              release_id=record["release_id"], version=record.get("version"))
     return _release_summary(record)
+
+
+# ---------------------------------------------------------------------------
+# decision log (administrative: records hold callers' access and facts)
+
+
+class ReviewImpactRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    as_of: datetime | None = None
+    window_end: datetime | None = None
+    only_affected: bool = True
+
+
+def _record_summary(record: dict[str, Any]) -> dict[str, Any]:
+    decision = record["decision"]
+    return {"record_id": record["record_id"], "decision_id": record["decision_id"],
+            "release_id": record["release_id"], "recorded_at": record["recorded_at"],
+            "subject": record["subject"], "overall": decision["overall"],
+            "human_review_required": decision["human_review_required"]}
+
+
+@router.get("/decisions/{domain}", dependencies=[Depends(require_scope("admin"))])
+async def decision_log(domain: Domain, tenant: str = Depends(get_tenant)):
+    """The tenant's recorded decisions for a domain (summaries, oldest first)."""
+    service = await get_knowledge_service()
+    return {"decisions": [_record_summary(r) for r in await service.decision_log(tenant, domain)]}
+
+
+@router.get("/decisions/{domain}/{record_id}/replay", dependencies=[Depends(require_scope("admin"))])
+async def replay_decision(
+    domain: Domain, record_id: Annotated[str, PathParam(pattern=r"^KR-[0-9a-f]{24}$")],
+    tenant: str = Depends(get_tenant),
+):
+    """Whether a stored decision is reproduced exactly by the release it cites."""
+    service = await get_knowledge_service()
+    try:
+        record, exact = await service.replay(tenant, domain, record_id)
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail={"code": "decision_not_found",
+                                                     "message": "no such decision record"}) from exc
+    return {**_record_summary(record), "replays_exactly": exact}
+
+
+@router.post("/decisions/{domain}/review-impact", dependencies=[Depends(require_scope("admin"))])
+async def decision_review_impact(
+    domain: Domain, body: ReviewImpactRequest, tenant: str = Depends(get_tenant),
+):
+    """Which recorded decisions would now come out differently, or cite items
+    due for review or exceptions lapsing before ``window_end``."""
+    from graphrag.context_graph.knowledge_decisions import needs_review
+    from graphrag.context_graph.knowledge_service import NoActiveReleaseError
+
+    service = await get_knowledge_service()
+    try:
+        impacts = await service.review_impact(tenant, domain, as_of=body.as_of, window_end=body.window_end)
+    except NoActiveReleaseError as exc:
+        raise HTTPException(status_code=404, detail={"code": "no_published_release", "message": str(exc)}) from exc
+    selected = needs_review(impacts) if body.only_affected else impacts
+    return {"evaluated": len(impacts), "affected": len(needs_review(impacts)),
+            "impacts": [impact.as_dict() for impact in selected]}
 
 
 @router.get("/releases/{domain}", dependencies=[Depends(require_scope("read"))])

@@ -44,6 +44,25 @@ def access_from_identity(identity) -> AccessContext:
     return AccessContext.from_claims(claims)
 
 
+_INPUT_HINTS = {
+    "missing": "Provide this field.",
+    "extra_forbidden": "Remove this field; it is not part of the contract.",
+    "datetime_from_date_parsing": "Send an ISO 8601 date-time with a timezone, e.g. 2026-08-01T00:00:00Z.",
+    "datetime_parsing": "Send an ISO 8601 date-time with a timezone, e.g. 2026-08-01T00:00:00Z.",
+}
+
+
+def _input_issue(err: dict) -> dict:
+    """A validation error an agent can act on: where, what, and how to fix it."""
+    message = str(err.get("msg", ""))
+    if "finite" in message:
+        hint = "Send a finite number; NaN and infinity are rejected."
+    else:
+        hint = _INPUT_HINTS.get(err.get("type", ""), "Correct the value to match the documented contract.")
+    return {"loc": list(err["loc"]), "msg": message, "code": err.get("type", "invalid"),
+            "path": ".".join(str(part) for part in err["loc"]), "hint": hint}
+
+
 async def evaluate_knowledge_capability(
     tenant: str, domain: str, context: dict, facts: dict | None = None,
     semantic_candidates: list | None = None, expect_applicable_knowledge: bool = False,
@@ -53,9 +72,7 @@ async def evaluate_knowledge_capability(
         business_context = BusinessContext.model_validate(context)
         parsed_facts = {str(name): Fact.model_validate(value) for name, value in (facts or {}).items()}
     except ValidationError as exc:
-        return _error("invalid_request", [
-            {"loc": list(err["loc"]), "msg": err["msg"]} for err in exc.errors()[:20]
-        ])
+        return _error("invalid_request", [_input_issue(err) for err in exc.errors()[:20]])
     if len(parsed_facts) > 200:
         return _error("invalid_request", "at most 200 facts per evaluation")
     if semantic_candidates is not None and (

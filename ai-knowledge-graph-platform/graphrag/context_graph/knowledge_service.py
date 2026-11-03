@@ -17,10 +17,14 @@ from __future__ import annotations
 
 from collections import OrderedDict
 from collections.abc import Iterable, Mapping
+from datetime import datetime, timezone
 import os
 from typing import Any
 
 from graphrag.context_graph.knowledge import BusinessContext, Fact, content_digest
+from graphrag.context_graph.knowledge_decisions import (
+    ReviewImpact, decision_record, expiring_exceptions, replays_exactly, review_impact,
+)
 from graphrag.context_graph.knowledge_evaluation import EvaluationDecision, evaluate_knowledge
 from graphrag.context_graph.knowledge_release import (
     KnowledgePack, RegressionCase, ReleaseCatalog, publish_pack,
@@ -88,8 +92,10 @@ class KnowledgeEvaluationService:
     async def evaluate(
         self, *, tenant: str, domain: str, access: AccessContext, context: BusinessContext,
         facts: Mapping[str, Fact] | None = None, expect_applicable_knowledge: bool = False,
-        semantic_candidates: list[str] | None = None,
+        semantic_candidates: list[str] | None = None, record: bool = True,
     ) -> EvaluationDecision:
+        """Evaluate against the active release.  With ``record`` (default) the
+        decision and its inputs are appended to the tenant's decision log."""
         tenant = require_tenant(tenant)
         catalog = await self.catalog(tenant, domain)
         facts = dict(facts or {})
@@ -97,22 +103,58 @@ class KnowledgeEvaluationService:
             tenant=tenant, access=access, catalog=catalog, context=context, facts=facts,
             expect_applicable_knowledge=expect_applicable_knowledge, semantic_candidates=semantic_candidates,
         )
-        cached = self._cache.get(key)
-        if cached is not None:
+        decision = self._cache.get(key)
+        if decision is not None:
             self._cache.move_to_end(key)
             self.cache_hits += 1
-            return cached
-        self.cache_misses += 1
-        decision = evaluate_knowledge(
-            items=catalog.items, exceptions=catalog.exceptions, context=context, facts=facts,
-            tenant=tenant, access=access, domain=domain, release=catalog.ref,
-            expect_applicable_knowledge=expect_applicable_knowledge,
-            semantic_candidates=semantic_candidates,
-        )
-        self._cache[key] = decision
-        if len(self._cache) > self._cache_size:
-            self._cache.popitem(last=False)
+        else:
+            self.cache_misses += 1
+            decision = evaluate_knowledge(
+                items=catalog.items, exceptions=catalog.exceptions, context=context, facts=facts,
+                tenant=tenant, access=access, domain=domain, release=catalog.ref,
+                expect_applicable_knowledge=expect_applicable_knowledge,
+                semantic_candidates=semantic_candidates,
+            )
+            self._cache[key] = decision
+            if len(self._cache) > self._cache_size:
+                self._cache.popitem(last=False)
+        if record:
+            await self._store.record_knowledge_decision(decision_record(
+                decision, access=access, context=context, facts=facts,
+                expect_applicable_knowledge=expect_applicable_knowledge,
+                semantic_candidates=semantic_candidates,
+            ))
         return decision
+
+    # -- decision log ------------------------------------------------------------
+
+    async def decision_log(self, tenant: str, domain: str, *, limit: int = 1000) -> list[dict[str, Any]]:
+        return await self._store.knowledge_decisions(require_tenant(tenant), domain, limit=limit)
+
+    async def release_catalog(self, tenant: str, domain: str, release_id: str) -> ReleaseCatalog:
+        record = await self._store.knowledge_release(require_tenant(tenant), domain, release_id)
+        if record is None:
+            raise NoActiveReleaseError(f"no knowledge release {release_id!r} for domain {domain!r}")
+        return ReleaseCatalog.from_record(record)
+
+    async def replay(self, tenant: str, domain: str, record_id: str) -> tuple[dict[str, Any], bool]:
+        """A stored decision and whether its cited release reproduces it exactly."""
+        record = await self._store.knowledge_decision(require_tenant(tenant), record_id)
+        if record is None or record["domain"] != domain:
+            raise LookupError(f"no decision record {record_id!r}")
+        catalog = await self.release_catalog(tenant, domain, str(record["release_id"]))
+        return record, replays_exactly(record, catalog)
+
+    async def review_impact(
+        self, tenant: str, domain: str, *, as_of: datetime | None = None, window_end: datetime | None = None,
+        now: datetime | None = None, limit: int = 1000,
+    ) -> list[ReviewImpact]:
+        """Stored decisions re-evaluated against the active release."""
+        catalog = await self.catalog(tenant, domain)
+        now = now or datetime.now(timezone.utc)
+        expiring = expiring_exceptions(catalog, start=now, end=window_end) if window_end else []
+        records = await self.decision_log(tenant, domain, limit=limit)
+        return review_impact(records, catalog, as_of=as_of or window_end, now=now, expiring=expiring)
 
 
 _service: KnowledgeEvaluationService | None = None

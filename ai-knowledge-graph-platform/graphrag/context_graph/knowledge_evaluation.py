@@ -166,6 +166,9 @@ class EvaluationDecision(_Frozen):
     results: tuple[ConstraintResult, ...] = ()
     conflicts: tuple[KnowledgeConflict, ...] = ()
     exceptions_applied: tuple[AppliedException, ...] = ()
+    # exceptions that may bear on the decision but could not be confirmed
+    # (scope unknown, or a precedence without an effective winner): escalated
+    exceptions_unresolved: tuple[str, ...] = ()
     missing_evidence: tuple[dict[str, str], ...] = ()
     citations: tuple[EvidenceRef, ...] = ()
     overall: OverallOutcome
@@ -696,6 +699,7 @@ def evaluate_knowledge(
     partial_refs: dict[str, list[str]] = {}
     review_reasons: list[str] = []
     unresolved_exceptions = 0
+    unresolved_refs: list[str] = []
     in_play = (ApplicabilityStatus.APPLIES, ApplicabilityStatus.UNKNOWN)
 
     exc_results = {
@@ -711,6 +715,7 @@ def evaluate_knowledge(
         status = exc_results[exc.id].status
         if status == ApplicabilityStatus.UNKNOWN:
             unresolved_exceptions += 1
+            unresolved_refs.append(exc.key)
             review_reasons.append(f"exception {exc.key} may apply but its scope cannot be determined")
         elif status == ApplicabilityStatus.APPLIES:
             candidates.append(exc)
@@ -793,6 +798,7 @@ def evaluate_knowledge(
             resolved.append(target)
         if unconfirmed:
             unresolved_exceptions += 1
+            unresolved_refs.append(exc.key)
             review_reasons.append(f"precedence exception {exc.key} {unconfirmed}")
             continue
         for target in resolved:
@@ -945,6 +951,7 @@ def evaluate_knowledge(
         unknown_applicability=tuple(sorted(
             item.key for item in visible if applicability[item.id].status == ApplicabilityStatus.UNKNOWN)),
         results=tuple(results), conflicts=tuple(conflicts), exceptions_applied=tuple(applied),
+        exceptions_unresolved=tuple(sorted(set(unresolved_refs))),
         missing_evidence=tuple(missing_evidence),
         citations=tuple(sorted(citations.values(), key=lambda ref: (ref.source_id, ref.locator))),
         overall=overall, human_review_required=bool(review_reasons),

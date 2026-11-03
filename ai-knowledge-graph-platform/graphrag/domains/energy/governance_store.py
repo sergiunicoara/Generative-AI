@@ -643,6 +643,61 @@ class GovernanceStore:
             await self._set_active_knowledge_release(connection, tenant, domain, str(restored["release_id"]))
         return restored
 
+    async def knowledge_release(self, tenant: str, domain: str, release_id: str) -> dict[str, object] | None:
+        """One release of a tenant's domain by id (any version, active or not)."""
+        async with self._engine.connect() as connection:
+            row = (await connection.execute(text("""
+                SELECT release_json FROM knowledge_releases
+                WHERE tenant = :tenant AND domain = :domain AND release_id = :release_id
+            """), {"tenant": tenant, "domain": domain, "release_id": release_id})).scalar_one_or_none()
+        return json.loads(row) if row else None
+
+    # -- knowledge decision log (append-only, tenant-scoped) -------------------
+
+    async def record_knowledge_decision(self, record: dict[str, object]) -> bool:
+        """Append a decision record; idempotent on ``record_id``.  Returns
+        whether a new row was written.  Records are never updated or deleted."""
+        async with self._write_transaction() as connection:
+            exists = (await connection.execute(text(
+                "SELECT 1 FROM knowledge_decisions WHERE record_id = :record_id"),
+                {"record_id": record["record_id"]})).scalar_one_or_none()
+            if exists:
+                return False
+            await connection.execute(text("""
+                INSERT INTO knowledge_decisions
+                (record_id, decision_id, tenant, domain, release_id, content_hash, recorded_at, subject, record_json)
+                VALUES (:record_id, :decision_id, :tenant, :domain, :release_id, :content_hash,
+                        :recorded_at, :subject, :record_json)
+            """), {
+                "record_id": record["record_id"], "decision_id": record["decision_id"],
+                "tenant": record["tenant"], "domain": record["domain"],
+                "release_id": record["release_id"], "content_hash": record["content_hash"],
+                "recorded_at": record["recorded_at"], "subject": record["subject"],
+                "record_json": json.dumps(record, sort_keys=True, default=str),
+            })
+        return True
+
+    async def knowledge_decision(self, tenant: str, record_id: str) -> dict[str, object] | None:
+        async with self._engine.connect() as connection:
+            row = (await connection.execute(text("""
+                SELECT record_json FROM knowledge_decisions WHERE tenant = :tenant AND record_id = :record_id
+            """), {"tenant": tenant, "record_id": record_id})).scalar_one_or_none()
+        return json.loads(row) if row else None
+
+    async def knowledge_decisions(
+        self, tenant: str, domain: str, *, release_id: str | None = None, limit: int = 1000,
+    ) -> list[dict[str, object]]:
+        """A tenant's decision records for one domain, oldest first."""
+        query = ("SELECT record_json FROM knowledge_decisions WHERE tenant = :tenant AND domain = :domain"
+                 + (" AND release_id = :release_id" if release_id else "")
+                 + " ORDER BY recorded_at, record_id LIMIT :limit")
+        params: dict[str, object] = {"tenant": tenant, "domain": domain, "limit": int(limit)}
+        if release_id:
+            params["release_id"] = release_id
+        async with self._engine.connect() as connection:
+            rows = (await connection.execute(text(query), params)).scalars().all()
+        return [json.loads(row) for row in rows]
+
     async def _set_active_knowledge_release(
         self, connection: AsyncConnection, tenant: str, domain: str, release_id: str,
     ) -> None:
@@ -749,6 +804,13 @@ _DDL = (
         tenant TEXT NOT NULL, domain TEXT NOT NULL, release_id TEXT NOT NULL,
         PRIMARY KEY (tenant, domain)
     )""",
+    """CREATE TABLE IF NOT EXISTS knowledge_decisions (
+        record_id TEXT PRIMARY KEY, decision_id TEXT NOT NULL, tenant TEXT NOT NULL,
+        domain TEXT NOT NULL, release_id TEXT NOT NULL, content_hash TEXT NOT NULL,
+        recorded_at TEXT NOT NULL, subject TEXT NOT NULL, record_json TEXT NOT NULL
+    )""",
+    """CREATE INDEX IF NOT EXISTS idx_knowledge_decisions_tenant
+        ON knowledge_decisions (tenant, domain, recorded_at)""",
     """CREATE TABLE IF NOT EXISTS energy_evidence_request_transitions (
         transition_id TEXT PRIMARY KEY, tenant TEXT NOT NULL, request_id TEXT NOT NULL,
         from_state TEXT NOT NULL, to_state TEXT NOT NULL, changed_at TEXT NOT NULL,

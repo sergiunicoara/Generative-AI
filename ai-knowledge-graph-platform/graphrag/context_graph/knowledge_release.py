@@ -56,9 +56,13 @@ RELEASE_SCHEMA_VERSION = "knowledge-release/v1"
 class KnowledgePublicationError(RuntimeError):
     """A candidate release failed its gate; the active release is unchanged."""
 
-    def __init__(self, message: str, failures: list[str]):
+    def __init__(self, message: str, failures: list[str] | None = None, *,
+                 issues: list["GateIssue"] | None = None):
+        issues = list(issues or [])
+        failures = list(failures) if failures is not None else [issue.message for issue in issues]
         super().__init__(message + ": " + "; ".join(failures[:10]))
         self.failures = failures
+        self.issues = issues
 
 
 class KnowledgePack(BaseModel):
@@ -230,43 +234,81 @@ def case_mismatches(case: RegressionCase, decision: EvaluationDecision) -> list[
 # publication gate
 
 
-def _version_failures(entries: Iterable, kind: str) -> list[str]:
+@dataclass(frozen=True)
+class GateIssue:
+    """One gate failure in machine-readable form: a stable ``code``, the
+    ``path`` of the offending entry, the human ``message`` (the same text the
+    gate has always produced) and the smallest corrective ``hint``."""
+
+    code: str
+    path: str
+    message: str
+    hint: str
+
+
+_HINTS = {
+    "multiple_published_versions": "Keep one published version per id; withdraw the older ones (withdraw_item).",
+    "published_version_not_latest": "Publish the latest version, or drop the newer unpublished or withdrawn one.",
+    "tenant_mismatch": "Set the entry tenant to the pack tenant, or move the entry to that tenant pack.",
+    "supersedes_unknown_item": "Add the superseded item to the pack, or remove its id from supersedes.",
+    "overrides_unknown_item": "Add the overridden item to the pack, or remove its id from overrides.",
+    "supersession_cycle": "Remove one supersedes edge so revisions form a chain.",
+    "exception_target_unpublished": "Publish the target item, or remove it from target_item_ids/winner_item_id.",
+    "shacl_violation": ("Fix the field named in the message on the published entry; the shapes are generated "
+                        "from ontology/models/contextual-knowledge.yaml."),
+    "regression_mismatch": ("Fix the pack, or change the case expectation only after review: cases encode "
+                            "intended behaviour."),
+    "regression_cases_missing": "Supply the domain regression cases (evals/knowledge_eval/<domain>_cases.json).",
+}
+
+
+def _issue(code: str, path: str, message: str) -> GateIssue:
+    return GateIssue(code=code, path=path, message=message, hint=_HINTS[code])
+
+
+def _version_issues(entries: Iterable, kind: str) -> list[GateIssue]:
     """Exactly one effective version per id: at most one published version,
     and it must be the latest -- a newer withdrawn or unpublished version
     cannot leave an older one in force."""
     by_id: dict[str, list] = {}
     for entry in entries:
         by_id.setdefault(entry.id, []).append(entry)
-    failures: list[str] = []
+    issues: list[GateIssue] = []
     for entry_id, versions in sorted(by_id.items()):
+        path = f"{kind}s/{entry_id}"
         published = sorted(e.version for e in versions if e.status == PublicationStatus.PUBLISHED)
         if len(published) > 1:
-            failures.append(f"{kind} {entry_id}: more than one published version {published}")
+            issues.append(_issue("multiple_published_versions", path,
+                                 f"{kind} {entry_id}: more than one published version {published}"))
         latest = max(versions, key=lambda e: e.version)
         if published and latest.status != PublicationStatus.PUBLISHED:
-            failures.append(f"{kind} {entry_id}: published v{published[-1]} is older than "
-                            f"v{latest.version} ({latest.status.value})")
-    return failures
+            issues.append(_issue("published_version_not_latest", path,
+                                 f"{kind} {entry_id}: published v{published[-1]} is older than "
+                                 f"v{latest.version} ({latest.status.value})"))
+    return issues
 
 
-def check_pack(pack: KnowledgePack, cases: Iterable[RegressionCase] = ()) -> list[str]:
-    """Return gate failures for the pack's published content (empty = pass)."""
-    failures: list[str] = []
+def check_pack_issues(pack: KnowledgePack, cases: Iterable[RegressionCase] = ()) -> list[GateIssue]:
+    """Gate failures for the pack's published content, structured (empty = pass)."""
+    issues: list[GateIssue] = []
     published = pack.published_items()
     published_ids = {item.id for item in published}
-    failures.extend(_version_failures(pack.items, "item"))
-    failures.extend(_version_failures(pack.exceptions, "exception"))
+    issues.extend(_version_issues(pack.items, "item"))
+    issues.extend(_version_issues(pack.exceptions, "exception"))
     all_ids = {item.id for item in pack.items}
     for item in pack.items + pack.exceptions:  # type: ignore[operator]
         if item.tenant != pack.tenant:
-            failures.append(f"{item.key}: tenant {item.tenant!r} differs from pack tenant {pack.tenant!r}")
+            issues.append(_issue("tenant_mismatch", item.key,
+                                 f"{item.key}: tenant {item.tenant!r} differs from pack tenant {pack.tenant!r}"))
     for item in published:
         for target in item.supersedes:
             if target not in all_ids:
-                failures.append(f"{item.key}: supersedes unknown item {target}")
+                issues.append(_issue("supersedes_unknown_item", f"{item.key}/supersedes",
+                                     f"{item.key}: supersedes unknown item {target}"))
         for target in item.overrides:
             if target not in all_ids:
-                failures.append(f"{item.key}: overrides unknown item {target}")
+                issues.append(_issue("overrides_unknown_item", f"{item.key}/overrides",
+                                     f"{item.key}: overrides unknown item {target}"))
     # supersession cycles among published items
     graph = {item.id: set(item.supersedes) & published_ids for item in published}
     visiting: set[str] = set()
@@ -284,23 +326,31 @@ def check_pack(pack: KnowledgePack, cases: Iterable[RegressionCase] = ()) -> lis
         return found
 
     if any(_cycle(node) for node in graph):
-        failures.append("supersession cycle among published items")
+        issues.append(_issue("supersession_cycle", "items", "supersession cycle among published items"))
     for exc in pack.published_exceptions():
-        for target in (*exc.target_item_ids, *( [exc.winner_item_id] if exc.winner_item_id else [])):
+        for target in (*exc.target_item_ids, *([exc.winner_item_id] if exc.winner_item_id else [])):
             if target not in published_ids:
-                failures.append(f"{exc.key}: targets {target}, which is not a published item")
-    if not failures:
+                issues.append(_issue("exception_target_unpublished", f"{exc.key}/targets",
+                                     f"{exc.key}: targets {target}, which is not a published item"))
+    if not issues:
         # the projection assumes one effective version per id, checked above
-        failures.extend(projection_failures(published, pack.published_exceptions()))
-    if failures:
-        return failures
+        issues.extend(_issue("shacl_violation", "rdf", failure)
+                      for failure in projection_failures(published, pack.published_exceptions()))
+    if issues:
+        return issues
 
     release = KnowledgeReleaseRef(release_id="candidate", domain=pack.domain, version="candidate")
     for case in cases:
         decision = run_case(case, items=published, exceptions=pack.published_exceptions(),
                             domain=pack.domain, release=release)
-        failures.extend(case_mismatches(case, decision))
-    return failures
+        issues.extend(_issue("regression_mismatch", f"cases/{case.id}", mismatch)
+                      for mismatch in case_mismatches(case, decision))
+    return issues
+
+
+def check_pack(pack: KnowledgePack, cases: Iterable[RegressionCase] = ()) -> list[str]:
+    """Return gate failures for the pack's published content (empty = pass)."""
+    return [issue.message for issue in check_pack_issues(pack, cases)]
 
 
 def release_record(pack: KnowledgePack, *, published_by: str, checks: Mapping[str, Any]) -> dict[str, Any]:
@@ -335,15 +385,14 @@ async def publish_pack(
     if not published_by:
         raise ValueError("publication needs the publishing identity")
     cases = list(cases)
+    rejected = f"knowledge release for {pack.tenant}/{pack.domain} rejected; the active release is unchanged"
     if not cases:
-        raise KnowledgePublicationError(
-            f"knowledge release for {pack.tenant}/{pack.domain} rejected; the active release is unchanged",
-            ["no regression cases supplied; a release cannot pass an empty regression gate"])
-    failures = check_pack(pack, cases)
-    if failures:
-        raise KnowledgePublicationError(
-            f"knowledge release for {pack.tenant}/{pack.domain} rejected; the active release is unchanged",
-            failures)
+        raise KnowledgePublicationError(rejected, issues=[_issue(
+            "regression_cases_missing", "cases",
+            "no regression cases supplied; a release cannot pass an empty regression gate")])
+    issues = check_pack_issues(pack, cases)
+    if issues:
+        raise KnowledgePublicationError(rejected, issues=issues)
     checks = {"contract": "passed", "referential": "passed", "regression_cases": len(cases),
               "regression": "passed"}
     return await store.publish_knowledge_release(release_record(pack, published_by=published_by, checks=checks))
@@ -370,7 +419,8 @@ class ReleaseCatalog:
 
 
 __all__ = [
-    "KnowledgePack", "KnowledgePublicationError", "RegressionCase", "ReleaseCatalog", "approve_item",
-    "case_mismatches", "check_pack", "load_cases", "load_pack", "publish_pack", "release_record",
+    "GateIssue", "KnowledgePack", "KnowledgePublicationError", "RegressionCase", "ReleaseCatalog", "approve_item",
+    "case_mismatches", "check_pack", "check_pack_issues", "load_cases", "load_pack", "publish_pack",
+    "release_record",
     "review_queue", "run_case", "withdraw_item",
 ]

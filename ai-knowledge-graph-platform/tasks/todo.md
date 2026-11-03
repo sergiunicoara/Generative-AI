@@ -205,3 +205,24 @@ described as live-validated. Full unit suite runs once, at the end, before push.
 - Full unit suite, one run at the end: **3567 passed**, 28 warnings, 0 failed (771 s).
 - Not validated live: GQL engine, Stardog/GraphDB/Fuseki, Jira (mock transports only).
 - Open: `requirements.lock` lacks `graphql-core` (`make lock`); Jira route not idempotent.
+
+# Roadmap candidate items (2026-11-03 batch)
+
+Scope: the 21 open items in `docs/roadmap.md` (7 feed-review candidates, 14
+job-description candidates). Confluence/Databricks stays open by its own
+condition (no real deployment requires it). Offline only, no paid services, no
+claims of live validation. Full unit suite and push after each wave.
+
+- [x] Wave 1 (3582 passed, full suite): durable decision log + replay + explanation-fidelity check;
+      decision re-review impact analysis (release change, expiring exceptions,
+      review-due items); remediation hints in gate and evaluation errors.
+- [ ] Wave 2: metamorphic + held-out + generated evaluation; applicability
+      index, latency benchmark, stage metrics; constraint rendering for reviewers.
+- [ ] Wave 3: release stamp on every projection; shape/model registry as RDF;
+      named-graph ADR + per-tenant drop test + JSON-LD round trip.
+- [ ] Wave 4: formalism ADR + decision tables (representation/validation);
+      expert elicitation; business-definition registry; use-case charters;
+      answer-trust investigation workflow.
+- [ ] Wave 5: erasure/correction propagation audit; data minimisation before
+      model providers; extraction record contract; permission-freshness bound.
+- [ ] Wave 6 (evaluation only): SHACL-to-Cypher; "Open Knowledge Format" spec check.

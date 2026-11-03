@@ -394,3 +394,42 @@ Known limitation that remains: the evaluation set is still developer-authored.
 The two evaluator limitations listed at the time (partial waivers not unioned;
 a partially superseded revision reported with its full matched context) were
 addressed on 2026-10-29 (see above).
+
+## Decision log, replay, fidelity and re-review (2026-11-03)
+
+* **Decision log.** `KnowledgeEvaluationService.evaluate` appends every
+  decision to a tenant-scoped, append-only table (`knowledge_decisions` in the
+  governance store) together with its inputs: business context, full facts with
+  evidence, the caller's resolved access context, evaluation options and the
+  cited release id and content hash. The same inputs, access and release give
+  the same `record_id`, so repeated evaluations are recorded once. Pass
+  `record=False` to skip.
+* **Replay.** `replays_exactly(record, catalog)` re-runs a record against the
+  release it cites and compares the decision byte for byte.
+* **Explanation fidelity.** `influence` removes each visible item and exception
+  once (an item together with the exceptions that name it, so every comparison
+  is with a release the gate would accept) and reports which ones change the
+  outcome (overall result, review flag or set of failing rules). `fidelity`
+  checks that no decisive entry is missing from what the decision cites; on the
+  26 evaluation cases none is. A decision cites every applicable rule, so many
+  cited rules are not decisive on their own; that direction is not claimed.
+  Influence costs one evaluation per visible entry and is an audit tool.
+* **Re-review impact.** `review_impact` re-evaluates stored decisions against a
+  release, optionally at a later valid time, and reports per decision what was
+  decided then and what would be decided now, the rules whose outcome moved,
+  cited items whose human-set `review_due` has passed, and applied exceptions
+  that lapse within a window.
+* **Remediation hints.** Gate failures are available as
+  `GateIssue(code, path, message, hint)` (`check_pack_issues`,
+  `KnowledgePublicationError.issues`, and `issues` in the publish route's 422);
+  evaluation input errors carry `code`, `path` and `hint`.
+
+Admin routes (records hold callers' access and facts, so reading them is
+administrative): `GET /knowledge/decisions/{domain}` (summaries),
+`GET /knowledge/decisions/{domain}/{record_id}/replay`,
+`POST /knowledge/decisions/{domain}/review-impact` (`as_of`, `window_end`,
+`only_affected`).
+
+Not done: retention or redaction rules for the decision log (it is append-only
+and keeps facts), and a per-decision access check that would let non-admins
+read their own records.

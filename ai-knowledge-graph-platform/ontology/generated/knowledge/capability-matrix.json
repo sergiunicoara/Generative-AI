@@ -1131,6 +1131,116 @@
       "rule": "composite_key"
     },
     {
+      "element": "KnowledgeRelease",
+      "line": 115,
+      "outcomes": {
+        "gql": "enforced",
+        "neo4j": "translated",
+        "owl": "enforced",
+        "shacl": "enforced"
+      },
+      "rule": "class"
+    },
+    {
+      "element": "KnowledgeRelease.contentHash",
+      "line": 128,
+      "outcomes": {
+        "gql": "enforced",
+        "neo4j": "runtime-mitigated",
+        "owl": "enforced",
+        "shacl": "enforced"
+      },
+      "rule": "property"
+    },
+    {
+      "element": "KnowledgeRelease.contentHash",
+      "line": 128,
+      "outcomes": {
+        "gql": "enforced",
+        "neo4j": "runtime-mitigated",
+        "owl": "enforced",
+        "shacl": "enforced"
+      },
+      "rule": "datatype"
+    },
+    {
+      "element": "KnowledgeRelease.contentHash",
+      "line": 128,
+      "outcomes": {
+        "gql": "enforced",
+        "neo4j": "runtime-mitigated",
+        "owl": "warning",
+        "shacl": "enforced"
+      },
+      "rule": "required"
+    },
+    {
+      "element": "KnowledgeRelease.contentHash",
+      "line": 128,
+      "outcomes": {
+        "gql": "unsupported",
+        "neo4j": "runtime-mitigated",
+        "owl": "warning",
+        "shacl": "enforced"
+      },
+      "rule": "max_cardinality"
+    },
+    {
+      "element": "KnowledgeRelease.releaseId",
+      "line": 123,
+      "outcomes": {
+        "gql": "enforced",
+        "neo4j": "runtime-mitigated",
+        "owl": "enforced",
+        "shacl": "enforced"
+      },
+      "rule": "property"
+    },
+    {
+      "element": "KnowledgeRelease.releaseId",
+      "line": 123,
+      "outcomes": {
+        "gql": "enforced",
+        "neo4j": "runtime-mitigated",
+        "owl": "enforced",
+        "shacl": "enforced"
+      },
+      "rule": "datatype"
+    },
+    {
+      "element": "KnowledgeRelease.releaseId",
+      "line": 123,
+      "outcomes": {
+        "gql": "enforced",
+        "neo4j": "runtime-mitigated",
+        "owl": "warning",
+        "shacl": "enforced"
+      },
+      "rule": "required"
+    },
+    {
+      "element": "KnowledgeRelease.releaseId",
+      "line": 123,
+      "outcomes": {
+        "gql": "unsupported",
+        "neo4j": "runtime-mitigated",
+        "owl": "warning",
+        "shacl": "enforced"
+      },
+      "rule": "max_cardinality"
+    },
+    {
+      "element": "KnowledgeRelease.releaseId",
+      "line": 123,
+      "outcomes": {
+        "gql": "runtime-mitigated",
+        "neo4j": "enforced",
+        "owl": "warning",
+        "shacl": "runtime-mitigated"
+      },
+      "rule": "key"
+    },
+    {
       "element": "KnowledgeSource",
       "line": 105,
       "outcomes": {
@@ -1198,7 +1308,7 @@
     },
     {
       "element": "citesSource",
-      "line": 116,
+      "line": 143,
       "outcomes": {
         "gql": "enforced",
         "neo4j": "runtime-mitigated",
@@ -1209,7 +1319,7 @@
     },
     {
       "element": "citesSource",
-      "line": 116,
+      "line": 143,
       "outcomes": {
         "gql": "runtime-mitigated",
         "neo4j": "runtime-mitigated",
@@ -1220,7 +1330,7 @@
     },
     {
       "element": "citesSource",
-      "line": 116,
+      "line": 143,
       "outcomes": {
         "gql": "enforced",
         "neo4j": "runtime-mitigated",
@@ -1231,7 +1341,7 @@
     },
     {
       "element": "exceptionCitesSource",
-      "line": 133,
+      "line": 160,
       "outcomes": {
         "gql": "enforced",
         "neo4j": "runtime-mitigated",
@@ -1242,6 +1352,94 @@
     },
     {
       "element": "exceptionCitesSource",
+      "line": 160,
+      "outcomes": {
+        "gql": "runtime-mitigated",
+        "neo4j": "runtime-mitigated",
+        "owl": "warning",
+        "shacl": "enforced"
+      },
+      "rule": "relation_cardinality"
+    },
+    {
+      "element": "exceptionInRelease",
+      "line": 138,
+      "outcomes": {
+        "gql": "enforced",
+        "neo4j": "runtime-mitigated",
+        "owl": "warning",
+        "shacl": "enforced"
+      },
+      "rule": "relation"
+    },
+    {
+      "element": "exceptionInRelease",
+      "line": 138,
+      "outcomes": {
+        "gql": "runtime-mitigated",
+        "neo4j": "runtime-mitigated",
+        "owl": "warning",
+        "shacl": "enforced"
+      },
+      "rule": "relation_cardinality"
+    },
+    {
+      "element": "exceptionTarget",
+      "line": 165,
+      "outcomes": {
+        "gql": "enforced",
+        "neo4j": "runtime-mitigated",
+        "owl": "warning",
+        "shacl": "enforced"
+      },
+      "rule": "relation"
+    },
+    {
+      "element": "exceptionTarget",
+      "line": 165,
+      "outcomes": {
+        "gql": "runtime-mitigated",
+        "neo4j": "runtime-mitigated",
+        "owl": "warning",
+        "shacl": "enforced"
+      },
+      "rule": "relation_cardinality"
+    },
+    {
+      "element": "exceptionWinner",
+      "line": 170,
+      "outcomes": {
+        "gql": "enforced",
+        "neo4j": "runtime-mitigated",
+        "owl": "warning",
+        "shacl": "enforced"
+      },
+      "rule": "relation"
+    },
+    {
+      "element": "exceptionWinner",
+      "line": 170,
+      "outcomes": {
+        "gql": "runtime-mitigated",
+        "neo4j": "runtime-mitigated",
+        "owl": "warning",
+        "shacl": "enforced"
+      },
+      "rule": "relation_cardinality"
+    },
+    {
+      "element": "inRelease",
+      "line": 133,
+      "outcomes": {
+        "gql": "enforced",
+        "neo4j": "runtime-mitigated",
+        "owl": "warning",
+        "shacl": "enforced"
+      },
+      "rule": "relation"
+    },
+    {
+      "element": "inRelease",
       "line": 133,
       "outcomes": {
         "gql": "runtime-mitigated",
@@ -1252,52 +1450,8 @@
       "rule": "relation_cardinality"
     },
     {
-      "element": "exceptionTarget",
-      "line": 138,
-      "outcomes": {
-        "gql": "enforced",
-        "neo4j": "runtime-mitigated",
-        "owl": "warning",
-        "shacl": "enforced"
-      },
-      "rule": "relation"
-    },
-    {
-      "element": "exceptionTarget",
-      "line": 138,
-      "outcomes": {
-        "gql": "runtime-mitigated",
-        "neo4j": "runtime-mitigated",
-        "owl": "warning",
-        "shacl": "enforced"
-      },
-      "rule": "relation_cardinality"
-    },
-    {
-      "element": "exceptionWinner",
-      "line": 143,
-      "outcomes": {
-        "gql": "enforced",
-        "neo4j": "runtime-mitigated",
-        "owl": "warning",
-        "shacl": "enforced"
-      },
-      "rule": "relation"
-    },
-    {
-      "element": "exceptionWinner",
-      "line": 143,
-      "outcomes": {
-        "gql": "runtime-mitigated",
-        "neo4j": "runtime-mitigated",
-        "owl": "warning",
-        "shacl": "enforced"
-      },
-      "rule": "relation_cardinality"
-    },
-    {
       "element": "overrides",
-      "line": 129,
+      "line": 156,
       "outcomes": {
         "gql": "enforced",
         "neo4j": "runtime-mitigated",
@@ -1308,7 +1462,7 @@
     },
     {
       "element": "supersedes",
-      "line": 125,
+      "line": 152,
       "outcomes": {
         "gql": "enforced",
         "neo4j": "runtime-mitigated",
@@ -1331,25 +1485,25 @@
   ],
   "summary": {
     "gql": {
-      "enforced": 83,
-      "runtime-mitigated": 10,
+      "enforced": 92,
+      "runtime-mitigated": 13,
       "translated": 2,
-      "unsupported": 25
+      "unsupported": 27
     },
     "neo4j": {
-      "enforced": 5,
-      "runtime-mitigated": 110,
-      "translated": 5
+      "enforced": 6,
+      "runtime-mitigated": 122,
+      "translated": 6
     },
     "owl": {
-      "enforced": 53,
+      "enforced": 58,
       "translated": 3,
       "unsupported": 1,
-      "warning": 63
+      "warning": 72
     },
     "shacl": {
-      "enforced": 111,
-      "runtime-mitigated": 7,
+      "enforced": 124,
+      "runtime-mitigated": 8,
       "translated": 2
     }
   },

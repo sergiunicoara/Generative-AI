@@ -140,6 +140,17 @@ class KnowledgeEvaluationService:
                                        if self.cache_misses else None),
         }
 
+    async def stale_projections(self, tenant: str, domain: str, stamps: Mapping[str, str]) -> list[str]:
+        """Names of projections whose release content hash is not the active one.
+
+        ``stamps`` maps a projection name (an RDF export, a cached answer, a
+        stored decision ...) to the content hash of the release it was made
+        from.  A rollback to identical content is current again: identity is
+        the content, not the release id.
+        """
+        active = (await self.catalog(tenant, domain)).ref.content_hash
+        return sorted(name for name, content_hash in stamps.items() if content_hash != active)
+
     # -- decision log ------------------------------------------------------------
 
     async def decision_log(self, tenant: str, domain: str, *, limit: int = 1000) -> list[dict[str, Any]]:

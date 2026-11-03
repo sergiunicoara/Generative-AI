@@ -767,7 +767,7 @@ documentation. Items are phrased against this platform's existing contracts.
   **Acceptance evidence:** golden renderings for every operator and `when_missing`
   mode; a test that the rendering cannot change evaluation.
   **Status (2026-11-03):** `knowledge_render.py`; the review queue shows `executable` next to `statement`; golden renderings for every operator and `when_missing` mode.
-- [ ] Release stamp on every projection. Each projection of a release (RDF
+- [x] Release stamp on every projection. Each projection of a release (RDF
   export, Energy answers, GraphQL and MCP payloads, cache entries) carries the
   release id and content hash; a check fails when a served projection does not
   match the active release. The decision cache already keys on release; the RDF
@@ -776,7 +776,8 @@ documentation. Items are phrased against this platform's existing contracts.
   projections, with the release remaining the single authority.
   **Acceptance evidence:** a test publishes, rolls back and re-exports, and
   asserts stamps and stale-projection detection.
-- [ ] Shape and model registry as plain RDF (lower priority). Describe which
+  **Status (2026-11-03):** the RDF export can carry a `KnowledgeRelease` node (release id + content hash, in the canonical model and its generated shapes) that every projected entry points at; decisions already cite their release and the cache keys on it; `KnowledgeEvaluationService.stale_projections` reports projections whose content hash is not the active one. A test publishes, changes the release and rolls back: stamps go stale and current again. Not done: stamping the Energy RDF publication, which keeps its own `publication_version_id`.
+- [x] Shape and model registry as plain RDF (lower priority). Describe which
   generated model and shapes apply to which graph, with version, SHA-256 and
   active flag, in a named graph shipped with the export so the mapping travels
   with the data.
@@ -784,6 +785,7 @@ documentation. Items are phrased against this platform's existing contracts.
   configuration.
   **Acceptance evidence:** a SPARQL query answers "which shapes apply to graph X"
   and the recorded hash equals `compile --check`.
+  **Status (2026-11-03):** `graphrag/semantic_model/registry_rdf.py`: models with id, version, model and shapes SHA-256, shapes path and active flag; data graphs bound with `dcterms:conformsTo`; `shapes_for_graph` is one SPARQL query; `shapes_drift` compares recorded hashes with the committed shapes.
 - [ ] Verify before considering an "Open Knowledge Format" bundle export. A post
   describes a markdown-bundle format for agent-readable knowledge with untyped
   links; its existence, version and licence are unverified here. Only if the
@@ -913,7 +915,7 @@ breaking. Only the gaps below are added.
   changes.
   **Acceptance evidence:** a schema-level test over the extractor output; a
   replay with a different model version produces a diffable record.
-- [ ] Named-graph layout decision for RDF stores. Record, as an ADR, how data is
+- [x] Named-graph layout decision for RDF stores. Record, as an ADR, how data is
   split into named graphs (per tenant, per source, per publication version) and
   how that supports rollback, per-tenant deletion and provenance queries, plus an
   optional JSON-LD serialisation for API consumers that cannot use Turtle.
@@ -922,6 +924,7 @@ breaking. Only the gaps below are added.
   **Acceptance evidence:** the ADR; a SPARQL test that drops one tenant's graph
   without touching another's; a JSON-LD round trip that preserves IRIs and
   datatypes.
+  **Status (2026-11-03):** ADR-0013 (`docs/adr/0013-named-graph-layout.md`); `graphrag/graph/named_graphs.py` with per-tenant `DROP GRAPH` (tested: one tenant dropped, the other untouched, a longer tenant name with the same prefix untouched) and a JSON-LD round trip that is isomorphic and keeps IRIs and datatypes. Tested on an in-memory rdflib Dataset; existing exports still write a single graph.
 
 Considered and **not** added: embeddings and hybrid-search evaluation, entity
 resolution, taxonomy mapping and pre-publication checks (already planned above or

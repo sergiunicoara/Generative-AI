@@ -37,7 +37,7 @@ from rdflib import RDF, Graph, Literal, Namespace, URIRef
 from rdflib.namespace import XSD
 
 from graphrag.context_graph.knowledge import KnowledgeException, KnowledgeItem
-from graphrag.context_graph.knowledge_evaluation import visible_exceptions, visible_items
+from graphrag.context_graph.knowledge_evaluation import KnowledgeReleaseRef, visible_exceptions, visible_items
 from graphrag.enterprise.models import AccessContext
 from graphrag.semantic_model.compiler import compile_model
 from graphrag.semantic_model.models import load_model
@@ -74,12 +74,27 @@ def _when(value: datetime) -> Literal:
     return Literal(value.isoformat(), datatype=XSD.dateTime)
 
 
-def items_to_graph(items: Iterable[KnowledgeItem], exceptions: Iterable[KnowledgeException] = ()) -> Graph:
-    """Project items and exceptions to RDF, exactly as given."""
+def items_to_graph(
+    items: Iterable[KnowledgeItem], exceptions: Iterable[KnowledgeException] = (), *,
+    release: KnowledgeReleaseRef | None = None,
+) -> Graph:
+    """Project items and exceptions to RDF, exactly as given.
+
+    With ``release`` every projected entry points at a release node carrying
+    the release id and content hash (the release stamp), so a holder of the
+    export can check it against the active release.
+    """
     k = _ns()
     graph = Graph()
     graph.bind("kn", k)
     items, exceptions = list(items), list(exceptions)
+    release_node = None
+    if release is not None:
+        tenants = sorted({entry.tenant for entry in (*items, *exceptions)}) or ["_"]
+        release_node = _iri(tenants[0], "KnowledgeRelease", release.release_id)
+        graph.add((release_node, RDF.type, k.KnowledgeRelease))
+        graph.add((release_node, k.releaseId, Literal(release.release_id)))
+        graph.add((release_node, k.contentHash, Literal(release.content_hash)))
     node_of: dict[str, URIRef] = {}
     for item in items:
         node_of[item.id] = _iri(item.tenant, "KnowledgeItem", item.key)
@@ -117,6 +132,8 @@ def items_to_graph(items: Iterable[KnowledgeItem], exceptions: Iterable[Knowledg
         if item.applicability.valid_to:
             graph.add((node, k.validTo, _when(item.applicability.valid_to)))
         cite(node, item.tenant, k.citesSource, item.sources)
+        if release_node is not None:
+            graph.add((node, k.inRelease, release_node))
         for target in item.supersedes:
             if target in node_of:
                 graph.add((node, k.supersedes, node_of[target]))
@@ -131,6 +148,8 @@ def items_to_graph(items: Iterable[KnowledgeItem], exceptions: Iterable[Knowledg
         graph.add((node, k.grantedBy, Literal(exc.granted_by)))
         graph.add((node, k.approvalRef, Literal(exc.approval_ref)))
         cite(node, exc.tenant, k.exceptionCitesSource, exc.sources)
+        if release_node is not None:
+            graph.add((node, k.exceptionInRelease, release_node))
         for target in exc.target_item_ids:
             if target in node_of:
                 graph.add((node, k.exceptionTarget, node_of[target]))
@@ -141,13 +160,22 @@ def items_to_graph(items: Iterable[KnowledgeItem], exceptions: Iterable[Knowledg
 
 def export_graph(
     items: Iterable[KnowledgeItem], exceptions: Iterable[KnowledgeException], *,
-    tenant: str, access: AccessContext,
+    tenant: str, access: AccessContext, release: KnowledgeReleaseRef | None = None,
 ) -> Graph:
     """Project only what ``access`` may see in ``tenant``, as the evaluator does."""
     return items_to_graph(
         visible_items(items, tenant=tenant, access=access),
         visible_exceptions(exceptions, tenant=tenant, access=access),
+        release=release,
     )
+
+
+def release_stamp(graph: Graph) -> tuple[str, str] | None:
+    """The (release id, content hash) an export was made from, if stamped."""
+    k = _ns()
+    stamps = {(str(graph.value(node, k.releaseId)), str(graph.value(node, k.contentHash)))
+              for node in graph.subjects(RDF.type, k.KnowledgeRelease)}
+    return stamps.pop() if len(stamps) == 1 else None
 
 
 def validate_projection(graph: Graph) -> list[str]:
@@ -185,5 +213,5 @@ def projection_failures(items: Iterable[KnowledgeItem], exceptions: Iterable[Kno
 
 __all__ = [
     "MODEL_PATH", "export_graph", "items_to_graph", "knowledge_shapes_ttl", "projection_failures",
-    "validate_projection",
+    "release_stamp", "validate_projection",
 ]

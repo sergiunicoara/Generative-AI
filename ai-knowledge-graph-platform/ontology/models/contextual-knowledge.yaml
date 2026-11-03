@@ -112,7 +112,34 @@ types:
         required: true
         key: true
         cardinality: {max: 1}
+  KnowledgeRelease:
+    label: Knowledge release
+    description: >-
+      The immutable, content-addressed release a projection was made from. Every
+      projected item and exception points at it, so a consumer can tell whether
+      what it holds is still the active release.
+    lpg_label: KNOWLEDGE_RELEASE
+    properties:
+      releaseId:
+        datatype: string
+        required: true
+        key: true
+        cardinality: {max: 1}
+      contentHash:
+        datatype: string
+        required: true
+        cardinality: {max: 1}
 relations:
+  inRelease:
+    source: KnowledgeItem
+    target: KnowledgeRelease
+    lpg_type: IN_RELEASE
+    cardinality: {max: 1}
+  exceptionInRelease:
+    source: KnowledgeException
+    target: KnowledgeRelease
+    lpg_type: EXCEPTION_IN_RELEASE
+    cardinality: {max: 1}
   citesSource:
     source: KnowledgeItem
     target: KnowledgeSource

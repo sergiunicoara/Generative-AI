@@ -117,3 +117,25 @@ The reviewer recorded on an import is the token `sub`; request and body
 proposal, a graph-schema decision), apply is sequential and not transactional
 (per-row results are reported), and the Jira client was only exercised against
 a mock transport.
+
+## Named graphs, release stamps and the shape registry (2026-11-03)
+
+* **Layout** (ADR-0013): `https://graphrag.example.com/graph/{tenant}/{source}/{publication}`.
+  `graphrag/graph/named_graphs.py` builds validated graph IRIs, lists a
+  tenant's graphs with SPARQL and drops them by name, and serialises to and
+  from JSON-LD. Tested on an in-memory `rdflib.Dataset`; existing exports still
+  write a single graph.
+* **Release stamp.** `export_graph(..., release=ref)` adds a
+  `KnowledgeRelease` node with release id and content hash, referenced by every
+  projected item and exception (part of the canonical model and its shapes).
+  `release_stamp(graph)` reads it back and
+  `KnowledgeEvaluationService.stale_projections` flags projections whose
+  content hash differs from the active release; identity is the content, so a
+  rollback to identical content is current again.
+* **Shape registry as RDF.** `registry_graph(models, bindings)` describes each
+  model (id, version, model and shapes SHA-256, shapes path, active flag) and
+  binds data graphs to models with `dcterms:conformsTo`; `shapes_for_graph`
+  answers "which shapes apply to graph X" with one SPARQL query, and
+  `shapes_drift` reports committed shapes that no longer match the recorded
+  hash.
+

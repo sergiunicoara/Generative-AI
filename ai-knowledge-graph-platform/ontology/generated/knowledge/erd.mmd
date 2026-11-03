@@ -28,13 +28,19 @@ classDiagram
     }
     KnowledgeItem ..|> Governed : mixin
     %% KnowledgeItem composite key (tenant, knowledgeId, version)
+    class KnowledgeRelease {
+        +string contentHash!
+        +string releaseId*
+    }
     class KnowledgeSource {
         +string sourceId*
     }
     KnowledgeItem "1" --> "1..*" KnowledgeSource : citesSource
     %% citesSource attributes: locator: string
     KnowledgeException "1" --> "1..*" KnowledgeSource : exceptionCitesSource
+    KnowledgeException "1" --> "0..1" KnowledgeRelease : exceptionInRelease
     KnowledgeException "1" --> "1..*" KnowledgeItem : exceptionTarget
     KnowledgeException "1" --> "0..1" KnowledgeItem : exceptionWinner
+    KnowledgeItem "1" --> "0..1" KnowledgeRelease : inRelease
     KnowledgeItem "1" --> "0..*" KnowledgeItem : overrides
     KnowledgeItem "1" --> "0..*" KnowledgeItem : supersedes

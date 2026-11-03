@@ -218,7 +218,7 @@ claims of live validation. Full unit suite and push after each wave.
       review-due items); remediation hints in gate and evaluation errors.
 - [x] Wave 2: metamorphic + held-out + generated evaluation; applicability
       index, latency benchmark, stage metrics; constraint rendering for reviewers.
-- [ ] Wave 3: release stamp on every projection; shape/model registry as RDF;
+- [x] Wave 3: release stamp on every projection; shape/model registry as RDF;
       named-graph ADR + per-tenant drop test + JSON-LD round trip.
 - [ ] Wave 4: formalism ADR + decision tables (representation/validation);
       expert elicitation; business-definition registry; use-case charters;

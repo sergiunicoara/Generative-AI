@@ -15,7 +15,7 @@ from api.auth.dependencies import get_current_user
 from api.routes import knowledge as knowledge_routes
 from graphrag.context_graph.knowledge import BusinessContext, Fact, KnowledgeItem
 from graphrag.context_graph.knowledge_decisions import (
-    cited_keys, fidelity, influence, needs_review, replay, replays_exactly, review_impact,
+    cited_keys, fidelity, influence, needs_review, replays_exactly, review_impact,
 )
 from graphrag.context_graph.knowledge_evaluation import KnowledgeReleaseRef
 from graphrag.context_graph.knowledge_release import (

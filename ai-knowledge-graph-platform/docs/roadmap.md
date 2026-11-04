@@ -757,7 +757,7 @@ documentation. Items are phrased against this platform's existing contracts.
   **Acceptance evidence:** parity with the RDF-side validator on fixed valid and
   invalid fixtures for the Energy and knowledge models, recorded with the shape
   hash it ran against.
-  **Status (2026-11-03):** evaluated: the open-source `shacl2cypher` (MIT per PyPI metadata, one release 0.3.0 on 2026-09-28, one maintainer, Rust core) was not installed, being new executable code from a single source; an in-house subset `graphrag/semantic_model/cypher_checks.py` compiles the canonical model into read-only Cypher violation queries (required, datatype, endpoints, relation and qualified counts, key and composite-key uniqueness) tied to the shapes hash, with a unit test that every generated property shape of a concrete type has its check. Parity with SHACL on a live Neo4j is written (`tests/e2e/test_live_cypher_checks.py`) but has not run: Docker was unavailable here.
+  **Status (2026-11-03):** evaluated: the open-source `shacl2cypher` (MIT per PyPI metadata, one release 0.3.0 on 2026-09-28, one maintainer, Rust core) was not installed, being new executable code from a single source; an in-house subset `graphrag/semantic_model/cypher_checks.py` compiles the canonical model into read-only Cypher violation queries (required, datatype, endpoints, relation and qualified counts, key and composite-key uniqueness) tied to the shapes hash, with a unit test that every generated property shape of a concrete type has its check. Parity with SHACL on a live Neo4j (`tests/e2e/test_live_cypher_checks.py`) passed in CI on 2026-11-04 (`neo4j:5.20-community`, five valid and invalid fixtures of the synthetic extension model); the Energy and knowledge models are not yet among the fixtures, which the acceptance evidence asks for.
 - [x] Controlled-natural-language rendering of constraints for reviewers. A
   deterministic text rendering of `Constraint`/`Predicate` over the existing
   operator vocabulary, shown in the review queue next to the statement.
@@ -1017,7 +1017,7 @@ corpus and labelled examples first.
 
 ### Candidate additions from a fourth job description: ontology-grounded AI delivery role (2026-11-04)
 
-**Status: proposed, not implemented.** Source: a job description for a role
+**Status: all three done (2026-11-04), verified offline only.** Source: a job description for a role
 building pipelines, retrieval workflows and decision-support agents on an
 ontology-centred data platform. Used as a checklist only; no claim of fit with
 that employer's product, and no integration with that platform is proposed (none
@@ -1061,7 +1061,7 @@ model declares an action that can be proposed, checked and executed.
   required parameter or executes something it should refuse fails the case that
   covers it; results are deterministic across runs.
   **Status (2026-11-04):** `graphrag/evaluation/action_eval.py`, `evals/actions/automotive_supplier_cases.json` (8 synthetic cases, 5 refusals) and `scripts/run_action_eval.py`: each proposal is graded (wrong action, wrong object, missing, wrong or unexpected parameter, should have refused, wrongly refused) and run through the action check, so a proposal the platform would block is reported as such; results per action type with denominators. The oracle agent checks the dataset itself; scripted agents with each mistake fail the covering case; `LLMActionAgent` was tested with a fake model only (a real model run costs money and needs `--allow-paid`).
-- [ ] Data expectations on pipeline transforms and per-build lineage. Each
+- [x] Data expectations on pipeline transforms and per-build lineage. Each
   ingestion transform declares expectations on its output (schema, nulls,
   uniqueness, freshness, row-count bounds); a failed expectation blocks
   publication of that build instead of writing partial data. Each build records
@@ -1073,6 +1073,7 @@ model declares an action that can be proposed, checked and executed.
   **Acceptance evidence:** a fixture that breaks each expectation kind blocks the
   build and leaves the previous publication in place; a passing build records
   inputs, code version and results; the lineage of a node resolves to its build.
+  **Status (2026-11-04):** `graphrag/ingestion/expectations.py` (schema, not_null, unique, freshness, row_count) declared on `RelationalGraphMapping.expectations` and checked on the rows read, before SHACL and any write, in both `ingest()` and `ingest_incremental()`; a failure raises `ExpectationsFailed` and leaves the previous publication in place. `graphrag/ingestion/build_ledger.py`: every build records its tables (rows and SHA-256), code version, mapping version, expectation results, outcome (published, blocked, skipped, failed) and output counts as an `IngestionBuild` node; a published build is linked `PUBLISHED` to its source document, and `lineage(tenant, entity_id)` resolves an entity through chunk and document to the latest published build. `scripts/ingest_r2rml.py` records builds. Tested with SQLite fixtures and fakes; the ledger Cypher has not run against a live Neo4j. An incremental build blocked by an expectation keeps its lease until it expires, like any other failure there.
 
 Considered and **not** added: more retrieval or GraphRAG work and more
 governance or privacy controls (already covered in depth); a connector to that
@@ -1083,7 +1084,7 @@ are worth measuring.
 
 ### Candidate additions from a fifth job description: agent-first engineering role (2026-11-04)
 
-**Status: all three done (2026-11-04); the kind job has not run yet.** Source: a job description centred on
+**Status: all three done (2026-11-04); the kind job's first run found a missing API dependency (fixed).** Source: a job description centred on
 the developer (daily work through coding agents, reviewing agent output,
 production systems, Kubernetes, testing habits). Used as a checklist only; most
 of it describes the person and is shown through the CV and interviews, not
@@ -1115,7 +1116,7 @@ ADRs, and the agent tooling in `.claude/` with the lesson log in
   probe. Only on explicit approval, since it adds CI time to every run.
   **Acceptance evidence:** the job reaches a ready API pod and fails with the
   pod events when it does not.
-  **Status (2026-11-04):** CI job `kind-smoke` (approved 2026-11-04): builds the API image, loads it into a kind cluster, applies `deploy/kind-smoke` (one API pod, non-development configuration, placeholder secrets, RWO volume) and waits for rollout, printing pods, events and logs on failure, then calls `/health` through the Service. Readiness is checked on `/health` because `/health/ready` needs Neo4j, Redis and an LLM provider, which are not deployed. A local run of the API with the same configuration and no backing services completed startup; the kind job itself has not run yet.
+  **Status (2026-11-04):** CI job `kind-smoke` (approved 2026-11-04): builds the API image, loads it into a kind cluster, applies `deploy/kind-smoke` (one API pod, non-development configuration, placeholder secrets, RWO volume) and waits for rollout, printing pods, events and logs on failure, then calls `/health` through the Service. Readiness is checked on `/health` because `/health/ready` needs Neo4j, Redis and an LLM provider, which are not deployed. A local run of the API with the same configuration and no backing services completed startup. The first CI run (2026-11-04) found a real defect: the API image lacked `pyshacl`, which startup needs, so the pod crash-looped; `requirements/api.txt` now declares it. The rerun after that fix has not been checked yet.
 
 Considered and **not** added: a Helm chart (would duplicate the Kustomize
 manifests; worth it only where a deployment requires Helm), and the
@@ -1123,7 +1124,7 @@ experience, ownership and communication requirements (not platform features).
 
 ### Candidate additions from a sixth job description: ontology and knowledge-graph lead (2026-11-04)
 
-**Status: proposed, not implemented.** Source: a job description (in Spanish)
+**Status: both done (2026-11-04), verified offline only.** Source: a job description (in Spanish)
 for a senior role applying ontologies and knowledge graphs, with RAG, agent
 orchestration and semantic data governance. Used as a checklist only; no claim
 of fit with that employer's product. Already present here: OWL export and
@@ -1132,7 +1133,7 @@ RDF interoperability, GraphRAG with LLM integration, Neo4j with Cypher, a
 Gremlin client and triple-store backend, the business-definition registry,
 use-case charters, expert elicitation and ADRs. Only the gaps below are added.
 
-- [ ] Data-catalog export: Apache Atlas glossary and OpenLineage events. Export
+- [x] Data-catalog export: Apache Atlas glossary and OpenLineage events. Export
   published business definitions (`graphrag/context_graph/definitions.py`) as
   Atlas glossary terms with owner, precision, review date and version, and their
   dependencies as term relations; emit ingestion and build runs as OpenLineage
@@ -1147,6 +1148,7 @@ use-case charters, expert elicitation and ADRs. Only the gaps below are added.
   Atlas glossary and OpenLineage JSON schemas; a definition's new version updates
   the term rather than duplicating it; a run event names exactly the datasets the
   build read and wrote; a restricted definition is absent from a plain export.
+  **Status (2026-11-04):** `graphrag/enterprise/catalog_export.py`: published, visible, latest-version definitions become Atlas glossary terms (owner, version, precision, review date in additional attributes); `AtlasClient.upsert_terms` updates an existing term by name instead of creating a second one and links `depends_on` as `seeAlso`; relational builds become OpenLineage run events with exactly the tables read as inputs (expectation results as `dataQualityAssertions` facets), the graph output only for published builds, and `FAIL` with the error for blocked or failed builds; `OpenLineageClient` posts them. `scripts/export_catalog.py` (dry run by default). Payloads are validated against hand-written subsets of the required fields, not the published schema files, and the clients ran against mocked transports only; no Atlas, Collibra or Marquez instance accepted them.
 - [x] LangGraph adapter (conditional). Expose the capability registry as
   LangGraph tools so an external LangGraph agent gets the same scopes, tenant
   binding, argument validation and audit as MCP and GraphQL. A thin adapter

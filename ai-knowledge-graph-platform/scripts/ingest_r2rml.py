@@ -39,6 +39,7 @@ sys.path.insert(0, str(ROOT))
 
 import structlog  # noqa: E402  # ROOT must be added to sys.path first.
 
+from graphrag.ingestion.build_ledger import BuildLedger  # noqa: E402
 from graphrag.ingestion.graph_writer import GraphWriter  # noqa: E402
 from graphrag.ingestion.r2rml import R2RMLMappingError, r2rml_to_mapping  # noqa: E402
 from graphrag.ingestion.relational import (  # noqa: E402
@@ -83,7 +84,9 @@ async def main(args: argparse.Namespace) -> None:
     # before any write (see its module docstring), so this is not duplicated
     # work -- it's the --validate-only early exit, and a clearer failure
     # message before touching the connector's write path at all.
-    ingestor = RelationalGraphIngestor(connector, GraphWriter(changed_by="ingest-r2rml-cli"))
+    writer = GraphWriter(changed_by="ingest-r2rml-cli")
+    # Every build (published, blocked by an expectation, skipped, failed) is recorded.
+    ingestor = RelationalGraphIngestor(connector, writer, build_ledger=BuildLedger(writer.neo4j_client))
     report = await ingestor.validate(mapping)
     if not report.valid:
         log.error("ingest_r2rml.validation_failed", errors=report.errors)

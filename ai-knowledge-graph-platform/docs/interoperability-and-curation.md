@@ -150,8 +150,10 @@ a mock transport.
   and composite-key uniqueness, each tied to the shapes hash. A unit test shows
   every generated property shape of a concrete type has its check.
   `tests/e2e/test_live_cypher_checks.py` compares verdicts with pySHACL on a
-  live Neo4j for valid and invalid fixtures; it has not been run here (no
-  Docker), so parity is not yet demonstrated.
+  live Neo4j for valid and invalid fixtures. It cannot run here (no Docker);
+  in CI (e2e job, `neo4j:5.20-community`, 2026-11-04) all five fixtures agreed
+  with pySHACL. The fixtures use the synthetic extension model, not the Energy
+  or knowledge models.
 * **Open Knowledge Format.** Verified against the published spec (v0.2,
   2026-07-25, `GoogleCloudPlatform/knowledge-catalog/okf/SPEC.md`): only `type`
   is required, links are untyped, unknown keys must be accepted, trust fields

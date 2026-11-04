@@ -17,7 +17,7 @@ from pydantic import ValidationError
 
 from graphrag.context_graph.knowledge import (
     Applicability, BusinessContext, Constraint, DimensionScope, EvidenceRef, Fact, KnowledgeException,
-    KnowledgeItem, NormativeModality, Predicate, PublicationStatus, SourceAuthority,
+    KnowledgeItem, Predicate, PublicationStatus, SourceAuthority,
 )
 from graphrag.context_graph.knowledge_evaluation import KnowledgeReleaseRef, evaluate_knowledge
 from graphrag.context_graph.knowledge_release import (

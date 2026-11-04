@@ -31,6 +31,8 @@ from graphrag.ingestion.incremental import (
     compute_relational_snapshot_hash,
     should_skip_ingest,
 )
+from graphrag.ingestion.build_ledger import BuildRecord
+from graphrag.ingestion.expectations import Expectation, ExpectationsFailed, check_expectations
 from graphrag.ingestion.row_checkpoint import compute_row_hash, diff_rows
 
 _IDENTIFIER = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
@@ -94,6 +96,8 @@ class RelationalGraphMapping(BaseModel):
     entities: list[EntityTableMapping] = Field(min_length=1)
     relations: list[RelationTableMapping] = Field(default_factory=list)
     ontology_version: str = "local/v1"
+    # Checked on the rows read, before any write; a failure blocks the build.
+    expectations: list[Expectation] = Field(default_factory=list)
 
     def as_source_mapping(self) -> SourceMapping:
         return SourceMapping(
@@ -118,6 +122,8 @@ class MappingValidationReport(BaseModel):
     # when it matched the caller-supplied previous_hash and no write occurred.
     content_hash: str = ""
     skipped: bool = False
+    build_id: str = ""
+    expectations: list[dict[str, Any]] = Field(default_factory=list)
 
 
 class IncrementalIngestReport(MappingValidationReport):
@@ -400,9 +406,41 @@ async def _quarantine_writer_rejections(graph_writer, *, tenant: str, source_id:
 class RelationalGraphIngestor:
     """Validate and persist mapped relational rows through ``GraphWriter``."""
 
-    def __init__(self, connector: TabularSourceConnector, graph_writer):
+    def __init__(self, connector: TabularSourceConnector, graph_writer, *, build_ledger=None,
+                 code_version: str | None = None):
         self.connector = connector
         self.graph_writer = graph_writer
+        # Optional BuildLedger: when set, every build (published, blocked,
+        # skipped or failed) is recorded; expectations apply either way.
+        self.build_ledger = build_ledger
+        self._code_version = code_version
+
+    def _start_build(self, mapping: RelationalGraphMapping) -> BuildRecord:
+        return BuildRecord.start(tenant=mapping.tenant, source_id=mapping.source_id, source_uri=self.connector.uri,
+                                 mapping_id=mapping.id, mapping_version=mapping.version, version=self._code_version)
+
+    async def _record(self, build: BuildRecord) -> None:
+        if self.build_ledger is not None:
+            await self.build_ledger.record(build)
+
+    async def _read_tables(self, mapping: RelationalGraphMapping) -> dict[str, list[dict[str, Any]]]:
+        tables: dict[str, list[dict[str, Any]]] = {}
+        for name in [m.table for m in mapping.entities] + [m.table for m in mapping.relations]:
+            if name not in tables:
+                tables[name] = await self.connector.read_table(name)
+        return tables
+
+    async def _enforce_expectations(self, mapping: RelationalGraphMapping, tables: dict[str, list[dict[str, Any]]],
+                                    build: BuildRecord, report: MappingValidationReport) -> None:
+        build.read(tables)
+        results = check_expectations(mapping.expectations, tables)
+        build.expectations = [r.as_dict() for r in results]
+        report.build_id, report.expectations = build.build_id, build.expectations
+        if any(not r.passed for r in results):
+            failure = ExpectationsFailed(results, build.build_id)
+            build.finish("blocked", error=str(failure))
+            await self._record(build)
+            raise failure
 
     async def validate(self, mapping: RelationalGraphMapping) -> MappingValidationReport:
         errors: list[str] = []
@@ -441,7 +479,8 @@ class RelationalGraphIngestor:
             errors=sorted(set(errors)),
         )
 
-    async def _read_and_build(self, mapping: RelationalGraphMapping) -> _BuildResult:
+    async def _read_and_build(self, mapping: RelationalGraphMapping,
+                              tables: dict[str, list[dict[str, Any]]] | None = None) -> _BuildResult:
         """Read every entity/relation table and build `Entity`/`Relation`
         model objects, payload rows (for the whole-snapshot hash), and a
         per-row hash checkpoint map (for `ingest_incremental()`'s row-level
@@ -453,7 +492,7 @@ class RelationalGraphIngestor:
         payload: list[dict[str, Any]] = []
         row_hashes: dict[str, str] = {}
         for table_map in mapping.entities:
-            rows = await self.connector.read_table(table_map.table)
+            rows = tables[table_map.table] if tables is not None else await self.connector.read_table(table_map.table)
             for row in rows:
                 source_key = str(row[table_map.id_column])
                 entity_id = str(uuid5(NAMESPACE_URL, f"{mapping.source_id}:{table_map.table}:{source_key}"))
@@ -475,7 +514,9 @@ class RelationalGraphIngestor:
         relations: list[Relation] = []
         relation_payload: list[dict[str, Any]] = []
         for table_map in mapping.relations:
-            for row in await self.connector.read_table(table_map.table):
+            relation_rows = (tables[table_map.table] if tables is not None
+                             else await self.connector.read_table(table_map.table))
+            for row in relation_rows:
                 relation_payload.append({"table": table_map.table, "row": row})
                 source_key = str(row[table_map.source_column])
                 target_key = str(row[table_map.target_column])
@@ -509,6 +550,28 @@ class RelationalGraphIngestor:
         mapping: RelationalGraphMapping,
         previous_hash: str | None = None,
     ) -> MappingValidationReport:
+        """Validate, check expectations, then write `mapping`'s source to the graph.
+
+        See `_ingest` for the full contract. Every outcome is recorded when a
+        build ledger is configured: published, skipped, blocked by an
+        expectation (nothing written) or failed.
+        """
+        build = self._start_build(mapping)
+        try:
+            return await self._ingest(mapping, previous_hash, build)
+        except ExpectationsFailed:
+            raise
+        except Exception as exc:
+            build.finish("failed", error=f"{type(exc).__name__}: {exc}")
+            await self._record(build)
+            raise
+
+    async def _ingest(
+        self,
+        mapping: RelationalGraphMapping,
+        previous_hash: str | None,
+        build: BuildRecord,
+    ) -> MappingValidationReport:
         """Validate, then write, `mapping`'s source through to the graph.
 
         `previous_hash` is injected rather than fetched internally (e.g. via
@@ -530,7 +593,9 @@ class RelationalGraphIngestor:
         if not report.valid:
             raise ValueError("relational mapping rejected: " + "; ".join(report.errors))
 
-        built = await self._read_and_build(mapping)
+        tables = await self._read_tables(mapping)
+        await self._enforce_expectations(mapping, tables, build, report)
+        built = await self._read_and_build(mapping, tables)
         entities, relations = built.entities, built.relations
         payload, relation_payload = built.payload, built.relation_payload
 
@@ -543,6 +608,7 @@ class RelationalGraphIngestor:
         report.content_hash = current_hash
         if should_skip_ingest(previous_hash, current_hash):
             report.skipped = True
+            await self._record(build.finish("skipped"))
             return report
 
         from graphrag.graph.shacl_validator import SHACLValidator
@@ -609,6 +675,8 @@ class RelationalGraphIngestor:
         await self.graph_writer.write_relations(relations, entity_map, doc_id=document_id, tenant=mapping.tenant)
         await _quarantine_writer_rejections(self.graph_writer, tenant=mapping.tenant,
                                             source_id=mapping.source_id, document_id=document_id)
+        await self._record(build.finish("published", outputs={"entities": len(entities), "relations": len(relations)},
+                                        document_id=document_id))
         return report
 
     async def ingest_incremental(
@@ -617,6 +685,30 @@ class RelationalGraphIngestor:
         *,
         run_id: str,
         lease_seconds: int = 300,
+    ) -> IncrementalIngestReport:
+        """Durable, row-level incremental ingest; see `_ingest_incremental`.
+
+        Expectations are checked after the lease is taken and before any
+        write. A blocked build keeps the lease until it expires, like any
+        other failure here (fail-safe).
+        """
+        build = self._start_build(mapping)
+        try:
+            return await self._ingest_incremental(mapping, run_id=run_id, lease_seconds=lease_seconds, build=build)
+        except ExpectationsFailed:
+            raise
+        except Exception as exc:
+            build.finish("failed", error=f"{type(exc).__name__}: {exc}")
+            await self._record(build)
+            raise
+
+    async def _ingest_incremental(
+        self,
+        mapping: RelationalGraphMapping,
+        *,
+        run_id: str,
+        lease_seconds: int,
+        build: BuildRecord,
     ) -> IncrementalIngestReport:
         """Durable, row-level incremental ingest.
 
@@ -660,7 +752,9 @@ class RelationalGraphIngestor:
         if not report.valid:
             raise ValueError("relational mapping rejected: " + "; ".join(report.errors))
 
-        built = await self._read_and_build(mapping)
+        tables = await self._read_tables(mapping)
+        await self._enforce_expectations(mapping, tables, build, report)
+        built = await self._read_and_build(mapping, tables)
         current_hash = compute_relational_snapshot_hash(built.payload + built.relation_payload)
 
         previous_state = await neo4j.get_relational_source_state(mapping.tenant, mapping.source_id)
@@ -680,6 +774,7 @@ class RelationalGraphIngestor:
             await neo4j.complete_relational_ingest_run(
                 mapping.tenant, mapping.source_id, run_id, built.row_hashes,
             )
+            await self._record(build.finish("skipped"))
             incremental_report = IncrementalIngestReport(**report.model_dump())
             incremental_report.content_hash = current_hash
             incremental_report.skipped = True
@@ -755,6 +850,9 @@ class RelationalGraphIngestor:
         await neo4j.complete_relational_ingest_run(
             mapping.tenant, mapping.source_id, run_id, built.row_hashes,
         )
+        await self._record(build.finish(
+            "published", outputs={"entities": len(built.entities), "relations": len(built.relations)},
+            document_id=document_id))
         return IncrementalIngestReport(
             **report.model_dump(exclude={"content_hash"}),
             content_hash=current_hash,

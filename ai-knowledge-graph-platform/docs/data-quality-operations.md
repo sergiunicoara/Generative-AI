@@ -62,3 +62,29 @@ API: `GET /governance/completeness?source_id=...` (read scope).
 * Completeness is structural. It does not say whether an extracted fact is true (see the correctness report and the
   golden set for that).
 * No scheduled run or alert is wired; run the scripts or call the routes.
+
+## Data expectations and build lineage (2026-11-04)
+
+Relational mappings can declare expectations checked on the rows read, before
+SHACL and before any write; a failed expectation blocks the build and the
+previous publication stays in place:
+
+```python
+RelationalGraphMapping(..., expectations=[
+    Expectation(id="suppliers-present", table="suppliers", kind="row_count", min_rows=1),
+    Expectation(id="supplier-ids", table="suppliers", kind="unique", column="id"),
+    Expectation(id="fresh-prices", table="prices", kind="freshness", column="updated_at", max_age_hours=24),
+])
+```
+
+Kinds: `schema` (columns present), `not_null`, `unique`, `freshness` (newest
+timestamp within `max_age_hours`) and `row_count` (`min_rows` / `max_rows`).
+With a `BuildLedger` (`scripts/ingest_r2rml.py` uses one), every build is an
+`IngestionBuild` node with its input tables (rows, SHA-256), code version,
+mapping version, expectation results, outcome and output counts; a published
+build is linked `PUBLISHED` to the source document, so
+`BuildLedger.lineage(tenant, entity_id)` resolves an entity to the latest build
+that published it. `scripts/export_catalog.py openlineage` turns builds into
+OpenLineage run events and `scripts/export_catalog.py atlas` turns published
+business definitions into Apache Atlas glossary terms (dry run unless `--push`).
+Verified offline only (SQLite fixtures, fakes, mocked HTTP).

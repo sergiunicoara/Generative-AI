@@ -25,6 +25,9 @@ openpyxl>=3.1.0
 # openpyxl: XLSX export/import for curator decisions sheets (graphrag/curation/exchange.py)
 rdflib>=7.0.0
 owlrl>=6.0.0
+# pyshacl: the API validates the Energy graph against its SHACL shapes during
+# startup; without it the process exits (found by the kind smoke deploy).
+pyshacl>=0.29.0
 
 # ── Media analysis (graphrag/graph/perceptual_hash.py, graphrag/graph/ocr.py) ──
 # Lazily imported by graphrag/graph/multimodal.py's phash/OCR methods, not

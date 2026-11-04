@@ -63,11 +63,28 @@ class TestAccessAuditMiddleware:
         sink = InMemoryAccessAuditSink()
         client = TestClient(_make_app(sink))
 
-        response = client.get("/health")
+        response = client.get("/kg/entities")
 
         assert response.status_code == 200
         assert sink.events[0].subject == ""
         assert sink.events[0].tenant == ""
+
+    def test_health_probes_are_not_audited_and_never_wait_on_the_sink(self):
+        class RecordingSink:
+            def __init__(self):
+                self.calls = 0
+
+            async def record(self, event):
+                self.calls += 1
+                raise AssertionError("a probe reached the audit sink")
+
+        sink = RecordingSink()
+        client = TestClient(_make_app(sink))
+
+        assert client.get("/health").status_code == 200
+        assert sink.calls == 0
+        client.get("/kg/entities")
+        assert sink.calls == 1
 
     def test_sink_failure_never_breaks_the_response(self):
         class ExplodingSink:

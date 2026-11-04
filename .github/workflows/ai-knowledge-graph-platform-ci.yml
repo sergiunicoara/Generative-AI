@@ -103,6 +103,11 @@ jobs:
           python-version: "3.11"
           cache: pip
           cache-dependency-path: ai-knowledge-graph-platform/requirements*.txt
+      # CPU wheels first: the default Linux torch pulls several GB of CUDA
+      # packages, and with the testcontainers images that filled the runner
+      # disk ("No space left on device"). No test here uses a GPU.
+      - name: Install CPU-only torch
+        run: pip install --index-url https://download.pytorch.org/whl/cpu torch torchvision
       - name: Install dependencies
         run: pip install -r requirements-dev.txt
 

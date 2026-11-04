@@ -26,6 +26,13 @@ from graphrag.observability.access_audit import (
 
 log = structlog.get_logger(__name__)
 
+# Kubelet probes are not audited. They carry no caller, arrive every few
+# seconds per pod, and the sink write sits on the response path: with Neo4j
+# unreachable it adds seconds of retries, so /health missed its 1 s probe
+# timeout and the liveness probe restarted a healthy API pod (found by the
+# kind smoke deploy). Liveness must not depend on the audit backend.
+UNAUDITED_PATHS = frozenset({"/health", "/health/ready"})
+
 
 class AccessAuditMiddleware(BaseHTTPMiddleware):
     def __init__(self, app, sink: AccessAuditSink | None = None):
@@ -36,6 +43,8 @@ class AccessAuditMiddleware(BaseHTTPMiddleware):
         self, request: Request, call_next: RequestResponseEndpoint
     ) -> Response:
         response = await call_next(request)
+        if request.url.path in UNAUDITED_PATHS:
+            return response
         try:
             event = event_from_claims(
                 user=getattr(request.state, "user", None),

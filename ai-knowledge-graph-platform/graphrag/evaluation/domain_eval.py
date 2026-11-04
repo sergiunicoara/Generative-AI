@@ -18,9 +18,11 @@ class FailureCategory(StrEnum):
 
 
 REQUIRED_CASE_FIELDS = {"id", "type", "question", "expected_citations"}
+# "temporal" (which version is in force) is the type evals/golden_set.json
+# already uses; the IATF held-out set needs it for its supersession case.
 ALLOWED_CASE_TYPES = {
     "single_hop", "multi_hop", "contradiction", "negative", "reasoning",
-    "authority_chain",
+    "authority_chain", "temporal",
 }
 
 

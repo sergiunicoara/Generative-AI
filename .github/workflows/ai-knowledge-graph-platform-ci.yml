@@ -57,7 +57,10 @@ jobs:
 
       # requirements-dev.txt pulls in requirements.txt and adds pytest,
       # pytest-asyncio and ruff — none of which were declared anywhere before,
-      # so this step used to leave `pytest` uninstalled.
+      # so this step used to leave `pytest` uninstalled. CPU torch first, as in
+      # the E2E job: CUDA wheels fill the runner disk.
+      - name: Install CPU-only torch
+        run: pip install --index-url https://download.pytorch.org/whl/cpu torch torchvision
       - name: Install dependencies
         run: pip install -r requirements-dev.txt
 
@@ -298,6 +301,8 @@ jobs:
           python-version: "3.11"
           cache: pip
           cache-dependency-path: ai-knowledge-graph-platform/requirements*.txt
+      - name: Install CPU-only torch
+        run: pip install --index-url https://download.pytorch.org/whl/cpu torch torchvision
       - name: Install dependencies
         run: pip install -r requirements-dev.txt
       - name: Build release evidence report

@@ -1,0 +1,19 @@
+# Deliberately invalid: CI asserts that kubeconform rejects it, so the schema
+# step cannot silently pass everything (unknown field, wrong type).
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: kubeconform-negative-fixture
+spec:
+  replicas: "three"
+  selector:
+    matchLabels: {app: fixture}
+  template:
+    metadata:
+      labels: {app: fixture}
+    spec:
+      containers:
+        - name: app
+          image: busybox:1.36
+          imagePullPolicy: Sometimes
+          notAField: true

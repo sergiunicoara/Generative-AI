@@ -99,3 +99,28 @@ active obligation.
 Review via `/lineage/reviews/{id}/approve` or `/reject`. Approval creates the
 provenance-carrying relation or an active bitemporal `Obligation`. Query the
 approved register with `GET /obligations?as_of=<ISO-8601>`.
+
+## Confluence and Databricks (2026-11-04)
+
+Both are tested against mocked HTTP transports only; neither has been run
+against a real Confluence site or Databricks workspace.
+
+* **Confluence** (`graphrag/enterprise/confluence.py`, configured under
+  `content_sync.confluence_sources`). `POST /sync/confluence/{source_id}/run`
+  fetches pages changed since the cursor with CQL (`lastmodified`, minute
+  precision, re-reading the boundary minute) and holds the cursor back if any
+  page fails. Trashed pages become deletes; `POST .../reconcile` lists the
+  pages that still exist so the sync plane tombstones the rest (Confluence has
+  no delete feed). Read restrictions of the page and every ancestor are mapped
+  conservatively to one allow list: the intersection of the principals named at
+  each restricted level; the configured space readers when nothing is
+  restricted. A space without configured readers, an empty intersection or an
+  unreadable restriction is `UNKNOWN`, denied and recorded in `acl_audit`. A
+  reader who qualifies at two levels through different groups is denied: the
+  model has one allow list, so the mapping prefers a false denial to a false
+  permission.
+* **Databricks** (`graphrag/ingestion/databricks_source.py`). A
+  `TabularSourceConnector` over the SQL Statement Execution API 2.0 (OAuth
+  machine-to-machine, inline JSON chunks, bounded polling, terminal states as
+  errors, required-column drift check), usable wherever the Snowflake connector
+  is: relational and R2RML ingestion. Table data carries no document ACLs.

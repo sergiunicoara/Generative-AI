@@ -1,0 +1,84 @@
+# CI-only smoke overlay: one API pod in a throwaway kind cluster
+# (.github/workflows/ai-knowledge-graph-platform-ci.yml, job kind-smoke).
+# It proves the image starts under the base manifests' security settings
+# (non-root, read-only root filesystem, restricted pod security) with a
+# non-development configuration. Neo4j, Redis, RabbitMQ and LLM providers are
+# not deployed, so readiness is checked on /health; /health/ready needs them.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - ../kubernetes
+images:
+  - name: REGION-docker.pkg.dev/PROJECT_ID/graphrag/api
+    newName: graphrag-api
+    newTag: smoke
+patches:
+  - patch: |-
+      apiVersion: v1
+      kind: ConfigMap
+      metadata: {name: graphrag-config, namespace: graphrag}
+      data:
+        ENV: staging
+        GRAPHRAG_API_RESOURCE: https://api.smoke.invalid
+        GRAPHRAG_MCP_RESOURCE: https://mcp.smoke.invalid/mcp
+        CORS_ORIGINS: '["https://app.smoke.invalid"]'
+  - patch: |-
+      apiVersion: apps/v1
+      kind: Deployment
+      metadata: {name: graphrag-api, namespace: graphrag}
+      spec:
+        replicas: 1
+        template:
+          spec:
+            containers:
+              - name: api
+                readinessProbe:
+                  httpGet: {path: /health, port: http}
+                  initialDelaySeconds: 5
+                  periodSeconds: 5
+                  failureThreshold: 120
+                livenessProbe:
+                  initialDelaySeconds: 300
+                resources:
+                  requests: {cpu: 100m, memory: 512Mi}
+  - patch: |-
+      apiVersion: v1
+      kind: PersistentVolumeClaim
+      metadata: {name: energy-published-rdf, namespace: graphrag}
+      spec:
+        accessModes: [ReadWriteOnce]
+  - patch: |-
+      apiVersion: autoscaling/v2
+      kind: HorizontalPodAutoscaler
+      metadata: {name: graphrag-api, namespace: graphrag}
+      $patch: delete
+  - patch: |-
+      apiVersion: policy/v1
+      kind: PodDisruptionBudget
+      metadata: {name: graphrag-api, namespace: graphrag}
+      $patch: delete
+  - patch: |-
+      apiVersion: apps/v1
+      kind: Deployment
+      metadata: {name: graphrag-mcp, namespace: graphrag}
+      $patch: delete
+  - patch: |-
+      apiVersion: v1
+      kind: Service
+      metadata: {name: graphrag-mcp, namespace: graphrag}
+      $patch: delete
+  - patch: |-
+      apiVersion: policy/v1
+      kind: PodDisruptionBudget
+      metadata: {name: graphrag-mcp, namespace: graphrag}
+      $patch: delete
+  - patch: |-
+      apiVersion: apps/v1
+      kind: Deployment
+      metadata: {name: graphrag-ingestion-worker, namespace: graphrag}
+      $patch: delete
+  - patch: |-
+      apiVersion: apps/v1
+      kind: Deployment
+      metadata: {name: graphrag-query-worker, namespace: graphrag}
+      $patch: delete

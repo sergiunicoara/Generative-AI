@@ -999,13 +999,14 @@ contextual-knowledge module. Only the gaps below are added.
   within the stated bound, including through the query cache; an unreachable
   source yields denial and an audit record.
   **Status (2026-11-03):** ACL observation time on the policy and the document node; restricted documents older than `ACL_MAX_AGE_SECONDS` are denied in the Cypher predicate and the Python mirror; the answer-cache key includes the ACL window; stated bound: next request after a re-sync, otherwise at most twice the max age; an unreachable permission source is denied and audited. Tested with a fake SharePoint source; policies without an observation time are not bounded until re-synced.
-- [ ] Confluence and Databricks source connectors (conditional). Only if a real
+- [x] Confluence and Databricks source connectors (conditional). Only if a real
   deployment requires them: a Confluence connector that maps page-tree and space
   permissions to the existing ACL model and detects changes, and a Databricks
   connector following the existing Snowflake connector. Same pattern as the other
   connectors: injectable client, offline tests, no claim of live validation.
   **Acceptance evidence:** permission-mapping tests, including inherited
   restrictions; change detection that removes deleted pages from the graph.
+  **Status (2026-11-04):** `graphrag/enterprise/confluence.py`: CQL change detection by `lastmodified` within configured spaces, trashed pages become deletes and `reconcile()` tombstones pages that vanished; page-tree read restrictions map to one allow list (intersection across restricted levels, space readers from configuration for unrestricted pages, empty intersection, unknown space readers or unreadable restrictions denied and audited); routes `POST /sync/confluence/{source_id}/run` and `/reconcile`. `graphrag/ingestion/databricks_source.py`: SQL Statement Execution API 2.0 with OAuth M2M, polling, chunked results, terminal-state errors and schema-drift checks, conforming to `TabularSourceConnector`. Both tested against mocked transports only; a reader who qualifies through different groups at two restricted levels is denied (conservative).
 
 Considered and **not** added: operating on a cloud platform, SQL and relational
 modelling, evaluation in continuous integration and AI-assisted development
@@ -1013,6 +1014,153 @@ workflows (all already in place or process, not platform features); expert
 elicitation (covered by the proposal above); and Finnish or other language
 support beyond the existing answer-language handling, which needs a concrete
 corpus and labelled examples first.
+
+### Candidate additions from a fourth job description: ontology-grounded AI delivery role (2026-11-04)
+
+**Status: proposed, not implemented.** Source: a job description for a role
+building pipelines, retrieval workflows and decision-support agents on an
+ontology-centred data platform. Used as a checklist only; no claim of fit with
+that employer's product, and no integration with that platform is proposed (none
+could be verified here). Already present here: RAG and GraphRAG grounding over
+vector search and ontology content, a canonical semantic model with SHACL and a
+runtime mutation validator, decision tables, the decision log and answer-trust
+workflow, retrieval-trajectory evaluation and rubrics, source ACLs, privacy and
+erasure controls, and use-case charters. Only the gaps below are added. Today
+`CGAction` and `ActionNode` only record actions after the fact; nothing in the
+model declares an action that can be proposed, checked and executed.
+
+- [ ] Ontology actions and functions (the write path of ontology-augmented
+  generation). Declare actions in the canonical model YAML (for example
+  `quarantine_lot` or `open_8d_report`): typed parameters, the object types they
+  apply to, submission criteria, the graph effects they produce and whether they
+  need approval. Declare functions as read-only logic bound to an object type
+  that agents may call. The flow: an agent proposes an action with parameters;
+  `SemanticMutationValidator` and the applicable decision tables check it; a
+  named human approves when required (reusing the answer-trust and review
+  patterns); the effect is written in one transaction; the proposal, checks,
+  approval and effect go into the decision log. Actions and functions are
+  exposed through the capability registry, so MCP and GraphQL get the same
+  scopes, tenant binding and audit.
+  **Base project value:** agents can act on the graph, not only answer about it,
+  with every change validated against the model and attributable to a person.
+  **Acceptance evidence:** a proposal that violates a submission criterion or a
+  decision-table rule is rejected with the rule named; an action that needs
+  approval does not change the graph until approved; an approved action's
+  effects match its declaration; a replay from the decision log reproduces the
+  same verdict; a caller without the scope or from another tenant cannot submit.
+- [ ] Agent evaluation on actions, not only answers. Test cases that name the
+  expected action (or the expected refusal) and its parameters for a request:
+  whether the agent chose the right action, filled the parameters correctly,
+  respected the submission criteria and declined what it must decline. Runs
+  offline with a scripted model, beside the retrieval-trajectory evaluation and
+  the rubrics; reports per action type with denominators.
+  **Base project value:** agent changes are judged on what they would do to the
+  graph, which answer-level scores do not show.
+  **Acceptance evidence:** a scripted agent that picks the wrong action, omits a
+  required parameter or executes something it should refuse fails the case that
+  covers it; results are deterministic across runs.
+- [ ] Data expectations on pipeline transforms and per-build lineage. Each
+  ingestion transform declares expectations on its output (schema, nulls,
+  uniqueness, freshness, row-count bounds); a failed expectation blocks
+  publication of that build instead of writing partial data. Each build records
+  its inputs, code version, expectation results and output counts, linked to the
+  existing lineage records. Extends the completeness and ingestion-gap checks in
+  `docs/data-quality-operations.md`, which run after the fact.
+  **Base project value:** bad source data stops at the transform with a reason,
+  and every published graph change traces back to the build that produced it.
+  **Acceptance evidence:** a fixture that breaks each expectation kind blocks the
+  build and leaves the previous publication in place; a passing build records
+  inputs, code version and results; the lineage of a node resolves to its build.
+
+Considered and **not** added: more retrieval or GraphRAG work and more
+governance or privacy controls (already covered in depth); a connector to that
+specific platform's SDK (not verifiable here); training and user-support
+material (process, not a platform feature); and adoption metrics per use case,
+which can follow once actions exist and their acceptance and rejection rates
+are worth measuring.
+
+### Candidate additions from a fifth job description: agent-first engineering role (2026-11-04)
+
+**Status: all three done (2026-11-04); the kind job has not run yet.** Source: a job description centred on
+the developer (daily work through coding agents, reviewing agent output,
+production systems, Kubernetes, testing habits). Used as a checklist only; most
+of it describes the person and is shown through the CV and interviews, not
+code. Already present here: Testcontainers integration and e2e tests on a real
+Neo4j in CI (failing when skipped), relational ingestion and SQL connectors,
+Neo4j and vector search, Kustomize manifests rendered in CI, mutation testing,
+ADRs, and the agent tooling in `.claude/` with the lesson log in
+`tasks/lessons.md`. Only the items below are added.
+
+- [x] Agent-assisted development write-up. How the repository is built through
+  a coding agent: what the agent is given, the guards on its output, and the
+  failure modes those guards exist for, each tied to a recorded case.
+  **Base project value:** shows review of agent output as a practice with
+  evidence, not a statement.
+  **Status (2026-11-04):** `docs/agent-assisted-development.md`, citing lessons
+  A52, A56, A133, A141, A154, A164, A173 and A181 and cases from the current
+  sessions; states the guards' limits.
+- [x] Kubernetes manifest schema validation. Run `kubeconform` (strict, with
+  the Kubernetes version the manifests target) on the rendered Kustomize output
+  in CI, beside the existing `kubectl kustomize` render step, which only proves
+  the manifests build.
+  **Base project value:** an invalid field or API version fails CI instead of
+  the first deploy.
+  **Acceptance evidence:** a deliberately invalid manifest fails the step; the
+  committed manifests pass.
+  **Status (2026-11-04):** the CI `infrastructure` job renders the base and the kind-smoke overlay and validates both with kubeconform 0.6.7 (`-strict`, Kubernetes 1.30.0), then asserts that `deploy/ci/invalid-manifest.yaml` is rejected. Runs in CI only; not run locally.
+- [x] Kind smoke deploy (conditional, costs CI minutes). Deploy the rendered
+  manifests to a throwaway kind cluster in CI and wait for the API readiness
+  probe. Only on explicit approval, since it adds CI time to every run.
+  **Acceptance evidence:** the job reaches a ready API pod and fails with the
+  pod events when it does not.
+  **Status (2026-11-04):** CI job `kind-smoke` (approved 2026-11-04): builds the API image, loads it into a kind cluster, applies `deploy/kind-smoke` (one API pod, non-development configuration, placeholder secrets, RWO volume) and waits for rollout, printing pods, events and logs on failure, then calls `/health` through the Service. Readiness is checked on `/health` because `/health/ready` needs Neo4j, Redis and an LLM provider, which are not deployed. A local run of the API with the same configuration and no backing services completed startup; the kind job itself has not run yet.
+
+Considered and **not** added: a Helm chart (would duplicate the Kustomize
+manifests; worth it only where a deployment requires Helm), and the
+experience, ownership and communication requirements (not platform features).
+
+### Candidate additions from a sixth job description: ontology and knowledge-graph lead (2026-11-04)
+
+**Status: proposed, not implemented.** Source: a job description (in Spanish)
+for a senior role applying ontologies and knowledge graphs, with RAG, agent
+orchestration and semantic data governance. Used as a checklist only; no claim
+of fit with that employer's product. Already present here: OWL export and
+reasoning, SHACL validation, the SPARQL bridge and endpoint conformance suite,
+RDF interoperability, GraphRAG with LLM integration, Neo4j with Cypher, a
+Gremlin client and triple-store backend, the business-definition registry,
+use-case charters, expert elicitation and ADRs. Only the gaps below are added.
+
+- [ ] Data-catalog export: Apache Atlas glossary and OpenLineage events. Export
+  published business definitions (`graphrag/context_graph/definitions.py`) as
+  Atlas glossary terms with owner, precision, review date and version, and their
+  dependencies as term relations; emit ingestion and build runs as OpenLineage
+  run events with input and output datasets, linked to the existing lineage
+  records (`graphrag/enterprise/lineage.py`). Tenant and access rules apply as for
+  any other export; restricted definitions are not exported without the reader's
+  access. Clients are injectable and tested against mocked transports; no claim
+  that a real Atlas, Collibra or Marquez instance accepted the payloads.
+  **Base project value:** the semantic layer reaches the governance catalog
+  people already use instead of staying inside this platform.
+  **Acceptance evidence:** exported payloads validate against the published
+  Atlas glossary and OpenLineage JSON schemas; a definition's new version updates
+  the term rather than duplicating it; a run event names exactly the datasets the
+  build read and wrote; a restricted definition is absent from a plain export.
+- [x] LangGraph adapter (conditional). Expose the capability registry as
+  LangGraph tools so an external LangGraph agent gets the same scopes, tenant
+  binding, argument validation and audit as MCP and GraphQL. A thin adapter
+  only: orchestration inside this platform stays on its own agents
+  (`base_agent`, `skill_router`, `tool_policy`). Only if a deployment uses
+  LangGraph, since it adds a framework dependency.
+  **Acceptance evidence:** a scripted LangGraph graph calls a read capability
+  and receives the same result and audit record as the MCP path; a call without
+  the scope or for another tenant is refused.
+  **Status (2026-11-04):** `mcp_server/langgraph_tools.py`: `registry_tools(registry, identity)` turns each entitled capability into a LangChain `StructuredTool` (provider-safe names, tenant bound to the identity, JSON content plus the raw payload as the artifact) that calls `CapabilityRegistry.call`; `langgraph_registry()` audits with `transport=langgraph`. Tests run a real LangGraph `StateGraph` with `ToolNode` and compare result and audit with the direct registry call; other-tenant and invalid arguments are refused. langchain-core is not in the API image, so the adapter is for external agents in environments that install it.
+
+Considered and **not** added: an Azure Cosmos DB backend (a further graph store
+with no deployment that needs it), a Collibra-specific connector (the Atlas and
+OpenLineage formats come first; a Collibra mapping can follow a real
+requirement), and the experience, leadership and language requirements (not
+platform features).
 
 ## Context Graph evaluation suite
 

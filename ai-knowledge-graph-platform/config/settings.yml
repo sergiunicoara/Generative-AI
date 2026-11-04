@@ -366,6 +366,9 @@ content_sync:
   # Credentials stay in environment variables. Configure real sources only in
   # deployment configuration; never commit a client secret here.
   sharepoint_sources: {}
+  # base_url, email, api_token_env, space_keys, tenant, optional space_principals
+  # (space key -> ["group:<id>", ...]); see graphrag/enterprise/confluence.py.
+  confluence_sources: {}
 
 # IATF 16949 clause evidence view (graphrag/domains/automotive/audit.py, docs/iatf-audit.md). Only tenants listed here
 # get the /audit/iatf routes; every other tenant receives 404. Paths are relative to the project root.

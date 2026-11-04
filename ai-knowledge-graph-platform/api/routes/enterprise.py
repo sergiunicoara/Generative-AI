@@ -14,6 +14,7 @@ from api.auth.dependencies import (
     get_tenant,
     require_scope,
 )
+from graphrag.enterprise.confluence import ConfluenceConnectorError, ConfluenceSyncConnector
 from graphrag.enterprise.gaps import find_ingestion_gaps
 from graphrag.enterprise.lineage import LineageService
 from graphrag.enterprise.metadata_governance import MetadataGovernanceService
@@ -114,6 +115,35 @@ async def sync_sharepoint_source(source_id: str, tenant: str = Depends(get_tenan
         return await connector.sync_once()
     except (httpx.HTTPError, ValueError) as exc:
         raise HTTPException(status_code=502, detail="SharePoint synchronization failed") from exc
+
+
+def _confluence_connector(source_id: str, tenant: str) -> ConfluenceSyncConnector:
+    try:
+        connector = ConfluenceSyncConnector.from_settings(source_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail="Confluence source is not configured") from exc
+    if connector.config.tenant != tenant:
+        raise HTTPException(status_code=403, detail="Confluence source does not match authenticated tenant")
+    return connector
+
+
+@router.post("/sync/confluence/{source_id}/run", dependencies=[Depends(require_scope("write"))])
+async def sync_confluence_source(source_id: str, tenant: str = Depends(get_tenant)):
+    connector = _confluence_connector(source_id, tenant)
+    try:
+        return await connector.sync_once()
+    except (httpx.HTTPError, ConfluenceConnectorError, ValueError) as exc:
+        raise HTTPException(status_code=502, detail="Confluence synchronization failed") from exc
+
+
+@router.post("/sync/confluence/{source_id}/reconcile", dependencies=[Depends(require_scope("write"))])
+async def reconcile_confluence_source(source_id: str, tenant: str = Depends(get_tenant)):
+    """Tombstone pages that were deleted, trashed or moved out of the configured spaces."""
+    connector = _confluence_connector(source_id, tenant)
+    try:
+        return await connector.reconcile()
+    except (httpx.HTTPError, ConfluenceConnectorError, ValueError) as exc:
+        raise HTTPException(status_code=502, detail="Confluence reconciliation failed") from exc
 
 
 @router.get("/lineage/reviews", dependencies=[Depends(require_scope("read"))])

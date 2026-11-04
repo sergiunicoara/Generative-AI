@@ -162,3 +162,16 @@ a mock transport.
   `stale_after` only from a human-set review date, and passes a conformance
   check of the spec rules it relies on. No OKF consumer was run against it.
 
+## LangGraph tools over the capability registry (2026-11-04)
+
+`mcp_server/langgraph_tools.py` gives an external LangGraph or LangChain agent
+the same governed surface as MCP and GraphQL: `registry_tools(registry,
+identity)` returns one `StructuredTool` per capability the identity may
+discover, named in the provider-safe form (`kg.graph.stats@1.0.0` becomes
+`kg_graph_stats_1_0_0`). Each call goes through `CapabilityRegistry.call`, so
+scopes, tenant binding (from the identity, never an argument), argument
+validation, size limits, approval rules and audit are unchanged;
+`langgraph_registry()` labels audit events `transport=langgraph`. The model
+receives JSON and the raw payload is kept as the tool message artifact.
+Orchestration inside the platform does not use LangGraph, and langchain-core is
+not part of the API image.

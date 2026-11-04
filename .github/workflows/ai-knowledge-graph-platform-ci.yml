@@ -203,7 +203,78 @@ jobs:
           python -m pip install --disable-pip-version-check checkov
           checkov -d ai-knowledge-graph-platform/infra/terraform --framework terraform --quiet
       - name: Render Kubernetes manifests
-        run: kubectl kustomize deploy/kubernetes > /dev/null
+        run: |
+          mkdir -p "$RUNNER_TEMP/k8s"
+          kubectl kustomize deploy/kubernetes > "$RUNNER_TEMP/k8s/base.yaml"
+          kubectl kustomize deploy/kind-smoke > "$RUNNER_TEMP/k8s/kind-smoke.yaml"
+      - name: Install kubeconform
+        run: |
+          curl -fsSL -o "$RUNNER_TEMP/kubeconform.tar.gz" \
+            https://github.com/yannh/kubeconform/releases/download/v0.6.7/kubeconform-linux-amd64.tar.gz
+          tar -xzf "$RUNNER_TEMP/kubeconform.tar.gz" -C "$RUNNER_TEMP" kubeconform
+      - name: Validate Kubernetes manifests against the API schemas
+        run: |
+          "$RUNNER_TEMP/kubeconform" -strict -summary -kubernetes-version 1.30.0 \
+            "$RUNNER_TEMP/k8s/base.yaml" "$RUNNER_TEMP/k8s/kind-smoke.yaml"
+          # The check must be able to fail: a known-invalid manifest has to be rejected.
+          if "$RUNNER_TEMP/kubeconform" -strict -kubernetes-version 1.30.0 deploy/ci/invalid-manifest.yaml; then
+            echo "::error::kubeconform accepted deploy/ci/invalid-manifest.yaml"
+            exit 1
+          fi
+
+  kind-smoke:
+    name: Kind smoke deploy (API pod)
+    # Approved 2026-11-04 although it adds CI minutes. Neo4j, Redis, RabbitMQ
+    # and LLM providers are not deployed: the pod must start with a
+    # non-development configuration and serve /health (see deploy/kind-smoke).
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - name: Create kind cluster
+        uses: helm/kind-action@v1
+        with:
+          cluster_name: graphrag-smoke
+      - name: Build and load the API image
+        run: |
+          docker build --build-arg SERVICE=api -t graphrag-api:smoke .
+          kind load docker-image graphrag-api:smoke --name graphrag-smoke
+      - name: Create namespace and placeholder secrets
+        run: |
+          kubectl apply -f deploy/kubernetes/namespace.yaml
+          kubectl -n graphrag create secret generic graphrag-secrets \
+            --from-literal=NEO4J_URI=bolt://neo4j.graphrag.svc.cluster.local:7687 \
+            --from-literal=NEO4J_USER=neo4j \
+            --from-literal=NEO4J_PASSWORD="smoke-$(openssl rand -hex 16)" \
+            --from-literal=RABBITMQ_URL=amqp://smoke:smoke@rabbitmq.graphrag.svc.cluster.local:5672/ \
+            --from-literal=REDIS_URL=redis://redis.graphrag.svc.cluster.local:6379/0 \
+            --from-literal=TIMESCALE_DB_URL=postgresql://smoke:smoke@timescale.graphrag.svc.cluster.local:5432/kpi \
+            --from-literal=ENERGY_GOVERNANCE_DB_URL=sqlite+aiosqlite:////tmp/governance.db \
+            --from-literal=JWT_SECRET_KEY="$(openssl rand -hex 32)" \
+            --from-literal=SESSION_SECRET_KEY="$(openssl rand -hex 32)" \
+            --from-literal=OPENAI_API_KEY=smoke-unused \
+            --from-literal=DEEPSEEK_API_KEY=smoke-unused \
+            --from-literal=GROQ_API_KEY=smoke-unused
+      - name: Deploy
+        run: kubectl apply -k deploy/kind-smoke
+      - name: Wait for a ready API pod
+        run: |
+          if ! kubectl -n graphrag rollout status deployment/graphrag-api --timeout=900s; then
+            kubectl -n graphrag get pods,pvc -o wide
+            kubectl -n graphrag describe pods -l app.kubernetes.io/name=graphrag-api
+            kubectl -n graphrag get events --sort-by=.lastTimestamp
+            kubectl -n graphrag logs -l app.kubernetes.io/name=graphrag-api --tail=200 || true
+            exit 1
+          fi
+      - name: Call /health through the Service
+        run: |
+          kubectl -n graphrag port-forward svc/graphrag-api 18080:80 >/dev/null 2>&1 &
+          for _ in $(seq 1 30); do
+            if curl -fsS http://127.0.0.1:18080/health; then exit 0; fi
+            sleep 2
+          done
+          kubectl -n graphrag logs -l app.kubernetes.io/name=graphrag-api --tail=200 || true
+          exit 1
 
   release-evidence:
     name: Release evidence report

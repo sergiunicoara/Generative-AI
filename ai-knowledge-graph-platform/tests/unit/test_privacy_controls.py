@@ -60,7 +60,7 @@ def test_every_derived_store_is_accounted_for():
             assert callable(resolve(store.handler)), store.name
         if store.coverage in ("immutable", "not_covered", "expires"):
             assert store.rule, f"{store.name} needs its rule or the reason it is not covered"
-    assert {"erased", "redacted", "immutable", "not_covered"} <= {s.coverage for s in STORES}
+    assert {"erased", "redacted", "immutable"} <= {s.coverage for s in STORES}
     assert erasure_table().count("\n") == len(STORES) + 2
 
 
@@ -96,6 +96,76 @@ async def test_gdpr_erasure_clears_cached_embeddings_and_media_for_that_tenant_o
     assert embeddings.get("tenant-b", "Alice", "PERSON") is not None
     media_query = neo4j.run.await_args
     assert "MediaAttachment" in media_query.args[0] and media_query.kwargs["tenant"] == "tenant-a"
+
+
+class _Graph:
+    """Answers the erasure's queries from canned rows and records every call."""
+
+    def __init__(self, rows):
+        self.rows, self.calls = rows, []
+
+    async def run(self, query, **kwargs):
+        self.calls.append((query, kwargs))
+        for marker, rows in self.rows.items():
+            if marker in query and "RETURN" in query:
+                return rows
+        return []
+
+    def writes(self, marker):
+        return [kw for q, kw in self.calls if marker in q and "SET" in q]
+
+
+async def test_erasure_drops_stale_vectors_redacts_summaries_and_deletes_aliases():
+    from graphrag.graph.gdpr import GDPRService
+
+    graph = _Graph({
+        "c.text AS text": [{"chunk_id": "c1", "text": "Alice met Bob"}],
+        "(s:Community {tenant": [{"id": "k1", "summary": "Led by alice."}, {"id": "k2", "summary": "No match"}],
+        "(s:CommunitySummarySnapshot {tenant": [{"id": "s1", "summary": "ALICE wrote it"}],
+        "AS deleted": [{"deleted": 2}],
+    })
+    service = GDPRService(graph)
+    report = await service._forget_entity("Alice", "PERSON", "tenant-a", "dpo", "r1")
+    chunk = graph.writes("MATCH (c:Chunk {id")
+    assert chunk == [{"chunk_id": "c1", "tenant": "tenant-a", "text": "[REDACTED] met Bob"}]
+    assert "c.embedding = null" in next(q for q, _ in graph.calls if "MATCH (c:Chunk {id" in q)
+    summaries = graph.writes("{id: $id, tenant: $tenant}")
+    assert [(w["id"], w["summary"]) for w in summaries] == [("k1", "Led by [REDACTED]."), ("s1", "[REDACTED] wrote it")]
+    assert all(w["tenant"] == "tenant-a" for w in summaries)
+    assert report["summaries_redacted"] == 2 and report["aliases_deleted"] == 2
+    order = [q for q, _ in graph.calls]
+    alias_at = next(i for i, q in enumerate(order) if "ALIAS_OF" in q)
+    entity_at = next(i for i, q in enumerate(order) if "DETACH DELETE e" in q)
+    assert alias_at < entity_at, "aliases are found through the entity, so they go first"
+    alias_query, alias_kwargs = graph.calls[alias_at]
+    assert "other <> e" in alias_query and alias_kwargs["tenant"] == "tenant-a"
+
+
+async def test_reembed_recomputes_flagged_vectors_through_the_given_embedder():
+    from graphrag.graph.gdpr import GDPRService
+
+    graph = _Graph({
+        "MATCH (n:Chunk {tenant": [{"id": "c1", "text": "[REDACTED] met Bob"}],
+        "MATCH (n:Community {tenant": [{"id": "k1", "text": None}],
+    })
+    embedder = SimpleNamespace(embed=AsyncMock(return_value=[[0.5, 0.5]]))
+    counts = await GDPRService(graph).reembed_redacted("tenant-a", embedder)
+    embedder.embed.assert_awaited_once_with(["[REDACTED] met Bob"])
+    assert counts == {"Chunk": 1, "Community": 0, "CommunitySummarySnapshot": 0}
+    assert graph.writes("n.embedding = $embedding") == [{"id": "c1", "tenant": "tenant-a", "embedding": [0.5, 0.5]}]
+
+
+def test_the_tenant_turtle_export_is_removed_and_other_tenants_keep_theirs(tmp_path, monkeypatch):
+    from graphrag.graph.gdpr import GDPRService
+
+    monkeypatch.setenv("GRAPHRAG_RDF_EXPORT_DIR", str(tmp_path))
+    for tenant in ("tenant-a", "tenant-b"):
+        (tmp_path / tenant).mkdir()
+        (tmp_path / tenant / "graph_export.ttl").write_text("<x> <y> 'Alice' .", encoding="utf-8")
+    assert GDPRService._remove_rdf_export("tenant-a") is True
+    assert not (tmp_path / "tenant-a" / "graph_export.ttl").exists()
+    assert (tmp_path / "tenant-b" / "graph_export.ttl").exists()
+    assert GDPRService._remove_rdf_export("tenant-a") is False
 
 
 async def test_decision_log_cache_and_trust_reports_forget_the_subject(tmp_path):

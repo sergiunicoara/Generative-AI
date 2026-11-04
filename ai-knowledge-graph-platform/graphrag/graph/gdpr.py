@@ -40,6 +40,8 @@ requires the audit trail itself to be scrubbed for the subject's data).
 from __future__ import annotations
 
 import hashlib
+import os
+from pathlib import Path
 import re
 from uuid import uuid4
 
@@ -108,6 +110,7 @@ class GDPRService:
             )
             await self._erase_derived(entity_name, entity_type, tenant)
         await self._evict_cached_answers(tenant)
+        report["rdf_export_removed"] = self._remove_rdf_export(tenant)
         return report
 
     async def _erase_derived(self, entity_name: str, entity_type: str, tenant: str) -> None:
@@ -135,7 +138,90 @@ class GDPRService:
         async with CorpusMutation(self._neo4j, tenant, reason="gdpr_erasure"):
             report = await self._forget_document(doc_id, tenant, requested_by, request_id)
         await self._evict_cached_answers(tenant)
+        report["rdf_export_removed"] = self._remove_rdf_export(tenant)
         return report
+
+    @staticmethod
+    def _remove_rdf_export(tenant: str) -> bool:
+        """Remove the tenant's Turtle export: it is a copy made before the
+        erasure and still holds the erased data.  Regenerate it with
+        ``scripts/export_rdf.py``; until then the RDF routes have nothing to
+        serve for the tenant rather than serving stale personal data."""
+        path = Path(os.getenv("GRAPHRAG_RDF_EXPORT_DIR", "exports")) / tenant / "graph_export.ttl"
+        if not path.is_file():
+            return False
+        path.unlink()
+        log.info("gdpr.rdf_export_removed", tenant=tenant)
+        return True
+
+    async def _redact_community_summaries(self, entity_name: str, tenant: str) -> int:
+        """Replace the name in community summaries and summary snapshots, and
+        drop their vectors (they encode the original text)."""
+        pattern = re.compile(re.escape(entity_name), re.IGNORECASE)
+        count = 0
+        for label in ("Community", "CommunitySummarySnapshot"):
+            rows = await self._neo4j.run(
+                f"MATCH (s:{label} {{tenant: $tenant}}) WHERE toLower(coalesce(s.summary, '')) CONTAINS toLower($name) "
+                "RETURN s.id AS id, s.summary AS summary",
+                name=entity_name, tenant=tenant,
+            )
+            for row in rows or []:
+                original = row.get("summary") or ""
+                redacted = pattern.sub("[REDACTED]", original)
+                if redacted == original:
+                    continue
+                await self._neo4j.run(
+                    f"MATCH (s:{label} {{id: $id, tenant: $tenant}}) "
+                    "SET s.summary = $summary, s.redacted = true, s.embedding = null, s.needs_reembedding = true",
+                    id=row["id"], tenant=tenant, summary=redacted,
+                )
+                count += 1
+        return count
+
+    async def _delete_aliases(self, entity_name: str, entity_type: str, tenant: str) -> int:
+        """Delete alias nodes that point only at the erased entity (an alias
+        shared with another entity keeps its other links)."""
+        rows = await self._neo4j.run(
+            """
+            MATCH (a:Alias {tenant: $tenant})-[:ALIAS_OF]->(e:Entity {name: $name, type: $type, tenant: $tenant})
+            WHERE NOT EXISTS { MATCH (a)-[:ALIAS_OF]->(other:Entity) WHERE other <> e }
+            WITH collect(a) AS aliases
+            FOREACH (a IN aliases | DETACH DELETE a)
+            RETURN size(aliases) AS deleted
+            """,
+            name=entity_name, type=entity_type, tenant=tenant,
+        )
+        return int((rows[0] if rows else {}).get("deleted") or 0)
+
+    async def reembed_redacted(self, tenant: str, embedder=None, *, limit: int = 500) -> dict[str, int]:
+        """Recompute vectors for redacted chunks and summaries of a tenant.
+
+        Runs after an erasure (the erasure itself only drops the old vectors).
+        Text goes through the shared embedder, so the outbound policy applies.
+        """
+        tenant = require_tenant(tenant)
+        if embedder is None:
+            from graphrag.core.llm_client import get_embedder
+
+            embedder = get_embedder()
+        counts: dict[str, int] = {}
+        for label, field in (("Chunk", "text"), ("Community", "summary"), ("CommunitySummarySnapshot", "summary")):
+            rows = await self._neo4j.run(
+                f"MATCH (n:{label} {{tenant: $tenant}}) WHERE n.needs_reembedding = true "
+                f"RETURN n.id AS id, n.{field} AS text LIMIT $limit",
+                tenant=tenant, limit=limit,
+            )
+            rows = [row for row in rows or [] if row.get("text")]
+            if rows:
+                vectors = await embedder.embed([row["text"] for row in rows])
+                for row, vector in zip(rows, vectors):
+                    await self._neo4j.run(
+                        f"MATCH (n:{label} {{id: $id, tenant: $tenant}}) "
+                        "SET n.embedding = $embedding, n.needs_reembedding = false",
+                        id=row["id"], tenant=tenant, embedding=vector,
+                    )
+            counts[label] = len(rows)
+        return counts
 
     async def _evict_cached_answers(self, tenant: str) -> None:
         """Delete the tenant's cached answers rather than leave them to expire.
@@ -212,6 +298,8 @@ class GDPRService:
         redacted_chunks = await self._redact_mentions_in_chunks(
             entity_name, entity_type, tenant
         )
+        # Step 1b: ... and from community summaries and their snapshots
+        redacted_summaries = await self._redact_community_summaries(entity_name, tenant)
 
         # Step 2: Remove MENTIONS edges
         await self._neo4j.run(
@@ -278,6 +366,9 @@ class GDPRService:
             tenant=tenant,
         )
 
+        # Step 5b: Remove alias nodes that name only this entity
+        aliases_deleted = await self._delete_aliases(entity_name, entity_type, tenant)
+
         # Step 6: Delete the entity node
         await self._neo4j.run(
             """
@@ -310,6 +401,8 @@ class GDPRService:
             "tenant":         tenant,
             "edges_removed":  stats.get("total_edges", 0),
             "chunks_redacted": redacted_chunks,
+            "summaries_redacted": redacted_summaries,
+            "aliases_deleted": aliases_deleted,
             "status":         "complete",
         }
         # The log line must not itself keep the erased name: record a digest.
@@ -492,7 +585,11 @@ class GDPRService:
                 # alone, so a chunk_id collision across tenants would
                 # redact another tenant's chunk text.
                 await self._neo4j.run(
-                    "MATCH (c:Chunk {id: $chunk_id, tenant: $tenant}) SET c.text = $text, c.redacted = true",
+                    # The stored vector still encodes the original text, so it
+                    # goes with it; reembed_redacted() recomputes it from the
+                    # redacted text.
+                    "MATCH (c:Chunk {id: $chunk_id, tenant: $tenant}) "
+                    "SET c.text = $text, c.redacted = true, c.embedding = null, c.needs_reembedding = true",
                     chunk_id=row["chunk_id"],
                     tenant=tenant,
                     text=redacted,

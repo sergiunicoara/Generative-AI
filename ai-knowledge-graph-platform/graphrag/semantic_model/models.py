@@ -124,6 +124,106 @@ class ArtifactPaths(StrictModel):
     gql: str | None = None
 
 
+Scalar = str | int | float | bool
+
+_IDENTIFIER = r"^[A-Za-z_][A-Za-z0-9_]{0,63}$"
+_SUBJECT = r"^(property|parameter|function):[A-Za-z_][A-Za-z0-9_]{0,63}$"
+
+
+class ParameterSpec(StrictModel):
+    """A typed action parameter (ontology actions, ADR-0015)."""
+
+    datatype: Literal["string", "integer", "decimal", "boolean", "date", "dateTime"]
+    required: bool = False
+    description: str = ""
+    allowed: list[Scalar] = Field(default_factory=list)
+    max_length: int | None = Field(default=None, ge=1, le=4000)
+
+
+class Criterion(StrictModel):
+    """A submission criterion over the target object, a parameter or a function.
+
+    ``subject`` is ``property:<name>``, ``parameter:<name>`` or ``function:<name>``.
+    """
+
+    id: str = Field(pattern=_IDENTIFIER)
+    subject: str = Field(pattern=_SUBJECT)
+    op: Literal["eq", "ne", "in", "not_in", "present", "absent", "min", "max", "min_length", "max_length"]
+    value: Scalar | None = None
+    values: list[Scalar] = Field(default_factory=list)
+    message: str = ""
+
+    @model_validator(mode="after")
+    def operand_matches_op(self) -> "Criterion":
+        if self.op in {"in", "not_in"} and not self.values:
+            raise ValueError(f"criterion {self.id}: {self.op} needs values")
+        if self.op in {"eq", "ne", "min", "max", "min_length", "max_length"} and self.value is None:
+            raise ValueError(f"criterion {self.id}: {self.op} needs value")
+        if self.op in {"min", "max", "min_length", "max_length"} and (
+                isinstance(self.value, bool) or not isinstance(self.value, (int, float))):
+            raise ValueError(f"criterion {self.id}: {self.op} needs a number")
+        return self
+
+
+class ActionEffect(StrictModel):
+    """Set one property of the target object: to a literal, a parameter or the action time."""
+
+    property: str = Field(pattern=_IDENTIFIER)
+    value: Scalar | None = None
+    from_parameter: str | None = Field(default=None, pattern=_IDENTIFIER)
+    now: bool = False
+
+    @model_validator(mode="after")
+    def exactly_one_source(self) -> "ActionEffect":
+        if sum((self.value is not None, self.from_parameter is not None, self.now)) != 1:
+            raise ValueError(f"effect on {self.property}: set exactly one of value, from_parameter, now")
+        return self
+
+
+class DecisionGate(StrictModel):
+    """A published decision table whose ``allow_output`` must be true for the action to proceed."""
+
+    domain: str = Field(pattern=r"^[a-z][a-z0-9_]{0,63}$")
+    table: str = Field(pattern=r"^[A-Z][A-Z0-9_\-]{0,63}$")
+    inputs: dict[str, str] = Field(default_factory=dict)  # column -> subject
+    allow_output: str = Field(min_length=1, max_length=128)
+
+
+class ActionSpec(StrictModel):
+    """A typed operation on one object of ``applies_to``, proposed, checked,
+    approved when required, written and logged (ADR-0015)."""
+
+    label: str = ""
+    description: str = ""
+    applies_to: str
+    parameters: dict[str, ParameterSpec] = Field(default_factory=dict)
+    submission_criteria: list[Criterion] = Field(default_factory=list)
+    effects: list[ActionEffect] = Field(min_length=1)
+    decision_gate: DecisionGate | None = None
+    requires_approval: bool = True
+    required_scope: str = Field(default="write", pattern=r"^[a-z][a-z0-9:_.-]{0,63}$")
+
+
+class FunctionSpec(StrictModel):
+    """Read-only logic bound to an object type: a property or a relation count."""
+
+    label: str = ""
+    description: str = ""
+    applies_to: str
+    kind: Literal["property", "relation_count"]
+    property: str | None = None
+    relation: str | None = None
+    direction: Literal["out", "in"] = "out"
+
+    @model_validator(mode="after")
+    def operand_matches_kind(self) -> "FunctionSpec":
+        if self.kind == "property" and not self.property:
+            raise ValueError("a property function names its property")
+        if self.kind == "relation_count" and not self.relation:
+            raise ValueError("a relation_count function names its relation")
+        return self
+
+
 class SemanticModel(StrictModel):
     id: str
     version: str
@@ -134,6 +234,8 @@ class SemanticModel(StrictModel):
     mixins: dict[str, MixinSpec] = Field(default_factory=dict)
     types: dict[str, TypeSpec]
     relations: dict[str, RelationSpec] = Field(default_factory=dict)
+    actions: dict[str, ActionSpec] = Field(default_factory=dict)
+    functions: dict[str, FunctionSpec] = Field(default_factory=dict)
     artifacts: ArtifactPaths
     source_path: Path | None = Field(default=None, exclude=True)
     source_lines: dict[str, int] = Field(default_factory=dict, exclude=True)
@@ -235,8 +337,119 @@ def _validate_semantics(model: SemanticModel) -> None:
     # lineage walks below assume the hierarchy is acyclic and fully resolved
     if not errors:
         errors.extend(_validate_extensions(model))
+    if not errors:
+        errors.extend(_validate_actions(model))
     if errors:
         raise SemanticModelError("; ".join(dict.fromkeys(errors)))
+
+
+_LITERAL_TYPES: dict[str, tuple[type, ...]] = {
+    "string": (str,), "integer": (int,), "decimal": (int, float), "boolean": (bool,),
+    "date": (str,), "dateTime": (str,),
+}
+
+
+def _literal_ok(datatype: str, value: Any) -> bool:
+    if datatype in {"integer", "decimal"} and isinstance(value, bool):
+        return False
+    return isinstance(value, _LITERAL_TYPES[datatype])
+
+
+def key_property(model: SemanticModel, type_name: str) -> str | None:
+    keys = [name for name, prop in model.effective_properties(type_name).items() if prop.key]
+    return keys[0] if len(keys) == 1 else None
+
+
+def subject_datatype(model: SemanticModel, action: ActionSpec | None, applies_to: str, subject: str) -> str | None:
+    """Datatype of a criterion/gate subject, or None if it does not resolve."""
+    kind, name = subject.split(":", 1)
+    if kind == "property":
+        prop = model.effective_properties(applies_to).get(name)
+        return prop.datatype if prop else None
+    if kind == "parameter":
+        param = action.parameters.get(name) if action else None
+        return param.datatype if param else None
+    function = model.functions.get(name)
+    if function is None or not model.is_subtype(applies_to, function.applies_to):
+        return None
+    if function.kind == "relation_count":
+        return "integer"
+    prop = model.effective_properties(function.applies_to).get(function.property or "")
+    return prop.datatype if prop else None
+
+
+def _validate_actions(model: SemanticModel) -> list[str]:
+    errors: list[str] = []
+    for name, function in model.functions.items():
+        where = f"function {name}"
+        if not re.fullmatch(_IDENTIFIER, name):
+            errors.append(f"{where}: name must be an identifier")
+        if function.applies_to not in model.types:
+            errors.append(f"{where}: unknown type {function.applies_to}")
+            continue
+        if function.kind == "property" and function.property not in model.effective_properties(function.applies_to):
+            errors.append(f"{where}: {function.applies_to} has no property {function.property}")
+        if function.kind == "relation_count":
+            relation = model.relations.get(function.relation or "")
+            if relation is None:
+                errors.append(f"{where}: unknown relation {function.relation}")
+            else:
+                endpoint = relation.source if function.direction == "out" else relation.target
+                if not model.is_subtype(function.applies_to, endpoint):
+                    errors.append(f"{where}: {function.applies_to} is not the {function.direction} end of {function.relation}")
+    for name, action in model.actions.items():
+        where = f"action {name}"
+        if not re.fullmatch(_IDENTIFIER, name):
+            errors.append(f"{where}: name must be an identifier")
+        spec = model.types.get(action.applies_to)
+        if spec is None:
+            errors.append(f"{where}: unknown type {action.applies_to}")
+            continue
+        if spec.abstract:
+            errors.append(f"{where}: {action.applies_to} is abstract")
+        key = key_property(model, action.applies_to)
+        if key is None:
+            errors.append(f"{where}: {action.applies_to} needs exactly one key property to address an object")
+        properties = model.effective_properties(action.applies_to)
+        for param_name, param in action.parameters.items():
+            if not re.fullmatch(_IDENTIFIER, param_name) or param_name == "tenant":
+                errors.append(f"{where}: invalid parameter name {param_name!r}")
+            for allowed in param.allowed:
+                if not _literal_ok(param.datatype, allowed):
+                    errors.append(f"{where}: parameter {param_name} allows a value that is not {param.datatype}")
+        subjects = [(f"criterion {c.id}", c.subject) for c in action.submission_criteria]
+        if action.decision_gate:
+            subjects += [(f"decision input {column}", subject) for column, subject in action.decision_gate.inputs.items()]
+            for subject in action.decision_gate.inputs.values():
+                if not re.fullmatch(_SUBJECT, subject):
+                    errors.append(f"{where}: invalid decision input subject {subject!r}")
+        for label, subject in subjects:
+            if re.fullmatch(_SUBJECT, subject) and subject_datatype(model, action, action.applies_to, subject) is None:
+                errors.append(f"{where}: {label} refers to unknown {subject}")
+        if len({c.id for c in action.submission_criteria}) != len(action.submission_criteria):
+            errors.append(f"{where}: duplicate criterion id")
+        targets = [effect.property for effect in action.effects]
+        if len(set(targets)) != len(targets):
+            errors.append(f"{where}: a property is set by more than one effect")
+        for effect in action.effects:
+            prop = properties.get(effect.property)
+            if prop is None:
+                errors.append(f"{where}: {action.applies_to} has no property {effect.property}")
+                continue
+            if effect.property in {key, "tenant"}:
+                errors.append(f"{where}: an effect may not change the key or tenant")
+            if effect.now and prop.datatype != "dateTime":
+                errors.append(f"{where}: now can only set a dateTime property")
+            if effect.value is not None and not _literal_ok(prop.datatype, effect.value):
+                errors.append(f"{where}: value for {effect.property} is not {prop.datatype}")
+            if effect.from_parameter is not None:
+                param = action.parameters.get(effect.from_parameter)
+                if param is None:
+                    errors.append(f"{where}: effect reads unknown parameter {effect.from_parameter}")
+                elif param.datatype != prop.datatype:
+                    errors.append(f"{where}: parameter {effect.from_parameter} is {param.datatype}, "
+                                  f"{effect.property} is {prop.datatype}")
+    return errors
 
 
 def statement_class(relation_name: str) -> str:

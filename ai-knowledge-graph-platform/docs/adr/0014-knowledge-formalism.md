@@ -1,6 +1,6 @@
 # ADR-0014: Formalism for contextual knowledge
 
-**Status:** Accepted (2026-11-03)
+**Status:** Accepted (2026-11-03); amended by ADR-0015 (2026-11-04): published decision tables may gate ontology actions. Knowledge evaluation still does not execute them.
 
 ## Context
 

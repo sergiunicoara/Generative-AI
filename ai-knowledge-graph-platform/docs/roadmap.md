@@ -859,7 +859,7 @@ before evaluation, curation routes, separate evaluation metrics, API and MCP.
   **Acceptance evidence:** the ADR; a table with an explicit hit policy,
   validated for overlaps and gaps; tests that unsupported content is refused or
   escalated rather than approximated.
-  **Status (2026-11-03):** ADR-0014 (`docs/adr/0014-knowledge-formalism.md`) compares bounded predicates, DMN-style tables, Datalog and production rule engines with their failure modes; `graphrag/context_graph/decision_tables.py` adds tables with declared input domains, a bounded condition vocabulary and an explicit hit policy, validated for overlaps, gaps and conflicting outputs (published invalid tables block the gate). Representation and validation only: tables are not executed. Unsupported content (expressions, undeclared domains) is refused at load time.
+  **Status (2026-11-03):** ADR-0014 (`docs/adr/0014-knowledge-formalism.md`) compares bounded predicates, DMN-style tables, Datalog and production rule engines with their failure modes; `graphrag/context_graph/decision_tables.py` adds tables with declared input domains, a bounded condition vocabulary and an explicit hit policy, validated for overlaps, gaps and conflicting outputs (published invalid tables block the gate). Representation and validation only: tables are not executed (since 2026-11-04, ADR-0015 lets a published table gate an ontology action; knowledge evaluation still does not execute them). Unsupported content (expressions, undeclared domains) is refused at load time.
 - [x] Expert elicitation workflow. Turn informal expertise into reviewable items:
   interview templates, expert attribution, recorded disagreement between experts,
   a "needs expert" state, and review ownership, built on the existing draft and
@@ -1029,7 +1029,7 @@ erasure controls, and use-case charters. Only the gaps below are added. Today
 `CGAction` and `ActionNode` only record actions after the fact; nothing in the
 model declares an action that can be proposed, checked and executed.
 
-- [ ] Ontology actions and functions (the write path of ontology-augmented
+- [x] Ontology actions and functions (the write path of ontology-augmented
   generation). Declare actions in the canonical model YAML (for example
   `quarantine_lot` or `open_8d_report`): typed parameters, the object types they
   apply to, submission criteria, the graph effects they produce and whether they
@@ -1048,7 +1048,8 @@ model declares an action that can be proposed, checked and executed.
   approval does not change the graph until approved; an approved action's
   effects match its declaration; a replay from the decision log reproduces the
   same verdict; a caller without the scope or from another tenant cannot submit.
-- [ ] Agent evaluation on actions, not only answers. Test cases that name the
+  **Status (2026-11-04):** ADR-0015. `actions:` and `functions:` in the canonical model YAML, validated at load (key property required, effects may not touch the key or tenant, typed parameters, criteria and gate inputs must resolve); `graphrag/semantic_model/actions.py` (pure check: parameters, criteria, decision gate via the new `evaluate_table`, post-change state through `SemanticMutationValidator`) and `action_service.py` (propose, four-eyes decide, re-read before writing, one guarded Cypher write inside `CorpusMutation`, `stale` when the object changed, every transition in the proposal record and an append-only event table, `replay`). Capabilities `kg.action.propose`, `kg.action.decide`, `kg.action.list`, `kg.function.call`. The automotive model declares `disqualify_supplier`, `requalify_supplier`, `set_reevaluation_frequency` and two functions. Tested with a temporary SQLite store and a fake graph; not run against a live Neo4j. Effects set properties of the target only; relation counts are re-checked but not part of the atomic guard.
+- [x] Agent evaluation on actions, not only answers. Test cases that name the
   expected action (or the expected refusal) and its parameters for a request:
   whether the agent chose the right action, filled the parameters correctly,
   respected the submission criteria and declined what it must decline. Runs
@@ -1059,6 +1060,7 @@ model declares an action that can be proposed, checked and executed.
   **Acceptance evidence:** a scripted agent that picks the wrong action, omits a
   required parameter or executes something it should refuse fails the case that
   covers it; results are deterministic across runs.
+  **Status (2026-11-04):** `graphrag/evaluation/action_eval.py`, `evals/actions/automotive_supplier_cases.json` (8 synthetic cases, 5 refusals) and `scripts/run_action_eval.py`: each proposal is graded (wrong action, wrong object, missing, wrong or unexpected parameter, should have refused, wrongly refused) and run through the action check, so a proposal the platform would block is reported as such; results per action type with denominators. The oracle agent checks the dataset itself; scripted agents with each mistake fail the covering case; `LLMActionAgent` was tested with a fake model only (a real model run costs money and needs `--allow-paid`).
 - [ ] Data expectations on pipeline transforms and per-build lineage. Each
   ingestion transform declares expectations on its output (schema, nulls,
   uniqueness, freshness, row-count bounds); a failed expectation blocks

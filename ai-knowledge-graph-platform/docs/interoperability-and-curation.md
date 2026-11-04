@@ -175,3 +175,41 @@ validation, size limits, approval rules and audit are unchanged;
 receives JSON and the raw payload is kept as the tool message artifact.
 Orchestration inside the platform does not use LangGraph, and langchain-core is
 not part of the API image.
+
+## Ontology actions and functions (2026-11-04, ADR-0015)
+
+Declared in the canonical YAML next to types and relations:
+
+```yaml
+functions:
+  audit_count: {applies_to: Supplier, kind: relation_count, relation: audits, direction: in}
+actions:
+  disqualify_supplier:
+    applies_to: Supplier                       # needs exactly one key property
+    parameters:
+      reason: {datatype: string, required: true, max_length: 2000}
+    submission_criteria:
+      - {id: audit_evidence, subject: function:audit_count, op: min, value: 1}
+      - {id: reason_given, subject: parameter:reason, op: min_length, value: 10}
+    effects:
+      - {property: classification, value: disqualified}
+    decision_gate: null                        # or {domain, table, inputs, allow_output}
+    requires_approval: true
+    required_scope: write
+```
+
+`kg.action.propose` reads the object (label, key, tenant), checks parameters,
+criteria, the decision gate and the post-change state, and records the
+proposal: `rejected` with the failed checks named, `applied` when no approval
+is declared, otherwise `pending_approval`. `kg.action.decide` approves or
+rejects; the proposer cannot decide their own proposal. Before writing, the
+object is read again; a changed guarded property or a failing re-check makes
+the proposal `stale`, and the write is one Cypher statement guarded on those
+properties. Proposals and their events are in the governance store, and
+`replay` re-runs a recorded check. `kg.function.call` evaluates a function;
+`kg.action.list` lists proposals.
+
+Agent evaluation on actions: `python scripts/run_action_eval.py` (oracle agent,
+offline) grades proposals against `evals/actions/automotive_supplier_cases.json`
+and reports results per action type; `--agent llm --allow-paid` would call the
+configured model and has not been run. Both verified offline only.

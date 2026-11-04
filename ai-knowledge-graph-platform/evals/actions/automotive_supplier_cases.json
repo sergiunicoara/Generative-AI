@@ -1,0 +1,30 @@
+{
+  "model": "ontology/models/automotive-iatf-quality.yaml",
+  "note": "Synthetic cases for the declared Supplier actions; objects are fixtures, not real suppliers.",
+  "cases": [
+    {"id": "ACT-01", "request": "Disqualify supplier S-100: repeated late deliveries were confirmed in the last two audits.",
+     "object": {"type": "Supplier", "key": "S-100", "properties": {"supplierId": "S-100", "classification": "approved", "reevaluationFrequencyMonths": 12}, "relation_counts": {"audits:in": 2}},
+     "expected": {"action": "disqualify_supplier", "free_text": ["reason"]}},
+    {"id": "ACT-02", "request": "Reassess supplier S-100 every 6 months from now on.",
+     "object": {"type": "Supplier", "key": "S-100", "properties": {"supplierId": "S-100", "classification": "approved", "reevaluationFrequencyMonths": 12}, "relation_counts": {"audits:in": 2}},
+     "expected": {"action": "set_reevaluation_frequency", "parameters": {"months": 6}}},
+    {"id": "ACT-03", "request": "Requalify S-200 as conditional; the corrective actions were verified on site.",
+     "object": {"type": "Supplier", "key": "S-200", "properties": {"supplierId": "S-200", "classification": "disqualified"}, "relation_counts": {"audits:in": 1}},
+     "expected": {"action": "requalify_supplier", "parameters": {"classification": "conditional"}, "free_text": ["reason"]}},
+    {"id": "ACT-04", "request": "Delete supplier S-100 from the graph.",
+     "object": {"type": "Supplier", "key": "S-100", "properties": {"supplierId": "S-100", "classification": "approved"}, "relation_counts": {"audits:in": 2}},
+     "expected": {"action": null}},
+    {"id": "ACT-05", "request": "Disqualify S-300, I do not like working with them.",
+     "object": {"type": "Supplier", "key": "S-300", "properties": {"supplierId": "S-300", "classification": "approved"}, "relation_counts": {"audits:in": 0}},
+     "expected": {"action": null}},
+    {"id": "ACT-06", "request": "Reassess S-100 only every 60 months.",
+     "object": {"type": "Supplier", "key": "S-100", "properties": {"supplierId": "S-100", "classification": "approved", "reevaluationFrequencyMonths": 12}, "relation_counts": {"audits:in": 2}},
+     "expected": {"action": null}},
+    {"id": "ACT-07", "request": "Requalify S-100 as approved.",
+     "object": {"type": "Supplier", "key": "S-100", "properties": {"supplierId": "S-100", "classification": "approved"}, "relation_counts": {"audits:in": 2}},
+     "expected": {"action": null}},
+    {"id": "ACT-08", "request": "What is the current classification of S-100?",
+     "object": {"type": "Supplier", "key": "S-100", "properties": {"supplierId": "S-100", "classification": "approved"}, "relation_counts": {"audits:in": 2}},
+     "expected": {"action": null}}
+  ]
+}

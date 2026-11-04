@@ -185,6 +185,103 @@ relations:
     source: Nonconformity
     target: ClientOrg
     lpg_type: ESCALATES_TO
+# Ontology actions and functions (ADR-0015). Actions change one object through
+# a checked, logged and (where declared) approved proposal; functions are
+# read-only. Neither changes the compiled OWL/SHACL/Neo4j artifacts.
+functions:
+  audit_count:
+    label: Audits of the supplier
+    applies_to: Supplier
+    kind: relation_count
+    relation: audits
+    direction: in
+  classification:
+    label: Current qualification status
+    applies_to: Supplier
+    kind: property
+    property: classification
+actions:
+  disqualify_supplier:
+    label: Disqualify a supplier
+    description: Set the supplier's classification to disqualified on audit evidence.
+    applies_to: Supplier
+    parameters:
+      reason:
+        datatype: string
+        required: true
+        max_length: 2000
+        description: Why the supplier is disqualified, with the audit evidence.
+    submission_criteria:
+      - id: not_already_disqualified
+        subject: property:classification
+        op: ne
+        value: disqualified
+        message: The supplier is already disqualified.
+      - id: audit_evidence
+        subject: function:audit_count
+        op: min
+        value: 1
+        message: A supplier is disqualified on audit evidence; this one has no recorded audit.
+      - id: reason_given
+        subject: parameter:reason
+        op: min_length
+        value: 10
+        message: State the reason (at least 10 characters).
+    effects:
+      - property: classification
+        value: disqualified
+    requires_approval: true
+  requalify_supplier:
+    label: Requalify a disqualified supplier
+    description: Return a disqualified supplier to approved or conditional status.
+    applies_to: Supplier
+    parameters:
+      classification:
+        datatype: string
+        required: true
+        allowed: [approved, conditional]
+      reason:
+        datatype: string
+        required: true
+        max_length: 2000
+    submission_criteria:
+      - id: is_disqualified
+        subject: property:classification
+        op: eq
+        value: disqualified
+        message: Only a disqualified supplier can be requalified.
+      - id: reason_given
+        subject: parameter:reason
+        op: min_length
+        value: 10
+        message: State the reason (at least 10 characters).
+    effects:
+      - property: classification
+        from_parameter: classification
+    requires_approval: true
+  set_reevaluation_frequency:
+    label: Set the reassessment cadence
+    description: Set how often, in months, the supplier is reassessed.
+    applies_to: Supplier
+    parameters:
+      months:
+        datatype: integer
+        required: true
+    submission_criteria:
+      - id: within_policy
+        subject: parameter:months
+        op: max
+        value: 36
+        message: Suppliers are reassessed at least every 36 months.
+      - id: positive
+        subject: parameter:months
+        op: min
+        value: 1
+        message: The cadence is at least one month.
+    effects:
+      - property: reevaluationFrequencyMonths
+        from_parameter: months
+    requires_approval: false
 artifacts:
   owl: ontology/automotive/automotive-iatf-quality.ttl
   shacl: ontology/shapes/automotive-iatf-quality.shapes.ttl

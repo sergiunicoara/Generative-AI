@@ -1,11 +1,12 @@
-"""DMN-style decision tables: a bounded representation, validated, not executed.
+"""DMN-style decision tables: a bounded representation, validated statically.
 
 Some knowledge is not a requirement over facts but a mapping from inputs to
 outputs ("which carton template applies for this market and pack size").  A
 conjunction of predicates cannot hold it without approximation.  This module
 represents such knowledge as a decision table with an explicit hit policy and
 validates it statically; it deliberately has **no execution path** into the
-evaluator (see ``docs/adr/0014-knowledge-formalism.md``).
+evaluator (see ``docs/adr/0014-knowledge-formalism.md``). The one execution
+path is ``evaluate_table``, used only by ontology action gates (ADR-0015).
 
 Bounded on purpose:
 
@@ -158,6 +159,51 @@ def _matches(condition: Condition | None, value) -> bool:
     if condition.high is not None and (value > condition.high or (value == condition.high and not condition.high_inclusive)):
         return False
     return True
+
+
+class TableResult(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
+    rule_ids: tuple[str, ...] = ()
+    outputs: dict[str, str | float | bool] = Field(default_factory=dict)
+    error: str = ""
+
+
+def evaluate_table(table: DecisionTable, inputs: dict) -> TableResult:
+    """Evaluate one input row under the table's hit policy.
+
+    Used only by ontology action gates (ADR-0015); knowledge evaluation still
+    has no execution path into decision tables (ADR-0014). ``collect`` is not
+    a single verdict and is reported as an error; a missing input matches only
+    ``any`` conditions.
+    """
+    def matches(rule) -> bool:
+        for column in table.inputs:
+            condition = rule.when.get(column.name)
+            value = inputs.get(column.name)
+            if value is None:
+                if condition is not None and condition.op != "any":
+                    return False
+                continue
+            try:
+                if not _matches(condition, value):
+                    return False
+            except TypeError:
+                return False
+        return True
+
+    hits = [rule for rule in table.rules if matches(rule)]
+    ids = tuple(rule.id for rule in hits)
+    if not hits:
+        return TableResult(error=f"no rule of {table.key} matches the inputs")
+    if table.hit_policy == "collect":
+        return TableResult(rule_ids=ids, error=f"{table.key} uses hit policy collect, not a single verdict")
+    if table.hit_policy == "unique" and len(hits) > 1:
+        return TableResult(rule_ids=ids, error=f"more than one rule of {table.key} matches under hit policy unique")
+    if table.hit_policy == "any" and any(rule.then != hits[0].then for rule in hits[1:]):
+        return TableResult(rule_ids=ids, error=f"matching rules of {table.key} disagree under hit policy any")
+    chosen = hits[0]
+    return TableResult(rule_ids=ids if table.hit_policy != "first" else (chosen.id,), outputs=dict(chosen.then))
 
 
 class TableIssue(BaseModel):

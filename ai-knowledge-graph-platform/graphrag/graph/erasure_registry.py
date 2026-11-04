@@ -77,6 +77,9 @@ STORES: tuple[DerivedStore, ...] = (
                  rule="append-only governance history holding actor ids only"),
     DerivedStore("energy.rdf_blobs", "content-addressed RDF blobs", "immutable",
                  rule="shared by digest; a correction is a new publication"),
+    DerivedStore("governance.ontology_actions", "ontology action proposals and their event log", "immutable",
+                 rule="append-only action audit with actor ids, the object snapshot and declared parameters; "
+                      "free-text parameters (a reason) are not redacted, so they must not carry personal data"),
     DerivedStore("rdf.exports", "per-tenant Turtle exports", "erased",
                  "graphrag.graph.gdpr:GDPRService.forget_entity",
                  "the tenant's export file is removed; regenerate it with scripts/export_rdf.py"),

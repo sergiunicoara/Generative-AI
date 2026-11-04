@@ -776,6 +776,89 @@ class GovernanceStore:
                    "report_json": json.dumps(report, sort_keys=True, default=str)})
         return report
 
+    # -- ontology action proposals (tenant-scoped, ADR-0015) ------------------------
+
+    async def record_action_proposal(self, record: dict[str, object]) -> None:
+        async with self._write_transaction() as connection:
+            await connection.execute(text("""
+                INSERT INTO ontology_action_proposals
+                (proposal_id, tenant, model_id, action, object_key, status, proposed_by, proposed_at, record_json)
+                VALUES (:proposal_id, :tenant, :model_id, :action, :object_key, :status, :proposed_by, :checked_at,
+                        :record_json)
+            """), {key: record[key] for key in ("proposal_id", "tenant", "model_id", "action", "object_key",
+                                                "status", "proposed_by", "checked_at")}
+                   | {"record_json": json.dumps(record, sort_keys=True, default=str)})
+            await self._action_event(connection, record, None, str(record["status"]), str(record["proposed_by"]),
+                                     str(record["checked_at"]), {})
+
+    async def action_proposal(self, tenant: str, proposal_id: str) -> dict[str, object] | None:
+        async with self._engine.connect() as connection:
+            row = (await connection.execute(text("""
+                SELECT record_json FROM ontology_action_proposals WHERE tenant = :tenant AND proposal_id = :proposal_id
+            """), {"tenant": tenant, "proposal_id": proposal_id})).scalar_one_or_none()
+        return json.loads(row) if row is not None else None
+
+    async def action_proposals(
+        self, tenant: str, *, status: str | None = None, limit: int = 100,
+    ) -> list[dict[str, object]]:
+        async with self._engine.connect() as connection:
+            rows = (await connection.execute(text("""
+                SELECT record_json FROM ontology_action_proposals
+                WHERE tenant = :tenant AND (:status IS NULL OR status = :status)
+                ORDER BY proposed_at, proposal_id LIMIT :limit
+            """), {"tenant": tenant, "status": status, "limit": limit})).scalars().all()
+        return [json.loads(row) for row in rows]
+
+    async def transition_action_proposal(
+        self, tenant: str, proposal_id: str, *, from_status: set[str], to_status: str, actor: str, at: str,
+        detail: dict[str, object],
+    ) -> dict[str, object]:
+        """Move a proposal between states with a compare-and-set on its status.
+
+        Raises ``LookupError`` if the proposal does not exist for the tenant and
+        ``WorkflowConflictError`` if it is not in one of ``from_status``.
+        """
+        async with self._write_transaction() as connection:
+            row = (await connection.execute(text("""
+                SELECT record_json FROM ontology_action_proposals WHERE tenant = :tenant AND proposal_id = :proposal_id
+            """), {"tenant": tenant, "proposal_id": proposal_id})).scalar_one_or_none()
+            if row is None:
+                raise LookupError(f"no proposal {proposal_id!r}")
+            record = json.loads(row)
+            current = str(record["status"])
+            if current not in from_status:
+                raise WorkflowConflictError(f"proposal {proposal_id} is {current}, expected {sorted(from_status)}")
+            record["status"] = to_status
+            record.setdefault("events", []).append({"from": current, "to": to_status, "actor": actor, "at": at,
+                                                    "detail": detail})
+            result = await connection.execute(text("""
+                UPDATE ontology_action_proposals SET status = :to_status, record_json = :record_json
+                WHERE tenant = :tenant AND proposal_id = :proposal_id AND status = :current
+            """), {"tenant": tenant, "proposal_id": proposal_id, "to_status": to_status, "current": current,
+                   "record_json": json.dumps(record, sort_keys=True, default=str)})
+            if result.rowcount != 1:
+                raise WorkflowConflictError(f"proposal {proposal_id} changed concurrently")
+            await self._action_event(connection, record, current, to_status, actor, at, detail)
+        return record
+
+    async def action_events(self, tenant: str, proposal_id: str) -> list[dict[str, object]]:
+        async with self._engine.connect() as connection:
+            rows = (await connection.execute(text("""
+                SELECT from_status, to_status, actor, at, detail_json FROM ontology_action_events
+                WHERE tenant = :tenant AND proposal_id = :proposal_id ORDER BY at, event_id
+            """), {"tenant": tenant, "proposal_id": proposal_id})).all()
+        return [{"from": r[0], "to": r[1], "actor": r[2], "at": r[3], "detail": json.loads(r[4])} for r in rows]
+
+    async def _action_event(self, connection: AsyncConnection, record: dict[str, object], from_status: str | None,
+                            to_status: str, actor: str, at: str, detail: dict[str, object]) -> None:
+        await connection.execute(text("""
+            INSERT INTO ontology_action_events
+            (event_id, tenant, proposal_id, from_status, to_status, actor, at, detail_json)
+            VALUES (:event_id, :tenant, :proposal_id, :from_status, :to_status, :actor, :at, :detail_json)
+        """), {"event_id": str(uuid4()), "tenant": record["tenant"], "proposal_id": record["proposal_id"],
+               "from_status": from_status, "to_status": to_status, "actor": actor, "at": at,
+               "detail_json": json.dumps(detail, sort_keys=True, default=str)})
+
     async def _set_active_knowledge_release(
         self, connection: AsyncConnection, tenant: str, domain: str, release_id: str,
     ) -> None:
@@ -893,6 +976,17 @@ _DDL = (
         report_id TEXT PRIMARY KEY, tenant TEXT NOT NULL, domain TEXT NOT NULL, record_id TEXT NOT NULL,
         status TEXT NOT NULL, root_cause TEXT NOT NULL, reported_at TEXT NOT NULL, fixed_at TEXT,
         report_json TEXT NOT NULL
+    )""",
+    """CREATE TABLE IF NOT EXISTS ontology_action_proposals (
+        proposal_id TEXT PRIMARY KEY, tenant TEXT NOT NULL, model_id TEXT NOT NULL, action TEXT NOT NULL,
+        object_key TEXT NOT NULL, status TEXT NOT NULL, proposed_by TEXT NOT NULL, proposed_at TEXT NOT NULL,
+        record_json TEXT NOT NULL
+    )""",
+    """CREATE INDEX IF NOT EXISTS idx_ontology_action_proposals_tenant
+        ON ontology_action_proposals (tenant, status, proposed_at)""",
+    """CREATE TABLE IF NOT EXISTS ontology_action_events (
+        event_id TEXT PRIMARY KEY, tenant TEXT NOT NULL, proposal_id TEXT NOT NULL, from_status TEXT,
+        to_status TEXT NOT NULL, actor TEXT NOT NULL, at TEXT NOT NULL, detail_json TEXT NOT NULL
     )""",
     """CREATE TABLE IF NOT EXISTS energy_evidence_request_transitions (
         transition_id TEXT PRIMARY KEY, tenant TEXT NOT NULL, request_id TEXT NOT NULL,

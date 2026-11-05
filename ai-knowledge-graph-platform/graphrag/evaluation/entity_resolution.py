@@ -22,7 +22,9 @@ class EntityResolutionCase:
 
 def evaluate_entity_resolution(
     cases: list[EntityResolutionCase],
-    resolver: Callable[[str], tuple[str, str] | AmbiguousMatch | None],
+    resolver: Callable[..., tuple[str, str] | AmbiguousMatch | None],
+    *,
+    typed: bool = False,
 ) -> dict:
     """Score resolver outcomes without treating an expected new entity as error.
 
@@ -35,7 +37,7 @@ def evaluate_entity_resolution(
     disposition_counts = {"matched": 0, "quarantined": 0, "new": 0}
 
     for case in cases:
-        resolved = resolver(case.raw_name)
+        resolved = resolver(case.raw_name, case.entity_type) if typed else resolver(case.raw_name)
         if isinstance(resolved, AmbiguousMatch):
             actual = "quarantined"
             canonical_name = resolved.candidate[0]

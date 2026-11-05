@@ -113,6 +113,41 @@ F1 0.857. Errors: 3 `over_merge`, 2 `missed_match`, 1 `over_quarantine`, 0 `wron
 * **Not measured:** the embedding tier and the co-occurrence tie-break need Neo4j and an embedding provider. The file
   is small (29 cases) so one case moves the rates by about 3 points; treat it as a regression baseline, not an accuracy
   claim for production data. `AliasRegistry.resolve` ignores `entity_type`, so cross-type collisions are not covered.
+  (Both points describe the 2026-10-12 baseline; the guards below change them.)
+
+### Lexical guards (2026-11-05)
+
+The fixes the baseline asked for, on the fuzzy tier only (`ingestion.alias_lexical_guards`, default `true`; `false`
+restores ratio-only matching). Exact and alias matches are unchanged.
+
+| Guard | Effect |
+| --- | --- |
+| Token substitution | Each name has a content token matching nothing in the other (`marine`/`air`, `rail`/`grid`): the candidate is skipped. Tokens match when equal, ratio ≥ 80 (typo, plural), an abbreviation (`assy`/`assembly`) or one adjacent transposition (`siet`/`site`). Connectives and legal-form suffixes are ignored. |
+| Identifier | Tokens with a digit must be equal (`450`/`470` is a substitution). One side having an extra identifier (`Boeing 737` against `Boeing 737-800`) can reach review, never an automatic merge. |
+| Type scope | `resolve(name, entity_type=...)` limits fuzzy, acronym and containment candidates to that type (case-insensitive; an empty type matches any). `graph_writer` passes the extracted type. |
+| Acronym review | An all-capital mention of 2–6 letters equal to a known name's initials (`FMEA`) goes to review, not to a merge and not to a new entity. |
+| Containment review | A mention made only of tokens of a longer known name, including its first token (`Northwind`), goes to review with up to three candidates. This adds reviewer load for short mentions. |
+| Curated aliases | `ingestion.curated_alias_files` (YAML/JSON `[{alias, canonical, type, tenant?}]`), applied in memory after every load and pushed to Redis with the rest. An entry applies only to an existing entity of the tenant and never overrides an alias that points elsewhere; nothing is written to Neo4j. |
+
+Results, both from `python scripts/eval_entity_resolution.py [--set heldout] [--no-guards]`:
+
+| Set | Ratio only | With guards |
+| --- | --- | --- |
+| Original, 29 cases (no curated aliases) | 23/29, precision 0.833, 3 `over_merge`, 2 `missed_match`, 1 `over_quarantine` | 27/29, precision 1.0, recall 0.882, 0 `over_merge`, 1 `missed_match` (`EASA`), 1 `over_quarantine` (`FAA`, now sent to review) |
+| Held-out, 30 cases (3 curated aliases) | 19/30, precision 0.7, 6 `over_merge`, 2 `over_quarantine`, 3 `missed_review` | 30/30, precision 1.0, recall 1.0 |
+
+How far to trust these numbers:
+
+* The original set is now **tuned**: its misses defined the guards. Its 27/29 is not evidence of generalisation.
+* `evals/entity_resolution_cases_heldout.json` (synthetic automotive and energy suppliers) was written and labelled
+  before the guards existed, and its ratio-only result was recorded first. But the same author designed the guards
+  with those categories in mind, so 30/30 shows the guards do what they were built for, not accuracy on unseen data.
+  The transposition rule came from a regression in `scripts/benchmark_sustainability_entity_resolution.py`
+  (`Barcelona Assembly Siet`), which is back to 7/7.
+* Not measured: the embedding tier, and real extracted mentions. No golden-set or corpus re-ingestion was run, so the
+  effect on the aerospace graph's entity counts is unknown. The guards mostly remove fuzzy merges or turn misses into
+  reviews, but they can also change the outcome: when the former best candidate is skipped (other type, conflicting
+  token), a lower-scoring candidate that clears the threshold now wins, and curated aliases add exact matches.
 
 ---
 

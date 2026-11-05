@@ -426,7 +426,7 @@ class GraphWriter:
                 )
 
             # 1. Alias resolution — name-based
-            canonical = registry.resolve(entity.name, with_detail=True)
+            canonical = registry.resolve(entity.name, with_detail=True, entity_type=entity.type)
             # Ambiguous band (fuzzy 70-84) — queue for human review, fail open
             if isinstance(canonical, AmbiguousMatch):
                 if self._cfg.ingestion.get("review_queue_enabled", True):

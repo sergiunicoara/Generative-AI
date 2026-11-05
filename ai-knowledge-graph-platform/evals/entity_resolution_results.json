@@ -1,19 +1,19 @@
 {
   "total": 29,
-  "correct": 23,
-  "accuracy": 0.7931034482758621,
-  "auto_match_precision": 0.8333333333333334,
+  "correct": 27,
+  "accuracy": 0.9310344827586207,
+  "auto_match_precision": 1.0,
   "auto_match_recall": 0.8823529411764706,
-  "auto_match_f1": 0.8571,
+  "auto_match_f1": 0.9375,
   "dispositions": {
-    "matched": 18,
+    "matched": 15,
     "quarantined": 4,
-    "new": 7
+    "new": 10
   },
   "errors": {
     "wrong_link": 0,
-    "over_merge": 3,
-    "missed_match": 2,
+    "over_merge": 0,
+    "missed_match": 1,
     "over_quarantine": 1,
     "missed_review": 0
   },
@@ -71,11 +71,11 @@
       "total": 1
     },
     "near-identifier-distinct": {
-      "correct": 0,
+      "correct": 2,
       "total": 2
     },
     "shared-tokens-distinct": {
-      "correct": 2,
+      "correct": 4,
       "total": 4
     },
     "unrelated": {
@@ -122,11 +122,11 @@
       "entity_type": "ORG",
       "category": "acronym",
       "expected": "matched",
-      "actual": "new",
-      "canonical_name": "",
-      "canonical_type": "",
+      "actual": "quarantined",
+      "canonical_name": "Federal Aviation Administration",
+      "canonical_type": "ORG",
       "correct": false,
-      "error": "missed_match"
+      "error": "over_quarantine"
     },
     {
       "raw_name": "EASA",
@@ -309,33 +309,33 @@
       "entity_type": "PRODUCT",
       "category": "near-identifier-distinct",
       "expected": "new",
-      "actual": "matched",
-      "canonical_name": "Boeing 737-800",
-      "canonical_type": "PRODUCT",
-      "correct": false,
-      "error": "over_merge"
+      "actual": "new",
+      "canonical_name": "",
+      "canonical_type": "",
+      "correct": true,
+      "error": null
     },
     {
       "raw_name": "Boeing 737-900",
       "entity_type": "PRODUCT",
       "category": "near-identifier-distinct",
       "expected": "new",
-      "actual": "matched",
-      "canonical_name": "Boeing 737-800",
-      "canonical_type": "PRODUCT",
-      "correct": false,
-      "error": "over_merge"
+      "actual": "new",
+      "canonical_name": "",
+      "canonical_type": "",
+      "correct": true,
+      "error": null
     },
     {
       "raw_name": "Meridian Marine Services",
       "entity_type": "ORG",
       "category": "shared-tokens-distinct",
       "expected": "new",
-      "actual": "matched",
-      "canonical_name": "Meridian Air Services",
-      "canonical_type": "ORG",
-      "correct": false,
-      "error": "over_merge"
+      "actual": "new",
+      "canonical_name": "",
+      "canonical_type": "",
+      "correct": true,
+      "error": null
     },
     {
       "raw_name": "Pratt Institute",
@@ -397,18 +397,24 @@
       "entity_type": "ORG",
       "category": "shared-tokens-distinct",
       "expected": "new",
-      "actual": "quarantined",
-      "canonical_name": "Federal Aviation Administration",
-      "canonical_type": "ORG",
-      "correct": false,
-      "error": "over_quarantine"
+      "actual": "new",
+      "canonical_name": "",
+      "canonical_type": "",
+      "correct": true,
+      "error": null
     }
   ],
+  "lexical_guards": true,
+  "curated_aliases": 0,
   "tiers_measured": [
     "exact",
     "regulatory-prefix",
     "romanian-stem",
-    "fuzzy"
+    "fuzzy",
+    "lexical-guards",
+    "type-scope",
+    "acronym-review",
+    "containment-review"
   ],
   "tiers_not_measured": [
     "embedding",

@@ -28,6 +28,11 @@ ingestion:
   alias_fuzzy_threshold: 85         # rapidfuzz ratio for soft name matching
   alias_cooccurrence_tiebreak_enabled: false   # disabled pending golden-eval validation — see tasks/lessons.md A128
   alias_embedding_tie_margin: 0.01             # embedding-score gap under which two corroborated candidates count as "tied"
+  # Token guards on the fuzzy tier: no merge across a substituted token or a
+  # different identifier ("IM-450" vs "IM-470"), fuzzy limited to the mention's
+  # type, acronyms and head-token mentions sent to review. false = ratio only.
+  alias_lexical_guards: true
+  curated_alias_files: []          # YAML/JSON [{alias, canonical, type, tenant?}], applied after each load
   # Same (name, type, tenant) MERGE key, but the incoming mention's embedding
   # is below this cosine similarity to what's already stored — likely two
   # different meanings sharing a name+type (e.g. "Apple" ORG for the company

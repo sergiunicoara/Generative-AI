@@ -1,0 +1,434 @@
+{
+  "total": 30,
+  "correct": 30,
+  "accuracy": 1.0,
+  "auto_match_precision": 1.0,
+  "auto_match_recall": 1.0,
+  "auto_match_f1": 1.0,
+  "dispositions": {
+    "matched": 14,
+    "quarantined": 5,
+    "new": 11
+  },
+  "errors": {
+    "wrong_link": 0,
+    "over_merge": 0,
+    "missed_match": 0,
+    "over_quarantine": 0,
+    "missed_review": 0
+  },
+  "by_category": {
+    "exact": {
+      "correct": 1,
+      "total": 1
+    },
+    "case": {
+      "correct": 1,
+      "total": 1
+    },
+    "legal-suffix": {
+      "correct": 2,
+      "total": 2
+    },
+    "plural-singular": {
+      "correct": 3,
+      "total": 3
+    },
+    "typo": {
+      "correct": 1,
+      "total": 1
+    },
+    "abbreviation": {
+      "correct": 1,
+      "total": 1
+    },
+    "punctuation": {
+      "correct": 1,
+      "total": 1
+    },
+    "symbol-variant": {
+      "correct": 1,
+      "total": 1
+    },
+    "curated-acronym": {
+      "correct": 3,
+      "total": 3
+    },
+    "uncurated-acronym": {
+      "correct": 2,
+      "total": 2
+    },
+    "near-identifier-distinct": {
+      "correct": 2,
+      "total": 2
+    },
+    "ambiguous-between-two-variants": {
+      "correct": 1,
+      "total": 1
+    },
+    "ambiguous-between-two-entities": {
+      "correct": 2,
+      "total": 2
+    },
+    "shared-tokens-distinct": {
+      "correct": 5,
+      "total": 5
+    },
+    "cross-type": {
+      "correct": 2,
+      "total": 2
+    },
+    "unrelated": {
+      "correct": 2,
+      "total": 2
+    }
+  },
+  "results": [
+    {
+      "raw_name": "International Automotive Task Force",
+      "entity_type": "ORG",
+      "category": "exact",
+      "expected": "matched",
+      "actual": "matched",
+      "canonical_name": "International Automotive Task Force",
+      "canonical_type": "ORG",
+      "correct": true,
+      "error": null
+    },
+    {
+      "raw_name": "KESSLER PRECISION CASTINGS GMBH",
+      "entity_type": "ORG",
+      "category": "case",
+      "expected": "matched",
+      "actual": "matched",
+      "canonical_name": "Kessler Precision Castings GmbH",
+      "canonical_type": "ORG",
+      "correct": true,
+      "error": null
+    },
+    {
+      "raw_name": "Kessler Precision Castings",
+      "entity_type": "ORG",
+      "category": "legal-suffix",
+      "expected": "matched",
+      "actual": "matched",
+      "canonical_name": "Kessler Precision Castings GmbH",
+      "canonical_type": "ORG",
+      "correct": true,
+      "error": null
+    },
+    {
+      "raw_name": "Northwind Electrical Component",
+      "entity_type": "ORG",
+      "category": "plural-singular",
+      "expected": "matched",
+      "actual": "matched",
+      "canonical_name": "Northwind Electrical Components",
+      "canonical_type": "ORG",
+      "correct": true,
+      "error": null
+    },
+    {
+      "raw_name": "Halvorsen Grid Servces",
+      "entity_type": "ORG",
+      "category": "typo",
+      "expected": "matched",
+      "actual": "matched",
+      "canonical_name": "Halvorsen Grid Services",
+      "canonical_type": "ORG",
+      "correct": true,
+      "error": null
+    },
+    {
+      "raw_name": "Brightwater Energy Storage, Inc.",
+      "entity_type": "ORG",
+      "category": "legal-suffix",
+      "expected": "matched",
+      "actual": "matched",
+      "canonical_name": "Brightwater Energy Storage",
+      "canonical_type": "ORG",
+      "correct": true,
+      "error": null
+    },
+    {
+      "raw_name": "Coolant Pump Assy",
+      "entity_type": "PRODUCT",
+      "category": "abbreviation",
+      "expected": "matched",
+      "actual": "matched",
+      "canonical_name": "Coolant Pump Assembly",
+      "canonical_type": "PRODUCT",
+      "correct": true,
+      "error": null
+    },
+    {
+      "raw_name": "Brake Caliper Housings",
+      "entity_type": "PRODUCT",
+      "category": "plural-singular",
+      "expected": "matched",
+      "actual": "matched",
+      "canonical_name": "Brake Caliper Housing",
+      "canonical_type": "PRODUCT",
+      "correct": true,
+      "error": null
+    },
+    {
+      "raw_name": "Inverter Module IM 450",
+      "entity_type": "PRODUCT",
+      "category": "punctuation",
+      "expected": "matched",
+      "actual": "matched",
+      "canonical_name": "Inverter Module IM-450",
+      "canonical_type": "PRODUCT",
+      "correct": true,
+      "error": null
+    },
+    {
+      "raw_name": "Volta Drive Units",
+      "entity_type": "PRODUCT",
+      "category": "plural-singular",
+      "expected": "matched",
+      "actual": "matched",
+      "canonical_name": "Volta Drive Unit",
+      "canonical_type": "PRODUCT",
+      "correct": true,
+      "error": null
+    },
+    {
+      "raw_name": "Failure Mode & Effects Analysis",
+      "entity_type": "CONCEPT",
+      "category": "symbol-variant",
+      "expected": "matched",
+      "actual": "matched",
+      "canonical_name": "Failure Mode and Effects Analysis",
+      "canonical_type": "CONCEPT",
+      "correct": true,
+      "error": null
+    },
+    {
+      "raw_name": "IATF",
+      "entity_type": "ORG",
+      "category": "curated-acronym",
+      "expected": "matched",
+      "actual": "matched",
+      "canonical_name": "International Automotive Task Force",
+      "canonical_type": "ORG",
+      "correct": true,
+      "error": null
+    },
+    {
+      "raw_name": "VDA",
+      "entity_type": "ORG",
+      "category": "curated-acronym",
+      "expected": "matched",
+      "actual": "matched",
+      "canonical_name": "Verband der Automobilindustrie",
+      "canonical_type": "ORG",
+      "correct": true,
+      "error": null
+    },
+    {
+      "raw_name": "PPAP",
+      "entity_type": "CONCEPT",
+      "category": "curated-acronym",
+      "expected": "matched",
+      "actual": "matched",
+      "canonical_name": "Production Part Approval Process",
+      "canonical_type": "CONCEPT",
+      "correct": true,
+      "error": null
+    },
+    {
+      "raw_name": "FMEA",
+      "entity_type": "CONCEPT",
+      "category": "uncurated-acronym",
+      "expected": "quarantined",
+      "actual": "quarantined",
+      "canonical_name": "Failure Mode and Effects Analysis",
+      "canonical_type": "CONCEPT",
+      "correct": true,
+      "error": null
+    },
+    {
+      "raw_name": "NEC",
+      "entity_type": "ORG",
+      "category": "uncurated-acronym",
+      "expected": "quarantined",
+      "actual": "quarantined",
+      "canonical_name": "Northwind Electrical Components",
+      "canonical_type": "ORG",
+      "correct": true,
+      "error": null
+    },
+    {
+      "raw_name": "Inverter Module IM-470",
+      "entity_type": "PRODUCT",
+      "category": "near-identifier-distinct",
+      "expected": "new",
+      "actual": "new",
+      "canonical_name": "",
+      "canonical_type": "",
+      "correct": true,
+      "error": null
+    },
+    {
+      "raw_name": "Inverter Module IM-540",
+      "entity_type": "PRODUCT",
+      "category": "near-identifier-distinct",
+      "expected": "new",
+      "actual": "new",
+      "canonical_name": "",
+      "canonical_type": "",
+      "correct": true,
+      "error": null
+    },
+    {
+      "raw_name": "Inverter Module",
+      "entity_type": "PRODUCT",
+      "category": "ambiguous-between-two-variants",
+      "expected": "quarantined",
+      "actual": "quarantined",
+      "canonical_name": "Inverter Module IM-450",
+      "canonical_type": "PRODUCT",
+      "correct": true,
+      "error": null
+    },
+    {
+      "raw_name": "Northwind",
+      "entity_type": "ORG",
+      "category": "ambiguous-between-two-entities",
+      "expected": "quarantined",
+      "actual": "quarantined",
+      "canonical_name": "Northwind Electrical Components",
+      "canonical_type": "ORG",
+      "correct": true,
+      "error": null
+    },
+    {
+      "raw_name": "Northwind Electrical Logistics",
+      "entity_type": "ORG",
+      "category": "ambiguous-between-two-entities",
+      "expected": "quarantined",
+      "actual": "quarantined",
+      "canonical_name": "Northwind Logistics",
+      "canonical_type": "ORG",
+      "correct": true,
+      "error": null
+    },
+    {
+      "raw_name": "Halvorsen Rail Services",
+      "entity_type": "ORG",
+      "category": "shared-tokens-distinct",
+      "expected": "new",
+      "actual": "new",
+      "canonical_name": "",
+      "canonical_type": "",
+      "correct": true,
+      "error": null
+    },
+    {
+      "raw_name": "Brightwater Water Storage",
+      "entity_type": "ORG",
+      "category": "shared-tokens-distinct",
+      "expected": "new",
+      "actual": "new",
+      "canonical_name": "",
+      "canonical_type": "",
+      "correct": true,
+      "error": null
+    },
+    {
+      "raw_name": "Kessler Precision Forgings GmbH",
+      "entity_type": "ORG",
+      "category": "shared-tokens-distinct",
+      "expected": "new",
+      "actual": "new",
+      "canonical_name": "",
+      "canonical_type": "",
+      "correct": true,
+      "error": null
+    },
+    {
+      "raw_name": "Brake Caliper Bracket",
+      "entity_type": "PRODUCT",
+      "category": "shared-tokens-distinct",
+      "expected": "new",
+      "actual": "new",
+      "canonical_name": "",
+      "canonical_type": "",
+      "correct": true,
+      "error": null
+    },
+    {
+      "raw_name": "Coolant Valve Assembly",
+      "entity_type": "PRODUCT",
+      "category": "shared-tokens-distinct",
+      "expected": "new",
+      "actual": "new",
+      "canonical_name": "",
+      "canonical_type": "",
+      "correct": true,
+      "error": null
+    },
+    {
+      "raw_name": "Volta Drive",
+      "entity_type": "ORG",
+      "category": "cross-type",
+      "expected": "new",
+      "actual": "new",
+      "canonical_name": "",
+      "canonical_type": "",
+      "correct": true,
+      "error": null
+    },
+    {
+      "raw_name": "Volta Drive Unit GmbH",
+      "entity_type": "ORG",
+      "category": "cross-type",
+      "expected": "new",
+      "actual": "new",
+      "canonical_name": "",
+      "canonical_type": "",
+      "correct": true,
+      "error": null
+    },
+    {
+      "raw_name": "Ostrava Thermal Coatings",
+      "entity_type": "ORG",
+      "category": "unrelated",
+      "expected": "new",
+      "actual": "new",
+      "canonical_name": "",
+      "canonical_type": "",
+      "correct": true,
+      "error": null
+    },
+    {
+      "raw_name": "Battery Management System",
+      "entity_type": "PRODUCT",
+      "category": "unrelated",
+      "expected": "new",
+      "actual": "new",
+      "canonical_name": "",
+      "canonical_type": "",
+      "correct": true,
+      "error": null
+    }
+  ],
+  "lexical_guards": true,
+  "curated_aliases": 3,
+  "tiers_measured": [
+    "exact",
+    "regulatory-prefix",
+    "romanian-stem",
+    "fuzzy",
+    "lexical-guards",
+    "type-scope",
+    "acronym-review",
+    "containment-review"
+  ],
+  "tiers_not_measured": [
+    "embedding",
+    "cooccurrence-tiebreak"
+  ]
+}

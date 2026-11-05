@@ -184,6 +184,101 @@ def _normalize_ro(text: str) -> str:
     return " ".join(_stem_ro_token(t) for t in _normalize(text).split(" ") if t)
 
 
+# ── Lexical guards for the fuzzy tier ────────────────────────────────────────
+# A character ratio cannot tell "Boeing 737-800" from "Boeing 747-800" or
+# "Halvorsen Grid Services" from "Halvorsen Rail Services": one token differs
+# and the ratio stays above the auto-merge threshold. These guards compare
+# tokens instead. See docs/entity-resolution.md ("Lexical guards").
+
+# Words that carry no identity: connectives and legal-form suffixes.
+_IGNORED_TOKENS = frozenset({
+    "and", "of", "the", "der", "die", "das", "de", "la", "le", "und", "et", "for",
+    "inc", "incorporated", "ltd", "limited", "llc", "gmbh", "ag", "sa", "srl",
+    "plc", "corp", "corporation", "co", "company", "bv", "nv", "kg", "se",
+})
+
+
+def _content_tokens(key: str) -> list[str]:
+    return [t for t in key.split(" ") if t and t not in _IGNORED_TOKENS]
+
+
+def _is_identifier(token: str) -> bool:
+    return any(ch.isdigit() for ch in token)
+
+
+def _is_abbreviation(short: str, long: str) -> bool:
+    """`assy` for `assembly`, `air` for `airlines`: same first letter and the
+    short token's letters appear in order in the long one."""
+    if len(short) < 2 or len(short) >= len(long) or short[0] != long[0]:
+        return False
+    rest = iter(long[1:])
+    return all(ch in rest for ch in short[1:])
+
+
+def _tokens_compatible(a: str, b: str) -> bool:
+    """Could `a` and `b` be the same word written differently?
+
+    Identifier tokens (any digit) must be equal: 450 and 470 are different
+    parts however close the characters are. Words may differ by a typo, a
+    plural or an abbreviation.
+    """
+    if a == b:
+        return True
+    if _is_identifier(a) or _is_identifier(b):
+        return False
+    from rapidfuzz import fuzz
+    from rapidfuzz.distance import DamerauLevenshtein
+    if fuzz.ratio(a, b) >= 80:
+        return True
+    # One adjacent transposition ("siet" for "site") scores only 75; a
+    # one-letter substitution ("rail"/"mail") stays a different word.
+    if sorted(a) == sorted(b) and DamerauLevenshtein.distance(a, b) == 1:
+        return True
+    short, long = (a, b) if len(a) <= len(b) else (b, a)
+    return _is_abbreviation(short, long)
+
+
+def token_conflict(raw_key: str, candidate_key: str) -> str | None:
+    """Return why two normalized names cannot be the same entity, or None.
+
+    A conflict is a substitution: each side has a content token that matches
+    nothing on the other side ("marine" against "air", "450" against "470").
+    One side merely having extra tokens ("Pratt & Whitney Inc.", "Boeing 737"
+    against "Boeing 737-800") is not a conflict; see `token_extra_identifier`.
+    """
+    raw_tokens, candidate_tokens = _content_tokens(raw_key), _content_tokens(candidate_key)
+    raw_left = [t for t in raw_tokens if not any(_tokens_compatible(t, c) for c in candidate_tokens)]
+    candidate_left = [c for c in candidate_tokens if not any(_tokens_compatible(c, t) for t in raw_tokens)]
+    if not raw_left or not candidate_left:
+        return None
+    if any(_is_identifier(t) for t in raw_left + candidate_left):
+        return "identifier_mismatch"
+    return "token_substitution"
+
+
+def token_extra_identifier(raw_key: str, candidate_key: str) -> bool:
+    """True when one side has an identifier token the other lacks: "Boeing
+    737" against "Boeing 737-800" is under-specified, never an auto-merge."""
+    raw_ids = {t for t in _content_tokens(raw_key) if _is_identifier(t)}
+    candidate_ids = {t for t in _content_tokens(candidate_key) if _is_identifier(t)}
+    return raw_ids != candidate_ids
+
+
+def _initials(key: str) -> str:
+    return "".join(t[0] for t in _content_tokens(key) if not _is_identifier(t))
+
+
+def _looks_like_acronym(raw_name: str) -> bool:
+    stripped = raw_name.strip().replace(".", "")
+    return 2 <= len(stripped) <= 6 and stripped.isalpha() and stripped.isupper()
+
+
+def _same_type(entity_type: str | None, candidate_type: str | None) -> bool:
+    if not entity_type or not candidate_type:
+        return True
+    return entity_type.strip().upper() == candidate_type.strip().upper()
+
+
 async def _get_redis():
     """Return an async Redis client, or None when the optional cache is off.
 
@@ -290,6 +385,17 @@ class AliasRegistry:
         self._embedding_tie_margin = ingestion_cfg.get(
             "alias_embedding_tie_margin", 0.01
         )
+        # Token guards, type scoping, acronym and containment review on the
+        # fuzzy tier (see token_conflict). On by default; false restores the
+        # character-ratio-only behaviour without a deploy.
+        self._lexical_guards = ingestion_cfg.get("alias_lexical_guards", True)
+        # Curated aliases ([{alias, canonical, type, tenant?}]) applied in
+        # memory after every load, for names nothing in the text links,
+        # chiefly acronyms. Never creates an entity.
+        self._curated_alias_files = list(ingestion_cfg.get("curated_alias_files") or [])
+        # head token -> keys, initials -> keys; built with the fuzzy index.
+        self._by_head: dict[str, list[str]] = {}
+        self._by_initials: dict[str, list[str]] = {}
 
     async def load(self) -> None:
         """Refresh alias table from Neo4j and push to Redis for cross-worker sharing."""
@@ -324,6 +430,11 @@ class AliasRegistry:
                     self._stemmed.setdefault(_normalize_ro(alias), (cname, ctype))
                     if ctype in _REGULATION_TYPES:
                         self._exact[_normalize_regulatory(alias)] = (cname, ctype)
+        for path in self._curated_alias_files:
+            try:
+                self.apply_curated_aliases(load_curated_aliases(path))
+            except (OSError, ValueError) as exc:
+                log.error("alias_registry.curated_aliases_failed", path=str(path), error=str(exc))
         self._rebuild_fuzzy_index()
         self._loaded = True
         log.info("alias_registry.loaded", tenant=self._tenant, entries=len(self._exact))
@@ -353,7 +464,7 @@ class AliasRegistry:
                 await redis.aclose()
 
     def resolve(
-        self, raw_name: str, *, with_detail: bool = False,
+        self, raw_name: str, *, with_detail: bool = False, entity_type: str | None = None,
     ) -> tuple[str, str] | ResolvedMatch | AmbiguousMatch | None:
         """
         Resolve a raw name to (canonical_name, canonical_type).
@@ -366,6 +477,14 @@ class AliasRegistry:
         graph_writer.py to persist resolution_status/resolution_method.
         Default is unchanged so every other caller (and the 14+ existing
         tests that assert a literal ``(name, type)`` tuple) keeps working.
+
+        ``entity_type`` scopes the fuzzy, acronym and containment steps to
+        candidates of that type; the exact and alias steps are unscoped,
+        since an alias is an explicit statement. With the lexical guards on,
+        a fuzzy candidate with a conflicting token is skipped, one with an
+        extra identifier can only reach review, and a miss is still sent to
+        review when it is an acronym of a known name or names a known
+        entity's head token.
         """
         key = _normalize(raw_name)
 
@@ -414,16 +533,22 @@ class AliasRegistry:
             # docs/IMPLEMENTATION_AUDIT.md's runner-up persistence.
             scored_candidates: list[tuple[float, tuple[str, str]]] = []
             seen_canonical: set[tuple[str, str]] = set()
+            review_only = False
             for stored_key in self._fuzzy_candidates(key, minimum_score=review_min):
                 canonical = self._exact[stored_key]
+                if self._lexical_guards and (
+                    not _same_type(entity_type, canonical[1]) or token_conflict(key, stored_key)
+                ):
+                    continue
                 score = fuzz.ratio(key, stored_key)
                 if score > best_score:
                     best_score = score
                     best_match = canonical
+                    review_only = self._lexical_guards and token_extra_identifier(key, stored_key)
                 if score >= review_min and canonical not in seen_canonical:
                     scored_candidates.append((score, canonical))
                     seen_canonical.add(canonical)
-            if best_score >= self._fuzzy_threshold and best_match:
+            if best_score >= self._fuzzy_threshold and best_match and not review_only:
                 log.debug(
                     "alias_registry.fuzzy_match",
                     raw=raw_name,
@@ -438,7 +563,8 @@ class AliasRegistry:
                 )[:2]
                 return _match(best_match, "fuzzy", float(best_score), runner_ups)
             # Ambiguous band — close but not confident enough to auto-merge
-            if review_min <= best_score < self._fuzzy_threshold and best_match:
+            # (or above the threshold but only under-specified, review_only)
+            if review_min <= best_score and best_match:
                 log.debug(
                     "alias_registry.fuzzy_ambiguous",
                     raw=raw_name,
@@ -456,7 +582,65 @@ class AliasRegistry:
         except ImportError:
             pass  # rapidfuzz not installed — skip fuzzy step
 
+        if self._lexical_guards:
+            return self._review_candidate(raw_name, key, entity_type)
         return None
+
+    def _review_candidate(self, raw_name: str, key: str, entity_type: str | None) -> AmbiguousMatch | None:
+        """A miss that still deserves a reviewer: an acronym whose letters are
+        the initials of known names ("FMEA"), or a name made only of tokens of
+        a known name, including its head ("Northwind", "Inverter Module").
+        Never an automatic merge; the score is 0 because no ratio applies."""
+        self._ensure_token_index()
+        found: list[tuple[str, str]] = []
+        kind = ""
+        if _looks_like_acronym(raw_name):
+            kind = "acronym"
+            found = [self._exact[k] for k in self._by_initials.get(key.replace(" ", ""), ())]
+        else:
+            tokens = _content_tokens(key)
+            if tokens:
+                kind = "containment"
+                for k in self._by_head.get(tokens[0], ()):
+                    candidate_tokens = _content_tokens(k)
+                    if len(candidate_tokens) > len(tokens) and all(t in candidate_tokens for t in tokens):
+                        found.append(self._exact[k])
+        unique: list[tuple[str, str]] = []
+        for pair in found:
+            if pair not in unique and _same_type(entity_type, pair[1]):
+                unique.append(pair)
+        if not unique:
+            return None
+        log.debug("alias_registry.review_candidate", raw=raw_name, kind=kind, candidates=len(unique))
+        return AmbiguousMatch(candidate=unique[0], score=0.0, match_type=kind,
+                              runner_ups=tuple((n, t, 0.0) for n, t in unique[1:3]))
+
+    def apply_curated_aliases(self, entries: list[dict]) -> tuple[int, int]:
+        """Add curated aliases in memory; return (applied, skipped).
+
+        An entry applies only when its canonical (name, type) is already a
+        known entity of this tenant and its tenant, if given, is this one.
+        An alias that already points elsewhere is left alone and skipped.
+        """
+        known = set(self._exact.values())
+        applied = skipped = 0
+        for entry in entries:
+            pair = (entry["canonical"], entry["type"])
+            tenant = entry.get("tenant")
+            key = _normalize(entry["alias"])
+            if (tenant and tenant != self._tenant) or pair not in known or self._exact.get(key, pair) != pair:
+                skipped += 1
+                continue
+            self._exact[key] = pair
+            applied += 1
+        if applied:
+            self._rebuild_fuzzy_index()
+        log.info("alias_registry.curated_aliases", tenant=self._tenant, applied=applied, skipped=skipped)
+        return applied, skipped
+
+    def _ensure_token_index(self) -> None:
+        if self._fuzzy_index_size != len(self._exact):
+            self._rebuild_fuzzy_index()
 
     async def register_alias(
         self,
@@ -514,15 +698,31 @@ class AliasRegistry:
     def _rebuild_fuzzy_index(self) -> None:
         """Build normalized-length buckets after a full alias-table refresh."""
         self._fuzzy_by_length.clear()
+        self._by_head.clear()
+        self._by_initials.clear()
         for key in self._exact:
             self._fuzzy_by_length.setdefault(len(key), []).append(key)
+            self._index_tokens(key)
         self._fuzzy_index_size = len(self._exact)
+
+    def _index_tokens(self, key: str) -> None:
+        tokens = _content_tokens(key)
+        if tokens:
+            bucket = self._by_head.setdefault(tokens[0], [])
+            if key not in bucket:
+                bucket.append(key)
+        initials = _initials(key)
+        if len(initials) >= 2:
+            bucket = self._by_initials.setdefault(initials, [])
+            if key not in bucket:
+                bucket.append(key)
 
     def _index_fuzzy_key(self, key: str) -> None:
         """Add a newly registered key without rebuilding the whole index."""
         bucket = self._fuzzy_by_length.setdefault(len(key), [])
         if key not in bucket:
             bucket.append(key)
+        self._index_tokens(key)
         self._fuzzy_index_size = len(self._exact)
 
     def _fuzzy_candidates(self, key: str, minimum_score: float) -> list[str]:
@@ -743,6 +943,25 @@ class AliasRegistry:
 # One AliasRegistry instance per tenant — entity identity is tenant-scoped.
 
 _registries: dict[str, AliasRegistry] = {}
+
+
+def load_curated_aliases(path) -> list[dict]:
+    """Read a curated alias file: YAML or JSON, a list of
+    ``{alias, canonical, type, tenant?}`` or ``{"aliases": [...]}``."""
+    from pathlib import Path
+    import json
+    import yaml
+
+    text = Path(path).read_text(encoding="utf-8")
+    data = json.loads(text) if str(path).endswith(".json") else yaml.safe_load(text)
+    entries = data.get("aliases", []) if isinstance(data, dict) else data
+    if not isinstance(entries, list):
+        raise ValueError(f"{path}: expected a list of aliases")
+    for index, entry in enumerate(entries):
+        if not isinstance(entry, dict) or not all(isinstance(entry.get(f), str) and entry.get(f)
+                                                  for f in ("alias", "canonical", "type")):
+            raise ValueError(f"{path}: entry {index} needs alias, canonical and type")
+    return entries
 
 
 def get_alias_registry(neo4j_client=None, tenant: str = "default") -> AliasRegistry:

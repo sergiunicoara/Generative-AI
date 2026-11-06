@@ -20,9 +20,36 @@ class WriteQueryRejected(ValueError):
     pass
 
 
+# One left-to-right pass: whichever token starts first owns its text. Two
+# independent passes (comments, then strings) let each hide what the other
+# should have seen: a ``//`` inside a string is not a comment, a ``'`` inside a
+# backtick identifier or after a backslash neither starts nor ends a string.
+# An unterminated literal or comment matches nothing, so its text stays visible
+# to the keyword scan (the engine rejects it anyway; the guard must not call it safe).
+_CYPHER_TOKEN_RE = re.compile(
+    r"(?P<block>/\*.*?\*/)"
+    r"|(?P<line>//[^\n\r]*)"
+    r"|(?P<sq>'(?:[^'\\]|\\.)*')"
+    r"|(?P<dq>\"(?:[^\"\\]|\\.)*\")"
+    r"|(?P<bt>`(?:[^`]|``)*`)",
+    re.DOTALL,
+)
+
+
+def _blank_literals_and_comments(cypher: str) -> str:
+    def blank(match: re.Match) -> str:
+        kind = match.lastgroup
+        if kind in ("block", "line"):
+            return " "  # a comment is whitespace to the engine: it must not glue words together
+        if kind == "bt":
+            return "``"
+        return "''"
+
+    return _CYPHER_TOKEN_RE.sub(blank, cypher)
+
+
 def assert_read_only(cypher: str) -> None:
-    stripped = re.sub(r"//[^\n]*", "", cypher)
-    stripped = re.sub(r"'[^']*'|\"[^\"]*\"", "''", stripped)
+    stripped = _blank_literals_and_comments(cypher)
     m = _WRITE_CLAUSE.search(stripped)
     if m:
         raise WriteQueryRejected(f"validation query contains a write/procedure clause: {m.group(0)!r}")

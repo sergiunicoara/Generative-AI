@@ -43,6 +43,7 @@ Integration:
 from __future__ import annotations
 
 import re
+from collections.abc import Iterable
 from dataclasses import dataclass
 
 import structlog
@@ -108,16 +109,23 @@ class PIIGuard:
 
     # ── Text scanning ──────────────────────────────────────────────────────────
 
-    def scan_text(self, text: str) -> list[PIIFinding]:
+    def scan_text(self, text: str, *, classes: Iterable[str] | None = None) -> list[PIIFinding]:
         """
         Return all PII findings above the confidence threshold.
 
         Results are de-overlapped: if two patterns match the same span,
-        the higher-confidence one wins.
+        the higher-confidence one wins.  ``classes`` restricts the scan to those
+        PII classes *before* de-overlap.  Filtering the result afterwards is not
+        equivalent: an unwanted class can win a span (a date followed by a phone
+        number reads as one credit-card-like digit run) and hide the wanted
+        finding inside it.
         """
+        wanted = None if classes is None else frozenset(classes)
         findings: list[PIIFinding] = []
         for pii_class, pattern, confidence in _PATTERNS:
             if confidence < self._min_confidence:
+                continue
+            if wanted is not None and pii_class not in wanted:
                 continue
             for match in pattern.finditer(text):
                 findings.append(PIIFinding(

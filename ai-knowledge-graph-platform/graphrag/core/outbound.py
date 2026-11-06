@@ -102,7 +102,10 @@ def policy_for(tenant: str) -> OutboundPolicy:
 def _redact(text: str, classes: tuple[str, ...]) -> tuple[str, dict[str, int]]:
     from graphrag.graph.pii_guard import PIIGuard
 
-    findings = [f for f in PIIGuard(None, min_confidence=0.0).scan_text(text) if f.pii_class in classes]
+    # Restrict the scan to the tenant's classes before de-overlap: filtering afterwards
+    # lets an unselected class (a card-like digit run) win a span and hide a phone
+    # number or SSN that follows a date, so the value would leave unredacted.
+    findings = PIIGuard(None, min_confidence=0.0).scan_text(text, classes=classes)
     counts: dict[str, int] = {}
     for finding in sorted(findings, key=lambda f: f.start, reverse=True):
         text = text[:finding.start] + f"[{finding.pii_class}_REDACTED]" + text[finding.end:]

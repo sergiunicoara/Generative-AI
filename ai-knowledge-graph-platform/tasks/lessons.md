@@ -6471,3 +6471,33 @@ uniqueness constraint once another test had run first. Seed with a per-run or pe
 * `ontology.domain_ontology_path` defaults to empty, so the general ontology rejects most aerospace relations
   (34 edges kept from 315 on a fresh graph, same on the pre-change commit). A golden-eval run on that graph exercises
   graph-dependent questions only lightly; state that next to any pass rate.
+
+## A183 - The SPARQL keyword guard: a lexer in one pass, and the escapes the engine expands first
+
+`graphrag/graph/sparql_bridge.py` (`_reject_unsafe_sparql`, `_reject_unsafe_update`) still had two bypasses after
+the 2026-09-12 fix (`42737e4`, which only reordered strings before comments):
+
+* **`\u` escapes (confirmed, engine-valid).** SPARQL 1.1 section 19.2 expands code-point escapes over the whole
+  text before tokenizing, and rdflib does it (`expandUnicodeEscapes`). The guard scanned the raw text, so an
+  escaped spelling of SERVICE or LOAD (backslash-u0053 then ERVICE) passed both guards while rdflib parsed it as a
+  SERVICE graph pattern. The guard now expands escapes first with the same pattern and semantics as rdflib's
+  (4 or 8 hex digits, any case, no awareness of a preceding backslash).
+* **`#` inside an IRI.** Comments were still stripped without knowing about IRIs, so `<http://ex/a#b> ... SERVICE
+  <...>` lost its SERVICE from the scanned copy. rdflib 7.6 itself refuses a SERVICE that follows a hash sign on the
+  same line (in an IRI or a string), so this one is not executable on the local engine, but remote stores
+  (`graphrag/graph/triplestore.py`) and other rdflib versions run the same text, so the guard must not rely on it.
+
+**Fix:** one left-to-right token regex (long string, short string, IRIREF, comment, variable); the token that starts
+first wins, so a hash inside a string or IRI can never start a comment. IRIs protect a hash in both guards but are
+reduced to `<>` only in the update guard; the query guard still refuses a keyword inside an IRI (a false positive,
+never a false negative, if lexer and engine disagree). IRIREF uses the grammar's own excluded characters, so the
+less-than operator is not swallowed.
+
+**Rules:** (1) a text-level guard must scan what the engine scans, so apply the engine's own pre-tokenizing steps
+first. (2) Applying one regex per lexical state in turn is what kept failing; use a single alternation. (3) Add a
+differential test that asks the real parser (`parseQuery`/`parseUpdate`) whether a SERVICE or LOAD is present, and
+assert that every corpus entry really parses, or a payload the engine refuses proves nothing. (4) When writing
+tests that contain backslash-u escapes, build the backslash at runtime: the editing tool expanded the lowercase
+sequences into characters, so the tests silently stopped testing escapes and "passed" for the wrong reason. Verified
+here by running the new tests against the committed guard (15 fail) and against the fix (47 pass); the related
+unit tests (1,129) pass; every `.rq` file in the repo still passes the query guard.

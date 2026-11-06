@@ -61,43 +61,94 @@ _ALLOWED_UPDATE_FORMS = ("INSERT", "DELETE", "CLEAR", "DROP",
 # nothing to do with mutating the local graph.
 _FORBIDDEN_UPDATE = ("SERVICE", "LOAD")
 
-_COMMENT_RE = re.compile(r"#[^\n]*")
-# Triple-quoted (SPARQL "long string") literals, blanked before the short-string
-# pattern below: they may legitimately span multiple lines and contain a lone
-# `"`/`'` or an unescaped `#`, either of which would otherwise confuse the
-# short-string pattern or get misread as a comment by _COMMENT_RE.
-_LONG_STRING_RE = re.compile(
-    r'"""(?:[^"\\]|\\.|"{1,2}(?!"))*"""|\'\'\'(?:[^\'\\]|\\.|\'{1,2}(?!\'))*\'\'\''
+# SPARQL 1.1 section 19.2: backslash-u (4 hex digits) and backslash-U (8 hex
+# digits) code-point escapes are expanded over the WHOLE query text before
+# tokenizing, so an escaped spelling of SERVICE (backslash-u0053 then ERVICE) IS
+# the keyword SERVICE. rdflib does exactly that
+# (rdflib.plugins.sparql.parser.expandUnicodeEscapes),
+# so the guard must scan the expanded text or an escaped keyword is invisible to
+# it. Same pattern and semantics as rdflib's: 4 hex digits, optionally 8, any
+# case, and no awareness of a preceding backslash. The backslash is built at
+# runtime so no editor or tool can pre-expand the sequences in this comment.
+_BACKSLASH = chr(92)
+_UNICODE_ESCAPE_RE = re.compile(
+    re.escape(_BACKSLASH) + r"u([0-9a-f]{4}(?:[0-9a-f]{4})?)", re.IGNORECASE
 )
-_STRING_RE  = re.compile(r'"(?:[^"\\]|\\.)*"|\'(?:[^\'\\]|\\.)*\'')
-# An IRI may legitimately contain a keyword (<http://ex/DELETE>); a variable may
-# legitimately be named ?ADD. Neither is a SPARQL keyword occurrence, so both are
-# blanked before the update guard scans for one.
-_IRI_RE     = re.compile(r"<[^<>\s]*>")
-_VAR_RE     = re.compile(r"[?$][A-Za-z_][A-Za-z0-9_]*")
+
+# One left-to-right lexer for every state in which text is NOT SPARQL keywords:
+# long strings, short strings, IRIs, comments and variable names. A single
+# alternation (instead of one regex per state applied in turn) is the point: the
+# token that STARTS first wins, so a ``#`` inside a string or an IRI is part of
+# that token and can never begin a comment, whatever order the states appear in.
+# Applying the states one after another is exactly what produced two bypasses
+# (comments before strings; then IRIs not known to the comment stripper).
+_SPARQL_TOKEN_RE = re.compile(
+    # triple-quoted "long strings": may span lines and hold lone quotes or '#'
+    r'(?P<long>"""(?:[^"\\]|\\.|"{1,2}(?!"))*"""|\'\'\'(?:[^\'\\]|\\.|\'{1,2}(?!\'))*\'\'\')'
+    # short strings: the grammar forbids raw CR/LF inside them
+    r'|(?P<string>"(?:[^"\\\n\r]|\\.)*"|\'(?:[^\'\\\n\r]|\\.)*\')'
+    # IRIREF, exactly the characters the grammar allows (no whitespace, no
+    # < > " { } | ^ ` or backslash), so the less-than operator and a ``<`` that
+    # is followed by whitespace or a brace are never swallowed as an IRI
+    r'|(?P<iri><[^<>"{}|^`\\\x00-\x20]*>)'
+    # a comment runs to the end of the line
+    r'|(?P<comment>#[^\n\r]*)'
+    # a variable may legitimately be named ?ADD
+    r'|(?P<var>[?$][A-Za-z_][A-Za-z0-9_]*)'
+)
 
 
-def _blank_strings_and_comments(sparql: str) -> str:
-    """Neutralize string and comment content before any keyword scan.
+def _expand_unicode_escapes(sparql: str) -> str:
+    """Expand code-point escapes the way the SPARQL grammar (and rdflib) does.
 
-    Strings are blanked *before* comments are stripped -- order matters. A
-    ``#`` genuinely inside a string literal (``"Room #101"``) is ordinary
-    SPARQL, not a comment. Stripping comments first (the original order)
-    treated everything after that ``#`` as a comment running to end of
-    line, which silently deleted a real forbidden clause placed later on
-    the same line -- e.g. ``"Room #101" . SERVICE <http://169.254.169.254/>
-    {?a ?b ?c}`` -- from the scanned copy while leaving it fully intact in
-    the query actually handed to rdflib. Confirmed live as a working
-    SSRF/write bypass past both guards below before this fix, not a
-    hypothetical; see tests/unit/test_sparql_injection_adversarial.py.
-
-    Long (triple-quoted) strings are blanked first, ahead of short strings,
-    for the same reason: they may themselves legitimately contain a ``#``
-    or a lone quote character that would otherwise be misread.
+    An escape naming an invalid code point makes the engine refuse the query, so
+    the guard refuses it too.
     """
-    without_long_strings = _LONG_STRING_RE.sub('""', sparql)
-    without_strings = _STRING_RE.sub('""', without_long_strings)
-    return _COMMENT_RE.sub("", without_strings)
+
+    def expand(match: re.Match) -> str:
+        try:
+            return chr(int(match.group(1), 16))
+        except (ValueError, OverflowError) as exc:
+            raise ValueError("Invalid unicode escape in SPARQL query") from exc
+
+    return _UNICODE_ESCAPE_RE.sub(expand, sparql)
+
+
+def _blank_strings_and_comments(
+    sparql: str, *, blank_iris: bool = False, blank_vars: bool = False
+) -> str:
+    """Return the text a keyword scan should look at.
+
+    Escapes are expanded first (see ``_UNICODE_ESCAPE_RE``), then strings are
+    reduced to ``""`` and comments removed in a single lexer pass
+    (``_SPARQL_TOKEN_RE``). IRIs always *protect* a ``#`` inside them from being
+    read as a comment; they are additionally reduced to ``<>`` only when
+    ``blank_iris`` is set (the update guard), and variables to ``?v`` only when
+    ``blank_vars`` is set. The query guard leaves IRI text visible, so a keyword
+    inside an IRI is still refused there: a false positive, never a false
+    negative, if the lexer and the engine ever disagree about where an IRI ends.
+
+    History, because the order of states is what keeps going wrong. (1) Comments
+    were once stripped before strings, so a ``#`` inside ``"Room #101"`` hid a
+    real ``SERVICE``/``LOAD`` later on the line from the scan while rdflib still
+    executed it. Fixed by blanking strings first. (2) That still stripped
+    comments without knowing about IRIs, so ``<http://ex/a#b> ?p ?o SERVICE
+    <http://169.254.169.254/> {?a ?b ?c}`` hid its SERVICE the same way; and
+    (3) an escaped spelling such as ``\\u0053ERVICE`` was never seen at all. See
+    tests/unit/test_sparql_injection_adversarial.py.
+    """
+
+    def blank(match: re.Match) -> str:
+        kind = match.lastgroup
+        if kind in ("long", "string"):
+            return '""'
+        if kind == "comment":
+            return ""
+        if kind == "iri":
+            return "<>" if blank_iris else match.group(0)
+        return "?v" if blank_vars else match.group(0)
+
+    return _SPARQL_TOKEN_RE.sub(blank, _expand_unicode_escapes(sparql))
 
 
 def _reject_unsafe_sparql(sparql: str) -> None:
@@ -128,9 +179,7 @@ def _reject_unsafe_update(sparql: str) -> None:
     ``INSERT DATA { <a> <b> <http://ex/SERVICE> }`` from being misread as
     federation, while a bare ``SERVICE`` clause is still caught.
     """
-    stripped = _blank_strings_and_comments(sparql)
-    stripped = _IRI_RE.sub("<>", stripped)
-    stripped = _VAR_RE.sub("?v", stripped)
+    stripped = _blank_strings_and_comments(sparql, blank_iris=True, blank_vars=True)
     upper = stripped.upper()
 
     if not any(re.search(rf"\b{form}\b", upper) for form in _ALLOWED_UPDATE_FORMS):

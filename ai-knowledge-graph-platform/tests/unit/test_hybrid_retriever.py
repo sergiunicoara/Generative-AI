@@ -229,6 +229,43 @@ class TestNegativeClassTopKWiring:
         assert "rerank_top_k" not in kwargs["config_overrides"]
 
 
+class TestAgenticFallbackOverride:
+    """``config_overrides={"agentic_fallback": False}`` (the ablation's --no-agentic-fallback)."""
+
+    QUESTION = "Explain the full compliance chain across steps."
+
+    async def _run(self, config_overrides: dict | None):
+        hr = _make_hybrid_retriever({
+            "query_planner_enabled": True,
+            "adaptive_router_enabled": False,
+            "agentic_fallback": True,
+        })
+        hr._global.search = AsyncMock(return_value={})
+        hr._agentic.retrieve_and_answer = AsyncMock(return_value=QueryResult(
+            question=self.QUESTION, answer="agentic answer", citations=["FAA-AD-2024-01-02"],
+            retrieval_mode="agentic",
+        ))
+        hr._record_context_trace = AsyncMock(return_value=None)
+        neo4j = MagicMock()
+        neo4j.get_document_filenames = AsyncMock(return_value=[])
+        with patch("graphrag.retrieval.hybrid_retriever.get_neo4j", return_value=neo4j):
+            result = await hr.retrieve_and_answer(
+                self.QUESTION, mode="hybrid", config_overrides=config_overrides)
+        return hr, result
+
+    async def test_without_the_override_the_same_query_does_fall_back(self) -> None:
+        """Control: proves the setup really reaches the agentic path."""
+        hr, result = await self._run(None)
+        hr._agentic.retrieve_and_answer.assert_awaited_once()
+        assert result.retrieval_mode == "agentic"
+
+    async def test_override_keeps_the_query_off_the_agentic_path(self) -> None:
+        hr, result = await self._run({"agentic_fallback": False})
+        hr._agentic.retrieve_and_answer.assert_not_awaited()
+        assert result.retrieval_mode != "agentic"
+        assert result.explanation["fallback"] == {"triggered": False, "reason": None}
+
+
 class TestPlannedAgenticFallback:
     async def test_multi_hop_plan_falls_back_when_global_has_no_chunk_evidence(self) -> None:
         """An incidental global citation must not suppress the planned IRCoT path."""

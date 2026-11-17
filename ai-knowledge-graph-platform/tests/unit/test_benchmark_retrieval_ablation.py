@@ -142,3 +142,44 @@ def test_unknown_profile_is_rejected_before_anything_runs(monkeypatch):
     monkeypatch.setattr(sys, "argv", ["x", "--tenant", "aerospace", "--profiles", "nope", "--dry-run"])
     with pytest.raises(Exception):
         ablation.main()
+
+
+def _run_with_flags(monkeypatch, tmp_path, extra: list[str]) -> list[dict]:
+    """Drive the real _run_profile with a fake retriever; return the kwargs it received."""
+    calls: list[dict] = []
+
+    class FakeRetriever:
+        async def retrieve_and_answer(self, question, **kwargs):
+            calls.append(kwargs)
+            return _result()
+
+    monkeypatch.setattr(ablation, "HybridRetriever", FakeRetriever)
+    monkeypatch.setattr(sys, "argv", ["x", "--tenant", "aerospace", "--profiles", "vector_only"] + extra)
+    args = SimpleNamespace(tenant="aerospace", mode="local")
+    overrides = {"agentic_fallback": False} if "--no-agentic-fallback" in extra else {}
+    report = asyncio.run(ablation._run_profile(
+        [QUESTION], args, {"version": "2.3"}, None, {}, "vector_only", overrides, True))
+    assert report["run"]["config_overrides"] == overrides
+    return calls
+
+
+def test_no_agentic_fallback_flag_reaches_the_retriever_and_the_result_file(monkeypatch, tmp_path):
+    (call,) = _run_with_flags(monkeypatch, tmp_path, ["--no-agentic-fallback"])
+    assert call["config_overrides"] == {"agentic_fallback": False}
+    assert call["retrieval_profile"] == "vector_only"
+    (call,) = _run_with_flags(monkeypatch, tmp_path, [])
+    assert call["config_overrides"] is None
+
+
+def test_main_turns_the_flag_into_the_override(monkeypatch):
+    """main() itself must build {"agentic_fallback": False} from --no-agentic-fallback."""
+    seen = {}
+
+    async def fake_run_all(questions, args, golden, profiles, config_overrides, pinned):
+        seen["overrides"] = config_overrides
+
+    monkeypatch.setattr(ablation, "_run_all", fake_run_all)
+    for flags, expected in ((["--no-agentic-fallback"], {"agentic_fallback": False}), ([], {})):
+        monkeypatch.setattr(sys, "argv", ["x", "--tenant", "aerospace", "--profiles", "full"] + flags)
+        ablation.main()
+        assert seen["overrides"] == expected

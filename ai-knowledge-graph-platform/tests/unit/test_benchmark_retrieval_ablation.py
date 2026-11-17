@@ -183,3 +183,46 @@ def test_main_turns_the_flag_into_the_override(monkeypatch):
         monkeypatch.setattr(sys, "argv", ["x", "--tenant", "aerospace", "--profiles", "full"] + flags)
         ablation.main()
         assert seen["overrides"] == expected
+
+
+def _utc(text: str):
+    from datetime import datetime, timezone
+    return datetime.fromisoformat(text).replace(tzinfo=timezone.utc)
+
+
+@pytest.mark.parametrize("when, peak", [
+    ("2026-11-17T01:00:00", True),    # Tuesday, first peak hour
+    ("2026-11-17T03:59:00", True),
+    ("2026-11-17T04:00:00", False),   # window is [start, end)
+    ("2026-11-17T06:00:00", True),
+    ("2026-11-17T09:59:00", True),
+    ("2026-11-17T10:00:00", False),
+    ("2026-11-17T13:43:00", False),   # the evaluation runs started off-peak
+    ("2026-11-21T07:00:00", False),   # Saturday: no peak pricing
+    ("2026-11-22T02:00:00", False),   # Sunday
+])
+def test_deepseek_peak_windows_are_utc_weekday_only(when, peak):
+    assert run_metadata.deepseek_peak(_utc(when)) is peak
+
+
+def test_peak_windows_are_reported_in_bucharest_time_with_dst():
+    assert run_metadata.deepseek_peak_windows_bucharest(_utc("2026-11-17T12:00:00")) == ["03:00-06:00", "08:00-12:00"]
+    assert run_metadata.deepseek_peak_windows_bucharest(_utc("2026-07-15T12:00:00")) == ["04:00-07:00", "09:00-13:00"]
+    window = run_metadata.deepseek_pricing_window(_utc("2026-11-17T13:43:00"))
+    assert window["now_bucharest"] == "2026-11-17 15:43 EET" and window["peak_now"] is False
+    assert window["peak_multiplier"] == 2.0 and window["peak_days"] == "Mon-Fri"
+
+
+def test_run_metadata_records_the_start_time_in_bucharest_and_the_peak_flag():
+    meta = run_metadata.collect_run_metadata(
+        tenant="aerospace", profile="full", profile_overrides={}, mode="local", config_overrides={},
+        pinned=True, models={}, golden={})
+    assert meta["timestamp_bucharest"].endswith(("+02:00", "+03:00"))
+    assert isinstance(meta["deepseek_peak_at_start"], bool)
+
+
+def test_dry_run_reports_the_pricing_window(capsys, monkeypatch):
+    monkeypatch.setattr(sys, "argv", ["x", "--tenant", "aerospace", "--profiles", "full", "--dry-run"])
+    ablation.main()
+    window = json.loads(capsys.readouterr().out)["deepseek_pricing_window"]
+    assert len(window["peak_windows_bucharest"]) == 2 and isinstance(window["peak_now"], bool)

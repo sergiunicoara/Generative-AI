@@ -60,7 +60,10 @@ class RagasEvaluator:
                     raise EvaluationError("EVAL_JUDGE_PROVIDER=deepseek requires DEEPSEEK_API_KEY")
                 from langchain_openai import ChatOpenAI
                 return ChatOpenAI(model="deepseek-v4-flash", api_key=cfg.deepseek_api_key,
-                                  base_url="https://api.deepseek.com", temperature=0.0)
+                                  base_url="https://api.deepseek.com", temperature=0.0,
+                                  # Hard HTTP bound: without it a stalled connection can hang a
+                                  # whole run (the asyncio timeout above cannot cancel the thread).
+                                  timeout=45, max_retries=1)
             if provider == "groq":
                 if not cfg.groq_api_key:
                     raise EvaluationError("EVAL_JUDGE_PROVIDER=groq requires GROQ_API_KEY")

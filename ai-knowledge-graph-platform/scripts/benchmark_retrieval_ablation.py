@@ -43,6 +43,7 @@ sys.path.insert(0, str(ROOT))
 from graphrag.evaluation.run_metadata import (  # noqa: E402
     agentic_fallback,
     collect_run_metadata,
+    deepseek_pricing_window,
     golden_set_info,
     percentile,
     retrieval_latency_ms,
@@ -281,12 +282,20 @@ def main() -> None:
     for profile in args.profiles:
         retrieval_profile_overrides(profile)
     golden = golden_set_info(golden_path, payload, len(questions))
+    pricing_window = deepseek_pricing_window()
+    if pricing_window["peak_now"] and not args.skip_faithfulness and not args.dry_run:
+        print(
+            f"WARNING: DeepSeek peak hours ({pricing_window['peak_multiplier']:g}x price). Now "
+            f"{pricing_window['now_bucharest']}; today's peak windows in Bucharest time: "
+            f"{', '.join(pricing_window['peak_windows_bucharest'])} (Mon-Fri). "
+            "Cheaper outside them, or use --skip-faithfulness.", file=sys.stderr)
     config_overrides = {"agentic_fallback": False} if args.no_agentic_fallback else {}
 
     if args.dry_run:
         print(json.dumps({
             "pinned_models": pinned, "models": _planned_models(), "golden_set": golden,
             "config_overrides": config_overrides, "skip_faithfulness": args.skip_faithfulness,
+            "deepseek_pricing_window": pricing_window,
             "profiles": {profile: retrieval_profile_overrides(profile) for profile in args.profiles},
             "output_dir": str(args.output_dir), "cache": "disabled (no query ID)",
         }, indent=2))

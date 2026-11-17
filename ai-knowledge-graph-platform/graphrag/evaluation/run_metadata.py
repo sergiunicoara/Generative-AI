@@ -10,13 +10,20 @@ from __future__ import annotations
 import hashlib
 import subprocess
 import sys
-from datetime import datetime, timezone
+from datetime import date, datetime, time, timezone
 from importlib import metadata as importlib_metadata
 from pathlib import Path
 from typing import Any
+from zoneinfo import ZoneInfo
 
 ROOT = Path(__file__).resolve().parents[2]
 SCHEMA_VERSION = "ablation-run/1"
+
+BUCHAREST = ZoneInfo("Europe/Bucharest")  # EET (UTC+2) in winter, EEST (UTC+3) in summer
+# DeepSeek bills 2x during these UTC windows, Monday to Friday (same rule as
+# graphrag/observability/pricing.py: PEAK_MULTIPLIER). Hours are [start, end).
+DEEPSEEK_PEAK_UTC = ((1, 4), (6, 10))
+DEEPSEEK_PEAK_MULTIPLIER = 2.0
 
 
 def _git(*args: str) -> str | None:
@@ -56,13 +63,47 @@ def golden_set_info(path: Path, payload: dict, n_questions: int) -> dict[str, An
     }
 
 
+def _utc(now: datetime | None) -> datetime:
+    return (now or datetime.now(timezone.utc)).astimezone(timezone.utc)
+
+
+def deepseek_peak(now: datetime | None = None) -> bool:
+    """True when DeepSeek bills at the peak (2x) rate at ``now`` (default: current time)."""
+    moment = _utc(now)
+    return moment.weekday() < 5 and any(start <= moment.hour < end for start, end in DEEPSEEK_PEAK_UTC)
+
+
+def deepseek_peak_windows_bucharest(day: date | datetime | None = None) -> list[str]:
+    """The peak windows of ``day`` as ``HH:MM-HH:MM`` in Bucharest time (DST-aware)."""
+    on = day.date() if isinstance(day, datetime) else (day or _utc(None).date())
+    return [
+        f"{datetime.combine(on, time(start), tzinfo=timezone.utc).astimezone(BUCHAREST):%H:%M}-"
+        f"{datetime.combine(on, time(end), tzinfo=timezone.utc).astimezone(BUCHAREST):%H:%M}"
+        for start, end in DEEPSEEK_PEAK_UTC
+    ]
+
+
+def deepseek_pricing_window(now: datetime | None = None) -> dict[str, Any]:
+    moment = _utc(now)
+    return {
+        "peak_now": deepseek_peak(moment),
+        "now_bucharest": moment.astimezone(BUCHAREST).strftime("%Y-%m-%d %H:%M %Z"),
+        "peak_windows_bucharest": deepseek_peak_windows_bucharest(moment),
+        "peak_days": "Mon-Fri",
+        "peak_multiplier": DEEPSEEK_PEAK_MULTIPLIER,
+    }
+
+
 def collect_run_metadata(
     *, tenant: str, profile: str, profile_overrides: dict, mode: str,
     config_overrides: dict, models: dict, golden: dict, pinned: bool,
 ) -> dict[str, Any]:
+    now = datetime.now(timezone.utc)
     return {
         "schema_version": SCHEMA_VERSION,
-        "timestamp": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+        "timestamp": now.isoformat(timespec="seconds"),
+        "timestamp_bucharest": now.astimezone(BUCHAREST).isoformat(timespec="seconds"),
+        "deepseek_peak_at_start": deepseek_peak(now),
         "git": git_commit(),
         "tenant": tenant,
         "retrieval_profile": profile,

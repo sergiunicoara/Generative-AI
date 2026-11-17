@@ -667,6 +667,24 @@ class FallbackLLM(BaseLLM):
         )
 
     @classmethod
+    def pinned_deepseek(cls, cfg, model: str | None = None) -> "FallbackLLM":
+        """DeepSeek only, no secondary: evaluation runs with ``EVAL_GENERATOR_PROVIDER=deepseek``.
+
+        Same contract as ``pinned_groq``: errors surface instead of switching provider.
+        """
+        if not (getattr(cfg, "deepseek_api_key", "") or ""):
+            raise RuntimeError(
+                "EVAL_GENERATOR_PROVIDER=deepseek requires DEEPSEEK_API_KEY: evaluation runs "
+                "use one provider only and never fall back to another"
+            )
+        return cls(
+            primary=DeepSeekLLM(api_key=cfg.deepseek_api_key, default_model=model or DeepSeekLLM._DEFAULT_MODEL),
+            primary_name="deepseek",
+            secondary=NoFallbackLLM(),
+            fallback_exceptions=(),
+        )
+
+    @classmethod
     def groq_primary(cls, cfg, model: str | None = None) -> "FallbackLLM":
         """Groq primary (~280 tok/s, fail-fast) -> DeepSeek on rate-limit/timeout,
         with OpenRouter as a third hop if ``cfg.openrouter_api_key`` is set.
@@ -826,6 +844,8 @@ def get_generation_route() -> dict[str, str]:
     deepseek = f"deepseek:{DeepSeekLLM._DEFAULT_MODEL}"
     groq = f"groq:{cfg.groq_model}"
     if getattr(cfg, "eval_pinned_models", False) is True:
+        if getattr(cfg, "eval_generator_provider", "groq") == "deepseek":
+            return {"primary": deepseek, "fallback": "none (EVAL_PINNED_MODELS)", "agentic_fast": deepseek}
         return {
             "primary": groq,
             "fallback": "none (EVAL_PINNED_MODELS)",
@@ -872,7 +892,9 @@ def get_llm() -> BaseLLM:
     if _llm is None:
         from graphrag.core.config import get_settings
         cfg = get_settings()
-        if getattr(cfg, "eval_pinned_models", False) is True:
+        if getattr(cfg, "eval_pinned_models", False) is True and                 getattr(cfg, "eval_generator_provider", "groq") == "deepseek":
+            _llm = FallbackLLM.pinned_deepseek(cfg)
+        elif getattr(cfg, "eval_pinned_models", False) is True:
             if cfg.llm_ingest_provider not in ("", "groq"):
                 raise RuntimeError(
                     f"EVAL_PINNED_MODELS=1 conflicts with LLM_INGEST_PROVIDER="
@@ -909,11 +931,14 @@ def get_fast_llm() -> FallbackLLM:
     if _fast_llm is None:
         from graphrag.core.config import get_settings
         cfg = get_settings()
-        _fast_llm = (
-            FallbackLLM.pinned_groq(cfg, model=cfg.groq_fast_model)
-            if getattr(cfg, "eval_pinned_models", False) is True
-            else FallbackLLM.groq_primary(cfg, model=cfg.groq_fast_model)
-        )
+        pinned = getattr(cfg, "eval_pinned_models", False) is True
+        if pinned and getattr(cfg, "eval_generator_provider", "groq") == "deepseek":
+            _fast_llm = FallbackLLM.pinned_deepseek(cfg)  # one model for generator and router
+        else:
+            _fast_llm = (
+                FallbackLLM.pinned_groq(cfg, model=cfg.groq_fast_model) if pinned
+                else FallbackLLM.groq_primary(cfg, model=cfg.groq_fast_model)
+            )
     return _fast_llm
 
 

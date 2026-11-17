@@ -113,3 +113,33 @@ def test_pinned_judge_never_falls_through_to_another_provider():
 def test_unpinned_judge_keeps_the_fallback_order():
     evaluator = _judge(_eval_cfg(eval_pinned_models=False))
     assert evaluator.judge_info["provider"] == "deepseek"  # DeepSeek first, as before
+
+
+# ── DeepSeek generator (EVAL_GENERATOR_PROVIDER=deepseek) ───────────────────────
+
+def test_pinned_deepseek_generator_and_router_are_one_model_with_no_secondary():
+    with patch("graphrag.core.config.get_settings", return_value=_cfg(eval_generator_provider="deepseek")):
+        generator, router = get_llm(), get_fast_llm()
+        route = get_generation_route()
+    for llm in (generator, router):
+        assert isinstance(llm._secondary, NoFallbackLLM) and llm._fallback_exceptions == ()
+        assert llm._primary._default_model == "deepseek-v4-flash"
+    assert route == {"primary": "deepseek:deepseek-v4-flash", "fallback": "none (EVAL_PINNED_MODELS)",
+                     "agentic_fast": "deepseek:deepseek-v4-flash"}
+
+
+def test_pinned_deepseek_without_a_key_fails_loudly_and_ignores_a_stale_ingest_provider():
+    with patch("graphrag.core.config.get_settings",
+               return_value=_cfg(eval_generator_provider="deepseek", deepseek_api_key="")):
+        with pytest.raises(RuntimeError, match="DEEPSEEK_API_KEY"):
+            get_llm()
+    llm_client_module._llm = None
+    with patch("graphrag.core.config.get_settings",
+               return_value=_cfg(eval_generator_provider="deepseek", llm_ingest_provider="groq")):
+        assert get_llm()._primary._default_model == "deepseek-v4-flash"
+
+
+def test_generator_provider_defaults_to_groq():
+    from graphrag.core.config import Settings
+
+    assert Settings.model_fields["eval_generator_provider"].default == "groq"

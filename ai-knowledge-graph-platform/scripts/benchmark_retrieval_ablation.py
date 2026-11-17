@@ -170,11 +170,15 @@ def _models(evaluator) -> dict:
     from graphrag.core.llm_client import get_generation_route
 
     route = get_generation_route()
+    judge = evaluator.judge_info if evaluator is not None else None
     return {
         "generator": route["primary"],
         "generator_fallback": route["fallback"],
         "router": route["agentic_fast"],
-        "judge": evaluator.judge_info if evaluator is not None else None,
+        "judge": judge,
+        # A judge from the generator's own provider is a known bias risk: flag it in the file.
+        "judge_same_provider_as_generator": bool(
+            judge and judge.get("provider") and route["primary"].split(":")[0] == judge["provider"]),
     }
 
 

@@ -194,6 +194,9 @@ class Settings(BaseSettings):
     # silently switching providers. Off by default: production keeps its chain.
     eval_pinned_models: bool = False
     eval_judge_provider: str = "deepseek"   # deepseek | groq | gemini
+    # Which single provider generates answers (and routes agentic steps) when pinned.
+    # deepseek = deepseek-v4-flash for both; groq = gpt-oss-120b / gpt-oss-20b.
+    eval_generator_provider: str = "groq"   # groq | deepseek
 
     # ── Neo4j ───────────────────────────────────────────────────────────────────
     neo4j_uri: str = "bolt://localhost:7687"

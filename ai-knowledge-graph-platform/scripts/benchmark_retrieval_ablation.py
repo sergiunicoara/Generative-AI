@@ -30,6 +30,7 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import faulthandler
 import json
 import os
 import statistics
@@ -48,11 +49,17 @@ from graphrag.evaluation.run_metadata import (  # noqa: E402
     percentile,
     retrieval_latency_ms,
 )
+from graphrag.evaluation import full_context  # noqa: E402
 from graphrag.retrieval.hybrid_retriever import (  # noqa: E402
     HybridRetriever,
-    retrieval_profile_overrides,
+    retrieval_profile_overrides as _retriever_profile_overrides,
 )
 from run_golden_eval import _check  # noqa: E402
+
+def retrieval_profile_overrides(profile: str) -> dict:
+    """Retriever profiles plus the evaluation-only ``full_context`` (no retrieval, so no overrides)."""
+    return {} if profile == full_context.PROFILE else _retriever_profile_overrides(profile)
+
 
 DEFAULT_OUTPUT_DIR = ROOT / "evals" / "ablation"
 AEROSPACE_GOLDEN = ROOT / "evals" / "golden_set.json"
@@ -189,14 +196,26 @@ def _planned_models() -> dict:
 
 async def _run_profile(questions: list[dict], args, golden: dict, evaluator, models: dict,
                        profile: str, config_overrides: dict, pinned: bool) -> dict:
-    retriever = HybridRetriever()
     rows: list[dict] = []
+    extra = None
+    if profile == full_context.PROFILE:
+        from graphrag.core.config import get_settings, resolve_tenant_config
+
+        corpus = await full_context.load_corpus(args.tenant)
+        extra = full_context.corpus_report(
+            corpus, resolve_tenant_config(get_settings().retrieval, args.tenant),
+            window=args.context_window)
+        full_context.require_fit(extra)
+        answer = lambda text: full_context.answer_full_context(text, corpus, tenant=args.tenant)  # noqa: E731
+    else:
+        retriever = HybridRetriever()
+        answer = lambda text: retriever.retrieve_and_answer(  # noqa: E731
+            text, mode=args.mode, tenant=args.tenant,
+            retrieval_profile=profile, config_overrides=config_overrides or None)
     for question in questions:
         started = time.perf_counter()
         try:
-            result = await retriever.retrieve_and_answer(
-                question["question"], mode=args.mode, tenant=args.tenant,
-                retrieval_profile=profile, config_overrides=config_overrides or None)
+            result = await answer(question["question"])
         except Exception as exc:  # recorded and counted; the run still exits non-zero
             rows.append(error_row(question, exc, (time.perf_counter() - started) * 1000))
             print(f"  [{profile}] {question['id']}: ERROR {type(exc).__name__}", file=sys.stderr)
@@ -208,7 +227,7 @@ async def _run_profile(questions: list[dict], args, golden: dict, evaluator, mod
         "run": collect_run_metadata(
             tenant=args.tenant, profile=profile, profile_overrides=retrieval_profile_overrides(profile),
             mode=args.mode, config_overrides=config_overrides, models=models, golden=golden,
-            pinned=pinned),
+            pinned=pinned, extra=extra),
         "summary": summarise(rows),
         "results": rows,
     }
@@ -261,8 +280,21 @@ def main() -> None:
     parser.add_argument("--skip-faithfulness", action="store_true", help="skip the RAGAS judge (cheaper)")
     parser.add_argument("--unpinned", action="store_true",
                         help="DEV ONLY: keep the production fallback chain; results are not comparable")
+    parser.add_argument("--context-window", type=int, default=full_context.DEFAULT_CONTEXT_WINDOW,
+                        help="generator context window in tokens, for the full_context fit check")
+    parser.add_argument("--corpus-report", action="store_true",
+                        help="read the tenant corpus (database read only, no model call) and print its size/fit")
     parser.add_argument("--dry-run", action="store_true", help="print the plan; no model or database call")
     args = parser.parse_args()
+
+    # Stall diagnostics: every EVAL_STALL_DUMP_SECONDS (default 600) the stacks of all threads are
+    # appended to a file, so a run that goes silent shows where it is waiting. Stdlib only.
+    stall_s = int(os.environ.get("EVAL_STALL_DUMP_SECONDS", "600"))
+    if stall_s > 0 and not args.dry_run:
+        stall_dir = args.output_dir / "stalls"
+        stall_dir.mkdir(parents=True, exist_ok=True)
+        stall_file = open(stall_dir / f"stacks_{'-'.join(args.profiles)}_{time.strftime('%Y%m%dT%H%M%S')}.txt", "a")
+        faulthandler.dump_traceback_later(stall_s, repeat=True, file=stall_file)
 
     # Evaluation mode must be set before the settings object is first built.
     os.environ["EVAL_PINNED_MODELS"] = "0" if args.unpinned else os.environ.get("EVAL_PINNED_MODELS", "1")
@@ -281,6 +313,14 @@ def main() -> None:
         questions = [question for question in questions if question["id"] in set(args.ids)]
     for profile in args.profiles:
         retrieval_profile_overrides(profile)
+    if args.corpus_report:
+        async def _report() -> dict:
+            from graphrag.core.config import get_settings, resolve_tenant_config
+            corpus = await full_context.load_corpus(args.tenant)
+            return full_context.corpus_report(
+                corpus, resolve_tenant_config(get_settings().retrieval, args.tenant), window=args.context_window)
+        print(json.dumps(asyncio.run(_report()), indent=2))
+        return
     golden = golden_set_info(golden_path, payload, len(questions))
     pricing_window = deepseek_pricing_window()
     if pricing_window["peak_now"] and not args.skip_faithfulness and not args.dry_run:

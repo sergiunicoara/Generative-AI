@@ -96,10 +96,10 @@ def deepseek_pricing_window(now: datetime | None = None) -> dict[str, Any]:
 
 def collect_run_metadata(
     *, tenant: str, profile: str, profile_overrides: dict, mode: str,
-    config_overrides: dict, models: dict, golden: dict, pinned: bool,
+    config_overrides: dict, models: dict, golden: dict, pinned: bool, extra: dict | None = None,
 ) -> dict[str, Any]:
     now = datetime.now(timezone.utc)
-    return {
+    meta = {
         "schema_version": SCHEMA_VERSION,
         "timestamp": now.isoformat(timespec="seconds"),
         "timestamp_bucharest": now.astimezone(BUCHAREST).isoformat(timespec="seconds"),
@@ -118,6 +118,9 @@ def collect_run_metadata(
         "python": sys.version.split()[0],
         "cache": "disabled (no query ID)",
     }
+    if extra:
+        meta["full_context"] = extra  # corpus size, fit check and the deliberate deviations of that profile
+    return meta
 
 
 def agentic_fallback(result: Any) -> dict[str, Any]:

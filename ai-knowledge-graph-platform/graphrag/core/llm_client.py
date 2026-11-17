@@ -646,6 +646,27 @@ class FallbackLLM(BaseLLM):
                 )
 
     @classmethod
+    def pinned_groq(cls, cfg, model: str | None = None) -> "FallbackLLM":
+        """Groq only, no secondary: for evaluation runs (``EVAL_PINNED_MODELS=1``).
+
+        Any provider error propagates instead of switching to DeepSeek or
+        OpenRouter, so a result file can only ever describe one model. Rate
+        limits are still retried against the SAME model (default retry budget,
+        not the fail-fast ``max_retries=1`` used when a fallback exists).
+        """
+        if not (getattr(cfg, "groq_api_key", "") or ""):
+            raise RuntimeError(
+                "EVAL_PINNED_MODELS=1 requires GROQ_API_KEY: evaluation runs use "
+                "Groq only and never fall back to another provider"
+            )
+        return cls(
+            primary=GroqLLM(api_key=cfg.groq_api_key, default_model=model or cfg.groq_model),
+            primary_name="groq",
+            secondary=NoFallbackLLM(),
+            fallback_exceptions=(),  # nothing is caught: errors surface to the caller
+        )
+
+    @classmethod
     def groq_primary(cls, cfg, model: str | None = None) -> "FallbackLLM":
         """Groq primary (~280 tok/s, fail-fast) -> DeepSeek on rate-limit/timeout,
         with OpenRouter as a third hop if ``cfg.openrouter_api_key`` is set.
@@ -804,6 +825,12 @@ def get_generation_route() -> dict[str, str]:
     cerebras = f"cerebras:{cfg.cerebras_model}"
     deepseek = f"deepseek:{DeepSeekLLM._DEFAULT_MODEL}"
     groq = f"groq:{cfg.groq_model}"
+    if getattr(cfg, "eval_pinned_models", False) is True:
+        return {
+            "primary": groq,
+            "fallback": "none (EVAL_PINNED_MODELS)",
+            "agentic_fast": f"groq:{cfg.groq_fast_model}",
+        }
     if cfg.llm_ingest_provider == "groq":
         primary, fallback = groq, deepseek
     elif cfg.llm_ingest_provider == "deepseek":
@@ -845,7 +872,14 @@ def get_llm() -> BaseLLM:
     if _llm is None:
         from graphrag.core.config import get_settings
         cfg = get_settings()
-        if cfg.llm_ingest_provider == "deepseek":
+        if getattr(cfg, "eval_pinned_models", False) is True:
+            if cfg.llm_ingest_provider not in ("", "groq"):
+                raise RuntimeError(
+                    f"EVAL_PINNED_MODELS=1 conflicts with LLM_INGEST_PROVIDER="
+                    f"{cfg.llm_ingest_provider!r}: evaluation generation is Groq only"
+                )
+            _llm = FallbackLLM.pinned_groq(cfg)
+        elif cfg.llm_ingest_provider == "deepseek":
             log.warning(
                 "llm_client.single_provider_override",
                 provider="deepseek",
@@ -875,7 +909,11 @@ def get_fast_llm() -> FallbackLLM:
     if _fast_llm is None:
         from graphrag.core.config import get_settings
         cfg = get_settings()
-        _fast_llm = FallbackLLM.groq_primary(cfg, model=cfg.groq_fast_model)
+        _fast_llm = (
+            FallbackLLM.pinned_groq(cfg, model=cfg.groq_fast_model)
+            if getattr(cfg, "eval_pinned_models", False) is True
+            else FallbackLLM.groq_primary(cfg, model=cfg.groq_fast_model)
+        )
     return _fast_llm
 
 

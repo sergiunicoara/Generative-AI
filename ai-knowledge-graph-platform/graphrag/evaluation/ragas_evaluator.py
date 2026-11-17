@@ -33,7 +33,51 @@ class RagasEvaluator:
         self._judge_timeout_s = max(
             1, int(cfg.evaluation.get("ragas_judge_timeout_seconds", 60))
         )
-        self._llm = self._build_llm()
+        self._llm = self._build_pinned_judge() if cfg.eval_pinned_models is True else self._build_llm()
+
+    @property
+    def judge_info(self) -> dict:
+        """Provider/model of the judge actually in use (None when RAGAS' own default)."""
+        llm = self._llm
+        if llm is None:
+            return {"provider": None, "model": None}
+        model = getattr(llm, "model_name", None) or getattr(llm, "model", None)
+        provider = {"ChatOpenAI": "deepseek", "ChatGroq": "groq",
+                    "ChatGoogleGenerativeAI": "gemini"}.get(type(llm).__name__, type(llm).__name__)
+        return {"provider": provider, "model": str(model) if model else None}
+
+    def _build_pinned_judge(self):
+        """Exactly one judge (``EVAL_JUDGE_PROVIDER``, default deepseek), temperature 0.
+
+        No fall-through: a missing key, a missing package or a constructor error
+        raises ``EvaluationError`` so a run never silently changes judge.
+        """
+        cfg = get_settings()
+        provider = (cfg.eval_judge_provider or "").lower()
+        try:
+            if provider == "deepseek":
+                if not cfg.deepseek_api_key:
+                    raise EvaluationError("EVAL_JUDGE_PROVIDER=deepseek requires DEEPSEEK_API_KEY")
+                from langchain_openai import ChatOpenAI
+                return ChatOpenAI(model="deepseek-v4-flash", api_key=cfg.deepseek_api_key,
+                                  base_url="https://api.deepseek.com", temperature=0.0)
+            if provider == "groq":
+                if not cfg.groq_api_key:
+                    raise EvaluationError("EVAL_JUDGE_PROVIDER=groq requires GROQ_API_KEY")
+                from langchain_groq import ChatGroq
+                return ChatGroq(model=cfg.groq_model, api_key=cfg.groq_api_key, temperature=0.0)
+            if provider == "gemini":
+                if not cfg.google_api_key:
+                    raise EvaluationError("EVAL_JUDGE_PROVIDER=gemini requires GOOGLE_API_KEY")
+                from langchain_google_genai import ChatGoogleGenerativeAI
+                return ChatGoogleGenerativeAI(model=cfg.gemini_ingest_model,
+                                              google_api_key=cfg.google_api_key, temperature=0.0)
+        except EvaluationError:
+            raise
+        except Exception as exc:  # ImportError or constructor failure: fail loudly
+            raise EvaluationError(f"pinned RAGAS judge {provider!r} unavailable: {exc}") from exc
+        raise EvaluationError(
+            f"unknown EVAL_JUDGE_PROVIDER {cfg.eval_judge_provider!r} (deepseek | groq | gemini)")
 
     def _build_llm(self):
         """Build the LLM judge for RAGAS.

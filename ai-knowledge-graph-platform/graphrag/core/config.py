@@ -186,6 +186,15 @@ class Settings(BaseSettings):
     #          quality/latency doesn't hold up for a given workload.
     llm_ingest_provider: str = "groq"
 
+    # ── Evaluation mode (EVAL_PINNED_MODELS=1) ──────────────────────────────────
+    # Makes evaluation runs comparable: get_llm() and get_fast_llm() use Groq
+    # only (generator = groq_model, router = groq_fast_model) with NO fallback
+    # chain, and the RAGAS judge is exactly `eval_judge_provider` with no
+    # fall-through. A missing key or a provider failure raises instead of
+    # silently switching providers. Off by default: production keeps its chain.
+    eval_pinned_models: bool = False
+    eval_judge_provider: str = "deepseek"   # deepseek | groq | gemini
+
     # ── Neo4j ───────────────────────────────────────────────────────────────────
     neo4j_uri: str = "bolt://localhost:7687"
     neo4j_user: str = "neo4j"

@@ -51,6 +51,7 @@ def per_profile(runs: dict[str, list[dict]]) -> None:
     for name, group in runs.items():
         s = [r["summary"] for r in group]
         print(f"{name} (runs={len(group)}) | pass {span([x['golden_pass_rate'] for x in s])}"
+              f" | pass citable basis {span([x.get('golden_pass_rate_citable') for x in s])}"
               f" | pass ignoring citation recall {span([content_pass_rate(r) for r in group])}"
               f" | faith {span([x['faithfulness_mean'] for x in s])}"
               f" | scored {[x['n_scored'] for x in s]} refused {[x['n_refused'] for x in s]}"
@@ -61,7 +62,8 @@ def per_profile(runs: dict[str, list[dict]]) -> None:
               f" | golden citation basis: {group[0]['run'].get('citation', {}).get('golden_citation_basis', 'legacy')}")
         for which in ("answer", "context"):    # headline attribution comparison: answer
             sets = [x.get("citations", {}).get(which, {}) for x in s]
-            print(f"    {which} citations: recall {span([c.get('recall') for c in sets])}"
+            print(f"    {which} citations: recall_raw {span([c.get('recall_raw') for c in sets])}"
+                  f" | recall_citable {span([c.get('recall_citable') for c in sets])}"
                   f" | precision {span([c.get('precision') for c in sets])}"
                   f" | macro F1 {span([c.get('f1_macro') for c in sets])}"
                   f" | distinct docs/answer {span([c.get('mean_distinct_docs') for c in sets])}"
@@ -76,7 +78,9 @@ def per_question(runs: dict[str, list[dict]]) -> dict:
         for run in group:
             for row in run["results"]:
                 cell = table.setdefault(row["id"], {"type": row["type"]}).setdefault(
-                    name, {"pass": [], "content": [], "faith": [], "runs": 0})
+                    name, {"pass": [], "content": [], "citable": [], "faith": [], "runs": 0})
+                if row.get("golden_pass_citable") is not None:
+                    cell["citable"].append(bool(row["golden_pass_citable"]))
                 cell["runs"] += 1
                 cell["pass"].append(bool(row["golden_pass"]))
                 cell["content"].append(bool(row["golden_pass"]) or citation_only(row))
@@ -98,7 +102,8 @@ def print_questions(table: dict, names: list[str]) -> None:
 
 
 def print_types(table: dict, names: list[str]) -> None:
-    print("\n## per type: (a) pass share / (b) pass share ignoring citation recall / mean faithfulness")
+    print("\n## per type: (a) pass share / (b) pass share ignoring citation recall / "
+          "(c) pass share on the citable basis (n/a for older files) / mean faithfulness")
     for qtype in sorted({row["type"] for row in table.values()}):
         ids = [i for i, row in table.items() if row["type"] == qtype]
         cells = []
@@ -106,7 +111,11 @@ def print_types(table: dict, names: list[str]) -> None:
             rate = st.mean(sum(table[i][name]["pass"]) / table[i][name]["runs"] for i in ids)
             content = st.mean(sum(table[i][name]["content"]) / table[i][name]["runs"] for i in ids)
             faith = [x for i in ids for x in table[i][name]["faith"]]
-            cells.append(f"{rate:.2f}/{content:.2f}/{st.mean(faith):.2f}" if faith else f"{rate:.2f}/{content:.2f}/n/a")
+            have = [i for i in ids if table[i][name]["citable"]]
+            citable = (f"{st.mean(sum(table[i][name]['citable']) / len(table[i][name]['citable']) for i in have):.2f}"
+                       if have else "n/a")
+            cells.append(f"{rate:.2f}/{content:.2f}/{citable}/{st.mean(faith):.2f}" if faith
+                         else f"{rate:.2f}/{content:.2f}/{citable}/n/a")
         print(f"{qtype} ({len(ids)}) | " + " | ".join(cells))
 
 

@@ -34,12 +34,35 @@ def sha256_text(text: str) -> str:
     return hashlib.sha256(text.encode("utf-8")).hexdigest()
 
 
-def set_metrics(question: dict, ids: list[str] | None) -> dict:
-    """Recall, precision, F1 and distinct count of one strictly normalised citation set (all None if ``ids`` is None)."""
+def _f1_of(precision_value: float | None, recall_value: float | None) -> float | None:
+    if recall_value is None:
+        return None
+    if not precision_value or not recall_value:
+        return 0.0
+    return 2 * precision_value * recall_value / (precision_value + recall_value)
+
+
+def set_metrics(question: dict, ids: list[str] | None, citable: list[str] | None = None,
+                f1_on: str = "raw") -> dict:
+    """Metrics of one strictly normalised citation set (all None if ``ids`` is None).
+
+    ``recall_raw`` is against every expected citation; ``recall_citable`` only against the expected ones the
+    prompt let the model cite (``citable``; None means every expected citation is citable). ``f1`` uses
+    ``recall_citable`` when ``f1_on == "citable"``, else ``recall_raw``."""
+    expected = _expected(question)
+    citable_keys = None if citable is None else {_norm(value) for value in citable}
+    expected_citable = [v for v in expected if citable_keys is None or _norm(v) in citable_keys]
     if ids is None:
-        return {"recall": None, "precision": None, "f1": None, "n_distinct": None}
-    return {"recall": recall(question, ids), "precision": precision(question, ids),
-            "f1": f1(question, ids), "n_distinct": len(ids)}
+        return {"recall_raw": None, "recall_citable": None, "precision": None, "f1": None,
+                "n_distinct": None, "n_expected_uncitable": len(expected) - len(expected_citable)}
+    have = {_norm(value) for value in ids}
+    recall_citable = (sum(_norm(v) in have for v in expected_citable) / len(expected_citable)
+                      if expected_citable else None)
+    recall_raw = recall(question, ids)
+    precision_value = precision(question, ids)
+    return {"recall_raw": recall_raw, "recall_citable": recall_citable, "precision": precision_value,
+            "f1": _f1_of(precision_value, recall_citable if f1_on == "citable" else recall_raw),
+            "n_distinct": len(ids), "n_expected_uncitable": len(expected) - len(expected_citable)}
 
 
 _DOC_TAG = re.compile(r"\[DOC:\s*([^\]]*)\]", re.IGNORECASE)
@@ -82,11 +105,45 @@ def strict_citations(raw: list[str], index: dict[str, str] | None = None) -> lis
     return seen
 
 
+_TAG = re.compile(r"\[(?:DOC:\s*([^\]]*)|([^\[\]\n:]{1,80}))\]", re.IGNORECASE)
+ACCEPTED_TAG_FORMS = [
+    "[DOC: <id>] (prefixed; several ids may be separated by commas or semicolons)",
+    "[<exact canonical id>] (bare; case-insensitive, no fuzzy matching)",
+]
+
+
+def parse_answer_tags(answer: str, canonical_ids: set[str] | None = None) -> dict:
+    """Tags of one answer: ``{"answer": text without the tags, "ids": raw ids in order, "n_prefixed", "n_bare"}``.
+
+    Prefixed ``[DOC: id]`` tags are always read. A bare ``[id]`` is read only when ``id`` equals a canonical
+    document id (case-insensitive, nothing fuzzy); any other bracketed text is left in the answer untouched."""
+    canonical = {value.casefold() for value in (canonical_ids if canonical_ids is not None
+                                                else set(_load()[0].values()))}
+    ids: list[str] = []
+    counts = {"prefixed": 0, "bare": 0}
+
+    def take(match: re.Match) -> str:
+        if match.group(1) is not None:
+            found = [part.strip() for part in re.split(r"[,;]", match.group(1)) if part.strip()]
+            ids.extend(found)
+            counts["prefixed"] += len(found)
+            return ""
+        candidate = match.group(2).strip()
+        if candidate.casefold() in canonical:
+            ids.append(candidate)
+            counts["bare"] += 1
+            return ""
+        return match.group(0)
+
+    stripped = re.sub(r"[ \t]+([.,;:])", r"\1", _TAG.sub(take, answer))
+    return {"answer": re.sub(r"[ \t]{2,}", " ", stripped).strip(), "ids": ids,
+            "n_prefixed": counts["prefixed"], "n_bare": counts["bare"]}
+
+
 def parse_doc_tags(answer: str) -> tuple[str, list[str]]:
-    """``(answer without [DOC: id] tags, ids in the tags)``. A tag may list ids separated by commas or semicolons."""
-    ids = [part.strip() for tag in _DOC_TAG.findall(answer) for part in re.split(r"[,;]", tag) if part.strip()]
-    stripped = re.sub(r"[ \t]+([.,;:])", r"\1", _DOC_TAG.sub("", answer))
-    return re.sub(r"[ \t]{2,}", " ", stripped).strip(), ids
+    """``(answer without the tags, ids in the tags)`` (see parse_answer_tags)."""
+    parsed = parse_answer_tags(answer)
+    return parsed["answer"], parsed["ids"]
 
 
 def _expected(question: dict) -> list[str]:
@@ -120,9 +177,15 @@ def f1(question: dict, cited: list[str]) -> float | None:
     return 2 * precision_value * recall_value / (precision_value + recall_value)
 
 
-def citation_failure(question: dict, cited: list[str]) -> str | None:
-    """The golden check's citation rule (run_golden_eval._check) applied to canonical ids only."""
+def citation_failure(question: dict, cited: list[str], citable: list[str] | None = None) -> str | None:
+    """The golden check's citation rule (run_golden_eval._check) applied to canonical ids only.
+
+    With ``citable`` the rule applies to the expected ids that are also citable (the ids the prompt offered);
+    a question whose expected ids are all uncitable then has no citation requirement."""
     expected = _expected(question)
+    if citable is not None:
+        offered = {_norm(value) for value in citable}
+        expected = [value for value in expected if _norm(value) in offered]
     if not expected:
         return None
     have = {_norm(value) for value in cited}

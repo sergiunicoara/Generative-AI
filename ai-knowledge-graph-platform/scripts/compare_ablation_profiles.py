@@ -8,7 +8,9 @@ collapsed to one value per question, so every comparison is paired on the same q
 
 * golden pass: the question passes when it passes in more than half of that profile's runs;
 * faithfulness: the mean over the runs in which the question was *scored* (refusals and unscorable
-  answers are excluded, so a question counts only when scored in both profiles).
+  answers are excluded, so a question counts only when scored in both profiles);
+* citation recall (files written by the strict-citation benchmark): the mean over the runs of the
+  answer-set ``recall_citable`` and of the context-set ``recall_raw``, compared with a paired bootstrap.
 
 Tests: exact McNemar (two-sided binomial on the discordant pairs) for pass/fail, with Holm adjustment
 across the compared profiles; paired percentile bootstrap (seeded) for the mean faithfulness
@@ -44,7 +46,14 @@ def per_question(runs: list[dict]) -> dict[str, dict]:
     seen: dict[str, dict] = {}
     for run in runs:
         for row in run["results"]:
-            entry = seen.setdefault(row["id"], {"type": row.get("type"), "passes": [], "faith": []})
+            entry = seen.setdefault(row["id"], {"type": row.get("type"), "passes": [], "faith": [],
+                                                "recall_answer": [], "recall_context": []})
+            metrics = row.get("citation_metrics") or {}
+            for key, which, field in (("recall_answer", "answer", "recall_citable"),
+                                      ("recall_context", "context", "recall_raw")):
+                value = (metrics.get(which) or {}).get(field)
+                if value is not None:
+                    entry[key].append(float(value))
             entry["passes"].append(bool(row["golden_pass"]))
             if row["status"] == "scored" and row["faithfulness"] is not None:
                 entry["faith"].append(float(row["faithfulness"]))
@@ -54,6 +63,8 @@ def per_question(runs: list[dict]) -> dict[str, dict]:
             "passed": sum(e["passes"]) * 2 > len(e["passes"]),
             "faithfulness": statistics.mean(e["faith"]) if e["faith"] else None,
             "n_runs": len(e["passes"]),
+            "recall_answer": statistics.mean(e["recall_answer"]) if e["recall_answer"] else None,
+            "recall_context": statistics.mean(e["recall_context"]) if e["recall_context"] else None,
         }
         for qid, e in seen.items()
     }
@@ -98,7 +109,16 @@ def compare(base: dict[str, dict], other: dict[str, dict], *, only_type: str | N
     both_scored = [q for q in ids if base[q]["faithfulness"] is not None and other[q]["faithfulness"] is not None]
     diffs = [base[q]["faithfulness"] - other[q]["faithfulness"] for q in both_scored]
     ci = paired_bootstrap_ci(diffs)
+
+    def paired(key: str) -> dict:
+        pairs = [q for q in ids if base[q].get(key) is not None and other[q].get(key) is not None]
+        deltas = [base[q][key] - other[q][key] for q in pairs]
+        interval = paired_bootstrap_ci(deltas)
+        return {"n_pairs": len(deltas), "mean_diff": statistics.mean(deltas) if deltas else None,
+                "ci95": interval, "distinguishable": bool(interval and (interval[0] > 0 or interval[1] < 0))}
+
     return {
+        "recall_answer": paired("recall_answer"), "recall_context": paired("recall_context"),
         "n_questions": len(ids),
         "pass_base": sum(base[q]["passed"] for q in ids), "pass_other": sum(other[q]["passed"] for q in ids),
         "only_base_passed": len(only_base), "only_other_passed": len(only_other),
@@ -157,6 +177,17 @@ def render(report: dict) -> str:
                 f"{r['only_base_passed']} | {r['only_other_passed']} | {_fmt(r['mcnemar_p'])} | "
                 f"{_fmt(holm_p)} | {r['n_faithfulness_pairs']} | {_fmt(r['faithfulness_mean_diff'])} | "
                 f"{ci_text} | {', '.join(distinct) or 'no'} |")
+    lines += ["", "Paired bootstrap of per-question citation recall (baseline minus other; answer set = recall_citable, "
+              "context set = recall_raw; no multiplicity adjustment):", "",
+              "| vs | scope | answer pairs | answer mean diff | answer 95% CI | context pairs | context mean diff | "
+              "context 95% CI | distinguishable |", "|---|---|---|---|---|---|---|---|---|"]
+    for other, result in report["comparisons"].items():
+        for scope in ("all", "multi_hop"):
+            a, c = result[scope]["recall_answer"], result[scope]["recall_context"]
+            fmt = lambda r: "n/a" if r["ci95"] is None else f"[{r['ci95'][0]:+.3f}, {r['ci95'][1]:+.3f}]"  # noqa: E731
+            distinct = [name for name, r in (("answer", a), ("context", c)) if r["distinguishable"]]
+            lines.append(f"| {other} | {scope} | {a['n_pairs']} | {_fmt(a['mean_diff'])} | {fmt(a)} | {c['n_pairs']} | "
+                         f"{_fmt(c['mean_diff'])} | {fmt(c)} | {', '.join(distinct) or 'no'} |")
     lines += ["", "Holm adjustment is applied to the all-questions McNemar tests across the compared profiles; "
               "multi_hop rows are descriptive (a handful of questions cannot reach significance)."]
     return "\n".join(lines)

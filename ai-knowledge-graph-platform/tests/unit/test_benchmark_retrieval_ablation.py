@@ -173,6 +173,8 @@ def _run_with_flags(monkeypatch, tmp_path, extra: list[str]) -> list[dict]:
     instruction = recorded.pop("eval_citation_instruction")     # the shared rule reaches every retrieval profile
     assert recorded == overrides and "  - FAA-AD-2024-01-02\n  - SWA_fleet_registry_2024\n" in instruction
     assert report["run"]["citation"]["citation_instruction"] == instruction
+    assert report["run"]["citation"]["citable_ids"] == ["FAA-AD-2024-01-02", "SWA_fleet_registry_2024"]
+    assert len(report["run"]["citation"]["accepted_tag_forms"]) == 2
     assert report["run"]["citation"]["citation_instruction_sha256"] == ablation.citations.sha256_text(instruction)
     assert len(report["run"]["citation"]["answer_prompt_sha256"]) == 64
     return calls
@@ -258,8 +260,11 @@ def test_over_citing_lowers_precision_and_a_missing_expected_id_fails_the_strict
 
 
 def test_split_answer_strips_tags_for_every_profile_and_returns_the_raw_ids():
-    result, ids = ablation.split_answer(_result(answer="AD 2024 supersedes it [DOC: FAA-AD-2024-01-02]."))
-    assert result.answer == "AD 2024 supersedes it." and ids == ["FAA-AD-2024-01-02"]
+    result, parsed = ablation.split_answer(_result(answer="AD 2024 supersedes it [DOC: FAA-AD-2024-01-02]."))
+    assert result.answer == "AD 2024 supersedes it." and parsed["ids"] == ["FAA-AD-2024-01-02"]
+    assert (parsed["n_prefixed"], parsed["n_bare"]) == (1, 0)
+    result, parsed = ablation.split_answer(_result(answer="AD 2024 supersedes it [FAA-AD-2024-01-02]."))
+    assert result.answer == "AD 2024 supersedes it." and (parsed["n_prefixed"], parsed["n_bare"]) == (0, 1)
 
 
 def test_a_retrieval_row_scores_the_context_set_and_records_the_answer_set_beside_it():
@@ -267,8 +272,9 @@ def test_a_retrieval_row_scores_the_context_set_and_records_the_answer_set_besid
     row = ablation.build_row(QUESTION, result, 10.0, None, answer_ids=["SWA_fleet_registry_2024"],
                              raw_answer="x [DOC: SWA_fleet_registry_2024]")
     assert row["golden_pass"] is True and row["citation_basis"] == "context"
-    assert row["citation_metrics"]["context"]["recall"] == 1.0
-    assert row["citation_metrics"]["answer"] == {"recall": 0.0, "precision": 0.0, "f1": 0.0, "n_distinct": 1}
+    assert row["citation_metrics"]["context"]["recall_raw"] == 1.0
+    answer = row["citation_metrics"]["answer"]
+    assert (answer["recall_raw"], answer["precision"], answer["f1"], answer["n_distinct"]) == (0.0, 0.0, 0.0, 1)
     assert row["answer_raw"].endswith("[DOC: SWA_fleet_registry_2024]")
 
 
@@ -278,7 +284,8 @@ def test_a_full_context_row_scores_the_answer_set_and_has_no_context_set():
     hit = ablation.build_row(QUESTION, result, 10.0, None, answer_ids=["AD 2024-01-02"], basis="answer")
     assert hit["golden_pass"] is True and hit["citations_context"] is None
     assert hit["citations_answer"] == ["FAA-AD-2024-01-02"]
-    assert hit["citation_metrics"]["context"] == {"recall": None, "precision": None, "f1": None, "n_distinct": None}
+    assert all(value is None for key, value in hit["citation_metrics"]["context"].items()
+               if key != "n_expected_uncitable")
     miss = ablation.build_row(QUESTION, result, 10.0, None, answer_ids=[], basis="answer")
     assert miss["golden_pass"] is False
     assert any(f.startswith("insufficient citation recall") for f in miss["golden_failures"])
@@ -288,12 +295,13 @@ def test_summary_reports_both_citation_sets_and_the_basis_headline():
     rows = [ablation.build_row(QUESTION, _result(), 10.0, None, answer_ids=ids)
             for ids in (["FAA-AD-2024-01-02"], ["SWA_fleet_registry_2024", "FAA-AD-2024-01-02"])]
     summary = ablation.summarise(rows)
-    assert summary["citations"]["context"] == {"recall": 1.0, "precision": 1.0, "f1_macro": 1.0,
-                                               "mean_distinct_docs": 1.0}
+    context = summary["citations"]["context"]
+    assert (context["recall_raw"], context["precision"], context["f1_macro"], context["mean_distinct_docs"]) == (
+        1.0, 1.0, 1.0, 1.0)
     assert summary["citations"]["answer"]["precision"] == 0.75 and summary["citations"]["answer"]["mean_distinct_docs"] == 1.5
     assert summary["citation_recall"] == 1.0                    # basis = context for a retrieval profile
     full_rows = [ablation.build_row(QUESTION, _result(), 10.0, None, answer_ids=["FAA-AD-2024-01-02"], basis="answer")]
-    assert ablation.summarise(full_rows)["citations"]["context"]["recall"] is None
+    assert ablation.summarise(full_rows)["citations"]["context"]["recall_raw"] is None
 
 
 def test_tag_compliance_counts_valid_tags_among_non_refused_answers_and_resolution_of_all_tags():
@@ -307,7 +315,8 @@ def test_tag_compliance_counts_valid_tags_among_non_refused_answers_and_resoluti
         row([], answer="The context does not contain enough information."),   # refused: not counted
     ]
     assert [r["answer_tags"]["refused"] for r in rows] == [False, False, False, True]
-    assert rows[1]["answer_tags"] == {"n_tags": 2, "n_resolved": 1, "valid": True, "refused": False}
+    assert rows[1]["answer_tags"] == {"n_tags": 2, "n_resolved": 1, "n_prefixed": 2, "n_bare": 0,
+                                      "valid": True, "refused": False}
     answer = ablation.summarise(rows)["citations"]["answer"]
     assert answer["compliance"] == pytest.approx(2 / 3, abs=1e-4) and answer["n_nonrefused"] == 3
     assert answer["n_tags"] == 3 and answer["tag_resolution_rate"] == pytest.approx(2 / 3, abs=1e-4)
@@ -318,3 +327,31 @@ def test_compliance_is_undefined_when_nothing_was_answered():
     refused = ablation.build_row(QUESTION, _result(answer="Insufficient context to answer."), 1.0,
                                  {"status": "refused", "faithfulness": None, "attempts": 0, "notes": []})
     assert ablation.summarise([refused])["citations"]["answer"]["compliance"] is None
+
+
+def test_rows_record_tag_forms_and_recall_against_the_citable_expected_ids():
+    question = {**QUESTION, "expected_citations": ["FAA-AD-2024-01-02", "FAA-AD-2022-03-07"]}
+    row = ablation.build_row(question, _result(), 10.0, None, answer_ids=["FAA-AD-2024-01-02"], basis="answer",
+                             tag_forms={"n_prefixed": 0, "n_bare": 1},
+                             citable=["FAA-AD-2024-01-02", "SWA_fleet_registry_2024"])
+    assert (row["answer_tags"]["n_prefixed"], row["answer_tags"]["n_bare"]) == (0, 1)
+    metrics = row["citation_metrics"]["answer"]
+    assert (metrics["recall_raw"], metrics["recall_citable"], metrics["n_expected_uncitable"]) == (0.5, 1.0, 1)
+    assert row["n_expected_uncitable"] == 1 and row["citation_f1"] == 1.0   # answer basis: F1 uses recall_citable
+    summary = ablation.summarise([row])
+    assert summary["citations"]["answer"]["n_expected_uncitable"] == 1
+    assert summary["citations"]["answer"]["recall_citable"] == 1.0 and summary["citations"]["answer"]["recall_raw"] == 0.5
+    assert (summary["citations"]["answer"]["n_tags_prefixed"], summary["citations"]["answer"]["n_tags_bare"]) == (0, 1)
+
+
+def test_golden_pass_citable_restricts_only_the_citation_check_and_is_summarised():
+    question = {**QUESTION, "expected_citations": ["FAA-AD-2024-01-02", "FAA-AD-2022-03-07"],
+                "min_citation_recall": 1.0}
+    citable = ["FAA-AD-2024-01-02", "SWA_fleet_registry_2024"]
+    row = ablation.build_row(question, _result(), 10.0, None, citable=citable)      # context set: AD-2024 only
+    assert row["golden_pass"] is False and row["golden_pass_citable"] is True
+    assert row["golden_failures_citable"] == [] and any("citation recall" in f for f in row["golden_failures"])
+    wrong = ablation.build_row(question, _result(answer="no idea"), 10.0, None, citable=citable)
+    assert wrong["golden_pass_citable"] is False                                   # other checks are unchanged
+    summary = ablation.summarise([row, wrong])
+    assert summary["golden_pass_rate"] == 0.0 and summary["golden_pass_rate_citable"] == 0.5

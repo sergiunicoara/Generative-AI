@@ -122,7 +122,49 @@ def test_the_parser_reads_ids_the_prompt_asks_for_and_the_normaliser_maps_or_dro
 
 def test_set_metrics_of_none_means_the_set_does_not_exist_and_of_empty_means_nothing_cited():
     question = {"expected_citations": [AD]}
-    assert cit.set_metrics(question, None) == {"recall": None, "precision": None, "f1": None, "n_distinct": None}
-    assert cit.set_metrics(question, []) == {"recall": 0.0, "precision": None, "f1": 0.0, "n_distinct": 0}
-    assert cit.set_metrics(question, [AD, SWA]) == {"recall": 1.0, "precision": 0.5, "f1": pytest.approx(2 / 3),
-                                                    "n_distinct": 2}
+    assert cit.set_metrics(question, None) == {
+        "recall_raw": None, "recall_citable": None, "precision": None, "f1": None, "n_distinct": None,
+        "n_expected_uncitable": 0}
+    assert cit.set_metrics(question, [], [AD]) == {
+        "recall_raw": 0.0, "recall_citable": 0.0, "precision": None, "f1": 0.0, "n_distinct": 0,
+        "n_expected_uncitable": 0}
+    both = cit.set_metrics(question, [AD, SWA])
+    assert both["recall_raw"] == both["recall_citable"] == 1.0 and both["precision"] == 0.5
+    assert both["f1"] == pytest.approx(2 / 3) and both["n_distinct"] == 2
+
+
+def test_recall_citable_ignores_expected_ids_the_prompt_could_not_offer_and_raw_recall_does_not():
+    question = {"expected_citations": [AD, OLD_AD]}
+    citable = [AD, SWA]                                  # OLD_AD (superseded) is not in the instruction
+    metrics = cit.set_metrics(question, [AD], citable, "citable")
+    assert metrics["recall_raw"] == 0.5 and metrics["recall_citable"] == 1.0
+    assert metrics["n_expected_uncitable"] == 1 and metrics["precision"] == 1.0 and metrics["f1"] == 1.0
+    assert cit.set_metrics(question, [AD], citable, "raw")["f1"] == pytest.approx(2 * 1.0 * 0.5 / 1.5)
+    only_uncitable = cit.set_metrics({"expected_citations": [OLD_AD]}, [AD], citable, "citable")
+    assert only_uncitable["recall_citable"] is None and only_uncitable["f1"] is None
+    assert only_uncitable["n_expected_uncitable"] == 1
+
+
+def test_bare_exact_canonical_ids_are_read_and_nothing_fuzzy_is():
+    parsed = cit.parse_answer_tags(
+        "A [FAA-ad-2024-01-02] B [DOC: SWA_fleet_registry_2024]. C [AD 2024-01-02] D [Note] "
+        "E [FAA-AD-2024-01-0] F [14CFR_Part39_excerpt].")
+    assert parsed["ids"] == ["FAA-ad-2024-01-02", "SWA_fleet_registry_2024", "14CFR_Part39_excerpt"]
+    assert (parsed["n_prefixed"], parsed["n_bare"]) == (1, 2)
+    # an alias, a different word and a truncated id are not canonical ids: left in the text, not read
+    assert parsed["answer"] == "A B. C [AD 2024-01-02] D [Note] E [FAA-AD-2024-01-0] F."
+    assert cit.strict_citations(parsed["ids"]) == [AD, SWA, "14CFR_Part39_excerpt"]
+    assert cit.parse_doc_tags("x [FAA-AD-2024-01-02]") == ("x", ["FAA-AD-2024-01-02"])
+
+
+def test_the_accepted_forms_are_declared_for_the_run_metadata():
+    assert len(cit.ACCEPTED_TAG_FORMS) == 2 and "bare" in cit.ACCEPTED_TAG_FORMS[1]
+
+
+def test_citation_failure_on_the_citable_basis_ignores_expected_ids_the_prompt_never_offered():
+    question = {"expected_citations": [AD, OLD_AD]}
+    citable = [AD, SWA]
+    assert cit.citation_failure(question, [AD]) is not None                 # raw: OLD_AD missing
+    assert cit.citation_failure(question, [AD], citable) is None            # citable: only AD is required
+    assert cit.citation_failure(question, [SWA], citable) is not None       # the citable one is still required
+    assert cit.citation_failure({"expected_citations": [OLD_AD]}, [], citable) is None   # nothing citable expected

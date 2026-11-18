@@ -93,13 +93,14 @@ async def _judge(evaluator, question: dict, answer: str, contexts: list[str]) ->
 
 
 def split_answer(result):
-    """``(result with the [DOC: id] tags stripped from its answer, raw tag ids)``: the same for every profile."""
-    cleaned, tag_ids = citations.parse_doc_tags(result.answer)
-    return result.model_copy(update={"answer": cleaned}), tag_ids
+    """``(result with the tags stripped from its answer, parsed tags)``: the same parser for every profile."""
+    parsed = citations.parse_answer_tags(result.answer)
+    return result.model_copy(update={"answer": parsed["answer"]}), parsed
 
 
 def build_row(question: dict, result, elapsed_ms: float, judged: dict | None, *,
-              answer_ids: list[str] | None = None, basis: str = "context", raw_answer: str | None = None) -> dict:
+              answer_ids: list[str] | None = None, basis: str = "context", raw_answer: str | None = None,
+              tag_forms: dict | None = None, citable: list[str] | None = None) -> dict:
     """One per-question record from a QueryResult whose answer is already tag-free (pure: no I/O).
 
     Two strictly normalised citation sets are recorded: ``context`` (the retriever's provenance list; None
@@ -113,6 +114,10 @@ def build_row(question: dict, result, elapsed_ms: float, judged: dict | None, *,
     citation_failure = citations.citation_failure(question, scored)
     failures = [f for f in lenient_failures if not f.startswith(citations.CITATION_FAILURE)]
     failures += [citation_failure] if citation_failure else []
+    # the same verdict with the citation rule restricted to expected ids the prompt could offer (all else unchanged)
+    citable_failure = citations.citation_failure(question, scored, citable)
+    failures_citable = [f for f in lenient_failures if not f.startswith(citations.CITATION_FAILURE)]
+    failures_citable += [citable_failure] if citable_failure else []
     if judged is not None:
         refused = judged["status"] == "refused"
     else:
@@ -122,16 +127,21 @@ def build_row(question: dict, result, elapsed_ms: float, judged: dict | None, *,
     tag_ids = list(answer_ids or [])
     resolved_tags = [tag for tag in tag_ids if strict_citations([tag])]
     judged = judged or {"status": "not_judged", "faithfulness": None, "attempts": 0, "notes": []}
-    context_m, answer_m = citations.set_metrics(question, context_set), citations.set_metrics(question, answer_set)
+    # answer set: recall_citable (expected ids the prompt allowed) drives F1; context set keeps the raw rule
+    context_m = citations.set_metrics(question, context_set, citable, "raw")
+    answer_m = citations.set_metrics(question, answer_set, citable, "citable")
     basis_m = answer_m if basis == "answer" else context_m
     return {
         "id": question["id"],
         "type": question.get("type"),
         "golden_pass": not failures,                # citations scored strictly on the `citation_basis` set
         "golden_failures": failures,
+        "golden_pass_citable": not failures_citable,   # citation check on expected ∩ citable ids only
+        "golden_failures_citable": failures_citable,
         "golden_pass_lenient": lenient_passed,      # the earlier rule: raw substring / document-key match
         "citation_basis": basis,
-        "citation_recall": basis_m["recall"],       # the basis set; both sets are reported below
+        "citation_recall": basis_m["recall_raw"],   # the basis set; both sets are reported below
+        "n_expected_uncitable": basis_m["n_expected_uncitable"],
         "citation_precision": basis_m["precision"],
         "citation_f1": basis_m["f1"],
         "n_distinct_cited": basis_m["n_distinct"],
@@ -140,6 +150,8 @@ def build_row(question: dict, result, elapsed_ms: float, judged: dict | None, *,
         "citation_metrics": {"context": context_m, "answer": answer_m},
         # tag compliance of the answer: how many [DOC: id] ids it wrote and how many resolve to a canonical id
         "answer_tags": {"n_tags": len(tag_ids), "n_resolved": len(resolved_tags),
+                        "n_prefixed": (tag_forms or {}).get("n_prefixed", len(tag_ids)),
+                        "n_bare": (tag_forms or {}).get("n_bare", 0),
                         "valid": bool(resolved_tags), "refused": refused},
         "status": judged["status"],
         "faithfulness": judged["faithfulness"],
@@ -179,6 +191,8 @@ def tag_compliance(ok_rows: list[dict]) -> dict:
         "compliance": round(sum(tags["valid"] for tags in answered) / len(answered), 4) if answered else None,
         "n_nonrefused": len(answered),
         "n_tags": n_tags,
+        "n_tags_prefixed": sum(tags.get("n_prefixed", 0) for tags in tagged),
+        "n_tags_bare": sum(tags.get("n_bare", 0) for tags in tagged),
         "tag_resolution_rate": round(sum(tags["n_resolved"] for tags in tagged) / n_tags, 4) if n_tags else None,
     }
 
@@ -190,10 +204,12 @@ def summarise(rows: list[dict]) -> dict:
                   if row.get("citation_metrics") and row["citation_metrics"][which][key] is not None]
         return round(statistics.mean(values), 4) if values else None
 
-    sets = {which: {"recall": pooled(which, "recall"), "precision": pooled(which, "precision"),
+    sets = {which: {"recall_raw": pooled(which, "recall_raw"), "recall_citable": pooled(which, "recall_citable"),
+                    "precision": pooled(which, "precision"),
                     "f1_macro": pooled(which, "f1"),    # per question, then averaged
                     "mean_distinct_docs": pooled(which, "n_distinct")}
             for which in ("context", "answer")}
+    sets["answer"]["n_expected_uncitable"] = sum(row.get("n_expected_uncitable") or 0 for row in ok)
     basis_rows = [row["citation_metrics"]["answer" if row["citation_basis"] == "answer" else "context"]
                   for row in ok if row.get("citation_metrics")]
 
@@ -217,11 +233,13 @@ def summarise(rows: list[dict]) -> dict:
         "n_questions": len(rows),
         "n_errors": sum(row["status"] == "error" for row in rows),
         "golden_pass_rate": round(sum(bool(row["golden_pass"]) for row in ok) / len(ok), 4) if ok else None,
-        "citation_recall": basis_mean("recall"),   # the golden basis set (context; answer for full_context)
+        "citation_recall": basis_mean("recall_raw"),   # the golden basis set (context; answer for full_context)
         "citation_precision": basis_mean("precision"),
         "citation_f1_macro": basis_mean("f1"),
         "mean_distinct_cited": basis_mean("n_distinct"),
         "citations": {**sets, "answer": {**sets["answer"], **tag_compliance(ok)}},   # headline = ["answer"]
+        "golden_pass_rate_citable": (round(sum(bool(row["golden_pass_citable"]) for row in ok) / len(ok), 4)
+                                     if ok and all("golden_pass_citable" in row for row in ok) else None),
         "golden_pass_rate_lenient": (round(sum(bool(row["golden_pass_lenient"]) for row in ok) / len(ok), 4)
                                      if ok else None),
         "faithfulness_mean": round(statistics.mean(faith), 4) if faith else None,
@@ -298,10 +316,11 @@ async def _run_profile(questions: list[dict], args, golden: dict, evaluator, mod
             continue
         elapsed_ms = (time.perf_counter() - started) * 1000
         raw_answer = result.answer
-        result, answer_ids = split_answer(result)
+        result, parsed_tags = split_answer(result)
         judged = await _judge(evaluator, question, result.answer, result.contexts) if evaluator else None
-        rows.append(build_row(question, result, elapsed_ms, judged, answer_ids=answer_ids,
-                              basis="answer" if is_full_context else "context", raw_answer=raw_answer))
+        rows.append(build_row(question, result, elapsed_ms, judged, answer_ids=parsed_tags["ids"],
+                              basis="answer" if is_full_context else "context", raw_answer=raw_answer,
+                              tag_forms=parsed_tags, citable=corpus.names))
     run = collect_run_metadata(
         tenant=args.tenant, profile=profile, profile_overrides=retrieval_profile_overrides(profile),
         mode=args.mode, config_overrides=config_overrides, models=models, golden=golden,
@@ -311,6 +330,8 @@ async def _run_profile(questions: list[dict], args, golden: dict, evaluator, mod
         "alias_map_sha256": citations.alias_map_sha256(),
         "answer_prompt": "shared base prompt + the same [DOC: id] citation rule for every profile",
         "citation_instruction": instruction,
+        "citable_ids": corpus.names,
+        "accepted_tag_forms": citations.ACCEPTED_TAG_FORMS,
         "citation_instruction_sha256": citations.sha256_text(instruction),
         "answer_prompt_sha256": citations.sha256_text(answer_prompt(tenant_cfg)),
         "golden_citation_basis": "answer_citations" if is_full_context else "context_citations",

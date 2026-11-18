@@ -93,3 +93,21 @@ def test_a_profile_without_valid_runs_is_reported_not_silently_skipped(tmp_path)
     _write(tmp_path, "full", "1", [_row("Q1", "single_hop", True, 0.9)])
     with pytest.raises(SystemExit, match="vector_only"):
         cmp.analyse(tmp_path, "full", ["vector_only"])
+
+
+def test_citation_recall_is_compared_per_question_with_a_paired_bootstrap(tmp_path):
+    def row(qid, answer_recall, context_recall):
+        entry = _row(qid, "single_hop", True, 0.9)
+        entry["citation_metrics"] = {"answer": {"recall_citable": answer_recall},
+                                     "context": {"recall_raw": context_recall}}
+        return entry
+
+    ids = [f"Q{i}" for i in range(12)]
+    _write(tmp_path, "full", "1", [row(q, 1.0, 1.0) for q in ids])
+    _write(tmp_path, "vector_only", "1", [row(q, 0.5, 0.5) for q in ids])
+    _write(tmp_path, "old", "1", [_row(q, "single_hop", True, 0.9) for q in ids])       # no citation_metrics
+    report = cmp.analyse(tmp_path, "full", ["vector_only", "old"])
+    answer = report["comparisons"]["vector_only"]["all"]["recall_answer"]
+    assert answer["n_pairs"] == 12 and answer["mean_diff"] == pytest.approx(0.5) and answer["distinguishable"] is True
+    assert report["comparisons"]["old"]["all"]["recall_answer"]["n_pairs"] == 0      # old files are skipped, not zeroed
+    assert "Paired bootstrap of per-question citation recall" in cmp.render(report)

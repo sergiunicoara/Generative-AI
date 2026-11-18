@@ -1,0 +1,168 @@
+{
+  "baseline": "full",
+  "n_runs": {
+    "full": 3,
+    "vector_only": 3,
+    "text_hybrid": 3,
+    "full_context": 3
+  },
+  "comparisons": {
+    "vector_only": {
+      "all": {
+        "n_questions": 34,
+        "pass_base": 29,
+        "pass_other": 24,
+        "only_base_passed": 6,
+        "only_other_passed": 1,
+        "only_base_ids": [
+          "AUT-02",
+          "AUT-03",
+          "CON-01",
+          "INF-01",
+          "PRE-01",
+          "TMP-01"
+        ],
+        "only_other_ids": [
+          "MH-03"
+        ],
+        "mcnemar_p": 0.125,
+        "n_faithfulness_pairs": 26,
+        "faithfulness_mean_diff": 0.016939102564102557,
+        "faithfulness_ci95": [
+          -0.046857051282051296,
+          0.07418846153846152
+        ],
+        "faithfulness_distinguishable": false,
+        "mcnemar_p_holm": 0.25,
+        "pass_distinguishable": false
+      },
+      "multi_hop": {
+        "n_questions": 6,
+        "pass_base": 5,
+        "pass_other": 6,
+        "only_base_passed": 0,
+        "only_other_passed": 1,
+        "only_base_ids": [],
+        "only_other_ids": [
+          "MH-03"
+        ],
+        "mcnemar_p": 1.0,
+        "n_faithfulness_pairs": 4,
+        "faithfulness_mean_diff": -0.1520791666666667,
+        "faithfulness_ci95": [
+          -0.39583333333333337,
+          0.09167499999999995
+        ],
+        "faithfulness_distinguishable": false
+      }
+    },
+    "text_hybrid": {
+      "all": {
+        "n_questions": 34,
+        "pass_base": 29,
+        "pass_other": 24,
+        "only_base_passed": 6,
+        "only_other_passed": 1,
+        "only_base_ids": [
+          "AUT-02",
+          "AUT-03",
+          "INF-01",
+          "MH-02",
+          "PRE-01",
+          "TMP-01"
+        ],
+        "only_other_ids": [
+          "SH-05"
+        ],
+        "mcnemar_p": 0.125,
+        "n_faithfulness_pairs": 29,
+        "faithfulness_mean_diff": -0.040469540229885054,
+        "faithfulness_ci95": [
+          -0.10587586206896551,
+          0.022950574712643685
+        ],
+        "faithfulness_distinguishable": false,
+        "mcnemar_p_holm": 0.25,
+        "pass_distinguishable": false
+      },
+      "multi_hop": {
+        "n_questions": 6,
+        "pass_base": 5,
+        "pass_other": 4,
+        "only_base_passed": 1,
+        "only_other_passed": 0,
+        "only_base_ids": [
+          "MH-02"
+        ],
+        "only_other_ids": [],
+        "mcnemar_p": 1.0,
+        "n_faithfulness_pairs": 4,
+        "faithfulness_mean_diff": -0.202775,
+        "faithfulness_ci95": [
+          -0.4055500000000001,
+          0.0
+        ],
+        "faithfulness_distinguishable": false
+      }
+    },
+    "full_context": {
+      "all": {
+        "n_questions": 34,
+        "pass_base": 29,
+        "pass_other": 12,
+        "only_base_passed": 17,
+        "only_other_passed": 0,
+        "only_base_ids": [
+          "AGT-02",
+          "AUT-02",
+          "AUT-03",
+          "CON-01",
+          "CON-02",
+          "INF-01",
+          "INF-02",
+          "MH-02",
+          "MH-05",
+          "NEG-02",
+          "SH-02",
+          "SH-04",
+          "SH-06",
+          "SH-07",
+          "SH-08",
+          "TMP-01",
+          "TMP-02"
+        ],
+        "only_other_ids": [],
+        "mcnemar_p": 1.52587890625e-05,
+        "n_faithfulness_pairs": 28,
+        "faithfulness_mean_diff": -0.0338970238095238,
+        "faithfulness_ci95": [
+          -0.10934464285714286,
+          0.04495595238095239
+        ],
+        "faithfulness_distinguishable": false,
+        "mcnemar_p_holm": 4.57763671875e-05,
+        "pass_distinguishable": true
+      },
+      "multi_hop": {
+        "n_questions": 6,
+        "pass_base": 5,
+        "pass_other": 3,
+        "only_base_passed": 2,
+        "only_other_passed": 0,
+        "only_base_ids": [
+          "MH-02",
+          "MH-05"
+        ],
+        "only_other_ids": [],
+        "mcnemar_p": 0.5,
+        "n_faithfulness_pairs": 4,
+        "faithfulness_mean_diff": -0.1701416666666667,
+        "faithfulness_ci95": [
+          -0.39583333333333337,
+          0.05554999999999999
+        ],
+        "faithfulness_distinguishable": false
+      }
+    }
+  }
+}

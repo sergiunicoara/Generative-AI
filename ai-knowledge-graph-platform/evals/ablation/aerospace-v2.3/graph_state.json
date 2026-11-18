@@ -1,0 +1,15 @@
+{
+  "recorded_at": "2026-11-17T13:11:06+00:00",
+  "tenant": "aerospace",
+  "source": "Neo4j volume restored from D:\\DockerBackups\\docker-backup-20261106-151509 (ingested 2026-10-11); no re-ingestion between runs",
+  "neo4j_image": "neo4j:5.20-community",
+  "counts": {
+    "entities": 401,
+    "relations_RELATES_TO": 34,
+    "chunks": 93,
+    "documents": 12,
+    "communities": 15,
+    "chunk_mentions_entity": 749,
+    "chunks_with_embedding": 93
+  }
+}

@@ -1,0 +1,161 @@
+{
+  "run": {
+    "schema_version": "ablation-run/1",
+    "timestamp": "2026-11-17T13:10:38+00:00",
+    "git": {
+      "sha": "53aef05ade517f583ed6a8a45f8dc106e5f0c4e5",
+      "branch": "eval-ablation",
+      "dirty": true
+    },
+    "tenant": "aerospace",
+    "retrieval_profile": "vector_only",
+    "profile_overrides": {
+      "bm25_enabled": false,
+      "reranker_enabled": false,
+      "multihop_depth": 0,
+      "gnn_enabled": false,
+      "pagerank_tiebreak_enabled": false,
+      "authority_weighting_enabled": false,
+      "feedback_ranking_enabled": false,
+      "query_rewrite_enabled": false,
+      "entity_context_enabled": false,
+      "named_document_boost_enabled": false
+    },
+    "config_overrides": {},
+    "mode": "local",
+    "pinned_models": true,
+    "models": {
+      "generator": "groq:openai/gpt-oss-120b",
+      "generator_fallback": "none (EVAL_PINNED_MODELS)",
+      "router": "groq:openai/gpt-oss-20b",
+      "judge": {
+        "provider": "deepseek",
+        "model": "deepseek-v4-flash"
+      }
+    },
+    "temperature": 0.0,
+    "ragas_version": "0.4.3",
+    "golden_set": {
+      "path": "C:\\Users\\Sergiu\\Desktop\\Projects\\Generative-AI\\ai-knowledge-graph-platform\\evals\\golden_set.json",
+      "version": "2.3",
+      "tenant": "aerospace",
+      "n_questions": 3,
+      "n_questions_in_file": 34,
+      "sha256": "0694148edd7768a7600a262c5485d15c65a5e38523018fe713d93f835eab405b"
+    },
+    "python": "3.11.9",
+    "cache": "disabled (no query ID)"
+  },
+  "summary": {
+    "n_questions": 3,
+    "n_errors": 0,
+    "golden_pass_rate": 1.0,
+    "citation_recall": 0.8333,
+    "faithfulness_mean": 0.875,
+    "n_scored": 2,
+    "n_refused": 1,
+    "n_unscorable": 0,
+    "n_agentic_fallback": 0,
+    "latency_e2e_ms": {
+      "n": 3,
+      "mean": 5327.23,
+      "p50": 1866.51,
+      "p95": 12894.37,
+      "max": 12894.37
+    },
+    "latency_retrieval_ms": {
+      "n": 3,
+      "mean": 3307.0,
+      "p50": 1015.0,
+      "p95": 8594.0,
+      "max": 8594.0
+    }
+  },
+  "results": [
+    {
+      "id": "SH-01",
+      "type": "single_hop",
+      "golden_pass": true,
+      "golden_failures": [],
+      "citation_recall": 1.0,
+      "status": "scored",
+      "faithfulness": 0.75,
+      "faithfulness_attempts": 1,
+      "judge_notes": [],
+      "latency_e2e_ms": 12894.37,
+      "latency_retrieval_ms": 8594.0,
+      "agentic_fallback": {
+        "fired": false,
+        "reason": null,
+        "completed_by": "synthesis"
+      },
+      "retrieval_mode": "local",
+      "routing_reason": "retrieval_profile",
+      "n_contexts": 1,
+      "answer": "Yes. AD 2024-01-02 supersedes AD 2022-03-07. The FAA AD summary states that the new AD \u201csupersedes AD 2022-03-07.\u201d Relevant FAA directives in the retrieved evidence: FAA-AD-2024-01-02.",
+      "citations": [
+        "FAA-AD-2024-01-02",
+        "14CFR_Part39_excerpt",
+        "EASA-AD-2024-0072"
+      ],
+      "error": null
+    },
+    {
+      "id": "SH-02",
+      "type": "single_hop",
+      "golden_pass": true,
+      "golden_failures": [],
+      "citation_recall": 0.5,
+      "status": "refused",
+      "faithfulness": null,
+      "faithfulness_attempts": 0,
+      "judge_notes": [],
+      "latency_e2e_ms": 1866.51,
+      "latency_retrieval_ms": 1015.0,
+      "agentic_fallback": {
+        "fired": false,
+        "reason": null,
+        "completed_by": "synthesis"
+      },
+      "retrieval_mode": "local",
+      "routing_reason": "retrieval_profile",
+      "n_contexts": 1,
+      "answer": "No. The context does not specify any directive that supersedes AD-2020-05-11. Relevant FAA directives in the retrieved evidence: FAA-AD-2024-01-02.",
+      "citations": [
+        "FAA-AD-2024-01-02",
+        "14CFR_Part39_excerpt",
+        "EASA-AD-2024-0072"
+      ],
+      "error": null
+    },
+    {
+      "id": "SH-03",
+      "type": "single_hop",
+      "golden_pass": true,
+      "golden_failures": [],
+      "citation_recall": 1.0,
+      "status": "scored",
+      "faithfulness": 1.0,
+      "faithfulness_attempts": 1,
+      "judge_notes": [],
+      "latency_e2e_ms": 1220.81,
+      "latency_retrieval_ms": 312.0,
+      "agentic_fallback": {
+        "fired": false,
+        "reason": null,
+        "completed_by": "synthesis"
+      },
+      "retrieval_mode": "local",
+      "routing_reason": "retrieval_profile",
+      "n_contexts": 1,
+      "answer": "Yes. The FAA-AD-2024-01-02 was mandated by the **Federal Aviation Administration (FAA)**. This is stated in the retrieved chunks that label the directive as an \u201cAIRWORTHINESS DIRECTIVE \u2026 Federal Aviation Administration\u201d and list the agency as \u201cFederal Aviation Administration (FAA), DOT.\u201d",
+      "citations": [
+        "FAA-AD-2024-01-02",
+        "EASA-AD-2024-0072",
+        "G-ABCD_AD_compliance_2024-03",
+        "G-ABCD_inspection_2024-01"
+      ],
+      "error": null
+    }
+  ]
+}

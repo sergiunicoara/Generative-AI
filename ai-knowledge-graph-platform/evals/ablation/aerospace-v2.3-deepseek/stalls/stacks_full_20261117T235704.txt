@@ -1,0 +1,66 @@
+Timeout (0:10:00)!
+Thread 0x00001420 (most recent call first):
+  File "C:\Users\Sergiu\AppData\Roaming\Python\Python311\site-packages\ragas\_analytics.py", line 158 in _flush_loop
+  File "C:\Users\Sergiu\AppData\Local\Programs\Python\Python311\Lib\threading.py", line 982 in run
+  File "C:\Users\Sergiu\AppData\Local\Programs\Python\Python311\Lib\threading.py", line 1045 in _bootstrap_inner
+  File "C:\Users\Sergiu\AppData\Local\Programs\Python\Python311\Lib\threading.py", line 1002 in _bootstrap
+
+Thread 0x00005e30 (most recent call first):
+  File "C:\Users\Sergiu\AppData\Local\Programs\Python\Python311\Lib\threading.py", line 331 in wait
+  File "C:\Users\Sergiu\AppData\Local\Programs\Python\Python311\Lib\threading.py", line 629 in wait
+  File "C:\Users\Sergiu\AppData\Roaming\Python\Python311\site-packages\tqdm\_monitor.py", line 60 in run
+  File "C:\Users\Sergiu\AppData\Local\Programs\Python\Python311\Lib\threading.py", line 1045 in _bootstrap_inner
+  File "C:\Users\Sergiu\AppData\Local\Programs\Python\Python311\Lib\threading.py", line 1002 in _bootstrap
+
+Thread 0x000062dc (most recent call first):
+  File "C:\Users\Sergiu\AppData\Local\Programs\Python\Python311\Lib\threading.py", line 331 in wait
+  File "C:\Users\Sergiu\AppData\Local\Programs\Python\Python311\Lib\threading.py", line 629 in wait
+  File "C:\Users\Sergiu\AppData\Roaming\Python\Python311\site-packages\tqdm\_monitor.py", line 60 in run
+  File "C:\Users\Sergiu\AppData\Local\Programs\Python\Python311\Lib\threading.py", line 1045 in _bootstrap_inner
+  File "C:\Users\Sergiu\AppData\Local\Programs\Python\Python311\Lib\threading.py", line 1002 in _bootstrap
+
+Thread 0x00004f50 (most recent call first):
+  File "C:\Users\Sergiu\AppData\Local\Programs\Python\Python311\Lib\ssl.py", line 1168 in read
+  File "C:\Users\Sergiu\AppData\Local\Programs\Python\Python311\Lib\ssl.py", line 1295 in recv
+  File "C:\Users\Sergiu\AppData\Roaming\Python\Python311\site-packages\httpcore\_backends\sync.py", line 128 in read
+  File "C:\Users\Sergiu\AppData\Roaming\Python\Python311\site-packages\httpcore\_sync\http11.py", line 217 in _receive_event
+  File "C:\Users\Sergiu\AppData\Roaming\Python\Python311\site-packages\httpcore\_sync\http11.py", line 177 in _receive_response_headers
+  File "C:\Users\Sergiu\AppData\Roaming\Python\Python311\site-packages\httpcore\_sync\http11.py", line 106 in handle_request
+  File "C:\Users\Sergiu\AppData\Roaming\Python\Python311\site-packages\httpcore\_sync\connection.py", line 103 in handle_request
+  File "C:\Users\Sergiu\AppData\Roaming\Python\Python311\site-packages\httpcore\_sync\connection_pool.py", line 236 in handle_request
+  File "C:\Users\Sergiu\AppData\Local\Programs\Python\Python311\Lib\site-packages\httpx\_transports\default.py", line 250 in handle_request
+  File "C:\Users\Sergiu\AppData\Local\Programs\Python\Python311\Lib\site-packages\httpx\_client.py", line 1014 in _send_single_request
+  File "C:\Users\Sergiu\AppData\Local\Programs\Python\Python311\Lib\site-packages\httpx\_client.py", line 979 in _send_handling_redirects
+  File "C:\Users\Sergiu\AppData\Local\Programs\Python\Python311\Lib\site-packages\httpx\_client.py", line 942 in _send_handling_auth
+  File "C:\Users\Sergiu\AppData\Local\Programs\Python\Python311\Lib\site-packages\httpx\_client.py", line 914 in send
+  File "C:\Users\Sergiu\AppData\Roaming\Python\Python311\site-packages\openai\_base_client.py", line 964 in _send_request
+  File "C:\Users\Sergiu\AppData\Roaming\Python\Python311\site-packages\openai\_client.py", line 418 in _send_with_auth_retry
+  File "C:\Users\Sergiu\AppData\Roaming\Python\Python311\site-packages\openai\_client.py", line 440 in _send_request
+  File "C:\Users\Sergiu\AppData\Roaming\Python\Python311\site-packages\openai\_base_client.py", line 1037 in request
+  File "C:\Users\Sergiu\AppData\Roaming\Python\Python311\site-packages\openai\_base_client.py", line 1332 in post
+  File "C:\Users\Sergiu\AppData\Roaming\Python\Python311\site-packages\openai\resources\chat\completions\completions.py", line 1215 in create
+  File "C:\Users\Sergiu\AppData\Roaming\Python\Python311\site-packages\openai\_utils\_utils.py", line 298 in wrapper
+  File "C:\Users\Sergiu\Desktop\Projects\Generative-AI\ai-knowledge-graph-platform\graphrag\core\llm_client.py", line 342 in <lambda>
+  File "C:\Users\Sergiu\AppData\Local\Programs\Python\Python311\Lib\concurrent\futures\thread.py", line 58 in run
+  File "C:\Users\Sergiu\AppData\Local\Programs\Python\Python311\Lib\concurrent\futures\thread.py", line 83 in _worker
+  File "C:\Users\Sergiu\AppData\Local\Programs\Python\Python311\Lib\threading.py", line 982 in run
+  File "C:\Users\Sergiu\AppData\Local\Programs\Python\Python311\Lib\threading.py", line 1045 in _bootstrap_inner
+  File "C:\Users\Sergiu\AppData\Local\Programs\Python\Python311\Lib\threading.py", line 1002 in _bootstrap
+
+Thread 0x00001464 (most recent call first):
+  File "C:\Users\Sergiu\AppData\Local\Programs\Python\Python311\Lib\concurrent\futures\thread.py", line 81 in _worker
+  File "C:\Users\Sergiu\AppData\Local\Programs\Python\Python311\Lib\threading.py", line 982 in run
+  File "C:\Users\Sergiu\AppData\Local\Programs\Python\Python311\Lib\threading.py", line 1045 in _bootstrap_inner
+  File "C:\Users\Sergiu\AppData\Local\Programs\Python\Python311\Lib\threading.py", line 1002 in _bootstrap
+
+Thread 0x000027b4 (most recent call first):
+  File "C:\Users\Sergiu\AppData\Local\Programs\Python\Python311\Lib\asyncio\windows_events.py", line 825 in _poll
+  File "C:\Users\Sergiu\AppData\Local\Programs\Python\Python311\Lib\asyncio\windows_events.py", line 444 in select
+  File "C:\Users\Sergiu\AppData\Local\Programs\Python\Python311\Lib\asyncio\base_events.py", line 1898 in _run_once
+  File "C:\Users\Sergiu\AppData\Local\Programs\Python\Python311\Lib\asyncio\base_events.py", line 608 in run_forever
+  File "C:\Users\Sergiu\AppData\Local\Programs\Python\Python311\Lib\asyncio\windows_events.py", line 321 in run_forever
+  File "C:\Users\Sergiu\AppData\Local\Programs\Python\Python311\Lib\asyncio\base_events.py", line 641 in run_until_complete
+  File "C:\Users\Sergiu\AppData\Local\Programs\Python\Python311\Lib\asyncio\runners.py", line 118 in run
+  File "C:\Users\Sergiu\AppData\Local\Programs\Python\Python311\Lib\asyncio\runners.py", line 190 in run
+  File "C:\Users\Sergiu\Desktop\Projects\Generative-AI\ai-knowledge-graph-platform\scripts\benchmark_retrieval_ablation.py", line 348 in main
+  File "C:\Users\Sergiu\Desktop\Projects\Generative-AI\ai-knowledge-graph-platform\scripts\benchmark_retrieval_ablation.py", line 352 in <module>

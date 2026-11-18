@@ -1,0 +1,192 @@
+{
+  "run": {
+    "schema_version": "ablation-run/1",
+    "timestamp": "2026-11-17T20:14:24+00:00",
+    "timestamp_bucharest": "2026-11-17T22:14:24+02:00",
+    "deepseek_peak_at_start": false,
+    "git": {
+      "sha": "2e9c466dadf0f0924138253bf8cd67f2a6826a32",
+      "branch": "eval-ablation",
+      "dirty": true
+    },
+    "tenant": "aerospace",
+    "retrieval_profile": "vector_only",
+    "profile_overrides": {
+      "bm25_enabled": false,
+      "reranker_enabled": false,
+      "multihop_depth": 0,
+      "gnn_enabled": false,
+      "pagerank_tiebreak_enabled": false,
+      "authority_weighting_enabled": false,
+      "feedback_ranking_enabled": false,
+      "query_rewrite_enabled": false,
+      "entity_context_enabled": false,
+      "named_document_boost_enabled": false
+    },
+    "config_overrides": {},
+    "mode": "local",
+    "pinned_models": true,
+    "models": {
+      "generator": "deepseek:deepseek-v4-flash",
+      "generator_fallback": "none (EVAL_PINNED_MODELS)",
+      "router": "deepseek:deepseek-v4-flash",
+      "judge": {
+        "provider": "deepseek",
+        "model": "deepseek-v4-flash"
+      },
+      "judge_same_provider_as_generator": true
+    },
+    "temperature": 0.0,
+    "ragas_version": "0.4.3",
+    "golden_set": {
+      "path": "C:\\Users\\Sergiu\\Desktop\\Projects\\Generative-AI\\ai-knowledge-graph-platform\\evals\\golden_set.json",
+      "version": "2.3",
+      "tenant": "aerospace",
+      "n_questions": 4,
+      "n_questions_in_file": 34,
+      "sha256": "0694148edd7768a7600a262c5485d15c65a5e38523018fe713d93f835eab405b"
+    },
+    "python": "3.11.9",
+    "cache": "disabled (no query ID)"
+  },
+  "summary": {
+    "n_questions": 4,
+    "n_errors": 0,
+    "golden_pass_rate": 1.0,
+    "citation_recall": 0.875,
+    "faithfulness_mean": 1.0,
+    "n_scored": 3,
+    "n_refused": 1,
+    "n_unscorable": 0,
+    "n_agentic_fallback": 0,
+    "latency_e2e_ms": {
+      "n": 4,
+      "mean": 3146.16,
+      "p50": 2664.63,
+      "p95": 6845.09,
+      "max": 6845.09
+    },
+    "latency_retrieval_ms": {
+      "n": 4,
+      "mean": 1402.25,
+      "p50": 1219.0,
+      "p95": 3687.0,
+      "max": 3687.0
+    }
+  },
+  "results": [
+    {
+      "id": "SH-01",
+      "type": "single_hop",
+      "golden_pass": true,
+      "golden_failures": [],
+      "citation_recall": 1.0,
+      "status": "scored",
+      "faithfulness": 1.0,
+      "faithfulness_attempts": 1,
+      "judge_notes": [],
+      "latency_e2e_ms": 6845.09,
+      "latency_retrieval_ms": 3687.0,
+      "agentic_fallback": {
+        "fired": false,
+        "reason": null,
+        "completed_by": "synthesis"
+      },
+      "retrieval_mode": "local",
+      "routing_reason": "retrieval_profile",
+      "n_contexts": 1,
+      "answer": "AD 2024-01-02 supersedes AD 2022-03-07. Relevant FAA directives in the retrieved evidence: FAA-AD-2024-01-02.",
+      "citations": [
+        "FAA-AD-2024-01-02",
+        "14CFR_Part39_excerpt",
+        "EASA-AD-2024-0072"
+      ],
+      "error": null
+    },
+    {
+      "id": "SH-02",
+      "type": "single_hop",
+      "golden_pass": true,
+      "golden_failures": [],
+      "citation_recall": 0.5,
+      "status": "refused",
+      "faithfulness": null,
+      "faithfulness_attempts": 0,
+      "judge_notes": [],
+      "latency_e2e_ms": 2664.63,
+      "latency_retrieval_ms": 1219.0,
+      "agentic_fallback": {
+        "fired": false,
+        "reason": null,
+        "completed_by": "synthesis"
+      },
+      "retrieval_mode": "local",
+      "routing_reason": "retrieval_profile",
+      "n_contexts": 1,
+      "answer": "The context does not contain enough information to answer which directive supersedes AD-2020. It states that FAA AD 2024-01-02 supersedes AD 2022-03-07, and that EASA AD 2022-0201 is superseded by EASA AD 2024-0072, but no directive superseding AD-2020 is identified. Relevant FAA directives in the retrieved evidence: FAA-AD-2024-01-02.",
+      "citations": [
+        "FAA-AD-2024-01-02",
+        "14CFR_Part39_excerpt",
+        "EASA-AD-2024-0072"
+      ],
+      "error": null
+    },
+    {
+      "id": "SH-03",
+      "type": "single_hop",
+      "golden_pass": true,
+      "golden_failures": [],
+      "citation_recall": 1.0,
+      "status": "scored",
+      "faithfulness": 1.0,
+      "faithfulness_attempts": 1,
+      "judge_notes": [],
+      "latency_e2e_ms": 1727.52,
+      "latency_retrieval_ms": 328.0,
+      "agentic_fallback": {
+        "fired": false,
+        "reason": null,
+        "completed_by": "synthesis"
+      },
+      "retrieval_mode": "local",
+      "routing_reason": "retrieval_profile",
+      "n_contexts": 1,
+      "answer": "The FAA (Federal Aviation Administration). The document identifies the agency as the Federal Aviation Administration (FAA), DOT, and states the rulemaking is issued under 49 USC authority. Relevant FAA directives in the retrieved evidence: FAA-AD-2024-01-02.",
+      "citations": [
+        "FAA-AD-2024-01-02",
+        "EASA-AD-2024-0072",
+        "G-ABCD_AD_compliance_2024-03",
+        "G-ABCD_inspection_2024-01"
+      ],
+      "error": null
+    },
+    {
+      "id": "MH-01",
+      "type": "multi_hop",
+      "golden_pass": true,
+      "golden_failures": [],
+      "citation_recall": 1.0,
+      "status": "scored",
+      "faithfulness": 1.0,
+      "faithfulness_attempts": 1,
+      "judge_notes": [],
+      "latency_e2e_ms": 1347.39,
+      "latency_retrieval_ms": 375.0,
+      "agentic_fallback": {
+        "fired": false,
+        "reason": null,
+        "completed_by": "synthesis"
+      },
+      "retrieval_mode": "local",
+      "routing_reason": "retrieval_profile",
+      "n_contexts": 1,
+      "answer": "FAA-AD-2024-01-02 supersedes AD 2022-03-07, which partially superseded AD 2020-05-11; AD 2020-05-11 is fully superseded by FAA-AD-2024-01-02.",
+      "citations": [
+        "FAA-AD-2024-01-02",
+        "EASA-AD-2024-0072",
+        "G-ABCD_inspection_2024-01"
+      ],
+      "error": null
+    }
+  ]
+}

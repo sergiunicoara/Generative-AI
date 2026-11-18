@@ -1,0 +1,69 @@
+Timeout (0:10:00)!
+Thread 0x000015d0 (most recent call first):
+  File "C:\Users\Sergiu\AppData\Local\Programs\Python\Python311\Lib\concurrent\futures\thread.py", line 81 in _worker
+  File "C:\Users\Sergiu\AppData\Local\Programs\Python\Python311\Lib\threading.py", line 982 in run
+  File "C:\Users\Sergiu\AppData\Local\Programs\Python\Python311\Lib\threading.py", line 1045 in _bootstrap_inner
+  File "C:\Users\Sergiu\AppData\Local\Programs\Python\Python311\Lib\threading.py", line 1002 in _bootstrap
+
+Thread 0x000008e8 (most recent call first):
+  File "C:\Users\Sergiu\AppData\Local\Programs\Python\Python311\Lib\concurrent\futures\thread.py", line 81 in _worker
+  File "C:\Users\Sergiu\AppData\Local\Programs\Python\Python311\Lib\threading.py", line 982 in run
+  File "C:\Users\Sergiu\AppData\Local\Programs\Python\Python311\Lib\threading.py", line 1045 in _bootstrap_inner
+  File "C:\Users\Sergiu\AppData\Local\Programs\Python\Python311\Lib\threading.py", line 1002 in _bootstrap
+
+Thread 0x00004600 (most recent call first):
+  File "C:\Users\Sergiu\AppData\Roaming\Python\Python311\site-packages\ragas\_analytics.py", line 158 in _flush_loop
+  File "C:\Users\Sergiu\AppData\Local\Programs\Python\Python311\Lib\threading.py", line 982 in run
+  File "C:\Users\Sergiu\AppData\Local\Programs\Python\Python311\Lib\threading.py", line 1045 in _bootstrap_inner
+  File "C:\Users\Sergiu\AppData\Local\Programs\Python\Python311\Lib\threading.py", line 1002 in _bootstrap
+
+Thread 0x00005e8c (most recent call first):
+  File "C:\Users\Sergiu\AppData\Local\Programs\Python\Python311\Lib\threading.py", line 331 in wait
+  File "C:\Users\Sergiu\AppData\Local\Programs\Python\Python311\Lib\threading.py", line 629 in wait
+  File "C:\Users\Sergiu\AppData\Roaming\Python\Python311\site-packages\tqdm\_monitor.py", line 60 in run
+  File "C:\Users\Sergiu\AppData\Local\Programs\Python\Python311\Lib\threading.py", line 1045 in _bootstrap_inner
+  File "C:\Users\Sergiu\AppData\Local\Programs\Python\Python311\Lib\threading.py", line 1002 in _bootstrap
+
+Thread 0x00006250 (most recent call first):
+  File "C:\Users\Sergiu\AppData\Local\Programs\Python\Python311\Lib\threading.py", line 331 in wait
+  File "C:\Users\Sergiu\AppData\Local\Programs\Python\Python311\Lib\threading.py", line 629 in wait
+  File "C:\Users\Sergiu\AppData\Roaming\Python\Python311\site-packages\tqdm\_monitor.py", line 60 in run
+  File "C:\Users\Sergiu\AppData\Local\Programs\Python\Python311\Lib\threading.py", line 1045 in _bootstrap_inner
+  File "C:\Users\Sergiu\AppData\Local\Programs\Python\Python311\Lib\threading.py", line 1002 in _bootstrap
+
+Thread 0x00004e14 (most recent call first):
+  File "C:\Users\Sergiu\AppData\Local\Programs\Python\Python311\Lib\asyncio\windows_events.py", line 825 in _poll
+  File "C:\Users\Sergiu\AppData\Local\Programs\Python\Python311\Lib\asyncio\windows_events.py", line 444 in select
+  File "C:\Users\Sergiu\AppData\Local\Programs\Python\Python311\Lib\asyncio\base_events.py", line 1898 in _run_once
+  File "C:\Users\Sergiu\AppData\Local\Programs\Python\Python311\Lib\asyncio\base_events.py", line 608 in run_forever
+  File "C:\Users\Sergiu\AppData\Local\Programs\Python\Python311\Lib\asyncio\windows_events.py", line 321 in run_forever
+  File "C:\Users\Sergiu\AppData\Local\Programs\Python\Python311\Lib\asyncio\base_events.py", line 641 in run_until_complete
+  File "C:\Users\Sergiu\AppData\Local\Programs\Python\Python311\Lib\asyncio\runners.py", line 118 in run
+  File "C:\Users\Sergiu\AppData\Local\Programs\Python\Python311\Lib\asyncio\runners.py", line 190 in run
+  File "C:\Users\Sergiu\AppData\Roaming\Python\Python311\site-packages\ragas\async_utils.py", line 156 in run
+  File "C:\Users\Sergiu\AppData\Roaming\Python\Python311\site-packages\ragas\evaluation.py", line 484 in evaluate
+  File "C:\Users\Sergiu\AppData\Roaming\Python\Python311\site-packages\ragas\_analytics.py", line 278 in wrapper
+  File "C:\Users\Sergiu\Desktop\Projects\Generative-AI\ai-knowledge-graph-platform\graphrag\evaluation\ragas_evaluator.py", line 264 in <lambda>
+  File "C:\Users\Sergiu\AppData\Local\Programs\Python\Python311\Lib\concurrent\futures\thread.py", line 58 in run
+  File "C:\Users\Sergiu\AppData\Local\Programs\Python\Python311\Lib\concurrent\futures\thread.py", line 83 in _worker
+  File "C:\Users\Sergiu\AppData\Local\Programs\Python\Python311\Lib\threading.py", line 982 in run
+  File "C:\Users\Sergiu\AppData\Local\Programs\Python\Python311\Lib\threading.py", line 1045 in _bootstrap_inner
+  File "C:\Users\Sergiu\AppData\Local\Programs\Python\Python311\Lib\threading.py", line 1002 in _bootstrap
+
+Thread 0x0000226c (most recent call first):
+  File "C:\Users\Sergiu\AppData\Local\Programs\Python\Python311\Lib\concurrent\futures\thread.py", line 81 in _worker
+  File "C:\Users\Sergiu\AppData\Local\Programs\Python\Python311\Lib\threading.py", line 982 in run
+  File "C:\Users\Sergiu\AppData\Local\Programs\Python\Python311\Lib\threading.py", line 1045 in _bootstrap_inner
+  File "C:\Users\Sergiu\AppData\Local\Programs\Python\Python311\Lib\threading.py", line 1002 in _bootstrap
+
+Thread 0x000060e0 (most recent call first):
+  File "C:\Users\Sergiu\AppData\Local\Programs\Python\Python311\Lib\asyncio\windows_events.py", line 825 in _poll
+  File "C:\Users\Sergiu\AppData\Local\Programs\Python\Python311\Lib\asyncio\windows_events.py", line 444 in select
+  File "C:\Users\Sergiu\AppData\Local\Programs\Python\Python311\Lib\asyncio\base_events.py", line 1898 in _run_once
+  File "C:\Users\Sergiu\AppData\Local\Programs\Python\Python311\Lib\asyncio\base_events.py", line 608 in run_forever
+  File "C:\Users\Sergiu\AppData\Local\Programs\Python\Python311\Lib\asyncio\windows_events.py", line 321 in run_forever
+  File "C:\Users\Sergiu\AppData\Local\Programs\Python\Python311\Lib\asyncio\base_events.py", line 641 in run_until_complete
+  File "C:\Users\Sergiu\AppData\Local\Programs\Python\Python311\Lib\asyncio\runners.py", line 118 in run
+  File "C:\Users\Sergiu\AppData\Local\Programs\Python\Python311\Lib\asyncio\runners.py", line 190 in run
+  File "C:\Users\Sergiu\Desktop\Projects\Generative-AI\ai-knowledge-graph-platform\scripts\benchmark_retrieval_ablation.py", line 348 in main
+  File "C:\Users\Sergiu\Desktop\Projects\Generative-AI\ai-knowledge-graph-platform\scripts\benchmark_retrieval_ablation.py", line 352 in <module>

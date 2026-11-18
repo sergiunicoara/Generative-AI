@@ -1,0 +1,255 @@
+{
+  "run": {
+    "schema_version": "ablation-run/1",
+    "timestamp": "2026-11-17T20:18:06+00:00",
+    "timestamp_bucharest": "2026-11-17T22:18:06+02:00",
+    "deepseek_peak_at_start": false,
+    "git": {
+      "sha": "2e9c466dadf0f0924138253bf8cd67f2a6826a32",
+      "branch": "eval-ablation",
+      "dirty": true
+    },
+    "tenant": "aerospace",
+    "retrieval_profile": "full_context",
+    "profile_overrides": {},
+    "config_overrides": {},
+    "mode": "local",
+    "pinned_models": true,
+    "models": {
+      "generator": "deepseek:deepseek-v4-flash",
+      "generator_fallback": "none (EVAL_PINNED_MODELS)",
+      "router": "deepseek:deepseek-v4-flash",
+      "judge": {
+        "provider": "deepseek",
+        "model": "deepseek-v4-flash"
+      },
+      "judge_same_provider_as_generator": true
+    },
+    "temperature": 0.0,
+    "ragas_version": "0.4.3",
+    "golden_set": {
+      "path": "C:\\Users\\Sergiu\\Desktop\\Projects\\Generative-AI\\ai-knowledge-graph-platform\\evals\\golden_set.json",
+      "version": "2.3",
+      "tenant": "aerospace",
+      "n_questions": 4,
+      "n_questions_in_file": 34,
+      "sha256": "0694148edd7768a7600a262c5485d15c65a5e38523018fe713d93f835eab405b"
+    },
+    "python": "3.11.9",
+    "cache": "disabled (no query ID)",
+    "full_context": {
+      "n_documents": 12,
+      "n_chunks": 93,
+      "words": 5442,
+      "characters": 40801,
+      "corpus_tokens": 10859,
+      "prompt_tokens_estimate": 11353,
+      "tokenizer": "tiktoken:o200k_base",
+      "context_window": 131072,
+      "output_reserve": 16384,
+      "fits": true,
+      "context_sha256": "8709143e2628f3da99c0b4d76ed1337a2cf1688e75ec2216d9d201734ef0b041",
+      "documents": [
+        {
+          "name": "14CFR_Part39_excerpt",
+          "chunks": 10,
+          "superseded": false
+        },
+        {
+          "name": "737MAX_CMM_Engine_Mount",
+          "chunks": 11,
+          "superseded": false
+        },
+        {
+          "name": "Airbus_A320neo_profile",
+          "chunks": 6,
+          "superseded": false
+        },
+        {
+          "name": "Boeing_MCAS_SWChangeRecord",
+          "chunks": 11,
+          "superseded": false
+        },
+        {
+          "name": "Boeing_company_profile",
+          "chunks": 7,
+          "superseded": false
+        },
+        {
+          "name": "EASA-AD-2024-0072",
+          "chunks": 7,
+          "superseded": false
+        },
+        {
+          "name": "FAA-AD-2020-05-11",
+          "chunks": 7,
+          "superseded": true
+        },
+        {
+          "name": "FAA-AD-2022-03-07",
+          "chunks": 7,
+          "superseded": true
+        },
+        {
+          "name": "FAA-AD-2024-01-02",
+          "chunks": 7,
+          "superseded": false
+        },
+        {
+          "name": "G-ABCD_AD_compliance_2024-03",
+          "chunks": 6,
+          "superseded": false
+        },
+        {
+          "name": "G-ABCD_inspection_2024-01",
+          "chunks": 7,
+          "superseded": false
+        },
+        {
+          "name": "SWA_fleet_registry_2024",
+          "chunks": 7,
+          "superseded": false
+        }
+      ],
+      "superseded_documents_included": [
+        "FAA-AD-2020-05-11",
+        "FAA-AD-2022-03-07"
+      ],
+      "post_generation_repair": "not applied (see module docstring)",
+      "citations": "documents named in the answer"
+    }
+  },
+  "summary": {
+    "n_questions": 4,
+    "n_errors": 0,
+    "golden_pass_rate": 0.75,
+    "citation_recall": 0.75,
+    "faithfulness_mean": 0.75,
+    "n_scored": 4,
+    "n_refused": 0,
+    "n_unscorable": 0,
+    "n_agentic_fallback": 0,
+    "latency_e2e_ms": {
+      "n": 4,
+      "mean": 1322.68,
+      "p50": 1335.24,
+      "p95": 1518.44,
+      "max": 1518.44
+    },
+    "latency_retrieval_ms": {
+      "n": 0,
+      "mean": null,
+      "p50": null,
+      "p95": null,
+      "max": null
+    }
+  },
+  "results": [
+    {
+      "id": "SH-01",
+      "type": "single_hop",
+      "golden_pass": true,
+      "golden_failures": [],
+      "citation_recall": 1.0,
+      "status": "scored",
+      "faithfulness": 0.0,
+      "faithfulness_attempts": 2,
+      "judge_notes": [
+        "attempt 1: EvaluationError: RAGAS judge timed out after 60s"
+      ],
+      "latency_e2e_ms": 1139.02,
+      "latency_retrieval_ms": null,
+      "agentic_fallback": {
+        "fired": false,
+        "reason": null,
+        "completed_by": null
+      },
+      "retrieval_mode": "full_context",
+      "routing_reason": "full_context_profile",
+      "n_contexts": 12,
+      "answer": "FAA AD 2024-01-02 supersedes AD 2022-03-07.",
+      "citations": [
+        "FAA-AD-2024-01-02"
+      ],
+      "error": null
+    },
+    {
+      "id": "SH-02",
+      "type": "single_hop",
+      "golden_pass": false,
+      "golden_failures": [
+        "insufficient citation recall \u2014 missing: ['FAA-AD-2022-03-07', 'FAA-AD-2024-01-02']"
+      ],
+      "citation_recall": 0.0,
+      "status": "scored",
+      "faithfulness": 1.0,
+      "faithfulness_attempts": 1,
+      "judge_notes": [],
+      "latency_e2e_ms": 1335.24,
+      "latency_retrieval_ms": null,
+      "agentic_fallback": {
+        "fired": false,
+        "reason": null,
+        "completed_by": null
+      },
+      "retrieval_mode": "full_context",
+      "routing_reason": "full_context_profile",
+      "n_contexts": 12,
+      "answer": "AD 2022-03-07 supersedes AD 2020-05-11.",
+      "citations": [],
+      "error": null
+    },
+    {
+      "id": "SH-03",
+      "type": "single_hop",
+      "golden_pass": true,
+      "golden_failures": [],
+      "citation_recall": 1.0,
+      "status": "scored",
+      "faithfulness": 1.0,
+      "faithfulness_attempts": 1,
+      "judge_notes": [],
+      "latency_e2e_ms": 1298.01,
+      "latency_retrieval_ms": null,
+      "agentic_fallback": {
+        "fired": false,
+        "reason": null,
+        "completed_by": null
+      },
+      "retrieval_mode": "full_context",
+      "routing_reason": "full_context_profile",
+      "n_contexts": 12,
+      "answer": "The FAA (Federal Aviation Administration) issued FAA-AD-2024-01-02 under 14 CFR Part 39.",
+      "citations": [
+        "FAA-AD-2024-01-02"
+      ],
+      "error": null
+    },
+    {
+      "id": "MH-01",
+      "type": "multi_hop",
+      "golden_pass": true,
+      "golden_failures": [],
+      "citation_recall": 1.0,
+      "status": "scored",
+      "faithfulness": 1.0,
+      "faithfulness_attempts": 1,
+      "judge_notes": [],
+      "latency_e2e_ms": 1518.44,
+      "latency_retrieval_ms": null,
+      "agentic_fallback": {
+        "fired": false,
+        "reason": null,
+        "completed_by": null
+      },
+      "retrieval_mode": "full_context",
+      "routing_reason": "full_context_profile",
+      "n_contexts": 12,
+      "answer": "FAA AD 2024-01-02 supersedes AD 2022-03-07, which in turn superseded AD 2020-05-11. The 2024 AD's references state that AD 2020-05-11 was partially superseded by AD 2022-03-07 and fully superseded by AD 2024-01-02.",
+      "citations": [
+        "FAA-AD-2024-01-02"
+      ],
+      "error": null
+    }
+  ]
+}

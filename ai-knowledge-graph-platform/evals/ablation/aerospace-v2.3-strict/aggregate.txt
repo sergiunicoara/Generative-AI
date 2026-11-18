@@ -1,0 +1,76 @@
+## per profile (mean [min-max] over the valid runs)
+vector_only (runs=3) | pass 0.667 [0.618-0.706] | pass citable basis 0.755 [0.706-0.794] | pass ignoring citation recall 0.755 [0.706-0.794] | faith 0.937 [0.904-0.959] | scored [27, 25, 25] refused [7, 9, 9] unscorable [0, 0, 0] | e2e p50 1997.833 [1974.110-2029.750] p95 2791.167 [2611.230-2933.030] | retrieval p95 848.667 [656.000-1031.000] | fallbacks [0, 0, 0] | golden citation basis: context_citations
+    answer citations: recall_raw 0.687 [0.677-0.692] | recall_citable 0.807 [0.797-0.812] | precision 0.734 [0.732-0.737] | macro F1 0.767 [0.760-0.770] | distinct docs/answer 1.402 [1.382-1.412] | tag compliance 1.000 [1.000-1.000] | tags resolving 1.000 [1.000-1.000]
+    context citations: recall_raw 0.783 [0.783-0.783] | recall_citable 0.922 [0.922-0.922] | precision 0.391 [0.391-0.391] | macro F1 0.487 [0.487-0.487] | distinct docs/answer 3.088 [3.088-3.088]
+text_hybrid (runs=3) | pass 0.706 [0.706-0.706] | pass citable basis 0.824 [0.824-0.824] | pass ignoring citation recall 0.853 [0.853-0.853] | faith 0.947 [0.941-0.955] | scored [28, 28, 28] refused [6, 6, 6] unscorable [0, 0, 0] | e2e p50 3743.187 [3442.390-4088.780] p95 4829.667 [4341.580-5342.680] | retrieval p95 1697.667 [1250.000-2109.000] | fallbacks [0, 0, 0] | golden citation basis: context_citations
+    answer citations: recall_raw 0.636 [0.621-0.667] | recall_citable 0.714 [0.698-0.745] | precision 0.601 [0.588-0.611] | macro F1 0.652 [0.639-0.670] | distinct docs/answer 1.618 [1.588-1.647] | tag compliance 1.000 [1.000-1.000] | tags resolving 1.000 [1.000-1.000]
+    context citations: recall_raw 0.763 [0.763-0.763] | recall_citable 0.880 [0.880-0.880] | precision 0.283 [0.281-0.284] | macro F1 0.398 [0.397-0.399] | distinct docs/answer 3.961 [3.941-4.000]
+full (runs=3) | pass 0.824 [0.794-0.853] | pass citable basis 0.824 [0.794-0.853] | pass ignoring citation recall 0.824 [0.794-0.853] | faith 0.953 [0.920-0.977] | scored [30, 29, 29] refused [4, 4, 5] unscorable [0, 1, 0] | e2e p50 4558.620 [4283.250-4786.600] p95 6014.520 [5799.970-6154.890] | retrieval p95 2885.333 [2641.000-3218.000] | fallbacks [0, 0, 0] | golden citation basis: context_citations
+    answer citations: recall_raw 0.685 [0.662-0.702] | recall_citable 0.785 [0.760-0.802] | precision 0.651 [0.643-0.657] | macro F1 0.709 [0.694-0.717] | distinct docs/answer 1.647 [1.588-1.735] | tag compliance 1.000 [1.000-1.000] | tags resolving 1.000 [1.000-1.000]
+    context citations: recall_raw 0.985 [0.985-0.985] | recall_citable 0.984 [0.984-0.984] | precision 0.227 [0.226-0.227] | macro F1 0.357 [0.357-0.358] | distinct docs/answer 7.127 [7.118-7.147]
+full_context (runs=3) | pass 0.745 [0.735-0.765] | pass citable basis 0.853 [0.824-0.882] | pass ignoring citation recall 0.922 [0.912-0.941] | faith 0.803 [0.780-0.828] | scored [30, 27, 29] refused [4, 6, 4] unscorable [0, 1, 1] | e2e p50 1661.067 [1611.050-1729.430] p95 2598.793 [2549.590-2643.040] | retrieval p95 n/a | fallbacks [0, 0, 0] | golden citation basis: answer_citations
+    answer citations: recall_raw 0.764 [0.758-0.773] | recall_citable 0.859 [0.844-0.875] | precision 0.698 [0.684-0.717] | macro F1 0.763 [0.751-0.780] | distinct docs/answer 1.677 [1.677-1.677] | tag compliance 1.000 [1.000-1.000] | tags resolving 1.000 [1.000-1.000]
+    context citations: recall_raw n/a | recall_citable n/a | precision n/a | macro F1 n/a | distinct docs/answer n/a
+
+## per question: runs passed / runs (mean faithfulness or -)
+id | type | vector_only | text_hybrid | full | full_context
+SH-01 | single_hop | 3/3 (1.00) | 3/3 (0.89) | 3/3 (1.00) | 3/3 (1.00)
+SH-02 | single_hop | 3/3 (-) | 3/3 (0.78) | 3/3 (1.00) | 3/3 (0.50)
+SH-03 | single_hop | 3/3 (1.00) | 3/3 (1.00) | 3/3 (1.00) | 3/3 (1.00)
+SH-04 | single_hop | 3/3 (1.00) | 3/3 (1.00) | 3/3 (1.00) | 3/3 (1.00)
+SH-05 | single_hop | 3/3 (1.00) | 3/3 (1.00) | 0/3 (0.67) | 3/3 (1.00)
+SH-06 | single_hop | 3/3 (1.00) | 3/3 (1.00) | 3/3 (1.00) | 3/3 (1.00)
+SH-07 | single_hop | 3/3 (1.00) | 3/3 (1.00) | 3/3 (1.00) | 3/3 (1.00)
+SH-08 | single_hop | 3/3 (1.00) | 3/3 (1.00) | 3/3 (1.00) | 3/3 (1.00)
+MH-01 | multi_hop | 3/3 (1.00) | 3/3 (1.00) | 3/3 (1.00) | 3/3 (0.86)
+MH-02 | multi_hop | 2/3 (-) | 0/3 (-) | 3/3 (-) | 2/3 (1.00)
+MH-03 | multi_hop | 2/3 (0.80) | 0/3 (1.00) | 0/3 (0.92) | 0/3 (0.33)
+MH-04 | multi_hop | 3/3 (-) | 3/3 (-) | 3/3 (1.00) | 3/3 (1.00)
+MH-05 | multi_hop | 3/3 (1.00) | 3/3 (1.00) | 3/3 (1.00) | 3/3 (1.00)
+MH-06 | multi_hop | 3/3 (1.00) | 3/3 (0.91) | 3/3 (0.88) | 3/3 (1.00)
+CON-01 | temporal | 1/3 (1.00) | 3/3 (0.97) | 3/3 (1.00) | 3/3 (1.00)
+CON-02 | inference | 3/3 (0.93) | 3/3 (1.00) | 3/3 (0.93) | 3/3 (0.67)
+AUT-01 | authority_chain | 0/3 (1.00) | 0/3 (1.00) | 0/3 (1.00) | 0/3 (1.00)
+AUT-02 | authority_chain | 0/3 (1.00) | 0/3 (1.00) | 3/3 (0.92) | 0/3 (0.33)
+AUT-03 | authority_chain | 0/3 (-) | 0/3 (-) | 3/3 (-) | 0/3 (-)
+INF-01 | inference | 0/3 (0.87) | 0/3 (0.89) | 3/3 (0.87) | 0/3 (0.93)
+INF-02 | inference | 3/3 (1.00) | 3/3 (1.00) | 3/3 (1.00) | 3/3 (0.50)
+NEG-01 | negative | 3/3 (1.00) | 3/3 (1.00) | 3/3 (1.00) | 3/3 (0.67)
+NEG-02 | negative | 3/3 (1.00) | 3/3 (1.00) | 3/3 (0.92) | 3/3 (0.67)
+NEG-03 | negative | 0/3 (0.67) | 3/3 (1.00) | 3/3 (0.83) | 2/3 (0.52)
+TMP-01 | temporal | 0/3 (-) | 0/3 (1.00) | 3/3 (1.00) | 0/3 (0.67)
+TMP-02 | temporal | 3/3 (0.67) | 3/3 (1.00) | 0/3 (1.00) | 3/3 (0.88)
+TMP-03 | temporal | 0/3 (1.00) | 0/3 (-) | 0/3 (-) | 0/3 (-)
+PRE-01 | precision | 0/3 (0.75) | 0/3 (0.33) | 3/3 (1.00) | 0/3 (0.33)
+PRE-02 | precision | 3/3 (1.00) | 3/3 (1.00) | 3/3 (1.00) | 3/3 (0.67)
+CAL-01 | calibration | 2/3 (1.00) | 0/3 (1.00) | 1/3 (1.00) | 3/3 (0.98)
+AGT-01 | agentic | 1/3 (-) | 3/3 (-) | 3/3 (-) | 3/3 (-)
+AGT-02 | agentic | 3/3 (-) | 3/3 (-) | 2/3 (0.50) | 3/3 (0.00)
+CTX-01 | contextual | 0/3 (0.93) | 3/3 (1.00) | 3/3 (1.00) | 3/3 (1.00)
+CTX-02 | contextual | 3/3 (0.58) | 3/3 (0.75) | 3/3 (1.00) | 3/3 (1.00)
+
+## per type: (a) pass share / (b) pass share ignoring citation recall / (c) pass share on the citable basis (n/a for older files) / mean faithfulness
+agentic (2) | 0.67/0.67/0.67/n/a | 1.00/1.00/1.00/n/a | 0.83/0.83/0.83/0.50 | 1.00/1.00/1.00/0.00
+authority_chain (3) | 0.00/0.33/0.33/1.00 | 0.00/0.67/0.33/1.00 | 0.67/0.67/0.67/0.96 | 0.00/0.67/0.56/0.67
+calibration (1) | 0.67/0.67/0.67/1.00 | 0.00/0.00/0.00/1.00 | 0.33/0.33/0.33/1.00 | 1.00/1.00/1.00/0.98
+contextual (2) | 0.50/0.50/0.50/0.76 | 1.00/1.00/1.00/0.88 | 1.00/1.00/1.00/1.00 | 1.00/1.00/1.00/1.00
+inference (3) | 0.67/1.00/1.00/0.93 | 0.67/1.00/1.00/0.96 | 1.00/1.00/1.00/0.93 | 0.67/1.00/1.00/0.72
+multi_hop (6) | 0.89/0.89/0.89/0.95 | 0.67/0.67/0.67/0.98 | 0.83/0.83/0.83/0.96 | 0.78/0.94/0.78/0.84
+negative (3) | 0.67/0.67/0.67/0.89 | 1.00/1.00/1.00/1.00 | 1.00/1.00/1.00/0.92 | 0.89/0.89/0.89/0.62
+precision (2) | 0.50/1.00/1.00/0.94 | 0.50/1.00/1.00/0.67 | 1.00/1.00/1.00/1.00 | 0.50/1.00/1.00/0.50
+single_hop (8) | 1.00/1.00/1.00/1.00 | 1.00/1.00/1.00/0.96 | 0.88/0.88/0.88/0.96 | 1.00/1.00/1.00/0.94
+temporal (4) | 0.33/0.33/0.33/0.86 | 0.50/0.75/0.75/0.99 | 0.50/0.50/0.50/1.00 | 0.50/0.75/0.50/0.84
+
+## files
+evals\ablation\aerospace-v2.3-strict\aerospace__vector_only__20261118T101531Z.json
+evals\ablation\aerospace-v2.3-strict\aerospace__vector_only__20261118T113306Z.json
+evals\ablation\aerospace-v2.3-strict\aerospace__vector_only__20261118T130247Z.json
+evals\ablation\aerospace-v2.3-strict\aerospace__text_hybrid__20261118T102848Z.json
+evals\ablation\aerospace-v2.3-strict\aerospace__text_hybrid__20261118T114539Z.json
+evals\ablation\aerospace-v2.3-strict\aerospace__text_hybrid__20261118T131712Z.json
+evals\ablation\aerospace-v2.3-strict\aerospace__full__20261118T104504Z.json
+evals\ablation\aerospace-v2.3-strict\aerospace__full__20261118T120225Z.json
+evals\ablation\aerospace-v2.3-strict\aerospace__full__20261118T133154Z.json
+evals\ablation\aerospace-v2.3-strict\aerospace__full_context__20261118T112207Z.json
+evals\ablation\aerospace-v2.3-strict\aerospace__full_context__20261118T125045Z.json
+evals\ablation\aerospace-v2.3-strict\aerospace__full_context__20261118T140934Z.json

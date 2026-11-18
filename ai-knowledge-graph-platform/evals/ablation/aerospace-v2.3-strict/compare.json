@@ -1,0 +1,266 @@
+{
+  "baseline": "full",
+  "n_runs": {
+    "full": 3,
+    "vector_only": 3,
+    "text_hybrid": 3,
+    "full_context": 3
+  },
+  "comparisons": {
+    "vector_only": {
+      "all": {
+        "recall_answer": {
+          "n_pairs": 32,
+          "mean_diff": -0.022569444444444448,
+          "ci95": [
+            -0.16319444444444445,
+            0.10937499999999999
+          ],
+          "distinguishable": false
+        },
+        "recall_context": {
+          "n_pairs": 33,
+          "mean_diff": 0.20202020202020202,
+          "ci95": [
+            0.08585858585858587,
+            0.32828282828282823
+          ],
+          "distinguishable": true
+        },
+        "n_questions": 34,
+        "pass_base": 28,
+        "pass_other": 23,
+        "only_base_passed": 9,
+        "only_other_passed": 4,
+        "only_base_ids": [
+          "AGT-01",
+          "AUT-02",
+          "AUT-03",
+          "CON-01",
+          "CTX-01",
+          "INF-01",
+          "NEG-03",
+          "PRE-01",
+          "TMP-01"
+        ],
+        "only_other_ids": [
+          "CAL-01",
+          "MH-03",
+          "SH-05",
+          "TMP-02"
+        ],
+        "mcnemar_p": 0.266845703125,
+        "n_faithfulness_pairs": 26,
+        "faithfulness_mean_diff": 0.028107692307692302,
+        "faithfulness_ci95": [
+          -0.02317179487179488,
+          0.08387435897435896
+        ],
+        "faithfulness_distinguishable": false,
+        "mcnemar_p_holm": 0.800537109375,
+        "pass_distinguishable": false
+      },
+      "multi_hop": {
+        "recall_answer": {
+          "n_pairs": 6,
+          "mean_diff": -0.23148148148148148,
+          "ci95": [
+            -0.4444444444444445,
+            -1.850371707708594e-17
+          ],
+          "distinguishable": true
+        },
+        "recall_context": {
+          "n_pairs": 6,
+          "mean_diff": 0.0,
+          "ci95": [
+            -0.25,
+            0.25
+          ],
+          "distinguishable": false
+        },
+        "n_questions": 6,
+        "pass_base": 5,
+        "pass_other": 6,
+        "only_base_passed": 0,
+        "only_other_passed": 1,
+        "only_base_ids": [],
+        "only_other_ids": [
+          "MH-03"
+        ],
+        "mcnemar_p": 1.0,
+        "n_faithfulness_pairs": 4,
+        "faithfulness_mean_diff": -0.0006333333333333468,
+        "faithfulness_ci95": [
+          -0.08939999999999998,
+          0.08749999999999994
+        ],
+        "faithfulness_distinguishable": false
+      }
+    },
+    "text_hybrid": {
+      "all": {
+        "recall_answer": {
+          "n_pairs": 32,
+          "mean_diff": 0.07118055555555555,
+          "ci95": [
+            -0.015625,
+            0.171875
+          ],
+          "distinguishable": false
+        },
+        "recall_context": {
+          "n_pairs": 33,
+          "mean_diff": 0.22222222222222224,
+          "ci95": [
+            0.11111111111111112,
+            0.34848484848484845
+          ],
+          "distinguishable": true
+        },
+        "n_questions": 34,
+        "pass_base": 28,
+        "pass_other": 24,
+        "only_base_passed": 6,
+        "only_other_passed": 2,
+        "only_base_ids": [
+          "AUT-02",
+          "AUT-03",
+          "INF-01",
+          "MH-02",
+          "PRE-01",
+          "TMP-01"
+        ],
+        "only_other_ids": [
+          "SH-05",
+          "TMP-02"
+        ],
+        "mcnemar_p": 0.2890625,
+        "n_faithfulness_pairs": 28,
+        "faithfulness_mean_diff": 0.01448214285714286,
+        "faithfulness_ci95": [
+          -0.03967976190476192,
+          0.0789666666666667
+        ],
+        "faithfulness_distinguishable": false,
+        "mcnemar_p_holm": 0.800537109375,
+        "pass_distinguishable": false
+      },
+      "multi_hop": {
+        "recall_answer": {
+          "n_pairs": 6,
+          "mean_diff": -0.12037037037037036,
+          "ci95": [
+            -0.3055555555555555,
+            0.037037037037037035
+          ],
+          "distinguishable": false
+        },
+        "recall_context": {
+          "n_pairs": 6,
+          "mean_diff": 0.1388888888888889,
+          "ci95": [
+            0.0,
+            0.3055555555555556
+          ],
+          "distinguishable": false
+        },
+        "n_questions": 6,
+        "pass_base": 5,
+        "pass_other": 4,
+        "only_base_passed": 1,
+        "only_other_passed": 0,
+        "only_base_ids": [
+          "MH-02"
+        ],
+        "only_other_ids": [],
+        "mcnemar_p": 1.0,
+        "n_faithfulness_pairs": 4,
+        "faithfulness_mean_diff": -0.029175000000000006,
+        "faithfulness_ci95": [
+          -0.06250000000000003,
+          0.0
+        ],
+        "faithfulness_distinguishable": false
+      }
+    },
+    "full_context": {
+      "all": {
+        "recall_answer": {
+          "n_pairs": 32,
+          "mean_diff": -0.07465277777777778,
+          "ci95": [
+            -0.16666666666666666,
+            0.0
+          ],
+          "distinguishable": false
+        },
+        "recall_context": {
+          "n_pairs": 0,
+          "mean_diff": null,
+          "ci95": null,
+          "distinguishable": false
+        },
+        "n_questions": 34,
+        "pass_base": 28,
+        "pass_other": 26,
+        "only_base_passed": 5,
+        "only_other_passed": 3,
+        "only_base_ids": [
+          "AUT-02",
+          "AUT-03",
+          "INF-01",
+          "PRE-01",
+          "TMP-01"
+        ],
+        "only_other_ids": [
+          "CAL-01",
+          "SH-05",
+          "TMP-02"
+        ],
+        "mcnemar_p": 0.7265625,
+        "n_faithfulness_pairs": 30,
+        "faithfulness_mean_diff": 0.16449,
+        "faithfulness_ci95": [
+          0.08152888888888889,
+          0.25384444444444443
+        ],
+        "faithfulness_distinguishable": true,
+        "mcnemar_p_holm": 0.800537109375,
+        "pass_distinguishable": false
+      },
+      "multi_hop": {
+        "recall_answer": {
+          "n_pairs": 6,
+          "mean_diff": -0.23148148148148148,
+          "ci95": [
+            -0.4444444444444445,
+            -1.850371707708594e-17
+          ],
+          "distinguishable": true
+        },
+        "recall_context": {
+          "n_pairs": 0,
+          "mean_diff": null,
+          "ci95": null,
+          "distinguishable": false
+        },
+        "n_questions": 6,
+        "pass_base": 5,
+        "pass_other": 5,
+        "only_base_passed": 0,
+        "only_other_passed": 0,
+        "only_base_ids": [],
+        "only_other_ids": [],
+        "mcnemar_p": 1.0,
+        "n_faithfulness_pairs": 5,
+        "faithfulness_mean_diff": 0.1214,
+        "faithfulness_ci95": [
+          -0.047679999999999986,
+          0.3547333333333333
+        ],
+        "faithfulness_distinguishable": false
+      }
+    }
+  }
+}

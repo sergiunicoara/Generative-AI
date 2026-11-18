@@ -58,7 +58,16 @@ def per_profile(runs: dict[str, list[dict]]) -> None:
               f" | e2e p50 {span([x['latency_e2e_ms']['p50'] for x in s])} p95 {span([x['latency_e2e_ms']['p95'] for x in s])}"
               f" | retrieval p95 {span([x['latency_retrieval_ms']['p95'] for x in s])}"
               f" | fallbacks {[x['n_agentic_fallback'] for x in s]}"
-              f" | citation_recall {span([x['citation_recall'] for x in s])}")
+              f" | golden citation basis: {group[0]['run'].get('citation', {}).get('golden_citation_basis', 'legacy')}")
+        for which in ("answer", "context"):    # headline attribution comparison: answer
+            sets = [x.get("citations", {}).get(which, {}) for x in s]
+            print(f"    {which} citations: recall {span([c.get('recall') for c in sets])}"
+                  f" | precision {span([c.get('precision') for c in sets])}"
+                  f" | macro F1 {span([c.get('f1_macro') for c in sets])}"
+                  f" | distinct docs/answer {span([c.get('mean_distinct_docs') for c in sets])}"
+                  + (f" | tag compliance {span([c.get('compliance') for c in sets])}"
+                     f" | tags resolving {span([c.get('tag_resolution_rate') for c in sets])}"
+                     if which == "answer" else ""))
 
 
 def per_question(runs: dict[str, list[dict]]) -> dict:
@@ -67,9 +76,10 @@ def per_question(runs: dict[str, list[dict]]) -> dict:
         for run in group:
             for row in run["results"]:
                 cell = table.setdefault(row["id"], {"type": row["type"]}).setdefault(
-                    name, {"pass": [], "faith": [], "runs": 0})
+                    name, {"pass": [], "content": [], "faith": [], "runs": 0})
                 cell["runs"] += 1
                 cell["pass"].append(bool(row["golden_pass"]))
+                cell["content"].append(bool(row["golden_pass"]) or citation_only(row))
                 if row["faithfulness"] is not None:
                     cell["faith"].append(row["faithfulness"])
     return table
@@ -88,14 +98,15 @@ def print_questions(table: dict, names: list[str]) -> None:
 
 
 def print_types(table: dict, names: list[str]) -> None:
-    print("\n## per type: mean pass rate / mean faithfulness")
+    print("\n## per type: (a) pass share / (b) pass share ignoring citation recall / mean faithfulness")
     for qtype in sorted({row["type"] for row in table.values()}):
         ids = [i for i, row in table.items() if row["type"] == qtype]
         cells = []
         for name in names:
             rate = st.mean(sum(table[i][name]["pass"]) / table[i][name]["runs"] for i in ids)
+            content = st.mean(sum(table[i][name]["content"]) / table[i][name]["runs"] for i in ids)
             faith = [x for i in ids for x in table[i][name]["faith"]]
-            cells.append(f"{rate:.2f}/{st.mean(faith):.2f}" if faith else f"{rate:.2f}/n/a")
+            cells.append(f"{rate:.2f}/{content:.2f}/{st.mean(faith):.2f}" if faith else f"{rate:.2f}/{content:.2f}/n/a")
         print(f"{qtype} ({len(ids)}) | " + " | ".join(cells))
 
 

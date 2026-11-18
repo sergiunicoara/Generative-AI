@@ -1,0 +1,19 @@
+{
+  "version": 1,
+  "tenant": "aerospace",
+  "description": "Canonical document ids (the names used in evals/golden_set.json expected_citations) and the strings that denote each document: file name, AD number, document number. An alias must denote exactly one document: bare tail numbers (G-ABCD), operators, manufacturers and aircraft types are deliberately absent because several documents mention them. Matching is exact after lower-casing and collapsing every non-alphanumeric run to one space; there is no substring matching.",
+  "documents": {
+    "14CFR_Part39_excerpt": ["14CFR_Part39_excerpt", "14 CFR Part 39", "14 CFR 39"],
+    "737MAX_CMM_Engine_Mount": ["737MAX_CMM_Engine_Mount", "737 MAX CMM Engine Mount"],
+    "Airbus_A320neo_profile": ["Airbus_A320neo_profile", "Airbus A320neo profile"],
+    "Boeing_MCAS_SWChangeRecord": ["Boeing_MCAS_SWChangeRecord", "Boeing MCAS Software Change Record", "D6-87700-100"],
+    "Boeing_company_profile": ["Boeing_company_profile", "Boeing company profile"],
+    "EASA-AD-2024-0072": ["EASA-AD-2024-0072", "EASA AD 2024-0072", "AD 2024-0072"],
+    "FAA-AD-2020-05-11": ["FAA-AD-2020-05-11", "FAA AD 2020-05-11", "AD 2020-05-11"],
+    "FAA-AD-2022-03-07": ["FAA-AD-2022-03-07", "FAA AD 2022-03-07", "AD 2022-03-07"],
+    "FAA-AD-2024-01-02": ["FAA-AD-2024-01-02", "FAA AD 2024-01-02", "AD 2024-01-02"],
+    "G-ABCD_AD_compliance_2024-03": ["G-ABCD_AD_compliance_2024-03", "G-ABCD AD compliance 2024-03"],
+    "G-ABCD_inspection_2024-01": ["G-ABCD_inspection_2024-01", "G-ABCD inspection 2024-01"],
+    "SWA_fleet_registry_2024": ["SWA_fleet_registry_2024", "SWA fleet registry 2024"]
+  }
+}

@@ -62,6 +62,8 @@ def answer_prompt(cfg: dict[str, Any]) -> str:
     domain_rules = _AEROSPACE_RULES if policy == "aerospace_regulatory" else ""
     if cfg.get("answer_language_rule_enabled", False):
         domain_rules += ANSWER_LANGUAGE_RULE
+    # Evaluation-only (the ablation sets it for every profile; no tenant or production config does).
+    domain_rules += str(cfg.get("eval_citation_instruction") or "")
     return BASE_ANSWER_PROMPT.format(
         domain_rules=domain_rules, context="{context}", question="{question}",
     )

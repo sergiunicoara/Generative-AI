@@ -30,7 +30,7 @@ def _isolate_settings(monkeypatch):
 
 
 QUESTION = {"id": "Q1", "type": "single_hop", "question": "Which AD supersedes AD-2022?",
-            "expected_citations": ["FAA-AD-2024"], "required_answer_terms": ["supersede"]}
+            "expected_citations": ["FAA-AD-2024-01-02"], "required_answer_terms": ["supersede"]}
 
 
 def _result(*, fallback=None, completed_by="synthesis", retrieval_ms=120.0, answer="AD-2024 supersedes it.",
@@ -39,7 +39,7 @@ def _result(*, fallback=None, completed_by="synthesis", retrieval_ms=120.0, answ
         planned_mode="agentic" if completed_by != "synthesis" else "local", completed_by=completed_by,
         steps=[RetrievalStep(step=1, action="search", query="q", latency_ms=retrieval_ms)])
     return QueryResult(
-        question="q", answer=answer, contexts=list(contexts), citations=["FAA-AD-2024-01-02"],
+        question="q", answer=answer, contexts=list(contexts), citations=["FAA-AD-2024-01-02", "AD 2024-01-02", "Aircraft"],
         retrieval_mode="local", routing_reason="r", retrieval_trajectory=trajectory,
         explanation={"fallback": fallback or {"triggered": False, "reason": None}})
 
@@ -53,6 +53,10 @@ def test_row_records_golden_latency_and_fallback_signals():
     assert row["latency_e2e_ms"] == 1500.0 and row["latency_retrieval_ms"] == 120.0
     assert row["agentic_fallback"] == {"fired": True, "reason": "low_confidence", "completed_by": "final_synthesis"}
     assert row["citation_recall"] == 1.0 and row["n_contexts"] == 1
+    # strict citations: the alias and the junk string collapse to one canonical id / are dropped
+    assert row["citations_context"] == ["FAA-AD-2024-01-02"] and row["citation_precision"] == 1.0
+    assert row["citations_answer"] == [] and row["citation_basis"] == "context"
+    assert row["golden_pass_lenient"] is True
 
 
 def test_row_without_judge_is_marked_not_judged_and_failures_are_listed():
@@ -153,22 +157,34 @@ def _run_with_flags(monkeypatch, tmp_path, extra: list[str]) -> list[dict]:
             calls.append(kwargs)
             return _result()
 
+    async def fake_corpus(tenant):                      # offline: no database in unit tests
+        rows = [{"filename": "FAA-AD-2024-01-02.txt", "superseded_by": None, "idx": 0, "text": "t"},
+                {"filename": "SWA_fleet_registry_2024.txt", "superseded_by": None, "idx": 0, "text": "t"}]
+        return ablation.full_context.build_corpus(tenant, rows)
+
     monkeypatch.setattr(ablation, "HybridRetriever", FakeRetriever)
+    monkeypatch.setattr(ablation.full_context, "load_corpus", fake_corpus)
     monkeypatch.setattr(sys, "argv", ["x", "--tenant", "aerospace", "--profiles", "vector_only"] + extra)
     args = SimpleNamespace(tenant="aerospace", mode="local")
     overrides = {"agentic_fallback": False} if "--no-agentic-fallback" in extra else {}
     report = asyncio.run(ablation._run_profile(
         [QUESTION], args, {"version": "2.3"}, None, {}, "vector_only", overrides, True))
-    assert report["run"]["config_overrides"] == overrides
+    recorded = dict(report["run"]["config_overrides"])
+    instruction = recorded.pop("eval_citation_instruction")     # the shared rule reaches every retrieval profile
+    assert recorded == overrides and "  - FAA-AD-2024-01-02\n  - SWA_fleet_registry_2024\n" in instruction
+    assert report["run"]["citation"]["citation_instruction"] == instruction
+    assert report["run"]["citation"]["citation_instruction_sha256"] == ablation.citations.sha256_text(instruction)
+    assert len(report["run"]["citation"]["answer_prompt_sha256"]) == 64
     return calls
 
 
 def test_no_agentic_fallback_flag_reaches_the_retriever_and_the_result_file(monkeypatch, tmp_path):
     (call,) = _run_with_flags(monkeypatch, tmp_path, ["--no-agentic-fallback"])
-    assert call["config_overrides"] == {"agentic_fallback": False}
+    assert call["config_overrides"]["agentic_fallback"] is False
+    assert set(call["config_overrides"]) == {"agentic_fallback", "eval_citation_instruction"}
     assert call["retrieval_profile"] == "vector_only"
     (call,) = _run_with_flags(monkeypatch, tmp_path, [])
-    assert call["config_overrides"] is None
+    assert set(call["config_overrides"]) == {"eval_citation_instruction"}
 
 
 def test_main_turns_the_flag_into_the_override(monkeypatch):
@@ -226,3 +242,79 @@ def test_dry_run_reports_the_pricing_window(capsys, monkeypatch):
     ablation.main()
     window = json.loads(capsys.readouterr().out)["deepseek_pricing_window"]
     assert len(window["peak_windows_bucharest"]) == 2 and isinstance(window["peak_now"], bool)
+
+
+def test_over_citing_lowers_precision_and_a_missing_expected_id_fails_the_strict_pass():
+    result = _result()
+    result.citations = ["SWA_fleet_registry_2024", "FAA-AD-2022-03-07"]
+    row = ablation.build_row(QUESTION, result, 10.0, None)
+    assert row["citation_recall"] == 0.0 and row["citation_precision"] == 0.0
+    assert row["golden_pass"] is False
+    assert any(f.startswith("insufficient citation recall") for f in row["golden_failures"])
+    summary = ablation.summarise([row])
+    assert summary["citation_precision"] == 0.0 and "golden_pass_rate_lenient" in summary
+    assert row["citation_f1"] == 0.0 and row["n_distinct_cited"] == 2
+    assert summary["citation_f1_macro"] == 0.0 and summary["mean_distinct_cited"] == 2.0
+
+
+def test_split_answer_strips_tags_for_every_profile_and_returns_the_raw_ids():
+    result, ids = ablation.split_answer(_result(answer="AD 2024 supersedes it [DOC: FAA-AD-2024-01-02]."))
+    assert result.answer == "AD 2024 supersedes it." and ids == ["FAA-AD-2024-01-02"]
+
+
+def test_a_retrieval_row_scores_the_context_set_and_records_the_answer_set_beside_it():
+    result = _result()                                        # context citations: the expected document
+    row = ablation.build_row(QUESTION, result, 10.0, None, answer_ids=["SWA_fleet_registry_2024"],
+                             raw_answer="x [DOC: SWA_fleet_registry_2024]")
+    assert row["golden_pass"] is True and row["citation_basis"] == "context"
+    assert row["citation_metrics"]["context"]["recall"] == 1.0
+    assert row["citation_metrics"]["answer"] == {"recall": 0.0, "precision": 0.0, "f1": 0.0, "n_distinct": 1}
+    assert row["answer_raw"].endswith("[DOC: SWA_fleet_registry_2024]")
+
+
+def test_a_full_context_row_scores_the_answer_set_and_has_no_context_set():
+    result = _result()
+    result.citations = []                                      # no retrieval, so no provenance list
+    hit = ablation.build_row(QUESTION, result, 10.0, None, answer_ids=["AD 2024-01-02"], basis="answer")
+    assert hit["golden_pass"] is True and hit["citations_context"] is None
+    assert hit["citations_answer"] == ["FAA-AD-2024-01-02"]
+    assert hit["citation_metrics"]["context"] == {"recall": None, "precision": None, "f1": None, "n_distinct": None}
+    miss = ablation.build_row(QUESTION, result, 10.0, None, answer_ids=[], basis="answer")
+    assert miss["golden_pass"] is False
+    assert any(f.startswith("insufficient citation recall") for f in miss["golden_failures"])
+
+
+def test_summary_reports_both_citation_sets_and_the_basis_headline():
+    rows = [ablation.build_row(QUESTION, _result(), 10.0, None, answer_ids=ids)
+            for ids in (["FAA-AD-2024-01-02"], ["SWA_fleet_registry_2024", "FAA-AD-2024-01-02"])]
+    summary = ablation.summarise(rows)
+    assert summary["citations"]["context"] == {"recall": 1.0, "precision": 1.0, "f1_macro": 1.0,
+                                               "mean_distinct_docs": 1.0}
+    assert summary["citations"]["answer"]["precision"] == 0.75 and summary["citations"]["answer"]["mean_distinct_docs"] == 1.5
+    assert summary["citation_recall"] == 1.0                    # basis = context for a retrieval profile
+    full_rows = [ablation.build_row(QUESTION, _result(), 10.0, None, answer_ids=["FAA-AD-2024-01-02"], basis="answer")]
+    assert ablation.summarise(full_rows)["citations"]["context"]["recall"] is None
+
+
+def test_tag_compliance_counts_valid_tags_among_non_refused_answers_and_resolution_of_all_tags():
+    def row(answer_ids, answer="AD-2024 supersedes it."):
+        return ablation.build_row(QUESTION, _result(answer=answer), 10.0, None, answer_ids=answer_ids)
+
+    rows = [
+        row(["FAA-AD-2024-01-02"]),                                  # compliant
+        row(["Aircraft", "AD 2022-03-07"]),                          # one junk tag, one valid: still compliant
+        row([]),                                                     # answered, no tag: non-compliant
+        row([], answer="The context does not contain enough information."),   # refused: not counted
+    ]
+    assert [r["answer_tags"]["refused"] for r in rows] == [False, False, False, True]
+    assert rows[1]["answer_tags"] == {"n_tags": 2, "n_resolved": 1, "valid": True, "refused": False}
+    answer = ablation.summarise(rows)["citations"]["answer"]
+    assert answer["compliance"] == pytest.approx(2 / 3, abs=1e-4) and answer["n_nonrefused"] == 3
+    assert answer["n_tags"] == 3 and answer["tag_resolution_rate"] == pytest.approx(2 / 3, abs=1e-4)
+    assert "compliance" not in ablation.summarise(rows)["citations"]["context"]
+
+
+def test_compliance_is_undefined_when_nothing_was_answered():
+    refused = ablation.build_row(QUESTION, _result(answer="Insufficient context to answer."), 1.0,
+                                 {"status": "refused", "faithfulness": None, "attempts": 0, "notes": []})
+    assert ablation.summarise([refused])["citations"]["answer"]["compliance"] is None

@@ -28,11 +28,20 @@ def _ordered(rows):  # the Cypher query sorts by filename, chunk_index
 
 
 def test_corpus_groups_chunks_by_document_in_order_and_labels_each_document():
-    corpus = fc.build_corpus("t", _ordered(ROWS))
+    corpus = fc.build_corpus("t", _ordered(ROWS), include_superseded=True)
     assert corpus.names == ["A-doc", "B-doc"]
     assert corpus.contexts == ["[Document: A-doc]\nfirst A", "[Document: B-doc]\nfirst B\n\nsecond B"]
     assert corpus.context == "\n\n".join(corpus.contexts)
     assert [d["superseded"] for d in corpus.documents] == [True, False]
+
+
+def test_superseded_documents_are_excluded_by_default_like_retrieval_and_the_exclusion_is_recorded():
+    corpus = fc.build_corpus("t", _ordered(ROWS))
+    assert corpus.names == ["B-doc"] and corpus.excluded_superseded == ("A-doc",)
+    assert "first A" not in corpus.context
+    report = fc.corpus_report(corpus, {})
+    assert report["superseded_documents_excluded"] == ["A-doc"] and report["superseded_documents_included"] == []
+    assert "same text for all profiles" in report["prompt"]
 
 
 def test_load_corpus_fails_when_the_tenant_has_no_documents():
@@ -43,7 +52,7 @@ def test_load_corpus_fails_when_the_tenant_has_no_documents():
 
 
 def test_report_counts_size_checks_fit_and_lists_superseded_documents():
-    corpus = fc.build_corpus("t", _ordered(ROWS))
+    corpus = fc.build_corpus("t", _ordered(ROWS), include_superseded=True)
     report = fc.corpus_report(corpus, {}, window=131_072)
     assert (report["n_documents"], report["n_chunks"]) == (2, 3)
     assert report["fits"] is True and report["corpus_tokens"] > 0
@@ -53,40 +62,58 @@ def test_report_counts_size_checks_fit_and_lists_superseded_documents():
 
 
 def test_a_corpus_larger_than_the_window_is_refused_before_any_model_call():
-    corpus = fc.build_corpus("t", _ordered(ROWS))
+    corpus = fc.build_corpus("t", _ordered(ROWS), include_superseded=True)
     report = fc.corpus_report(corpus, {}, window=10_000, output_reserve=9_990)
     assert report["fits"] is False
     with pytest.raises(ValueError, match="does not fit"):
         fc.require_fit(report)
 
 
-AD, INSPECTION = "FAA-AD-2024-01-02", "G-ABCD_inspection_2024-01"
-
-
-@pytest.mark.parametrize("answer, expected", [
-    ("AD 2024 supersedes it (FAA-AD-2024-01-02).", [AD]),
-    ("see faa-ad-2024-01-02 and G-ABCD inspection 2024-01", [AD, INSPECTION]),
-    ("FAA‑AD‑2024‑01‑02 applies", [AD]),  # U+2011 non-breaking hyphens
-    ("no document is named here", []),
-])
-def test_citations_are_the_documents_named_in_the_answer(answer, expected):
-    assert fc.cited_documents(answer, [AD, INSPECTION]) == expected
-
-
-def test_the_answer_is_one_generator_call_with_the_whole_corpus_and_the_standard_prompt():
-    corpus = fc.build_corpus("t", _ordered(ROWS))
-    llm = SimpleNamespace(generate=AsyncMock(return_value="A-doc says first A."))
+def _answer(corpus, generated, instruction=None):
+    llm = SimpleNamespace(generate=AsyncMock(return_value=generated))
     with patch.object(fc, "get_settings", return_value=SimpleNamespace(retrieval={})), \
             patch.object(fc, "get_llm", return_value=llm), \
             patch.object(fc, "get_generation_route", return_value={"primary": "groq:m"}):
-        result = asyncio.run(fc.answer_full_context("What?", corpus, tenant="t"))
+        result = asyncio.run(fc.answer_full_context("What?", corpus, tenant="t", citation_instruction=instruction))
+    return result, llm
+
+
+def test_the_answer_is_returned_as_generated_and_the_benchmark_owns_citation_parsing():
+    corpus = fc.build_corpus("t", _ordered(ROWS), include_superseded=True)
+    result, _ = _answer(corpus, "A supersedes B [DOC: A-doc].")
+    assert result.answer == "A supersedes B [DOC: A-doc]." and result.citations == []
+
+
+def test_the_shared_citation_rule_is_placed_in_the_prompt_exactly_as_for_the_retrievers():
+    from graphrag.core.prompt_security import escape_prompt_data
+    from graphrag.evaluation import citations
+    from graphrag.retrieval.answer_policy import answer_prompt
+
+    corpus = fc.build_corpus("t", _ordered(ROWS), include_superseded=True)
+    instruction = citations.citation_instruction(corpus.names)
+    _, llm = _answer(corpus, "x", instruction)
+    prompt = llm.generate.await_args.args[0]
+    assert instruction in prompt and "[DOC: <id>]" in prompt and "  - A-doc\n  - B-doc" in prompt
+    assert prompt == answer_prompt({"eval_citation_instruction": instruction}).format(
+        context=escape_prompt_data(corpus.context), question="What?")
+
+
+def test_without_the_rule_the_prompt_has_no_citation_instruction():
+    corpus = fc.build_corpus("t", _ordered(ROWS), include_superseded=True)
+    _, llm = _answer(corpus, "x")
+    assert "[DOC:" not in llm.generate.await_args.args[0]
+
+
+def test_the_answer_is_one_generator_call_with_the_whole_corpus_and_the_standard_prompt():
+    corpus = fc.build_corpus("t", _ordered(ROWS), include_superseded=True)
+    result, llm = _answer(corpus, "A-doc says first A.")
     llm.generate.assert_awaited_once()
     prompt = llm.generate.await_args.args[0]
     assert "first A" in prompt and "second B" in prompt and "Question: What?" in prompt
     assert "Answer using ONLY the information in the context" in prompt
     assert result.retrieval_mode == "full_context"
     assert result.contexts == corpus.contexts            # the judge sees the whole corpus
-    assert result.citations == ["A-doc"] and result.model_version == "groq:m"
+    assert result.model_version == "groq:m"
 
 
 def test_profile_registry_accepts_full_context_and_still_rejects_unknown_profiles():

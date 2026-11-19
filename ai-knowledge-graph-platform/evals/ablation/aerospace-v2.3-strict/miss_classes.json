@@ -1,0 +1,1310 @@
+{
+  "rows": [
+    {
+      "profile": "vector_only",
+      "run": 1,
+      "id": "CON-01",
+      "type": "temporal",
+      "class": "answer_error",
+      "status": "scored",
+      "failures": [
+        "answer missing any of required terms: ['not compliant', 'non-compliant', 'not yet compliant', 'noncompliant', 'not fully compliant']"
+      ]
+    },
+    {
+      "profile": "vector_only",
+      "run": 1,
+      "id": "AUT-01",
+      "type": "authority_chain",
+      "class": "retrieval_miss",
+      "status": "scored",
+      "failures": [
+        "answer missing any of required terms: ['FAA-AD-2024-01-02', 'FAA AD 2024-01-02', 'AD 2024-01-02']",
+        "insufficient citation recall — missing: ['FAA-AD-2024-01-02', 'FAA-AD-2022-03-07']"
+      ]
+    },
+    {
+      "profile": "vector_only",
+      "run": 1,
+      "id": "AUT-02",
+      "type": "authority_chain",
+      "class": "retrieval_miss",
+      "status": "scored",
+      "failures": [
+        "answer missing any of required terms: ['superseded', 'no longer', 'not the current', 'not the governing']",
+        "insufficient citation recall — missing: ['FAA-AD-2022-03-07', 'FAA-AD-2020-05-11']"
+      ]
+    },
+    {
+      "profile": "vector_only",
+      "run": 1,
+      "id": "AUT-03",
+      "type": "authority_chain",
+      "class": "citation_uncitable_artifact",
+      "status": "refused",
+      "failures": [
+        "insufficient citation recall — missing: ['FAA-AD-2022-03-07', 'FAA-AD-2020-05-11']"
+      ]
+    },
+    {
+      "profile": "vector_only",
+      "run": 1,
+      "id": "INF-01",
+      "type": "inference",
+      "class": "citation_uncitable_artifact",
+      "status": "scored",
+      "failures": [
+        "insufficient citation recall — missing: ['FAA-AD-2022-03-07', 'FAA-AD-2020-05-11']"
+      ]
+    },
+    {
+      "profile": "vector_only",
+      "run": 1,
+      "id": "NEG-03",
+      "type": "negative",
+      "class": "answer_error",
+      "status": "scored",
+      "failures": [
+        "answer missing required term: 'no'"
+      ]
+    },
+    {
+      "profile": "vector_only",
+      "run": 1,
+      "id": "TMP-01",
+      "type": "temporal",
+      "class": "refused_no_evidence",
+      "status": "refused",
+      "failures": [
+        "answer missing any of required terms: ['2020', 'FAA-AD-2020', 'AD 2020-05-11']",
+        "insufficient citation recall — missing: ['FAA-AD-2020-05-11', 'FAA-AD-2022-03-07']"
+      ]
+    },
+    {
+      "profile": "vector_only",
+      "run": 1,
+      "id": "TMP-03",
+      "type": "temporal",
+      "class": "retrieval_miss",
+      "status": "scored",
+      "failures": [
+        "answer missing required term: 'two'",
+        "insufficient citation recall — missing: ['FAA-AD-2022-03-07']"
+      ]
+    },
+    {
+      "profile": "vector_only",
+      "run": 1,
+      "id": "PRE-01",
+      "type": "precision",
+      "class": "citation_uncitable_artifact",
+      "status": "scored",
+      "failures": [
+        "insufficient citation recall — missing: ['FAA-AD-2022-03-07']"
+      ]
+    },
+    {
+      "profile": "vector_only",
+      "run": 1,
+      "id": "CTX-01",
+      "type": "contextual",
+      "class": "retrieval_miss",
+      "status": "scored",
+      "failures": [
+        "answer missing required term: 'airworthiness'"
+      ]
+    },
+    {
+      "profile": "vector_only",
+      "run": 2,
+      "id": "MH-02",
+      "type": "multi_hop",
+      "class": "refused_with_evidence",
+      "status": "refused",
+      "failures": [
+        "answer missing required term: 'engine mount'"
+      ]
+    },
+    {
+      "profile": "vector_only",
+      "run": 2,
+      "id": "MH-03",
+      "type": "multi_hop",
+      "class": "answer_error",
+      "status": "scored",
+      "failures": [
+        "answer missing required term: 'Southwest'"
+      ]
+    },
+    {
+      "profile": "vector_only",
+      "run": 2,
+      "id": "CON-01",
+      "type": "temporal",
+      "class": "answer_error",
+      "status": "scored",
+      "failures": [
+        "answer missing any of required terms: ['not compliant', 'non-compliant', 'not yet compliant', 'noncompliant', 'not fully compliant']"
+      ]
+    },
+    {
+      "profile": "vector_only",
+      "run": 2,
+      "id": "AUT-01",
+      "type": "authority_chain",
+      "class": "retrieval_miss",
+      "status": "scored",
+      "failures": [
+        "answer missing any of required terms: ['FAA-AD-2024-01-02', 'FAA AD 2024-01-02', 'AD 2024-01-02']",
+        "insufficient citation recall — missing: ['FAA-AD-2024-01-02', 'FAA-AD-2022-03-07']"
+      ]
+    },
+    {
+      "profile": "vector_only",
+      "run": 2,
+      "id": "AUT-02",
+      "type": "authority_chain",
+      "class": "retrieval_miss",
+      "status": "scored",
+      "failures": [
+        "answer missing any of required terms: ['superseded', 'no longer', 'not the current', 'not the governing']",
+        "insufficient citation recall — missing: ['FAA-AD-2022-03-07', 'FAA-AD-2020-05-11']"
+      ]
+    },
+    {
+      "profile": "vector_only",
+      "run": 2,
+      "id": "AUT-03",
+      "type": "authority_chain",
+      "class": "citation_uncitable_artifact",
+      "status": "refused",
+      "failures": [
+        "insufficient citation recall — missing: ['FAA-AD-2022-03-07', 'FAA-AD-2020-05-11']"
+      ]
+    },
+    {
+      "profile": "vector_only",
+      "run": 2,
+      "id": "INF-01",
+      "type": "inference",
+      "class": "citation_uncitable_artifact",
+      "status": "scored",
+      "failures": [
+        "insufficient citation recall — missing: ['FAA-AD-2022-03-07', 'FAA-AD-2020-05-11']"
+      ]
+    },
+    {
+      "profile": "vector_only",
+      "run": 2,
+      "id": "NEG-03",
+      "type": "negative",
+      "class": "answer_error",
+      "status": "scored",
+      "failures": [
+        "answer missing required term: 'no'"
+      ]
+    },
+    {
+      "profile": "vector_only",
+      "run": 2,
+      "id": "TMP-01",
+      "type": "temporal",
+      "class": "refused_no_evidence",
+      "status": "refused",
+      "failures": [
+        "answer missing any of required terms: ['2020', 'FAA-AD-2020', 'AD 2020-05-11']",
+        "insufficient citation recall — missing: ['FAA-AD-2020-05-11', 'FAA-AD-2022-03-07']"
+      ]
+    },
+    {
+      "profile": "vector_only",
+      "run": 2,
+      "id": "TMP-03",
+      "type": "temporal",
+      "class": "refused_no_evidence",
+      "status": "refused",
+      "failures": [
+        "answer missing required term: 'two'",
+        "insufficient citation recall — missing: ['FAA-AD-2022-03-07']"
+      ]
+    },
+    {
+      "profile": "vector_only",
+      "run": 2,
+      "id": "PRE-01",
+      "type": "precision",
+      "class": "citation_uncitable_artifact",
+      "status": "refused",
+      "failures": [
+        "insufficient citation recall — missing: ['FAA-AD-2022-03-07']"
+      ]
+    },
+    {
+      "profile": "vector_only",
+      "run": 2,
+      "id": "AGT-01",
+      "type": "agentic",
+      "class": "refused_no_evidence",
+      "status": "refused",
+      "failures": [
+        "answer missing required term: 'LEAP'"
+      ]
+    },
+    {
+      "profile": "vector_only",
+      "run": 2,
+      "id": "CTX-01",
+      "type": "contextual",
+      "class": "retrieval_miss",
+      "status": "scored",
+      "failures": [
+        "answer missing required term: 'airworthiness'"
+      ]
+    },
+    {
+      "profile": "vector_only",
+      "run": 3,
+      "id": "AUT-01",
+      "type": "authority_chain",
+      "class": "retrieval_miss",
+      "status": "scored",
+      "failures": [
+        "answer missing any of required terms: ['FAA-AD-2024-01-02', 'FAA AD 2024-01-02', 'AD 2024-01-02']",
+        "insufficient citation recall — missing: ['FAA-AD-2024-01-02', 'FAA-AD-2022-03-07']"
+      ]
+    },
+    {
+      "profile": "vector_only",
+      "run": 3,
+      "id": "AUT-02",
+      "type": "authority_chain",
+      "class": "retrieval_miss",
+      "status": "scored",
+      "failures": [
+        "answer missing any of required terms: ['superseded', 'no longer', 'not the current', 'not the governing']",
+        "insufficient citation recall — missing: ['FAA-AD-2022-03-07', 'FAA-AD-2020-05-11']"
+      ]
+    },
+    {
+      "profile": "vector_only",
+      "run": 3,
+      "id": "AUT-03",
+      "type": "authority_chain",
+      "class": "citation_uncitable_artifact",
+      "status": "refused",
+      "failures": [
+        "insufficient citation recall — missing: ['FAA-AD-2022-03-07', 'FAA-AD-2020-05-11']"
+      ]
+    },
+    {
+      "profile": "vector_only",
+      "run": 3,
+      "id": "INF-01",
+      "type": "inference",
+      "class": "citation_uncitable_artifact",
+      "status": "scored",
+      "failures": [
+        "insufficient citation recall — missing: ['FAA-AD-2022-03-07', 'FAA-AD-2020-05-11']"
+      ]
+    },
+    {
+      "profile": "vector_only",
+      "run": 3,
+      "id": "NEG-03",
+      "type": "negative",
+      "class": "answer_error",
+      "status": "scored",
+      "failures": [
+        "answer missing required term: 'no'"
+      ]
+    },
+    {
+      "profile": "vector_only",
+      "run": 3,
+      "id": "TMP-01",
+      "type": "temporal",
+      "class": "refused_no_evidence",
+      "status": "refused",
+      "failures": [
+        "answer missing any of required terms: ['2020', 'FAA-AD-2020', 'AD 2020-05-11']",
+        "insufficient citation recall — missing: ['FAA-AD-2020-05-11', 'FAA-AD-2022-03-07']"
+      ]
+    },
+    {
+      "profile": "vector_only",
+      "run": 3,
+      "id": "TMP-03",
+      "type": "temporal",
+      "class": "refused_no_evidence",
+      "status": "refused",
+      "failures": [
+        "answer missing required term: 'two'",
+        "insufficient citation recall — missing: ['FAA-AD-2022-03-07']"
+      ]
+    },
+    {
+      "profile": "vector_only",
+      "run": 3,
+      "id": "PRE-01",
+      "type": "precision",
+      "class": "citation_uncitable_artifact",
+      "status": "refused",
+      "failures": [
+        "insufficient citation recall — missing: ['FAA-AD-2022-03-07']"
+      ]
+    },
+    {
+      "profile": "vector_only",
+      "run": 3,
+      "id": "CAL-01",
+      "type": "calibration",
+      "class": "answer_error",
+      "status": "scored",
+      "failures": [
+        "answer missing any of required terms: ['no conflict', 'not conflicting', 'no contradiction', 'do not conflict', 'does not conflict', 'not contradict', 'consistent']"
+      ]
+    },
+    {
+      "profile": "vector_only",
+      "run": 3,
+      "id": "AGT-01",
+      "type": "agentic",
+      "class": "refused_no_evidence",
+      "status": "refused",
+      "failures": [
+        "answer missing required term: 'LEAP'"
+      ]
+    },
+    {
+      "profile": "vector_only",
+      "run": 3,
+      "id": "CTX-01",
+      "type": "contextual",
+      "class": "retrieval_miss",
+      "status": "scored",
+      "failures": [
+        "answer missing required term: 'airworthiness'"
+      ]
+    },
+    {
+      "profile": "text_hybrid",
+      "run": 1,
+      "id": "MH-02",
+      "type": "multi_hop",
+      "class": "refused_with_evidence",
+      "status": "refused",
+      "failures": [
+        "answer missing required term: 'inspection'"
+      ]
+    },
+    {
+      "profile": "text_hybrid",
+      "run": 1,
+      "id": "MH-03",
+      "type": "multi_hop",
+      "class": "retrieval_miss",
+      "status": "scored",
+      "failures": [
+        "answer missing required term: 'Southwest'",
+        "insufficient citation recall — missing: ['SWA_fleet_registry_2024']"
+      ]
+    },
+    {
+      "profile": "text_hybrid",
+      "run": 1,
+      "id": "AUT-01",
+      "type": "authority_chain",
+      "class": "retrieval_miss",
+      "status": "scored",
+      "failures": [
+        "answer missing any of required terms: ['FAA-AD-2024-01-02', 'FAA AD 2024-01-02', 'AD 2024-01-02']",
+        "insufficient citation recall — missing: ['FAA-AD-2024-01-02', 'FAA-AD-2022-03-07']"
+      ]
+    },
+    {
+      "profile": "text_hybrid",
+      "run": 1,
+      "id": "AUT-02",
+      "type": "authority_chain",
+      "class": "citation_uncitable_artifact",
+      "status": "scored",
+      "failures": [
+        "insufficient citation recall — missing: ['FAA-AD-2022-03-07', 'FAA-AD-2020-05-11']"
+      ]
+    },
+    {
+      "profile": "text_hybrid",
+      "run": 1,
+      "id": "AUT-03",
+      "type": "authority_chain",
+      "class": "retrieval_miss_citation",
+      "status": "refused",
+      "failures": [
+        "insufficient citation recall — missing: ['FAA-AD-2024-01-02', 'FAA-AD-2022-03-07', 'FAA-AD-2020-05-11']"
+      ]
+    },
+    {
+      "profile": "text_hybrid",
+      "run": 1,
+      "id": "INF-01",
+      "type": "inference",
+      "class": "citation_uncitable_artifact",
+      "status": "scored",
+      "failures": [
+        "insufficient citation recall — missing: ['FAA-AD-2022-03-07', 'FAA-AD-2020-05-11']"
+      ]
+    },
+    {
+      "profile": "text_hybrid",
+      "run": 1,
+      "id": "TMP-01",
+      "type": "temporal",
+      "class": "citation_uncitable_artifact",
+      "status": "scored",
+      "failures": [
+        "insufficient citation recall — missing: ['FAA-AD-2020-05-11', 'FAA-AD-2022-03-07']"
+      ]
+    },
+    {
+      "profile": "text_hybrid",
+      "run": 1,
+      "id": "TMP-03",
+      "type": "temporal",
+      "class": "refused_no_evidence",
+      "status": "refused",
+      "failures": [
+        "answer missing required term: 'two'",
+        "insufficient citation recall — missing: ['FAA-AD-2022-03-07']"
+      ]
+    },
+    {
+      "profile": "text_hybrid",
+      "run": 1,
+      "id": "PRE-01",
+      "type": "precision",
+      "class": "citation_uncitable_artifact",
+      "status": "scored",
+      "failures": [
+        "insufficient citation recall — missing: ['FAA-AD-2022-03-07']"
+      ]
+    },
+    {
+      "profile": "text_hybrid",
+      "run": 1,
+      "id": "CAL-01",
+      "type": "calibration",
+      "class": "answer_error",
+      "status": "scored",
+      "failures": [
+        "answer missing any of required terms: ['no conflict', 'not conflicting', 'no contradiction', 'do not conflict', 'does not conflict', 'not contradict', 'consistent']"
+      ]
+    },
+    {
+      "profile": "text_hybrid",
+      "run": 2,
+      "id": "MH-02",
+      "type": "multi_hop",
+      "class": "refused_with_evidence",
+      "status": "refused",
+      "failures": [
+        "answer missing required term: 'inspection'"
+      ]
+    },
+    {
+      "profile": "text_hybrid",
+      "run": 2,
+      "id": "MH-03",
+      "type": "multi_hop",
+      "class": "retrieval_miss",
+      "status": "scored",
+      "failures": [
+        "answer missing required term: 'Southwest'",
+        "insufficient citation recall — missing: ['SWA_fleet_registry_2024']"
+      ]
+    },
+    {
+      "profile": "text_hybrid",
+      "run": 2,
+      "id": "AUT-01",
+      "type": "authority_chain",
+      "class": "retrieval_miss",
+      "status": "scored",
+      "failures": [
+        "answer missing any of required terms: ['FAA-AD-2024-01-02', 'FAA AD 2024-01-02', 'AD 2024-01-02']",
+        "insufficient citation recall — missing: ['FAA-AD-2024-01-02', 'FAA-AD-2022-03-07']"
+      ]
+    },
+    {
+      "profile": "text_hybrid",
+      "run": 2,
+      "id": "AUT-02",
+      "type": "authority_chain",
+      "class": "citation_uncitable_artifact",
+      "status": "scored",
+      "failures": [
+        "insufficient citation recall — missing: ['FAA-AD-2022-03-07', 'FAA-AD-2020-05-11']"
+      ]
+    },
+    {
+      "profile": "text_hybrid",
+      "run": 2,
+      "id": "AUT-03",
+      "type": "authority_chain",
+      "class": "retrieval_miss_citation",
+      "status": "refused",
+      "failures": [
+        "insufficient citation recall — missing: ['FAA-AD-2024-01-02', 'FAA-AD-2022-03-07', 'FAA-AD-2020-05-11']"
+      ]
+    },
+    {
+      "profile": "text_hybrid",
+      "run": 2,
+      "id": "INF-01",
+      "type": "inference",
+      "class": "citation_uncitable_artifact",
+      "status": "scored",
+      "failures": [
+        "insufficient citation recall — missing: ['FAA-AD-2022-03-07', 'FAA-AD-2020-05-11']"
+      ]
+    },
+    {
+      "profile": "text_hybrid",
+      "run": 2,
+      "id": "TMP-01",
+      "type": "temporal",
+      "class": "citation_uncitable_artifact",
+      "status": "scored",
+      "failures": [
+        "insufficient citation recall — missing: ['FAA-AD-2020-05-11', 'FAA-AD-2022-03-07']"
+      ]
+    },
+    {
+      "profile": "text_hybrid",
+      "run": 2,
+      "id": "TMP-03",
+      "type": "temporal",
+      "class": "refused_no_evidence",
+      "status": "refused",
+      "failures": [
+        "answer missing required term: 'two'",
+        "insufficient citation recall — missing: ['FAA-AD-2022-03-07']"
+      ]
+    },
+    {
+      "profile": "text_hybrid",
+      "run": 2,
+      "id": "PRE-01",
+      "type": "precision",
+      "class": "citation_uncitable_artifact",
+      "status": "scored",
+      "failures": [
+        "insufficient citation recall — missing: ['FAA-AD-2022-03-07']"
+      ]
+    },
+    {
+      "profile": "text_hybrid",
+      "run": 2,
+      "id": "CAL-01",
+      "type": "calibration",
+      "class": "answer_error",
+      "status": "scored",
+      "failures": [
+        "answer missing any of required terms: ['no conflict', 'not conflicting', 'no contradiction', 'do not conflict', 'does not conflict', 'not contradict', 'consistent']"
+      ]
+    },
+    {
+      "profile": "text_hybrid",
+      "run": 3,
+      "id": "MH-02",
+      "type": "multi_hop",
+      "class": "refused_with_evidence",
+      "status": "refused",
+      "failures": [
+        "answer missing required term: 'inspection'"
+      ]
+    },
+    {
+      "profile": "text_hybrid",
+      "run": 3,
+      "id": "MH-03",
+      "type": "multi_hop",
+      "class": "retrieval_miss",
+      "status": "scored",
+      "failures": [
+        "answer missing required term: 'Southwest'",
+        "insufficient citation recall — missing: ['SWA_fleet_registry_2024']"
+      ]
+    },
+    {
+      "profile": "text_hybrid",
+      "run": 3,
+      "id": "AUT-01",
+      "type": "authority_chain",
+      "class": "retrieval_miss",
+      "status": "scored",
+      "failures": [
+        "answer missing any of required terms: ['FAA-AD-2024-01-02', 'FAA AD 2024-01-02', 'AD 2024-01-02']",
+        "insufficient citation recall — missing: ['FAA-AD-2024-01-02', 'FAA-AD-2022-03-07']"
+      ]
+    },
+    {
+      "profile": "text_hybrid",
+      "run": 3,
+      "id": "AUT-02",
+      "type": "authority_chain",
+      "class": "citation_uncitable_artifact",
+      "status": "scored",
+      "failures": [
+        "insufficient citation recall — missing: ['FAA-AD-2022-03-07', 'FAA-AD-2020-05-11']"
+      ]
+    },
+    {
+      "profile": "text_hybrid",
+      "run": 3,
+      "id": "AUT-03",
+      "type": "authority_chain",
+      "class": "retrieval_miss_citation",
+      "status": "refused",
+      "failures": [
+        "insufficient citation recall — missing: ['FAA-AD-2024-01-02', 'FAA-AD-2022-03-07', 'FAA-AD-2020-05-11']"
+      ]
+    },
+    {
+      "profile": "text_hybrid",
+      "run": 3,
+      "id": "INF-01",
+      "type": "inference",
+      "class": "citation_uncitable_artifact",
+      "status": "scored",
+      "failures": [
+        "insufficient citation recall — missing: ['FAA-AD-2022-03-07', 'FAA-AD-2020-05-11']"
+      ]
+    },
+    {
+      "profile": "text_hybrid",
+      "run": 3,
+      "id": "TMP-01",
+      "type": "temporal",
+      "class": "citation_uncitable_artifact",
+      "status": "scored",
+      "failures": [
+        "insufficient citation recall — missing: ['FAA-AD-2020-05-11', 'FAA-AD-2022-03-07']"
+      ]
+    },
+    {
+      "profile": "text_hybrid",
+      "run": 3,
+      "id": "TMP-03",
+      "type": "temporal",
+      "class": "refused_no_evidence",
+      "status": "refused",
+      "failures": [
+        "answer missing required term: 'two'",
+        "insufficient citation recall — missing: ['FAA-AD-2022-03-07']"
+      ]
+    },
+    {
+      "profile": "text_hybrid",
+      "run": 3,
+      "id": "PRE-01",
+      "type": "precision",
+      "class": "citation_uncitable_artifact",
+      "status": "scored",
+      "failures": [
+        "insufficient citation recall — missing: ['FAA-AD-2022-03-07']"
+      ]
+    },
+    {
+      "profile": "text_hybrid",
+      "run": 3,
+      "id": "CAL-01",
+      "type": "calibration",
+      "class": "answer_error",
+      "status": "scored",
+      "failures": [
+        "answer missing any of required terms: ['no conflict', 'not conflicting', 'no contradiction', 'do not conflict', 'does not conflict', 'not contradict', 'consistent']"
+      ]
+    },
+    {
+      "profile": "full",
+      "run": 1,
+      "id": "SH-05",
+      "type": "single_hop",
+      "class": "answer_error",
+      "status": "scored",
+      "failures": [
+        "answer missing required term: 'Boeing'"
+      ]
+    },
+    {
+      "profile": "full",
+      "run": 1,
+      "id": "MH-03",
+      "type": "multi_hop",
+      "class": "retrieval_miss",
+      "status": "scored",
+      "failures": [
+        "answer missing required term: 'Southwest'",
+        "insufficient citation recall — missing: ['SWA_fleet_registry_2024']"
+      ]
+    },
+    {
+      "profile": "full",
+      "run": 1,
+      "id": "AUT-01",
+      "type": "authority_chain",
+      "class": "answer_error",
+      "status": "scored",
+      "failures": [
+        "answer missing any of required terms: ['FAA-AD-2024-01-02', 'FAA AD 2024-01-02', 'AD 2024-01-02']"
+      ]
+    },
+    {
+      "profile": "full",
+      "run": 1,
+      "id": "TMP-02",
+      "type": "temporal",
+      "class": "answer_error",
+      "status": "scored",
+      "failures": [
+        "answer missing required term: 'v2.0'"
+      ]
+    },
+    {
+      "profile": "full",
+      "run": 1,
+      "id": "TMP-03",
+      "type": "temporal",
+      "class": "refused_with_evidence",
+      "status": "refused",
+      "failures": [
+        "answer missing required term: 'two'"
+      ]
+    },
+    {
+      "profile": "full",
+      "run": 1,
+      "id": "CAL-01",
+      "type": "calibration",
+      "class": "answer_error",
+      "status": "scored",
+      "failures": [
+        "answer missing any of required terms: ['no conflict', 'not conflicting', 'no contradiction', 'do not conflict', 'does not conflict', 'not contradict', 'consistent']"
+      ]
+    },
+    {
+      "profile": "full",
+      "run": 2,
+      "id": "SH-05",
+      "type": "single_hop",
+      "class": "answer_error",
+      "status": "scored",
+      "failures": [
+        "answer missing required term: 'Boeing'"
+      ]
+    },
+    {
+      "profile": "full",
+      "run": 2,
+      "id": "MH-03",
+      "type": "multi_hop",
+      "class": "retrieval_miss",
+      "status": "scored",
+      "failures": [
+        "answer missing required term: 'Southwest'",
+        "insufficient citation recall — missing: ['SWA_fleet_registry_2024']"
+      ]
+    },
+    {
+      "profile": "full",
+      "run": 2,
+      "id": "AUT-01",
+      "type": "authority_chain",
+      "class": "answer_error",
+      "status": "scored",
+      "failures": [
+        "answer missing any of required terms: ['FAA-AD-2024-01-02', 'FAA AD 2024-01-02', 'AD 2024-01-02']"
+      ]
+    },
+    {
+      "profile": "full",
+      "run": 2,
+      "id": "TMP-02",
+      "type": "temporal",
+      "class": "answer_error",
+      "status": "scored",
+      "failures": [
+        "answer missing required term: 'v2.0'"
+      ]
+    },
+    {
+      "profile": "full",
+      "run": 2,
+      "id": "TMP-03",
+      "type": "temporal",
+      "class": "refused_with_evidence",
+      "status": "refused",
+      "failures": [
+        "answer missing required term: 'two'"
+      ]
+    },
+    {
+      "profile": "full",
+      "run": 3,
+      "id": "SH-05",
+      "type": "single_hop",
+      "class": "answer_error",
+      "status": "scored",
+      "failures": [
+        "answer missing required term: 'Boeing'"
+      ]
+    },
+    {
+      "profile": "full",
+      "run": 3,
+      "id": "MH-03",
+      "type": "multi_hop",
+      "class": "retrieval_miss",
+      "status": "scored",
+      "failures": [
+        "answer missing required term: 'Southwest'",
+        "insufficient citation recall — missing: ['SWA_fleet_registry_2024']"
+      ]
+    },
+    {
+      "profile": "full",
+      "run": 3,
+      "id": "AUT-01",
+      "type": "authority_chain",
+      "class": "answer_error",
+      "status": "scored",
+      "failures": [
+        "answer missing any of required terms: ['FAA-AD-2024-01-02', 'FAA AD 2024-01-02', 'AD 2024-01-02']"
+      ]
+    },
+    {
+      "profile": "full",
+      "run": 3,
+      "id": "TMP-02",
+      "type": "temporal",
+      "class": "answer_error",
+      "status": "scored",
+      "failures": [
+        "answer missing required term: 'v2.0'"
+      ]
+    },
+    {
+      "profile": "full",
+      "run": 3,
+      "id": "TMP-03",
+      "type": "temporal",
+      "class": "refused_with_evidence",
+      "status": "refused",
+      "failures": [
+        "answer missing required term: 'two'"
+      ]
+    },
+    {
+      "profile": "full",
+      "run": 3,
+      "id": "CAL-01",
+      "type": "calibration",
+      "class": "answer_error",
+      "status": "scored",
+      "failures": [
+        "answer missing any of required terms: ['no conflict', 'not conflicting', 'no contradiction', 'do not conflict', 'does not conflict', 'not contradict', 'consistent']"
+      ]
+    },
+    {
+      "profile": "full",
+      "run": 3,
+      "id": "AGT-02",
+      "type": "agentic",
+      "class": "answer_error",
+      "status": "scored",
+      "failures": [
+        "answer missing required term: '737 MAX'"
+      ]
+    },
+    {
+      "profile": "full_context",
+      "run": 1,
+      "id": "MH-03",
+      "type": "multi_hop",
+      "class": "citation_only",
+      "status": "scored",
+      "failures": [
+        "insufficient citation recall — missing: ['Boeing_MCAS_SWChangeRecord']"
+      ]
+    },
+    {
+      "profile": "full_context",
+      "run": 1,
+      "id": "AUT-01",
+      "type": "authority_chain",
+      "class": "answer_error",
+      "status": "scored",
+      "failures": [
+        "answer missing any of required terms: ['FAA-AD-2024-01-02', 'FAA AD 2024-01-02', 'AD 2024-01-02']",
+        "insufficient citation recall — missing: ['FAA-AD-2024-01-02', 'FAA-AD-2022-03-07']"
+      ]
+    },
+    {
+      "profile": "full_context",
+      "run": 1,
+      "id": "AUT-02",
+      "type": "authority_chain",
+      "class": "citation_uncitable_artifact",
+      "status": "scored",
+      "failures": [
+        "insufficient citation recall — missing: ['FAA-AD-2022-03-07', 'FAA-AD-2020-05-11']"
+      ]
+    },
+    {
+      "profile": "full_context",
+      "run": 1,
+      "id": "AUT-03",
+      "type": "authority_chain",
+      "class": "citation_uncitable_artifact",
+      "status": "refused",
+      "failures": [
+        "insufficient citation recall — missing: ['FAA-AD-2022-03-07', 'FAA-AD-2020-05-11']"
+      ]
+    },
+    {
+      "profile": "full_context",
+      "run": 1,
+      "id": "INF-01",
+      "type": "inference",
+      "class": "citation_uncitable_artifact",
+      "status": "scored",
+      "failures": [
+        "insufficient citation recall — missing: ['FAA-AD-2022-03-07', 'FAA-AD-2020-05-11']"
+      ]
+    },
+    {
+      "profile": "full_context",
+      "run": 1,
+      "id": "TMP-01",
+      "type": "temporal",
+      "class": "citation_only",
+      "status": "scored",
+      "failures": [
+        "insufficient citation recall — missing: ['FAA-AD-2020-05-11', 'FAA-AD-2022-03-07', 'FAA-AD-2024-01-02']"
+      ]
+    },
+    {
+      "profile": "full_context",
+      "run": 1,
+      "id": "TMP-03",
+      "type": "temporal",
+      "class": "refused_no_evidence",
+      "status": "refused",
+      "failures": [
+        "answer missing required term: 'two'",
+        "insufficient citation recall — missing: ['FAA-AD-2024-01-02', 'FAA-AD-2022-03-07']"
+      ]
+    },
+    {
+      "profile": "full_context",
+      "run": 1,
+      "id": "PRE-01",
+      "type": "precision",
+      "class": "citation_uncitable_artifact",
+      "status": "scored",
+      "failures": [
+        "insufficient citation recall — missing: ['FAA-AD-2022-03-07']"
+      ]
+    },
+    {
+      "profile": "full_context",
+      "run": 2,
+      "id": "MH-03",
+      "type": "multi_hop",
+      "class": "citation_only",
+      "status": "scored",
+      "failures": [
+        "insufficient citation recall — missing: ['Boeing_MCAS_SWChangeRecord']"
+      ]
+    },
+    {
+      "profile": "full_context",
+      "run": 2,
+      "id": "AUT-01",
+      "type": "authority_chain",
+      "class": "answer_error",
+      "status": "scored",
+      "failures": [
+        "answer missing any of required terms: ['FAA-AD-2024-01-02', 'FAA AD 2024-01-02', 'AD 2024-01-02']",
+        "insufficient citation recall — missing: ['FAA-AD-2024-01-02', 'FAA-AD-2022-03-07']"
+      ]
+    },
+    {
+      "profile": "full_context",
+      "run": 2,
+      "id": "AUT-02",
+      "type": "authority_chain",
+      "class": "citation_uncitable_artifact",
+      "status": "scored",
+      "failures": [
+        "insufficient citation recall — missing: ['FAA-AD-2022-03-07', 'FAA-AD-2020-05-11']"
+      ]
+    },
+    {
+      "profile": "full_context",
+      "run": 2,
+      "id": "AUT-03",
+      "type": "authority_chain",
+      "class": "citation_only",
+      "status": "refused",
+      "failures": [
+        "insufficient citation recall — missing: ['FAA-AD-2024-01-02', 'FAA-AD-2022-03-07', 'FAA-AD-2020-05-11']"
+      ]
+    },
+    {
+      "profile": "full_context",
+      "run": 2,
+      "id": "INF-01",
+      "type": "inference",
+      "class": "citation_uncitable_artifact",
+      "status": "scored",
+      "failures": [
+        "insufficient citation recall — missing: ['FAA-AD-2022-03-07', 'FAA-AD-2020-05-11']"
+      ]
+    },
+    {
+      "profile": "full_context",
+      "run": 2,
+      "id": "NEG-03",
+      "type": "negative",
+      "class": "answer_error",
+      "status": "scored",
+      "failures": [
+        "answer missing required term: 'no'"
+      ]
+    },
+    {
+      "profile": "full_context",
+      "run": 2,
+      "id": "TMP-01",
+      "type": "temporal",
+      "class": "citation_only",
+      "status": "scored",
+      "failures": [
+        "insufficient citation recall — missing: ['FAA-AD-2020-05-11', 'FAA-AD-2022-03-07', 'FAA-AD-2024-01-02']"
+      ]
+    },
+    {
+      "profile": "full_context",
+      "run": 2,
+      "id": "TMP-03",
+      "type": "temporal",
+      "class": "refused_no_evidence",
+      "status": "refused",
+      "failures": [
+        "answer missing required term: 'two'",
+        "insufficient citation recall — missing: ['FAA-AD-2024-01-02', 'FAA-AD-2022-03-07']"
+      ]
+    },
+    {
+      "profile": "full_context",
+      "run": 2,
+      "id": "PRE-01",
+      "type": "precision",
+      "class": "citation_uncitable_artifact",
+      "status": "scored",
+      "failures": [
+        "insufficient citation recall — missing: ['FAA-AD-2022-03-07']"
+      ]
+    },
+    {
+      "profile": "full_context",
+      "run": 3,
+      "id": "MH-02",
+      "type": "multi_hop",
+      "class": "answer_error",
+      "status": "scored",
+      "failures": [
+        "answer missing required term: 'inspection'",
+        "answer missing required term: 'engine mount'",
+        "insufficient citation recall — missing: ['737MAX_CMM_Engine_Mount']"
+      ]
+    },
+    {
+      "profile": "full_context",
+      "run": 3,
+      "id": "MH-03",
+      "type": "multi_hop",
+      "class": "citation_only",
+      "status": "scored",
+      "failures": [
+        "insufficient citation recall — missing: ['Boeing_MCAS_SWChangeRecord']"
+      ]
+    },
+    {
+      "profile": "full_context",
+      "run": 3,
+      "id": "AUT-01",
+      "type": "authority_chain",
+      "class": "answer_error",
+      "status": "scored",
+      "failures": [
+        "answer missing any of required terms: ['FAA-AD-2024-01-02', 'FAA AD 2024-01-02', 'AD 2024-01-02']",
+        "insufficient citation recall — missing: ['FAA-AD-2024-01-02', 'FAA-AD-2022-03-07']"
+      ]
+    },
+    {
+      "profile": "full_context",
+      "run": 3,
+      "id": "AUT-02",
+      "type": "authority_chain",
+      "class": "citation_uncitable_artifact",
+      "status": "scored",
+      "failures": [
+        "insufficient citation recall — missing: ['FAA-AD-2022-03-07', 'FAA-AD-2020-05-11']"
+      ]
+    },
+    {
+      "profile": "full_context",
+      "run": 3,
+      "id": "AUT-03",
+      "type": "authority_chain",
+      "class": "citation_uncitable_artifact",
+      "status": "refused",
+      "failures": [
+        "insufficient citation recall — missing: ['FAA-AD-2022-03-07', 'FAA-AD-2020-05-11']"
+      ]
+    },
+    {
+      "profile": "full_context",
+      "run": 3,
+      "id": "INF-01",
+      "type": "inference",
+      "class": "citation_uncitable_artifact",
+      "status": "scored",
+      "failures": [
+        "insufficient citation recall — missing: ['FAA-AD-2022-03-07', 'FAA-AD-2020-05-11']"
+      ]
+    },
+    {
+      "profile": "full_context",
+      "run": 3,
+      "id": "TMP-01",
+      "type": "temporal",
+      "class": "citation_only",
+      "status": "scored",
+      "failures": [
+        "insufficient citation recall — missing: ['FAA-AD-2020-05-11', 'FAA-AD-2022-03-07', 'FAA-AD-2024-01-02']"
+      ]
+    },
+    {
+      "profile": "full_context",
+      "run": 3,
+      "id": "TMP-03",
+      "type": "temporal",
+      "class": "refused_no_evidence",
+      "status": "refused",
+      "failures": [
+        "answer missing required term: 'two'",
+        "insufficient citation recall — missing: ['FAA-AD-2024-01-02', 'FAA-AD-2022-03-07']"
+      ]
+    },
+    {
+      "profile": "full_context",
+      "run": 3,
+      "id": "PRE-01",
+      "type": "precision",
+      "class": "citation_uncitable_artifact",
+      "status": "scored",
+      "failures": [
+        "insufficient citation recall — missing: ['FAA-AD-2022-03-07']"
+      ]
+    }
+  ],
+  "by_profile": {
+    "vector_only": {
+      "answer_error": 7,
+      "retrieval_miss": 10,
+      "citation_uncitable_artifact": 9,
+      "refused_no_evidence": 7,
+      "refused_with_evidence": 1
+    },
+    "text_hybrid": {
+      "refused_with_evidence": 3,
+      "retrieval_miss": 6,
+      "citation_uncitable_artifact": 12,
+      "retrieval_miss_citation": 3,
+      "refused_no_evidence": 3,
+      "answer_error": 3
+    },
+    "full": {
+      "answer_error": 12,
+      "retrieval_miss": 3,
+      "refused_with_evidence": 3
+    },
+    "full_context": {
+      "citation_only": 7,
+      "answer_error": 5,
+      "citation_uncitable_artifact": 11,
+      "refused_no_evidence": 3
+    }
+  },
+  "by_question": {
+    "vector_only": {
+      "AGT-01": "refused_no_evidence",
+      "AUT-01": "retrieval_miss",
+      "AUT-02": "retrieval_miss",
+      "AUT-03": "citation_uncitable_artifact",
+      "CAL-01": "answer_error",
+      "CON-01": "answer_error",
+      "CTX-01": "retrieval_miss",
+      "INF-01": "citation_uncitable_artifact",
+      "MH-02": "refused_with_evidence",
+      "MH-03": "answer_error",
+      "NEG-03": "answer_error",
+      "PRE-01": "citation_uncitable_artifact",
+      "TMP-01": "refused_no_evidence",
+      "TMP-03": "refused_no_evidence"
+    },
+    "text_hybrid": {
+      "AUT-01": "retrieval_miss",
+      "AUT-02": "citation_uncitable_artifact",
+      "AUT-03": "retrieval_miss_citation",
+      "CAL-01": "answer_error",
+      "INF-01": "citation_uncitable_artifact",
+      "MH-02": "refused_with_evidence",
+      "MH-03": "retrieval_miss",
+      "PRE-01": "citation_uncitable_artifact",
+      "TMP-01": "citation_uncitable_artifact",
+      "TMP-03": "refused_no_evidence"
+    },
+    "full": {
+      "AGT-02": "answer_error",
+      "AUT-01": "answer_error",
+      "CAL-01": "answer_error",
+      "MH-03": "retrieval_miss",
+      "SH-05": "answer_error",
+      "TMP-02": "answer_error",
+      "TMP-03": "refused_with_evidence"
+    },
+    "full_context": {
+      "AUT-01": "answer_error",
+      "AUT-02": "citation_uncitable_artifact",
+      "AUT-03": "citation_uncitable_artifact",
+      "INF-01": "citation_uncitable_artifact",
+      "MH-02": "answer_error",
+      "MH-03": "citation_only",
+      "NEG-03": "answer_error",
+      "PRE-01": "citation_uncitable_artifact",
+      "TMP-01": "citation_only",
+      "TMP-03": "refused_no_evidence"
+    }
+  },
+  "n_runs": {
+    "vector_only": 3,
+    "text_hybrid": 3,
+    "full": 3,
+    "full_context": 3
+  },
+  "limitation": "Classes are document-level proxies. The retrieved context text is not stored (only document ids), so 'right document, wrong chunk' is counted as answer_error. A graph or schema gap cannot be decided from stored data (the graph state records counts only) and is never assigned. For full_context the whole corpus is in the prompt, so a content failure is an answer error by construction."
+}

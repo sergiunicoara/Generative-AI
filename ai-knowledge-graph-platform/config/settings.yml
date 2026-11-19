@@ -115,6 +115,12 @@ retrieval:
   # Opt-in, NOT golden-validated: add "answer in the question's language" to the answer prompt (automotive CON-05
   # was asked in Romanian, answered in English). Changes the prompt, so it stays off until measured.
   answer_language_rule_enabled: false
+  # Opt-in, NOT golden-validated in production: ask the model to tag the documents it used ([DOC: id]) and return
+  # them as `cited` next to the retrieval provenance in `citations` (tags are stripped from the answer text).
+  # Changes the prompt, so it stays off until measured. Fails closed for a tenant with no documents or more than
+  # answer_citation_tags_max_documents (the rule lists every document).
+  answer_citation_tags_enabled: false
+  answer_citation_tags_max_documents: 50
   retrieval_sufficiency_abstain_enabled: false
   retrieval_sufficiency_min_evidence: 1
   retrieval_sufficiency_min_average_score: 0.0

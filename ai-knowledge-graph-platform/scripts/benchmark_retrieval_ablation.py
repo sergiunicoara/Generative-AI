@@ -41,6 +41,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
+from graphrag.observability.usage import KINDS, UsageLedger, ledger_scope  # noqa: E402
 from graphrag.evaluation.run_metadata import (  # noqa: E402
     agentic_fallback,
     collect_run_metadata,
@@ -284,6 +285,21 @@ def _planned_models() -> dict:
     }
 
 
+def usage_summary(ledger: UsageLedger) -> dict:
+    """Measured token usage of one profile run (``None`` wherever any call reported no usage)."""
+    by_kind = {kind: ledger.totals(kind) for kind in KINDS if ledger.totals(kind)["n_calls"]}
+    priced = {kind: t["cost_usd"] for kind, t in by_kind.items() if t["cost_usd"] is not None}
+    return {
+        "by_kind": by_kind,
+        "total": ledger.totals(),
+        "cost_usd_of_priced_kinds": round(sum(priced.values()), 6) if priced else None,
+        "unpriced_kinds": sorted(kind for kind in by_kind if kind not in priced),
+        "buckets": ledger.snapshot(),
+        "basis": "provider-reported usage of successful calls only; estimated_cost_usd at the price table's "
+                 "off-peak rate (not a bill); None means not measured or no price",
+    }
+
+
 async def _run_profile(questions: list[dict], args, golden: dict, evaluator, models: dict,
                        profile: str, config_overrides: dict, pinned: bool) -> dict:
     from graphrag.core.config import get_settings, resolve_tenant_config
@@ -306,21 +322,23 @@ async def _run_profile(questions: list[dict], args, golden: dict, evaluator, mod
         answer = lambda text: retriever.retrieve_and_answer(  # noqa: E731
             text, mode=args.mode, tenant=args.tenant,
             retrieval_profile=profile, config_overrides=config_overrides)
-    for question in questions:
-        started = time.perf_counter()
-        try:
-            result = await answer(question["question"])
-        except Exception as exc:  # recorded and counted; the run still exits non-zero
-            rows.append(error_row(question, exc, (time.perf_counter() - started) * 1000))
-            print(f"  [{profile}] {question['id']}: ERROR {type(exc).__name__}", file=sys.stderr)
-            continue
-        elapsed_ms = (time.perf_counter() - started) * 1000
-        raw_answer = result.answer
-        result, parsed_tags = split_answer(result)
-        judged = await _judge(evaluator, question, result.answer, result.contexts) if evaluator else None
-        rows.append(build_row(question, result, elapsed_ms, judged, answer_ids=parsed_tags["ids"],
-                              basis="answer" if is_full_context else "context", raw_answer=raw_answer,
-                              tag_forms=parsed_tags, citable=corpus.names))
+    ledger = UsageLedger()           # measured token usage of this profile's calls (never invented)
+    with ledger_scope(ledger, "generation"):
+        for question in questions:
+            started = time.perf_counter()
+            try:
+                result = await answer(question["question"])
+            except Exception as exc:  # recorded and counted; the run still exits non-zero
+                rows.append(error_row(question, exc, (time.perf_counter() - started) * 1000))
+                print(f"  [{profile}] {question['id']}: ERROR {type(exc).__name__}", file=sys.stderr)
+                continue
+            elapsed_ms = (time.perf_counter() - started) * 1000
+            raw_answer = result.answer
+            result, parsed_tags = split_answer(result)
+            judged = await _judge(evaluator, question, result.answer, result.contexts) if evaluator else None
+            rows.append(build_row(question, result, elapsed_ms, judged, answer_ids=parsed_tags["ids"],
+                                  basis="answer" if is_full_context else "context", raw_answer=raw_answer,
+                                  tag_forms=parsed_tags, citable=corpus.names))
     run = collect_run_metadata(
         tenant=args.tenant, profile=profile, profile_overrides=retrieval_profile_overrides(profile),
         mode=args.mode, config_overrides=config_overrides, models=models, golden=golden,
@@ -338,9 +356,11 @@ async def _run_profile(questions: list[dict], args, golden: dict, evaluator, mod
         "citation_sets": "context_citations (retriever provenance; none for full_context) and answer_citations "
                          "(ids parsed from the answer's [DOC: id] tags); headline comparison: answer_citations",
     }
+    summary = summarise(rows)
+    summary["tokens"] = usage_summary(ledger)
     return {
         "run": run,
-        "summary": summarise(rows),
+        "summary": summary,
         "results": rows,
     }
 

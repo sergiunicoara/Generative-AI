@@ -115,6 +115,9 @@ async def query_knowledge_graph(
 ) -> dict:
     """Return a grounded GraphRAG answer with citations.
 
+    ``citations`` is the retrieval provenance. When the tenant enables ``answer_citation_tags_enabled`` the
+    result also carries ``cited``: the documents the answer itself tagged.
+
     Backed by ``kg.answer.query@1.0.0``.  Retrieval routing stays inside the
     existing HybridRetriever; MCP supplies only authenticated, tenant-bound
     invocation.

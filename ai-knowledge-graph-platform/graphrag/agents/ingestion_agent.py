@@ -9,6 +9,7 @@ from time import perf_counter
 
 import structlog
 
+from graphrag.observability.usage import UsageLedger, ledger_scope
 from graphrag.agents.base_agent import BaseGraphRAGAgent
 from graphrag.core.config import get_settings
 from graphrag.core.models import IngestMessage, IngestionRunManifest, StructuredTable
@@ -28,6 +29,14 @@ from graphrag.graph.corpus_revision import CorpusMutation
 from graphrag.graph.validation import PublicationGate, PublicationRejected
 
 log = structlog.get_logger(__name__)
+
+
+def _usage_fields(ledger: UsageLedger, kind: str) -> dict:
+    """Manifest fields for one kind of call: real totals only when every call reported usage, else None."""
+    totals = ledger.totals(kind)
+    return {key: totals[key] for key in ("prompt_tokens", "completion_tokens", "total_tokens",
+                                         "n_calls", "n_calls_without_usage", "cost_usd")}
+
 
 
 class IngestionAgent(BaseGraphRAGAgent):
@@ -107,6 +116,7 @@ class IngestionAgent(BaseGraphRAGAgent):
         )
 
         log.info("ingestion_agent.start", job_id=job_id, filename=doc.filename)
+        ledger = UsageLedger()          # measured token usage of this document's calls (never invented)
 
         # 1. Chunk
         chunks = chunk_document(doc)
@@ -115,7 +125,8 @@ class IngestionAgent(BaseGraphRAGAgent):
 
         # 2. Embed chunks
         embed_started = perf_counter()
-        chunks = await self._embedder.embed_chunks(chunks)
+        with ledger_scope(ledger):
+            chunks = await self._embedder.embed_chunks(chunks)
         embed_elapsed_ms = (perf_counter() - embed_started) * 1000
 
         # 3. Extract entities + relations from each chunk, concurrently
@@ -145,9 +156,10 @@ class IngestionAgent(BaseGraphRAGAgent):
                     return [], []
 
         extraction_started = perf_counter()
-        extraction_results = await asyncio.gather(
-            *(_extract_one(chunk) for chunk in chunks)
-        )
+        with ledger_scope(ledger, "extraction"):
+            extraction_results = await asyncio.gather(
+                *(_extract_one(chunk) for chunk in chunks)
+            )
 
         # 4. Embed all entities across the whole document in one batched call
         # (was: one embed_text() round-trip per entity, serialized). See
@@ -155,9 +167,10 @@ class IngestionAgent(BaseGraphRAGAgent):
         # place, applied to the per-entity loop A129#5 left untouched.
         all_entities_flat = [e for entities, _ in extraction_results for e in entities]
         if all_entities_flat:
-            entity_embeddings = await self._embedder.embed_texts(
-                [f"{e.name} {e.description}" for e in all_entities_flat]
-            )
+            with ledger_scope(ledger):
+                entity_embeddings = await self._embedder.embed_texts(
+                    [f"{e.name} {e.description}" for e in all_entities_flat]
+                )
             for entity, emb in zip(all_entities_flat, entity_embeddings):
                 entity.embedding = emb
 
@@ -179,9 +192,10 @@ class IngestionAgent(BaseGraphRAGAgent):
                                 job_id=job_id, chunk_id=chunk.id, error=str(exc)[:200],
                             )
                             return []
-                artifact_results = await asyncio.gather(
-                    *(_extract_artifacts(chunk, entities) for chunk, (entities, _) in zip(chunks, extraction_results))
-                )
+                with ledger_scope(ledger, "artifacts"):
+                    artifact_results = await asyncio.gather(
+                        *(_extract_artifacts(chunk, entities) for chunk, (entities, _) in zip(chunks, extraction_results))
+                    )
         extraction_elapsed_ms = (perf_counter() - extraction_started) * 1000
         alias_results = [
             mine_explicit_aliases(chunk.text, [entity.name for entity in entities])
@@ -194,14 +208,16 @@ class IngestionAgent(BaseGraphRAGAgent):
         )
         manifest.stage_metrics = {
             "chunking": {"duration_ms": round(chunk_elapsed_ms, 3), "items": len(chunks), "cost_usd": None},
-            "embedding": {"duration_ms": round(embed_elapsed_ms, 3), "items": len(chunks) + len(all_entities_flat), "cost_usd": None},
+            "embedding": {"duration_ms": round(embed_elapsed_ms, 3), "items": len(chunks) + len(all_entities_flat),
+                          **_usage_fields(ledger, "embedding")},
             "extraction": {
                 "duration_ms": round(extraction_elapsed_ms, 3),
                 "items": len(all_entities_flat),
-                "cost_usd": None,
+                **_usage_fields(ledger, "extraction"),
                 "chunk_failures": chunk_extract_failures,
                 "artifact_chunk_failures": artifact_extract_failures,
             },
+            "artifacts": {"items": sum(len(found) for found in artifact_results), **_usage_fields(ledger, "artifacts")},
             "cost_status": {"value": "provider_usage_is_recorded_in_telemetry_when_available; manifest_never_invents_missing_cost"},
         }
 

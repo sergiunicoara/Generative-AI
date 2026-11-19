@@ -10,25 +10,17 @@ from __future__ import annotations
 
 import hashlib
 import json
-import re
 from functools import lru_cache
 from pathlib import Path
+
+from graphrag.retrieval import answer_citations as _pure
+from graphrag.retrieval.answer_citations import (  # noqa: F401  (re-exported: the benchmark and the tests import them here)
+    ACCEPTED_TAG_FORMS, _TAG, _norm, build_alias_index, citation_instruction)
 
 ALIAS_MAP_PATH = Path(__file__).resolve().parents[2] / "evals" / "citation_aliases.json"
 NORMALISER = "strict-v1"
 CITATION_FAILURE = "insufficient citation recall"
 DEFAULT_MIN_RECALL = 0.60  # same default as scripts/run_golden_eval.py
-
-def citation_instruction(ids: list[str]) -> str:
-    """The one citation rule shared by every ablation profile (appended to the answer prompt's rules)."""
-    listed = "\n".join(f"  - {name}" for name in ids)
-    return (
-        "- Citation format (required): after every statement supported by a document, cite that document as "
-        "[DOC: <id>], using exactly one id from this list and nothing else:\n"
-        f"{listed}\n"
-        "  Cite only documents that support your answer; do not cite a document you did not use.\n"
-    )
-
 
 def sha256_text(text: str) -> str:
     return hashlib.sha256(text.encode("utf-8")).hexdigest()
@@ -65,25 +57,6 @@ def set_metrics(question: dict, ids: list[str] | None, citable: list[str] | None
             "n_distinct": len(ids), "n_expected_uncitable": len(expected) - len(expected_citable)}
 
 
-_DOC_TAG = re.compile(r"\[DOC:\s*([^\]]*)\]", re.IGNORECASE)
-
-
-def _norm(text: str) -> str:
-    text = re.sub(r"\.txt$", "", str(text).strip(), flags=re.IGNORECASE)
-    return re.sub(r"[^0-9a-z]+", " ", text.casefold()).strip()
-
-
-def build_alias_index(document_aliases: dict[str, list[str]]) -> dict[str, str]:
-    """normalised alias -> canonical id; an alias that denotes two documents is a data error."""
-    index: dict[str, str] = {}
-    for canonical, aliases in document_aliases.items():
-        for alias in {canonical, *aliases}:
-            key = _norm(alias)
-            if index.setdefault(key, canonical) != canonical:
-                raise ValueError(f"alias {alias!r} denotes both {index[key]!r} and {canonical!r}")
-    return index
-
-
 @lru_cache(maxsize=1)
 def _load(path: str = str(ALIAS_MAP_PATH)) -> tuple[dict[str, str], str]:
     raw = Path(path).read_bytes()
@@ -95,49 +68,15 @@ def alias_map_sha256() -> str:
 
 
 def strict_citations(raw: list[str], index: dict[str, str] | None = None) -> list[str]:
-    """Canonical ids of the raw citation strings, unmapped strings dropped, first-seen order, no duplicates."""
-    index = index if index is not None else _load()[0]
-    seen: list[str] = []
-    for value in raw:
-        canonical = index.get(_norm(value))
-        if canonical and canonical not in seen:
-            seen.append(canonical)
-    return seen
-
-
-_TAG = re.compile(r"\[(?:DOC:\s*([^\]]*)|([^\[\]\n:]{1,80}))\]", re.IGNORECASE)
-ACCEPTED_TAG_FORMS = [
-    "[DOC: <id>] (prefixed; several ids may be separated by commas or semicolons)",
-    "[<exact canonical id>] (bare; case-insensitive, no fuzzy matching)",
-]
+    """Canonical ids of the raw citation strings (see graphrag.retrieval.answer_citations); the committed
+    alias map is the default index."""
+    return _pure.strict_citations(raw, index if index is not None else _load()[0])
 
 
 def parse_answer_tags(answer: str, canonical_ids: set[str] | None = None) -> dict:
-    """Tags of one answer: ``{"answer": text without the tags, "ids": raw ids in order, "n_prefixed", "n_bare"}``.
-
-    Prefixed ``[DOC: id]`` tags are always read. A bare ``[id]`` is read only when ``id`` equals a canonical
-    document id (case-insensitive, nothing fuzzy); any other bracketed text is left in the answer untouched."""
-    canonical = {value.casefold() for value in (canonical_ids if canonical_ids is not None
-                                                else set(_load()[0].values()))}
-    ids: list[str] = []
-    counts = {"prefixed": 0, "bare": 0}
-
-    def take(match: re.Match) -> str:
-        if match.group(1) is not None:
-            found = [part.strip() for part in re.split(r"[,;]", match.group(1)) if part.strip()]
-            ids.extend(found)
-            counts["prefixed"] += len(found)
-            return ""
-        candidate = match.group(2).strip()
-        if candidate.casefold() in canonical:
-            ids.append(candidate)
-            counts["bare"] += 1
-            return ""
-        return match.group(0)
-
-    stripped = re.sub(r"[ \t]+([.,;:])", r"\1", _TAG.sub(take, answer))
-    return {"answer": re.sub(r"[ \t]{2,}", " ", stripped).strip(), "ids": ids,
-            "n_prefixed": counts["prefixed"], "n_bare": counts["bare"]}
+    """Tags of one answer (see graphrag.retrieval.answer_citations); the committed alias map's ids by default."""
+    return _pure.parse_answer_tags(
+        answer, canonical_ids if canonical_ids is not None else set(_load()[0].values()))
 
 
 def parse_doc_tags(answer: str) -> tuple[str, list[str]]:

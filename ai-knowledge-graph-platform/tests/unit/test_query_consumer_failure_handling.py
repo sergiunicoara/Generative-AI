@@ -109,6 +109,22 @@ class TestFailedQueryIsMarkedFailed:
         query_id, payload = store.set.call_args.args
         assert query_id == "q-1"
         assert payload["status"] == "completed"
+        assert payload["citations"] == ["doc-1"] and payload["cited"] == []
+
+    async def test_the_answer_attributed_citations_are_persisted(self):
+        from graphrag.core.models import QueryResult
+
+        result = QueryResult(question="q", answer="a", citations=["doc-1", "doc-2"], cited=["doc-2"])
+        agent = MagicMock()
+        agent.run = AsyncMock(return_value=result)
+        store = AsyncMock()
+        store.get = AsyncMock(return_value={})
+        store.set = AsyncMock(return_value=None)
+
+        await _run_query_consumer_handler(agent, store, _query_payload())
+
+        _, payload = store.set.call_args.args
+        assert payload["citations"] == ["doc-1", "doc-2"] and payload["cited"] == ["doc-2"]
 
 
 class TestEvalJobPublishFailureIsolation:

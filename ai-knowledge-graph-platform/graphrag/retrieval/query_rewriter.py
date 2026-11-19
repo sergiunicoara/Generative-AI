@@ -21,6 +21,7 @@ import re
 
 import structlog
 
+from graphrag.observability.usage import kind_scope
 from graphrag.core.config import get_settings
 from graphrag.core.llm_client import get_fast_llm
 
@@ -78,9 +79,10 @@ class QueryRewriter:
     async def rewrite(self, question: str, tenant: str = "default") -> str:
         """Return a retrieval-optimized query, or the original on any failure."""
         try:
-            raw = await get_fast_llm().generate(
-                _REWRITE_PROMPT.format(question=question)
-            )
+            with kind_scope("rewrite"):
+                raw = await get_fast_llm().generate(
+                    _REWRITE_PROMPT.format(question=question)
+                )
         except Exception as exc:  # fail open — never block a query on the rewriter
             log.warning("query_rewriter.failed", error=str(exc))
             return question

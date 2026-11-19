@@ -501,3 +501,40 @@ class TestAnswerCacheIndexesEntityNames:
 
         fake_cache.set.assert_awaited_once()
         assert fake_cache.set.call_args.kwargs["entities_used"] == ["Boeing 737", "FAA"]
+
+
+class TestAnswerAttributedCitations:
+    """Opt-in ``answer_citation_tags_enabled``: the answer's [DOC: id] tags become ``cited``; off changes nothing."""
+
+    DOCS = ["FAA-AD-2024-01-02.txt", "SWA_fleet_registry_2024.txt"]
+    TAGGED = "It applies [DOC: FAA-AD-2024-01-02] and the registry [swa_fleet_registry_2024]."
+
+    async def _run(self, mock_llm, cfg: dict, docs: list[str] | None = None):
+        mock_llm.generate = AsyncMock(return_value=self.TAGGED)
+        hr = _make_hybrid_retriever(cfg)
+        hr._local.search = AsyncMock(return_value={"chunks": [{"chunk_id": "c1", "text": "t"}]})
+        hr._global.search = AsyncMock(return_value={})
+        hr._context_builder.build.return_value = ("context", ["FAA-AD-2024-01-02", "Aircraft"], [])
+        hr._record_context_trace = AsyncMock(return_value=None)
+        neo4j = MagicMock()
+        neo4j.get_document_filenames = AsyncMock(return_value=self.DOCS if docs is None else docs)
+        with patch("graphrag.retrieval.hybrid_retriever.get_neo4j", return_value=neo4j):
+            result = await hr.retrieve_and_answer("Which directive applies?", mode="local")
+        return result, mock_llm.generate.call_args.args[0]
+
+    async def test_off_by_default_the_prompt_and_the_answer_are_unchanged(self, _patch_llm_and_config) -> None:
+        result, prompt = await self._run(_patch_llm_and_config, {})
+        assert "Citation format (required)" not in prompt
+        assert result.cited == [] and "[DOC: FAA-AD-2024-01-02]" in result.answer
+
+    async def test_on_the_rule_is_sent_tags_are_stripped_and_cited_is_filled(self, _patch_llm_and_config) -> None:
+        result, prompt = await self._run(_patch_llm_and_config, {"answer_citation_tags_enabled": True})
+        assert "  - FAA-AD-2024-01-02\n  - SWA_fleet_registry_2024\n" in prompt
+        assert result.cited == ["FAA-AD-2024-01-02", "SWA_fleet_registry_2024"]
+        assert "[DOC:" not in result.answer and "[swa_fleet" not in result.answer
+        assert "FAA-AD-2024-01-02" in result.citations                    # provenance stays as it was
+
+    async def test_above_the_cap_it_fails_closed_to_the_unchanged_prompt(self, _patch_llm_and_config) -> None:
+        result, prompt = await self._run(
+            _patch_llm_and_config, {"answer_citation_tags_enabled": True, "answer_citation_tags_max_documents": 1})
+        assert "Citation format (required)" not in prompt and result.cited == []

@@ -452,6 +452,9 @@ class QueryResult(BaseModel):
     answer: str
     contexts: list[str] = Field(default_factory=list)
     citations: list[str] = Field(default_factory=list)
+    # Canonical ids of the documents the *answer* tagged ([DOC: id]); filled only when the opt-in
+    # ``answer_citation_tags_enabled`` is on. ``citations`` stays the retrieval provenance.
+    cited: list[str] = Field(default_factory=list)
     evidence: list[CitationEvidence] = Field(default_factory=list)
     latency_ms: float = 0.0
     retrieval_mode: str = "hybrid"

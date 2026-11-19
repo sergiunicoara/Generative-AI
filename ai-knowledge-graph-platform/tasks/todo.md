@@ -236,3 +236,172 @@ claims of live validation. Full unit suite and push after each wave.
 - Everything is verified offline; no live Neo4j, Redis, triple store, SharePoint, Jira, GQL engine
   or model provider was used.
 
+
+
+---
+
+# Roadmap items from the 2026-11-19 feed review: failure classes, token accounting, answer-attributed citations
+
+Context: the three highest-value items of "Candidate additions from a second
+graph-community feed review (2026-11-19)" in `docs/roadmap.md`. Code mapped by
+three read-only passes on 2026-11-19; nothing implemented yet. **Waiting for
+plan approval.** Order: item 2 (free, offline), item 3 (instrumentation), item 1
+(production answer path, largest regression risk).
+
+Rules for the whole batch: no paid model calls without explicit approval;
+default prompts, answers and response shapes unchanged when a new flag is off;
+unit suite run once at the end; no push until asked; never commit
+`docs/roadmap.md` changes made before this batch.
+
+## Item 2 — classify golden-set misses (offline, no model calls)
+
+- [x] `scripts/classify_golden_misses.py`: load the valid runs of a folder (same
+      glob and `n_errors == 0` filter as `aggregate_ablation.py`), take every row
+      with `golden_pass == False`, assign exactly one class by this ordered rule:
+      1. `status == "unscorable"` -> `unscorable`
+      2. only the citation check failed: all expected ids uncitable
+         (`n_expected_uncitable == len(expected)`) or `golden_failures_citable`
+         empty -> `citation_uncitable_artifact`; else if expected ids are missing
+         from `citations_context` (context basis) -> `retrieval_miss_citation`;
+         else `citation_only`
+      3. a content check failed (required term / any-of): `refused_with_evidence`
+         or `refused_no_evidence` when `status == "refused"` (evidence = context
+         `recall_raw == 1.0`); otherwise `retrieval_miss` when context
+         `recall_raw < 1.0`, else `answer_error`; `full_context` (no context set,
+         whole corpus in the prompt) -> `answer_error` by construction
+      4. `graph_or_schema_gap` is **not decidable** from stored data (graph state
+         has counts only, no context text) -> reported as a stated limitation, never
+         assigned
+- [x] Outputs next to the runs: `miss_classes.json` and `miss_classes.md` (per
+      profile x class counts, per-question majority class over the 3 runs,
+      per-row table, the limitation text).
+- [x] `tests/unit/test_classify_golden_misses.py` with synthetic rows (pattern of
+      `test_compare_ablation_profiles.py`): one test per rule, `invalid/` and
+      `n_errors > 0` ignored, `full_context` null-context path, raw versus citable
+      citation split.
+- [x] Run it on `evals/ablation/aerospace-v2.3-strict/`; sanity-check against
+      the known tallies (for example `full`: 15 content-only failing rows, 3
+      citation-plus-content).
+- Limitation to state in the output: classes are document-level proxies. The
+  retrieved context text is not stored, so "right document, wrong chunk" lands in
+  `answer_error`. Storing context text in future runs is a separate, paid decision.
+
+Review (2026-11-19, item 2): `scripts/classify_golden_misses.py` and
+`tests/unit/test_classify_golden_misses.py` (16 tests, pass). One deliberate change from the
+plan: `unscorable` is not a class, because it describes the faithfulness judge, not the golden
+check, so a failed row is classified by its golden cause whatever its judge status. On
+`evals/ablation/aerospace-v2.3-strict/` the failed rows (34, 30, 18, 26 of 102 for
+vector_only, text_hybrid, full, full_context) match the aggregate pass rates; outputs
+`miss_classes.json` and `miss_classes.md` are next to the runs, not committed. For `full`,
+12 of 18 failures are `answer_error` (every expected document was retrieved), 3
+`refused_with_evidence`, 3 `retrieval_miss`.
+
+## Item 3 — token and cost accounting (measure only, answers unchanged)
+
+- [x] `graphrag/observability/usage.py`: `UsageLedger` (buckets by kind
+      {extraction, artifacts, community, embedding, generation, judge}, provider,
+      model; fields prompt, completion, total, n_calls, n_calls_without_usage),
+      active ledger in a ContextVar, a lock around mutation, `ledger_scope()` and
+      `usage_scope(kind)`.
+- [x] Report sites:
+      - `graphrag/core/llm_client.py` `_report_openai_compatible_usage` (about
+        93-119): also add to the active ledger (no change to return values; failed
+        or retried-away attempts are not counted — document the understatement)
+      - `OpenAIEmbedder.embed` (about 796-825): record
+        `response.usage.total_tokens` when present, else count it as unmeasured
+      - RAGAS judge: a passive `BaseCallbackHandler` passed as
+        `evaluate(callbacks=[...])` at `graphrag/evaluation/ragas_evaluator.py`
+        (about 264-270), tagged `judge`, scoped per question
+- [x] Ingestion manifest (`graphrag/agents/ingestion_agent.py` about 196-206,
+      474-482): add `prompt_tokens`, `completion_tokens`, `total_tokens`,
+      `n_calls_without_usage` and a cost to `embedding`, `extraction` and a new
+      `artifacts` stage of `stage_metrics`. Values are `None` unless every call
+      reported usage; cost only from `estimated_cost_usd` and only for priced
+      models; the `cost_status` string stays. Community summaries get a separate
+      job-level record. The integrity hash changes with the new keys (accepted).
+- [x] Ablation script (`scripts/benchmark_retrieval_ablation.py`): open a ledger
+      per profile around the question loop (about 313) and add an optional
+      `summary["tokens"]` (generation and judge prompt/completion, embedding,
+      cost or `None`). No exact-key assertions on `summary` were found, only on
+      `meta["git"]` and `config_overrides`.
+- [x] Tests (patterns of `test_genai_token_usage.py`, `test_pricing.py`,
+      `test_llm_client.py`, `test_ingestion_agent_extract_resilience.py`):
+      ledger accumulation and thread safety, `None` usage stays unmeasured, a
+      fallback secondary call is counted once, the embedder with and without
+      `usage`, the judge handler with a mocked judge (scores unchanged), the
+      manifest `None` rule and the "never invents missing cost" behaviour.
+- Resolved: a bare `import ragas` does fail here (missing
+  `langchain_community.chat_models.vertexai`), but the project patches a stub in
+  first (`RagasEvaluator._patch_langchain_vertexai_stub`, `ragas_evaluator.py`
+  about 171-211); with it, ragas 0.4.3 imports and `evaluate` accepts `callbacks`.
+  Not a defect.
+
+Review (2026-11-19, item 3): `graphrag/observability/usage.py` (ledger), reporters in
+`llm_client.py` (providers and embedder), `query_rewriter.py` (kind `rewrite`),
+`ragas_evaluator.py` (passive judge callback, only when a ledger is active),
+`ingestion_agent.py` (per-document ledger into `stage_metrics`, new `artifacts` stage),
+`benchmark_retrieval_ablation.py` (`summary["tokens"]` per profile). Tests:
+`tests/unit/test_usage_ledger.py` (11) plus the neighbouring suites (99 pass in total).
+Verified only with mocked providers: no real provider response, ingestion or judge call was
+made (no cost), so the first real token numbers appear at the next paid run. Not counted:
+provider-internal retries that failed, community summaries (separate job record, not yet
+wired). Embedding cost stays `None` (no verified price row).
+
+## Item 1 — answer-attributed citations (opt-in, off by default)
+
+- [x] New `graphrag/retrieval/answer_citations.py` with the pure parts moved out
+      of `graphrag/evaluation/citations.py`: `_norm`, `build_alias_index`,
+      `strict_citations`, `parse_answer_tags`, `ACCEPTED_TAG_FORMS`,
+      `citation_instruction`; none reads the disk. `graphrag/evaluation/citations.py`
+      re-exports them and keeps `_load`, `ALIAS_MAP_PATH` and the scoring helpers,
+      so the benchmark and `test_citations.py` keep working and the pinned
+      instruction text stays byte-identical (hash `9769435d...` must not change).
+- [x] Config: `retrieval.answer_citation_tags_enabled: false` in
+      `config/settings.yml`. When true, the retriever builds the instruction from
+      the tenant's document names (`get_document_filenames`, stems, ACL-filtered)
+      and appends it through the existing `eval_citation_instruction` hook in
+      `answer_policy.answer_prompt`; when false the prompt is byte-identical.
+- [x] `graphrag/retrieval/hybrid_retriever.py` after `normalize_dashes` (about
+      960) and before claim verification (about 966): parse the tags with
+      `canonical_ids` = the tenant stems and an index built from them, set
+      `cited`; strip the tags from the user-facing answer (decision D1).
+- [x] `graphrag/core/models.py` `QueryResult`: `cited: list[str] = []`; set it at
+      every construction (about 443, 1096, 1164 and the agentic path); persist it
+      in `graphrag/messaging/consumers.py` (explicit dict, about 123) and in the
+      semantic answer-cache entry; MCP picks it up through `model_dump`; update
+      the two docstrings in `mcp_server/server.py` (about 116, 164).
+- [x] Tests: `test_answer_policy.py` (prompt unchanged when off, instruction when
+      on), `test_hybrid_retriever.py` (`cited` populated, tags stripped, empty
+      when off), `test_query_consumer_failure_handling.py`,
+      `test_mcp_tools.py`, `test_query_result_evidence.py` (additive field),
+      re-run `test_mcp_contract_compat.py`, `test_citations.py` and
+      `test_benchmark_retrieval_ablation.py`.
+- [x] Acceptance on stored data, free: precision of the answer-tag set versus the
+      context set per retrieval profile, already in the strict runs (answer
+      0.601 to 0.734 against context 0.227 to 0.391). Production-path correctness
+      is covered by the unit tests; an optional paid confirming run is decision D4.
+
+## Decisions needed before coding
+
+- D1 (item 1): strip the `[DOC: id]` tags from the user-facing answer when the
+  flag is on? Recommended: yes, as the benchmark does; the raw tagged text is
+  not exposed.
+- D2 (item 1): the instruction lists every tenant document, one line each. Cap it
+  (for example refuse to enable above 50 documents, fail closed) or list only the
+  retrieved documents? Recommended: cap and fail closed; listing only retrieved
+  documents changes what the model may cite and would need its own measurement.
+- D3 (item 1): module location `graphrag/retrieval/answer_citations.py`
+  (recommended, next to `answer_policy.py`) or `graphrag/core/`.
+- D4 (item 1): an optional paid confirming run (one profile, 34 questions; the
+  strict runs cost about $0.06 to $0.08 for the retrieval profiles) to check tag
+  compliance on the production path. Default: not run.
+- D5 (item 3): embeddings have no price row. Record tokens only and leave
+  embedding cost `None` until you supply a verified price (recommended; no
+  guessed prices).
+- D6 (item 2): should later ablation runs store the retrieved context text so
+  `retrieval_miss` versus `answer_error` can be decided at chunk level? Needs a
+  paid re-run, so out of this batch unless you ask.
+
+## Review (2026-11-19)
+
+Items 2, 3 and 1 implemented in that order with the recommended decisions (D1 strip tags, D2 cap 50 and fail closed, D3 `graphrag/retrieval/answer_citations.py`, D4 no paid run, D5 embedding cost None, D6 not done). One unit-suite run at the end: 4176 passed, 0 failed (4137 before this batch plus 39 new tests). Not done: a paid confirming run for item 1, community-summary token accounting, the routing table from the roadmap (item 2 of the feed review). The measured behaviour of the new code on real provider responses is untested: all three were verified with mocks.

@@ -16,11 +16,33 @@ import math
 
 import structlog
 
+from graphrag.observability.usage import current_ledger
 from graphrag.core.config import get_settings
 from graphrag.core.exceptions import EvaluationError
 from graphrag.core.models import EvalResult
 
 log = structlog.get_logger(__name__)
+
+
+def judge_usage_callbacks(ledger, info: dict) -> list:
+    """One LangChain callback that adds each judge call's token usage to ``ledger`` (kind ``judge``)."""
+    from langchain_core.callbacks import BaseCallbackHandler
+
+    class _JudgeUsage(BaseCallbackHandler):
+        def on_llm_end(self, response, **kwargs):  # noqa: ANN001
+            output = getattr(response, "llm_output", None) or {}
+            usage = output.get("token_usage") or {}
+            prompt, completion = usage.get("prompt_tokens"), usage.get("completion_tokens")
+            if prompt is None or completion is None:
+                try:
+                    meta = response.generations[0][0].message.usage_metadata or {}
+                    prompt, completion = meta.get("input_tokens"), meta.get("output_tokens")
+                except Exception:  # noqa: BLE001 - usage is best effort; a missing value is counted as unmeasured
+                    prompt = completion = None
+            ledger.add("judge", info.get("provider"), info.get("model"), prompt, completion)
+
+    return [_JudgeUsage()]
+
 
 
 class RagasEvaluator:
@@ -258,6 +280,10 @@ class RagasEvaluator:
                 except Exception:
                     _eval_embeddings = None
 
+            # Passive usage callback, only when a ledger is active (read here, on the loop side: the executor
+            # thread below does not inherit context variables). Scores are not affected.
+            ledger = current_ledger()
+            extra = {"callbacks": judge_usage_callbacks(ledger, self.judge_info)} if ledger is not None else {}
             scores = await asyncio.wait_for(
                 loop.run_in_executor(
                     None,
@@ -266,6 +292,7 @@ class RagasEvaluator:
                         metrics=metrics,
                         llm=self._llm,
                         embeddings=_eval_embeddings,
+                        **extra,
                     ),
                 ),
                 timeout=self._judge_timeout_s,

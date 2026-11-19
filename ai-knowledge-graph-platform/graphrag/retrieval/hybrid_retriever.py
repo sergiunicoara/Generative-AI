@@ -30,6 +30,7 @@ from graphrag.retrieval.local_search import LocalSearch
 from graphrag.retrieval.global_search import GlobalSearch
 from graphrag.retrieval.context_builder import ContextBuilder
 from graphrag.retrieval.agentic_retriever import AgenticRetriever
+from graphrag.retrieval import answer_citations
 from graphrag.retrieval.answer_policy import BASE_ANSWER_PROMPT, answer_prompt, apply_answer_policy
 from graphrag.retrieval.fallback_policy import is_low_confidence as _is_low_confidence
 from graphrag.retrieval.claim_verifier import ClaimVerifier
@@ -938,6 +939,13 @@ class HybridRetriever:
                 sufficiency.reason_code == "all_evidence_stale"
                 and cfg.get("retrieval_sufficiency_abstain_on_stale", True)
             )
+            # Opt-in answer-attributed citations: None leaves the prompt and the answer exactly as before.
+            tag_plan = answer_citations.tag_plan(cfg, document_names)
+            if tag_plan is None and cfg.get("answer_citation_tags_enabled", False):
+                log.warning("hybrid_retriever.answer_tags_unavailable", documents=len(document_names),
+                            cap=cfg.get("answer_citation_tags_max_documents", 50))
+            prompt_cfg = {**cfg, "eval_citation_instruction": tag_plan[0]} if tag_plan else cfg
+            cited: list[str] = []
             if (
                 sufficiency_enabled
                 and (cfg.get("retrieval_sufficiency_abstain_enabled", False) or abstain_on_stale)
@@ -948,7 +956,7 @@ class HybridRetriever:
                 evidence = []
             else:
                 answer = await get_llm().generate(
-                    answer_prompt(cfg).format(
+                    answer_prompt(prompt_cfg).format(
                         context=escape_prompt_data(context),
                         question=question,
                     ),
@@ -960,6 +968,10 @@ class HybridRetriever:
             answer, citations = apply_answer_policy(
                 answer, context, question, citations, document_names, cfg,
             )
+            if tag_plan:
+                answer, cited, parsed_tags = answer_citations.attribute(answer, tag_plan[1])
+                log.info("hybrid_retriever.answer_tags", prefixed=parsed_tags["n_prefixed"],
+                         bare=parsed_tags["n_bare"], cited=len(cited))
             # `evidence` deliberately isn't re-derived to mirror this mutation
             # (dedup / aerospace regulatory-identifier grounding) — it documents
             # what was actually retrieved, a simpler and distinct contract from
@@ -1170,6 +1182,7 @@ class HybridRetriever:
                 # as unsupported (faithfulness=0.0 false negatives, e.g. AUT-03).
                 contexts=[context] if context else [],
                 citations=citations,
+                cited=cited,
                 evidence=evidence,
                 latency_ms=latency_ms,
                 retrieval_mode=mode,

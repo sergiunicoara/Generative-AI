@@ -121,6 +121,7 @@ class QueryConsumer:
                 "answer":     result.answer,
                 "contexts":   result.contexts,
                 "citations":  result.citations,
+                "cited":      result.cited,
                 "evidence":   [e.model_dump() for e in result.evidence],
                 "latency_ms": result.latency_ms,
                 "retrieval_mode": result.retrieval_mode,

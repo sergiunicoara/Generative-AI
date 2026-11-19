@@ -90,7 +90,7 @@ def last_response_model() -> str | None:
     return _response_model.get()
 
 
-def _report_openai_compatible_usage(response: Any) -> None:
+def _report_openai_compatible_usage(response: Any, provider: str | None = None) -> None:
     """Forward a chat-completion response's usage/model to GenAI telemetry.
 
     Groq, DeepSeek, Cerebras, and OpenRouter are all OpenAI-compatible and
@@ -105,16 +105,22 @@ def _report_openai_compatible_usage(response: Any) -> None:
     is treated differently from `0` throughout this telemetry path.
     """
     from graphrag.observability.genai_telemetry import record_llm_usage
+    from graphrag.observability.usage import record_usage
 
     usage = getattr(response, "usage", None)
     served_by = getattr(response, "model", None)
     if isinstance(served_by, str) and served_by:
         _response_model.set(served_by)
+    input_tokens = getattr(usage, "prompt_tokens", None) if usage else None
+    output_tokens = getattr(usage, "completion_tokens", None) if usage else None
     record_llm_usage(
         response_model=getattr(response, "model", None),
-        input_tokens=getattr(usage, "prompt_tokens", None) if usage else None,
-        output_tokens=getattr(usage, "completion_tokens", None) if usage else None,
+        input_tokens=input_tokens,
+        output_tokens=output_tokens,
     )
+    # the measuring ledger (a no-op unless a ledger_scope is active); only successful calls reach it
+    record_usage(provider=provider, model=served_by if isinstance(served_by, str) else None,
+                 prompt_tokens=input_tokens, completion_tokens=output_tokens)
 
 
 # ── Shared interface ─────────────────────────────────────────────────────────
@@ -219,7 +225,7 @@ class GroqLLM(BaseLLM):
                     lambda: self._client.chat.completions.create(**kwargs),
                 )
                 record_result(self._PROVIDER_NAME, True)
-                _report_openai_compatible_usage(response)
+                _report_openai_compatible_usage(response, self._PROVIDER_NAME)
                 return response.choices[0].message.content or ""
 
             except (RateLimitError, APIStatusError) as exc:
@@ -342,7 +348,7 @@ class DeepSeekLLM(BaseLLM):
                     lambda: self._client.chat.completions.create(**kwargs),
                 )
                 record_result(self._PROVIDER_NAME, True)
-                _report_openai_compatible_usage(response)
+                _report_openai_compatible_usage(response, self._PROVIDER_NAME)
                 return response.choices[0].message.content or ""
 
             except (RateLimitError, APIStatusError, APITimeoutError, APIConnectionError) as exc:
@@ -426,7 +432,7 @@ class CerebrasLLM(BaseLLM):
                     lambda: self._client.chat.completions.create(**kwargs),
                 )
                 record_result(self._PROVIDER_NAME, True)
-                _report_openai_compatible_usage(response)
+                _report_openai_compatible_usage(response, self._PROVIDER_NAME)
                 return response.choices[0].message.content or ""
 
             except (RateLimitError, APIStatusError, APITimeoutError, APIConnectionError) as exc:
@@ -533,7 +539,7 @@ class OpenRouterLLM(BaseLLM):
                     lambda: self._client.chat.completions.create(**kwargs),
                 )
                 record_result(self._PROVIDER_NAME, True)
-                _report_openai_compatible_usage(response)
+                _report_openai_compatible_usage(response, self._PROVIDER_NAME)
                 return response.choices[0].message.content or ""
 
             except (RateLimitError, APIStatusError, APITimeoutError, APIConnectionError) as exc:
@@ -821,6 +827,11 @@ class OpenAIEmbedder:
                 input=texts,
             ),
         )
+        from graphrag.observability.usage import record_usage
+
+        usage = getattr(response, "usage", None)
+        record_usage(provider="openai", model=self._model, kind="embedding",
+                     prompt_tokens=getattr(usage, "total_tokens", None) if usage else None, completion_tokens=0)
         return [item.embedding for item in response.data]
 
     async def embed_text(self, text: str, task_type: str = "retrieval_document") -> list[float]:

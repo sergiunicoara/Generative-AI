@@ -19,7 +19,6 @@ Deliberate choices (each is recorded in the result file under ``run.full_context
 from __future__ import annotations
 
 import hashlib
-import re
 from dataclasses import dataclass
 from typing import Any
 
